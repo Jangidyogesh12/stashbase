@@ -534,6 +534,13 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   controlled summaries, known codes and stack line/column locations. HTTP, Agent,
   background and renderer failures converge here without throwing into operations,
   recursively reporting analytics failures, or creating another privacy setting.
+- Host log level is the reported severity. `log.error` means an operation failed
+  for the user or data may be inconsistent; `log.warn` means it degraded and
+  continued; an expected state (no embedding key, a size limit the UI states,
+  cancellation, intentional daemon retirement) is `log.info` and is not reported.
+  Pass the caught error as its own argument rather than interpolating its message,
+  so the reported cause is the error, not the log sentence. HTTP 4xx responses are
+  warnings and 5xx are errors.
 - [Usage statistics](../docs/usage-statistics.md) owns event interpretation,
   retention definitions, IP-retention setup and delivery limits. An absent event
   proves neither abandonment nor continued use after opt-out; subscription rights

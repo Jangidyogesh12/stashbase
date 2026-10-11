@@ -19,7 +19,7 @@ import express from 'express';
 import crypto from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createProjectMcpServer } from '../../mcp/project-server.ts';
-import { logger, errorMessage } from '../log.ts';
+import { logger } from '../log.ts';
 import { createProjectOperations, type ProjectOperations } from '../project-operations/index.ts';
 
 const log = logger('mcp-http');
@@ -48,7 +48,7 @@ async function handleMcpPost(
   try {
     token = options.getToken();
   } catch (err: unknown) {
-    log.warn(`credential read failed: ${errorMessage(err)}`);
+    log.warn(`credential read failed:`, err);
     res.status(500).json({
       jsonrpc: '2.0',
       error: { code: -32603, message: 'MCP HTTP credential is unavailable. Open Settings → MCP and try again.' },
@@ -80,7 +80,7 @@ async function handleMcpPost(
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (err: unknown) {
-    log.warn(`request failed: ${errorMessage(err)}`);
+    log.warn(`request failed:`, err);
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: '2.0',

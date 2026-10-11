@@ -78,7 +78,7 @@ function persist(): void {
   } catch (err: unknown) {
     // Disposable catalog caching must neither replace unreadable settings nor
     // interrupt a working Agent session. The fresh catalog remains in memory.
-    log.warn(`could not cache model catalog: ${errorMessage(err)}`);
+    log.warn(`could not cache model catalog:`, err);
   }
 }
 

@@ -11,6 +11,12 @@ import destination from './telemetry-destination.json' with { type: 'json' };
 import packageInfo from '../package.json' with { type: 'json' };
 export type { TelemetryState } from './telemetry-state.ts';
 
+type DiagnosticEvent = Extract<TelemetryEvent, { event: 'application_error' | 'application_warning' }>;
+/** A diagnostic is reported when first seen; repeats inside its window are
+ * counted and reported once when the window closes, so a persistent failure
+ * keeps one event per window while its frequency stays measurable. */
+const OCCURRENCE_WINDOWS = { application_error: 60_000, application_warning: 10 * 60_000 } as const;
+
 export function createTelemetry(options: {
   available: boolean;
   projectToken: string;
@@ -34,7 +40,8 @@ export function createTelemetry(options: {
   let retry: ReturnType<typeof setTimeout> | undefined;
   let retryDelay = 1000;
   let generation = 0;
-  const recentErrors = new Map<string, number>();
+  const occurrences = new Map<string, { event: DiagnosticEvent; identity: UsageIdentity; startedAt: number; repeated: number }>();
+  let occurrenceTimer: ReturnType<typeof setInterval> | undefined;
   const turns = new Map<string, { identity: UsageIdentity; startedAt: number; sessionId?: string }>();
   const allowed = () => options.available && !stopped && !collectionStopped;
   const preferences = () => ({ enabled: usageState(options.read(), now()).enabled, available: options.available });
@@ -52,7 +59,9 @@ export function createTelemetry(options: {
     pending = null;
     clearTimeout(retry);
     retry = undefined;
-    recentErrors.clear();
+    occurrences.clear();
+    clearInterval(occurrenceTimer);
+    occurrenceTimer = undefined;
     turns.clear();
   };
   const send = async (queued: QueuedUsage, controller: AbortController) => {
@@ -141,7 +150,18 @@ export function createTelemetry(options: {
     }
     return usageIdentity(state, now());
   };
-  const capture = (input: TelemetryEvent, captured?: UsageIdentity, capturedGeneration = generation) => {
+  const windowOpen = (bucket: { event: DiagnosticEvent; startedAt: number }) =>
+    now() >= bucket.startedAt && now() - bucket.startedAt < OCCURRENCE_WINDOWS[bucket.event.event];
+  /** Report counted repeats of closed windows (or all, before shutdown). */
+  const releaseOccurrences = (all = false) => {
+    for (const [key, bucket] of occurrences) {
+      if (!all && windowOpen(bucket)) continue;
+      occurrences.delete(key);
+      if (bucket.repeated) capture({ ...bucket.event, occurrences: bucket.repeated }, bucket.identity, generation, true);
+    }
+    if (!occurrences.size) { clearInterval(occurrenceTimer); occurrenceTimer = undefined; }
+  };
+  const capture = (input: TelemetryEvent, captured?: UsageIdentity, capturedGeneration = generation, rollup = false) => {
     if (!allowed() || capturedGeneration !== generation) return;
     try {
       const parsed = telemetryEventSchema.safeParse(input);
@@ -161,13 +181,30 @@ export function createTelemetry(options: {
       if (captured && captured.installationId !== identity.installationId) return;
       const event = parsed.data;
       if ('diagnostic' in event && event.diagnostic) event.diagnostic = errorDiagnostic(event.diagnostic);
-      if (event.event === 'application_error') {
+      if (event.event === 'application_error' || event.event === 'application_warning') {
         event.operation = diagnosticOperation(event.operation);
-        const key = JSON.stringify(event);
-        const last = recentErrors.get(key);
-        if (last !== undefined && now() - last < 60_000) return;
-        if (recentErrors.size >= 100) recentErrors.delete(recentErrors.keys().next().value!);
-        recentErrors.set(key, now());
+        if (!rollup) {
+          delete event.occurrences;
+          // The key is the redacted event, so every counted repeat carries
+          // exactly the diagnostic that was reported for its window.
+          const diagnosticIdentity = captured ?? identity;
+          const key = JSON.stringify([diagnosticIdentity.anonymousId, diagnosticIdentity.userId, event]);
+          const bucket = occurrences.get(key);
+          if (bucket && windowOpen(bucket)) { bucket.repeated++; return; }
+          event.occurrences = (bucket?.repeated ?? 0) + 1;
+          occurrences.delete(key);
+          if (occurrences.size >= 100) {
+            const [oldestKey, oldest] = occurrences.entries().next().value!;
+            occurrences.delete(oldestKey);
+            // Saved below with this event; a nested capture would be overwritten.
+            if (oldest.repeated) (state.queue ??= []).push(entry(oldest.identity, { ...oldest.event, occurrences: oldest.repeated }));
+          }
+          occurrences.set(key, { event: { ...event }, identity: diagnosticIdentity, startedAt: now(), repeated: 0 });
+          if (!occurrenceTimer) {
+            occurrenceTimer = setInterval(() => releaseOccurrences(), 60_000);
+            occurrenceTimer.unref();
+          }
+        }
       }
       if (event.event === 'app_opened' && opened) return;
       const minute = Math.floor(now() / 60000);
@@ -237,6 +274,11 @@ export function createTelemetry(options: {
       try { capture({ event: 'application_error', ...context, diagnostic: errorDiagnostic(error) }); }
       catch { /* Never replace the original failure. */ }
     },
+    /** A degraded but continuing operation, reported apart from failures. */
+    captureWarning(error: unknown, context: ErrorContext) {
+      try { capture({ event: 'application_warning', ...context, diagnostic: errorDiagnostic(error) }); }
+      catch { /* Never replace the original condition. */ }
+    },
     update(next: { enabled: boolean }) {
       if (!next.enabled) { collectionStopped = true; cancel(); }
       const config = options.read();
@@ -249,7 +291,11 @@ export function createTelemetry(options: {
       return preferences();
     },
     flush,
-    close() { stopped = true; cancel(); },
+    /** Counted repeats are queued durably and delivered after the next launch. */
+    close() {
+      try { releaseOccurrences(true); } catch { /* Shutdown never depends on analytics. */ }
+      stopped = true; cancel();
+    },
   };
 }
 

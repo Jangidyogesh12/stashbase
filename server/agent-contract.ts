@@ -311,13 +311,13 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
   const runtime = runtimeDescriptorFor(adapter);
   if (!runtime.installed || runtime.state !== 'available') {
     const message = runtime.error ?? `${adapter.label} is not ready.`;
-    telemetry.captureError(message, { source: 'agent', operation: 'connection', runtime: adapter.id });
+    telemetry.captureWarning(message, { source: 'agent', operation: 'connection', runtime: adapter.id });
     ws.send(JSON.stringify({ t: 'error', message }));
     ws.close();
     return;
   }
   if (adapter.id !== 'stashbase' && !agentExecutableFor(adapter.id)) {
-    telemetry.captureError(`${adapter.label} CLI is not available.`, { source: 'agent', operation: 'connection', runtime: adapter.id });
+    telemetry.captureWarning(`${adapter.label} CLI is not available.`, { source: 'agent', operation: 'connection', runtime: adapter.id });
     ws.send(JSON.stringify({ t: 'error', message: `${adapter.label} CLI is not available.` }));
     ws.close();
     return;

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { logger, errorMessage } from './log.ts';
+import { logger } from './log.ts';
 
 const log = logger('agent-rules');
 
@@ -37,7 +37,7 @@ export function ensureClaudeFolderTrust(
   } catch (err: unknown) {
     // Never block the session on this — worst case the user trusts the
     // folder once in a terminal, which is exactly today's behaviour.
-    log.warn(`could not pre-trust ${folderRoot} for Claude: ${errorMessage(err)}`);
+    log.warn(`could not pre-trust ${folderRoot} for Claude:`, err);
   }
 }
 

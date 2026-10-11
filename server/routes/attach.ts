@@ -110,7 +110,7 @@ export function cleanupStaleAttachments(root = attachRoot(), maxAgeMs = ATTACHME
       const st = fs.statSync(abs);
       if (now - st.mtimeMs > maxAgeMs) fs.rmSync(abs, { recursive: true, force: true });
     } catch (err: unknown) {
-      log.warn(`attach: cleanup ${entry.name} failed: ${errorMessage(err)}`);
+      log.warn(`attach: cleanup ${entry.name} failed:`, err);
     }
   }
 }
@@ -159,7 +159,7 @@ export function mount(app: express.Express): void {
           fs.writeFileSync(abs, f.buffer, { mode: 0o600 });
           out.push({ name, path: abs });
         } catch (err: unknown) {
-          log.warn(`attach: write ${name} failed: ${errorMessage(err)}`);
+          log.error(`attach: write ${name} failed:`, err);
           out.push({ name, error: errorMessage(err) });
         }
       }

@@ -224,7 +224,7 @@ export function revealInOsFileManager(absPath: string): void {
   }
   const proc = childProcess.spawn(cmd, args, { detached: true, stdio: 'ignore' });
   proc.on('error', (err) => {
-    log.warn(`reveal: spawn ${cmd} failed: ${err.message}`);
+    log.warn(`reveal: spawn ${cmd} failed:`, err);
   });
   proc.unref();
 }

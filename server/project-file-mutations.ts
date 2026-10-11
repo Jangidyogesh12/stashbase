@@ -141,22 +141,22 @@ export async function moveProjectFile(
       const newPathIsRetrievalEligible = isRetrievalEligiblePath(newTarget.folderRel);
       if (opaque) {
         await indexer.deleteFile(oldTarget.abs).catch((err) => {
-          log.warn(`project move: failed to remove opaque source index row ${oldTarget.abs}: ${errorMessage(err)}`);
+          log.warn(`project move: failed to remove opaque source index row ${oldTarget.abs}:`, err);
         });
         await indexer.deleteFile(newTarget.abs).catch((err) => {
-          log.warn(`project move: failed to remove opaque target index row ${newTarget.abs}: ${errorMessage(err)}`);
+          log.warn(`project move: failed to remove opaque target index row ${newTarget.abs}:`, err);
         });
       } else if (viewerOnly) {
         clearRecord(oldTarget.abs);
         clearRecord(newTarget.abs);
         try { deleteDerivedForSource(oldTarget.abs); } catch (err: unknown) {
-          log.warn(`project move: old derived cleanup failed for ${oldTarget.abs}: ${errorMessage(err)}`);
+          log.warn(`project move: old derived cleanup failed for ${oldTarget.abs}:`, err);
         }
         try { deleteDerivedForSource(newTarget.abs); } catch (err: unknown) {
-          log.warn(`project move: stale target derived cleanup failed for ${newTarget.abs}: ${errorMessage(err)}`);
+          log.warn(`project move: stale target derived cleanup failed for ${newTarget.abs}:`, err);
         }
         await indexer.deleteFile(oldTarget.abs).catch((err) => {
-          log.warn(`project move: failed to remove old source index row ${oldTarget.abs}: ${errorMessage(err)}`);
+          log.warn(`project move: failed to remove old source index row ${oldTarget.abs}:`, err);
         });
         if (newPathIsRetrievalEligible) {
           try {
@@ -164,23 +164,23 @@ export async function moveProjectFile(
               throw new Error(`no conversion owner for ${oldFormat} source`);
             }
           } catch (err: unknown) {
-            log.warn(`project move: conversion kickoff failed for ${newTarget.abs}: ${errorMessage(err)}`);
+            log.warn(`project move: conversion kickoff failed for ${newTarget.abs}:`, err);
           }
           indexWarning = 'Searchable text is being regenerated in the background.';
         }
       } else if (!newPathIsRetrievalEligible) {
         await indexer.deleteFile(oldTarget.abs).catch((err) => {
-          log.warn(`project move: failed to remove hidden source index row ${oldTarget.abs}: ${errorMessage(err)}`);
+          log.warn(`project move: failed to remove hidden source index row ${oldTarget.abs}:`, err);
         });
         await indexer.deleteFile(newTarget.abs).catch((err) => {
-          log.warn(`project move: failed to remove hidden target index row ${newTarget.abs}: ${errorMessage(err)}`);
+          log.warn(`project move: failed to remove hidden target index row ${newTarget.abs}:`, err);
         });
       } else {
         const movedContent = (await readTextAsync(newTarget.folderRel)) ?? '';
         const tooLarge = contentSizeError(movedContent);
         if (tooLarge) {
           await indexer.deleteFile(oldTarget.abs).catch((err) => {
-            log.warn(`project move: failed to remove old index row ${oldTarget.abs}: ${errorMessage(err)}`);
+            log.warn(`project move: failed to remove old index row ${oldTarget.abs}:`, err);
           });
           indexWarning = `${tooLarge}. The file moved, but it won't be searchable until you split or reduce it and run sync.`;
         } else {
@@ -200,7 +200,7 @@ export async function moveProjectFile(
       // The disk move is already valid. Report search-projection lag instead of
       // rolling it back after link rewrites have completed.
       await indexer.deleteFile(oldTarget.abs).catch((cleanupErr) => {
-        log.warn(`project move: stale-source cleanup failed for ${oldTarget.abs}: ${errorMessage(cleanupErr)}`);
+        log.warn(`project move: stale-source cleanup failed for ${oldTarget.abs}:`, cleanupErr);
       });
       indexWarning = `Moved, but the file couldn't be updated for search: ${errorMessage(err)}`;
     }
@@ -228,16 +228,16 @@ export async function deleteProjectFile(
     await prepareFileOperation(target.folderRel);
     const removed = await deleteFileAsync(target.folderRel);
     try { deleteDerivedForSource(target.abs); }
-    catch (err: unknown) { log.warn(`project delete: derived cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
+    catch (err: unknown) { log.warn(`project delete: derived cleanup failed for ${target.abs}:`, err); }
     try { clearRecord(target.abs); }
-    catch (err: unknown) { log.warn(`project delete: preparation status cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
+    catch (err: unknown) { log.warn(`project delete: preparation status cleanup failed for ${target.abs}:`, err); }
     if (removed) {
       noteTreeChanged();
     }
     let indexWarning: string | undefined;
     try { await indexer.deleteFile(target.abs); }
     catch (err: unknown) {
-      log.warn(`project delete: index cleanup failed for ${target.abs}: ${errorMessage(err)}`);
+      log.warn(`project delete: index cleanup failed for ${target.abs}:`, err);
       indexWarning = 'Deleted, but search-data cleanup failed. Run sync to reconcile.';
     }
     return {

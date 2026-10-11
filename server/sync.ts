@@ -103,7 +103,7 @@ function cleanupRemovedSource(sourcePath: string): void {
   try { cancelConversion(sourcePath); } catch { /* best effort */ }
   try { clearRecord(sourcePath); } catch { /* best effort */ }
   try { deleteDerivedForSource(sourcePath); } catch (err: unknown) {
-    log.warn(`removed-source cleanup failed for ${sourcePath}: ${errorMessage(err)}`);
+    log.warn(`removed-source cleanup failed for ${sourcePath}:`, err);
   }
 }
 
@@ -192,7 +192,7 @@ async function indexDirectSource(
     if (isMfsDaemonRetiringError(err)) throw err;
     const message = errorMessage(err);
     failed.push({ name: sourcePath, error: message });
-    log.warn(`failed ${sourcePath}: ${message}`);
+    log.warn(`failed ${sourcePath}:`, err);
     return { outcome: 'unchanged' };
   }
 }

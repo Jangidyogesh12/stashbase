@@ -43,7 +43,7 @@ export async function renameWithRollback(opts: {
     await doIndex();
     res.json(okResponse());
   } catch (err: unknown) {
-    log.warn(`${kind} rename: index update failed for ${from} → ${to}: ${errorMessage(err)}`);
+    log.warn(`${kind} rename: index update failed for ${from} → ${to}:`, err);
     try {
       await undoDisk();
     } catch (rb: unknown) {

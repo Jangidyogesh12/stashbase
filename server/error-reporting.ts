@@ -9,6 +9,13 @@ const FEATURES = new Set(['account', 'agents', 'agent', 'project', 'upload', 'as
   'folders', 'gallery', 'index-status', 'mcp', 'projects', 'search', 'sync', 'terminal',
   'keyword-search', 'local-components', 'turn-changes', 'updates', 'workspace-preferences']);
 
+/** A refused request (4xx) is an expected outcome such as a save conflict or a
+ * missing file; only a server failure (5xx) is an application error. */
+function captureHttp(service: typeof telemetry, status: number, error: unknown, operation: string): void {
+  if (status >= 500) service.captureError(error, { source: 'server', operation });
+  else service.captureWarning(error, { source: 'server', operation });
+}
+
 export function httpErrorReporting(service = telemetry): RequestHandler {
   return (req, res, next) => {
     const asset = /^\/(asset|asset-derived)\//.exec(req.path)?.[1];
@@ -18,8 +25,8 @@ export function httpErrorReporting(service = telemetry): RequestHandler {
     // and status while recording the same bounded operation/status once.
     res.once('finish', () => {
       if (res.statusCode >= 400 && !res.locals?.diagnosticReported) {
-        service.captureError({ message: 'HTTP request failed', status: res.statusCode },
-          { source: 'server', operation: `http.${FEATURES.has(feature) ? feature : 'other'}` });
+        captureHttp(service, res.statusCode, { message: 'HTTP request failed', status: res.statusCode },
+          `http.${FEATURES.has(feature) ? feature : 'other'}`);
       }
     });
     const json = res.json;
@@ -27,14 +34,14 @@ export function httpErrorReporting(service = telemetry): RequestHandler {
       if (res.statusCode >= 400 && !res.locals?.diagnosticReported) {
         res.locals.diagnosticReported = true;
         const value = body && typeof body === 'object' ? body as Record<string, unknown> : {};
-        service.captureError({
+        captureHttp(service, res.statusCode, {
           message: typeof value.error === 'string' ? value.error : 'HTTP request failed',
           code: value.code, status: res.statusCode,
           ...(res.locals?.diagnosticError instanceof Error ? {
             stack: res.locals.diagnosticError.stack,
             cause: res.locals.diagnosticError,
           } : {}),
-        }, { source: 'server', operation: `http.${FEATURES.has(feature) ? feature : 'other'}` });
+        }, `http.${FEATURES.has(feature) ? feature : 'other'}`);
       }
       return json.call(this, body);
     };
@@ -65,14 +72,18 @@ export function reportAgentRuntimeError(runtime: NonNullable<ErrorContext['runti
   }
 }
 
-export function installHostErrorReporting(): void {
-  setLogErrorReporter((scope, args) => {
+export function installHostErrorReporting(service = telemetry): void {
+  setLogErrorReporter((scope, args, level) => {
     if (scope === 'renderer') return; // Already collected by the renderer error sink.
     // Objects may be entire provider payloads. Keep Error values and sentences only.
+    // A logged Error is classified alone: the surrounding sentence is a local
+    // log template and must not decide the reported cause.
     const error = args.find((value) => value instanceof Error);
     const messages = args.filter((value): value is string => typeof value === 'string');
-    telemetry.captureError(error ?? messages.join('\n'), { source: 'server', operation: `background.${scope}` });
+    const context = { source: 'server', operation: `background.${scope}` } as const;
+    if (level === 'warn') service.captureWarning(error ?? messages.join('\n'), context);
+    else service.captureError(error ?? messages.join('\n'), context);
   });
   // Monitoring does not swallow an uncaught exception or change Node's exit policy.
-  process.on('uncaughtExceptionMonitor', (error) => telemetry.captureError(error, { source: 'server', operation: 'uncaught' }));
+  process.on('uncaughtExceptionMonitor', (error) => service.captureError(error, { source: 'server', operation: 'uncaught' }));
 }

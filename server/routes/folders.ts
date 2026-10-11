@@ -16,7 +16,7 @@ import {
 } from '../files.ts';
 import { applyRenamePlanAsync, planRenameLinksAsync } from '../links.ts';
 import { toSourcePath } from '../folder.ts';
-import { errorMessage, logger } from '../log.ts';
+import { logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { guardExplicitFolder, sendError } from '../http.ts';
 import { renameWithRollback } from '../rename-helpers.ts';
@@ -36,7 +36,7 @@ const log = logger('routes/folders');
 function scheduleConversionRediscovery(sourcePrefix: string, displayPath: string): void {
   setImmediate(() => {
     void discoverConvertibleSources(sourcePrefix).catch((err: unknown) => {
-      log.warn(`rename_folder: conversion rediscovery failed for ${displayPath}: ${errorMessage(err)}`);
+      log.warn(`rename_folder: conversion rediscovery failed for ${displayPath}:`, err);
     });
   });
 }
@@ -67,14 +67,14 @@ export function mount(app: express.Express): void {
       // wiped a populated folder". Do not acknowledge completion until
       // the old semantic prefix has also been removed.
       try { deleteDerivedUnderFolder(sourcePrefix); }
-      catch (err: unknown) { log.warn(`delete_prefix: derived cleanup failed for ${p}: ${errorMessage(err)}`); }
+      catch (err: unknown) { log.warn(`delete_prefix: derived cleanup failed for ${p}:`, err); }
       const removed = await deleteFolderAsync(p);
       forgetFolderTurnChanges(sourcePrefix);
       if (removed) {
         noteTreeChanged();
       }
       try { clearRecordsUnder(toSourcePath(p)); }
-      catch (err: unknown) { log.warn(`delete_prefix: preparation status cleanup failed for ${p}: ${errorMessage(err)}`); }
+      catch (err: unknown) { log.warn(`delete_prefix: preparation status cleanup failed for ${p}:`, err); }
       await indexer.deletePathPrefix(sourcePrefix);
       res.json({ alreadyGone: !removed });
     } catch (err: unknown) {
@@ -176,7 +176,7 @@ export function mount(app: express.Express): void {
       },
       okResponse: () => {
         try { deleteDerivedUnderFolder(oldSourcePrefix); }
-        catch (err: unknown) { log.warn(`rename_folder: old derived cleanup failed for ${oldPath}: ${errorMessage(err)}`); }
+        catch (err: unknown) { log.warn(`rename_folder: old derived cleanup failed for ${oldPath}:`, err); }
         if (newPrefixIsRetrievalEligible) scheduleConversionRediscovery(newSourcePrefix, newPath);
         noteTreeChanged();
         return { path: newPath };

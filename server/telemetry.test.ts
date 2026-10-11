@@ -207,6 +207,64 @@ test('error diagnostics share opt-out, redact causes, and suppress repeated fail
   f.service.close();
 });
 
+test('warnings report apart from errors and count repeats per window', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const f = fixture();
+  const context = { source: 'server', operation: 'background.sync' } as const;
+  const failure = Object.assign(new Error('index rejected'), { code: 'EIO' });
+  f.service.captureWarning(failure, context);
+  f.service.captureError(failure, context);
+  await tick();
+  assert.deepEqual(f.sent.map((entry) => [entry.body.event, entry.body.properties.occurrences]),
+    [['application_warning', 1], ['application_error', 1]]);
+
+  // Persistent: repeats are counted locally and reported once when the window closes.
+  for (let i = 0; i < 5; i++) { f.advance(60_000); f.service.captureWarning(failure, context); }
+  await tick();
+  assert.equal(f.sent.length, 2);
+  f.advance(5 * 60_000);
+  t.mock.timers.tick(60_000);
+  await tick();
+  assert.deepEqual(f.sent.slice(2).map((entry) => [entry.body.event, entry.body.properties.occurrences]),
+    [['application_warning', 5]]);
+  assert.equal(f.sent[2].body.properties.diagnostic.code, 'EIO');
+
+  // Sporadic: a lone occurrence reports once, with no later rollup.
+  f.advance(60 * 60_000);
+  f.service.captureWarning(failure, context);
+  f.advance(20 * 60_000);
+  t.mock.timers.tick(60_000);
+  await tick();
+  assert.deepEqual(f.sent.slice(3).map((entry) => entry.body.properties.occurrences), [1]);
+
+  // Shutdown queues uncounted repeats durably instead of dropping them.
+  f.service.captureWarning(failure, context);
+  f.service.captureWarning(failure, context);
+  f.service.captureWarning(failure, context);
+  await tick();
+  f.service.close();
+  assert.deepEqual(f.config().telemetry?.queue?.map((entry) => [entry.event.event, 'occurrences' in entry.event && entry.event.occurrences]),
+    [['application_warning', 2]]);
+});
+
+test('diagnostic repeats retain their account across a switch', async () => {
+  const f = fixture();
+  const context = { source: 'server', operation: 'background.sync' } as const;
+  const failure = new Error('sync failed');
+  account(f, 'A');
+  f.service.captureWarning(failure, context);
+  f.service.captureWarning(failure, context);
+  await tick();
+  account(f, 'B');
+  f.service.captureWarning(failure, context);
+  f.service.captureWarning(failure, context);
+  await tick();
+  f.service.close();
+  const queued = f.config().telemetry?.queue?.filter((item) => item.event.event === 'application_warning') ?? [];
+  assert.deepEqual(queued.map((item) => [item.userId, 'occurrences' in item.event && item.event.occurrences]),
+    [['A', 1], ['B', 1]]);
+});
+
 test('setup diagnostics are redacted at collection even when the caller supplies raw text', async () => {
   const f = fixture();
   f.service.capture({ event: 'agent_setup_result', runtime: 'claude', stage: 'update', outcome: 'failed',
@@ -243,6 +301,41 @@ test('HTTP failures report their operation without request bodies, paths, or a s
   } finally { f.service.close(); server.closeAllConnections(); server.close(); }
 });
 
+
+test('host logs report warnings and errors apart, classified by the caught error alone', async () => {
+  const { installHostErrorReporting } = await import('./error-reporting.ts');
+  const { logger, setLogErrorReporter } = await import('./log.ts');
+  const f = fixture();
+  installHostErrorReporting(f.service);
+  try {
+    const log = logger('file-save');
+    log.warn('save: index update failed for Acme Plan.md:', Object.assign(new Error('disk is full'), { code: 'ENOSPC' }));
+    log.error('save: write failed for Acme Plan.md:', Object.assign(new Error('read-only'), { code: 'EROFS' }));
+    await tick();
+    assert.deepEqual(f.sent.map((entry) => [entry.body.event, entry.body.properties.operation, entry.body.properties.diagnostic.code]),
+      [['application_warning', 'background.file-save', 'ENOSPC'], ['application_error', 'background.file-save', 'EROFS']]);
+    // The template's "update" must not decide the cause.
+    assert.equal(f.sent[0].body.properties.diagnostic.message, 'Disk space exhausted');
+    assert.equal(JSON.stringify(f.sent).includes('Acme'), false);
+  } finally { setLogErrorReporter(() => {}); f.service.close(); }
+});
+
+test('refused HTTP requests are warnings while server failures are errors', async () => {
+  const { httpErrorReporting } = await import('./error-reporting.ts');
+  const f = fixture();
+  const app = express(); app.use(httpErrorReporting(f.service));
+  app.put('/api/files/conflict', (_req, res) => res.status(412).json({ error: 'File changed on disk' }));
+  app.put('/api/files/broken', (_req, res) => res.status(500).json({ error: 'Operation failed' }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const address = server.address(); assert.ok(address && typeof address === 'object');
+  try {
+    for (const path of ['conflict', 'broken']) await fetch(`http://127.0.0.1:${address.port}/api/files/${path}`, { method: 'PUT' });
+    await tick();
+    assert.deepEqual(f.sent.map((entry) => [entry.body.event, entry.body.properties.diagnostic.http_status]),
+      [['application_warning', 412], ['application_error', 500]]);
+  } finally { f.service.close(); server.closeAllConnections(); server.close(); }
+});
 
 test('automatic diagnostics never retain unquoted names or relative paths', async () => {
   const f = fixture();

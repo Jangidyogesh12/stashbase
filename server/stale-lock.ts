@@ -75,11 +75,11 @@ export function reclaimStaleServerPort(
     const proc = readProcess(pid);
     if (!proc) continue;
     if (!proc.command.includes(entryPath)) {
-      log.warn(`port ${port} is held by pid=${pid} (${proc.command}) — not a StashBase server from this install, leaving alone`);
+      log.info(`port ${port} is held by pid=${pid} (${proc.command}) — not a StashBase server from this install, leaving alone`);
       continue;
     }
     if (proc.ppid !== 1) {
-      log.warn(`port ${port} is held by sibling server pid=${pid} with a live parent (ppid=${proc.ppid}) — leaving alone`);
+      log.info(`port ${port} is held by sibling server pid=${pid} with a live parent (ppid=${proc.ppid}) — leaving alone`);
       continue;
     }
     log.warn(`reclaiming port ${port}: killing orphaned sibling server pid=${pid}`);

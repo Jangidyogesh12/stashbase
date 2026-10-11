@@ -156,7 +156,7 @@ export async function reprocessFileInFolder(
       if (!result.cancelled) noteTreeChanged();
     })
     .catch((err: unknown) => {
-      log.warn(`manual reprocess sync failed for ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(`manual reprocess sync failed for ${sourcePath}:`, err);
     });
   return 'index';
 }

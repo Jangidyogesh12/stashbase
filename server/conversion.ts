@@ -37,7 +37,7 @@ import { clearRecord } from './conversion-status.ts';
 import { fromSourcePath, getActiveFolders, registeredRootForAbs, onClose, onSwitch } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import type { IndexUpsertResult } from './indexer.ts';
-import { logger, errorMessage } from './log.ts';
+import { logger } from './log.ts';
 import {
   FILESYSTEM_SCAN_YIELD_EVERY,
   hasNoExtractableText,
@@ -263,11 +263,11 @@ async function executeConversion(
   const t0 = Date.now();
   log.info(`${spec.kind}: running ${absPath} → ${path.basename(spec.derivedNote(absPath))} …`);
   try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (err: unknown) {
-    log.warn(`${spec.kind}: preflight cleanup failed for ${absPath}: ${errorMessage(err)}`);
+    log.warn(`${spec.kind}: preflight cleanup failed for ${absPath}:`, err);
   }
   const cleanupFailedOutput = () => {
     try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (cleanupErr: unknown) {
-      log.warn(`${spec.kind}: failed-output cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
+      log.warn(`${spec.kind}: failed-output cleanup failed for ${absPath}:`, cleanupErr);
     }
   };
   try {
@@ -282,7 +282,7 @@ async function executeConversion(
     if (!existsSync(absPath)) {
       log.info(`${spec.kind}: source disappeared before completion, cleaning derived output for ${absPath}`);
       try { spec.cleanupDerived?.(absPath); } catch (err: unknown) {
-        log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}: ${errorMessage(err)}`);
+        log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}:`, err);
       }
       clearRecord(sourcePath);
       return 'settled';
@@ -290,7 +290,7 @@ async function executeConversion(
     if (!sameSourceSignature(startedWith, sourceSignature(absPath))) {
       log.info(`${spec.kind}: source changed before completion, cleaning stale derived output for ${absPath}`);
       try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
-        log.warn(`${spec.kind}: stale derived cleanup failed for changed source ${absPath}: ${errorMessage(cleanupErr)}`);
+        log.warn(`${spec.kind}: stale derived cleanup failed for changed source ${absPath}:`, cleanupErr);
       }
       clearRecord(sourcePath);
       return 'rediscover';
@@ -314,13 +314,12 @@ async function executeConversion(
       setProgress(sourcePath, { phase: 'indexing' });
       await indexDerivedNote?.(absPath, noteAbs);
     } catch (err: unknown) {
-      const msg = errorMessage(err);
-      log.warn(`${spec.kind}: derived-text index failed for ${absPath}: ${msg}`);
+      log.warn(`${spec.kind}: derived-text index failed for ${absPath}:`, err);
     }
     if (signal.aborted) throw new TransientConversionError(`${spec.kind} cancelled`);
     if (!existsSync(absPath)) {
       try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
-        log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}: ${errorMessage(cleanupErr)}`);
+        log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}:`, cleanupErr);
       }
       clearRecord(sourcePath);
       return 'settled';
@@ -328,7 +327,7 @@ async function executeConversion(
     if (!sameSourceSignature(startedWith, sourceSignature(absPath))) {
       log.info(`${spec.kind}: source changed during indexing, retiring stale output for ${absPath}`);
       try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
-        log.warn(`${spec.kind}: stale derived cleanup failed for changed source ${absPath}: ${errorMessage(cleanupErr)}`);
+        log.warn(`${spec.kind}: stale derived cleanup failed for changed source ${absPath}:`, cleanupErr);
       }
       clearRecord(sourcePath);
       return 'rediscover';
@@ -337,7 +336,7 @@ async function executeConversion(
     if (spec.derivedReady && !spec.derivedReady(absPath, completedDerived)) {
       log.info(`${spec.kind}: derived output became stale during indexing, rediscovering ${absPath}`);
       try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
-        log.warn(`${spec.kind}: stale derived cleanup failed after indexing ${absPath}: ${errorMessage(cleanupErr)}`);
+        log.warn(`${spec.kind}: stale derived cleanup failed after indexing ${absPath}:`, cleanupErr);
       }
       clearRecord(sourcePath);
       return 'rediscover';
@@ -346,17 +345,19 @@ async function executeConversion(
     return 'settled';
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err));
-    log.warn(`${spec.kind}: failed for ${absPath}: ${error.message}`);
+    // Deleted, cancelled, changed and transient runs are expected outcomes;
+    // only a conversion that leaves the source failed is a warning.
+    log.info(`${spec.kind}: stopped for ${absPath}: ${error.message}`);
     if (!existsSync(absPath)) {
       try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
-        log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}: ${errorMessage(cleanupErr)}`);
+        log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}:`, cleanupErr);
       }
       clearRecord(sourcePath);
       return 'settled';
     }
     if (signal.aborted) {
       try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (cleanupErr: unknown) {
-        log.warn(`${spec.kind}: cancelled-conversion cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
+        log.warn(`${spec.kind}: cancelled-conversion cleanup failed for ${absPath}:`, cleanupErr);
       }
       const reason = signal.reason as ConversionCancellationReason | undefined;
       if (reason === 'user-request') markCancelled(sourcePath);
@@ -369,14 +370,15 @@ async function executeConversion(
     }
     if (isTransientConversionError(error)) {
       try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (cleanupErr: unknown) {
-        log.warn(`${spec.kind}: transient-conversion cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
+        log.warn(`${spec.kind}: transient-conversion cleanup failed for ${absPath}:`, cleanupErr);
       }
       clearRecord(sourcePath);
       return 'settled';
     }
     try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
-      log.warn(`${spec.kind}: failed-conversion cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
+      log.warn(`${spec.kind}: failed-conversion cleanup failed for ${absPath}:`, cleanupErr);
     }
+    log.warn(`${spec.kind}: failed for ${absPath}:`, error);
     markFailed(sourcePath, error.message);
     return 'settled';
   }
@@ -416,7 +418,7 @@ function runConversion(
   if (scheduled.created) {
     spec.onScheduled?.(absPath, scheduled.completion, urgency);
     try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (err: unknown) {
-      log.warn(`${spec.kind}: enqueue cleanup failed for ${absPath}: ${errorMessage(err)}`);
+      log.warn(`${spec.kind}: enqueue cleanup failed for ${absPath}:`, err);
     }
     log.info(`${spec.kind}: queued ${absPath} → ${path.basename(spec.derivedNote(absPath))}`);
   }

@@ -7,7 +7,7 @@ import { withAgentProjectScope } from '../project-request-scope.ts';
  */
 import express from 'express';
 import fs from 'node:fs';
-import { errorMessage, logger } from '../log.ts';
+import { logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
 import {
@@ -149,7 +149,7 @@ export function mount(app: express.Express, operations: ProjectOperations = crea
         enriched.sort((a, b) => b.mtimeMs - a.mtimeMs);
         recentlyIndexed = enriched.slice(0, 10);
       } catch (err) {
-        log.warn(`recently_indexed enrichment failed: ${errorMessage(err)}`);
+        log.warn(`recently_indexed enrichment failed:`, err);
       }
       res.json({
         ...status,

@@ -195,7 +195,7 @@ export class MfsDaemon extends EventEmitter {
     this.bindings.delete(key);
     if (this.proc) {
       try { await this.call('unbind_folder', { folder: source, folder_identity: key }); }
-      catch (err) { log.warn(`unbind_folder ${source} failed: ${(err as Error).message}`); }
+      catch (err) { log.warn(`unbind_folder ${source} failed:`, err); }
     }
   }
 
@@ -276,17 +276,19 @@ export class MfsDaemon extends EventEmitter {
 
       proc.on('error', (err) => {
         clearTimeout(readyTimer);
-        log.warn(`MFS daemon spawn failed: ${err.message}`);
+        log.warn(`MFS daemon spawn failed:`, err);
         failAll(err);
         reject(err);
       });
 
       proc.on('exit', (code, signal) => {
         clearTimeout(readyTimer);
-        const err = new Error(
+        const err = Object.assign(new Error(
           `MFS daemon exited (code=${code}, signal=${signal ?? 'null'})`,
-        );
-        log.warn(`${err.message}`);
+        ), code === null ? {} : { exitCode: code });
+        // close() detaches its child first; only an exit nobody asked for is a warning.
+        if (this.proc === proc) log.warn(err);
+        else log.info(err.message);
         failAll(err);
         // If we never got `ready`, surface the failure to the caller.
         if (!ready) reject(err);

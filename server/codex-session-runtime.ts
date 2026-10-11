@@ -598,7 +598,7 @@ export class CodexSession implements AttributedAgentSession {
       if (title) {
         this.send({ t: 'session-title', title });
         await this.request('thread/name/set', { threadId: id, name: title })
-          .catch((err: unknown) => log.warn(`Codex title set failed for ${id}: ${errorMessage(err)}`));
+          .catch((err: unknown) => log.warn(`Codex title set failed for ${id}:`, err));
       }
     }
     return id;
@@ -643,7 +643,7 @@ export class CodexSession implements AttributedAgentSession {
     try {
       this.rpc?.respond(id, result);
     } catch (err: unknown) {
-      log.warn(`failed responding to Codex app-server request: ${errorMessage(err)}`);
+      log.warn(`failed responding to Codex app-server request:`, err);
     }
   }
 
@@ -651,7 +651,7 @@ export class CodexSession implements AttributedAgentSession {
     try {
       this.rpc?.reject(id, message, code);
     } catch (err: unknown) {
-      log.warn(`failed rejecting Codex app-server request: ${errorMessage(err)}`);
+      log.warn(`failed rejecting Codex app-server request:`, err);
     }
   }
 

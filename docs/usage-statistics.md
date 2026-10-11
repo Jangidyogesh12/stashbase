@@ -49,7 +49,8 @@ date. Older builds do not supply the same activity or identity evidence.
 | `billing_portal_result` | Host obtains a verified management page or fails | `outcome` |
 | `subscription_observed` | Hosted API confirms subscription rights; unchanged polling is suppressed | bounded `plan`, `paid`, `cancel_at_period_end` |
 | `agent_setup_result` | Agent setup settles or connection fails | `runtime`, `stage`, `outcome`, optional failure stage and diagnostic |
-| `application_error` | Host, renderer or Agent failure | `source`, controlled `operation`, optional `runtime`, redacted `diagnostic` |
+| `application_error` | Host, renderer or Agent failure | `source`, controlled `operation`, optional `runtime`, redacted `diagnostic`, `occurrences` |
+| `application_warning` | Operation degraded but continued, such as a saved file that could not be indexed, a refused (4xx) request, or an Agent that is not ready | Same as `application_error` |
 
 `app_active` and each document activity/format category are limited to once per UTC
 minute across windows. They are not heartbeats. Idle background processes,
@@ -67,7 +68,17 @@ cancelled or blocked; saves use conflict. Durations are under 10 seconds,
 10–60 seconds, 1–5 minutes, or over 5 minutes. No model names or exact request
 durations are sent. Diagnostics contain controlled summaries, known error codes,
 HTTP/exit status and bounded stack line/column locations. Raw messages are
-classified locally. Identical diagnostics are suppressed for one minute.
+classified locally. When a logged sentence carries the caught error, only that
+error is classified, never the sentence around it.
+
+An identical diagnostic is reported when first seen. Repeats within its window
+(one minute for errors, ten minutes for warnings) are counted locally and sent as
+one event when the window closes. `occurrences` is the number of times it happened
+since the previous report of that diagnostic, including this one, so summing it
+over time gives the real frequency. A failure that persists produces one event
+per window; an isolated one produces a single event with `occurrences = 1`.
+Counts not yet sent at shutdown join the delivery queue. Older builds omit
+`occurrences` and reported warnings as `application_error`.
 
 Save, project-open and billing operations retain their initiating identity across
 an asynchronous account switch. A turn's random correlation ID retains its

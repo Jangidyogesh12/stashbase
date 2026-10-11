@@ -56,7 +56,7 @@ async function cleanupDerivedForFolder(folderAbs: string, retainedRoots: readonl
       stats = addDerivedCleanupStats(stats, deleteDerivedForSource(sourcePath));
     }
   } catch (err: unknown) {
-    log.warn(`derived cleanup: failed to list indexed files for ${folderAbs}: ${errorMessage(err)}`);
+    log.warn(`derived cleanup: failed to list indexed files for ${folderAbs}:`, err);
   }
   if (stats.artifacts > 0) {
     log.info(`derived cleanup: removed ${stats.artifacts} artifact(s) for ${stats.sources} source(s) under ${folderAbs}`);
@@ -74,17 +74,17 @@ async function cleanupRemovedProjectFolder(abs: string): Promise<void> {
     log.info(`folder remove: cancelled ${cancelled.length} queued/running conversion(s) under ${abs}`);
   }
   try { clearRecordsUnder(abs, retainedRoots); }
-  catch (err: unknown) { log.warn(`conversion-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
+  catch (err: unknown) { log.warn(`conversion-state cleanup failed for ${abs}:`, err); }
   await cleanupDerivedForFolder(abs, retainedRoots);
   // Clear its index rows + unbind from the daemon. deletePathPrefix is
   // keyed by the absolute folder root.
   await indexer.deletePathPrefix(abs);
   try { await indexer.unbindFolder(abs); }
-  catch (err: unknown) { log.warn(`unbind on remove failed for ${abs}: ${errorMessage(err)}`); }
+  catch (err: unknown) { log.warn(`unbind on remove failed for ${abs}:`, err); }
   forgetFolderTurnChanges(abs, retainedRoots);
   // Best-effort secondary-cache cleanup (conversions / runtime warnings).
   try { await deleteFolderRuntimeState(abs); }
-  catch (err: unknown) { log.warn(`runtime-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
+  catch (err: unknown) { log.warn(`runtime-state cleanup failed for ${abs}:`, err); }
 }
 
 async function removeProjectFolder(rawPath: string): Promise<void> {

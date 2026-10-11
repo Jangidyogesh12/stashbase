@@ -353,24 +353,24 @@ app.use(unhandledHttpError);
 
 const server = app.listen(PORT, '127.0.0.1', () => {
   try { ensureMcpLauncher(); }
-  catch (err: unknown) { log.warn(`MCP launcher refresh failed: ${err instanceof Error ? err.message : String(err)}`); }
+  catch (err: unknown) { log.warn(`MCP launcher refresh failed:`, err); }
   log.info(`listening on http://127.0.0.1:${PORT}`);
-  void resumeExtractorDownload().catch((error) => log.warn(`component recovery failed: ${String(error)}`));
+  void resumeExtractorDownload().catch((error) => log.warn(`component recovery failed:`, error));
   void mcpHttpService.start().catch((err: unknown) => {
-    log.warn(`MCP HTTP startup failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.warn(`MCP HTTP startup failed:`, err);
   });
   void connectInstalledAgentMcpOnStartup().then((results) => {
     for (const { id, status } of results) {
       if (status.phase === 'ready') log.info(`connected StashBase MCP for installed ${id} runtime`);
       else if (status.phase === 'failed') log.warn(`could not connect StashBase MCP for ${id}: ${status.failure?.message ?? 'unknown error'}`);
     }
-  }).catch((error) => log.warn(`Agent startup check failed: ${String(error)}`));
+  }).catch((error) => log.warn(`Agent startup check failed:`, error));
   if (DEV_VITE) log.info(`dev-proxy → vite at http://localhost:${VITE_PORT}`);
   // We own :8090 now → we're THE server. Reap any orphan daemon left by a
   // previous server that died hard (kill -9 / crash / lost the startup
   // race) BEFORE spawning ours, so it can acquire the MFS store cleanly.
   try { reapOrphanDaemons(); } catch (err: unknown) {
-    log.warn(`reap orphan daemons failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.warn(`reap orphan daemons failed:`, err);
   }
   // Configure the daemon and bind registered folders in the background so
   // each namespace is ready when a window selects it. Boot reconciles nothing:
@@ -379,7 +379,7 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   Promise.resolve()
     .then(() => bootBindAllFolders())
     .catch((err) =>
-      log.warn(`boot project bind failed: ${err?.message ?? err}`),
+      log.warn(`boot project bind failed:`, err),
     );
   log.info('waiting for the user to pick a folder');
 });
@@ -404,10 +404,10 @@ server.on('error', (err: NodeJS.ErrnoException) => {
     try {
       reclaimed = reclaimStaleServerPort(PORT, fileURLToPath(import.meta.url));
     } catch (reclaimErr: unknown) {
-      log.warn(`stale server reclaim failed: ${reclaimErr instanceof Error ? reclaimErr.message : String(reclaimErr)}`);
+      log.warn(`stale server reclaim failed:`, reclaimErr);
     }
     if (reclaimed > 0) {
-      log.warn(`reclaimed port ${PORT} from ${reclaimed} orphaned server(s) — retrying bind`);
+      log.info(`reclaimed port ${PORT} from ${reclaimed} orphaned server(s) — retrying bind`);
       // SIGKILL frees a LISTEN socket immediately; the delay just gives the
       // kernel a beat. The original `app.listen` callback is still pending
       // on 'listening', so a successful rebind boots normally.
@@ -416,11 +416,11 @@ server.on('error', (err: NodeJS.ErrnoException) => {
     }
   }
   if (err.code === 'EADDRINUSE') {
-    log.warn(`port ${PORT} is already in use — is another StashBase running? Quit it (or pass --port=N to use a different port).`);
+    log.error(`port ${PORT} is already in use — is another StashBase running? Quit it (or pass --port=N to use a different port).`, err);
   } else if (err.code === 'EACCES') {
-    log.warn(`permission denied binding to port ${PORT} — pick a port above 1024.`);
+    log.error(`permission denied binding to port ${PORT} — pick a port above 1024.`, err);
   } else {
-    log.warn(`server error: ${err.message}`);
+    log.error(`server error:`, err);
   }
   process.exit(1);
 });
@@ -606,7 +606,7 @@ async function shutdown(reason: string): Promise<void> {
         if (cancelled > 0) log.info(`shutdown: cancelled ${cancelled} GitHub import(s)`);
       },
       onError: (step, err) => {
-        log.warn(`shutdown: ${step} cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
+        log.warn(`shutdown: ${step} cleanup failed:`, err);
       },
     });
   } finally {
@@ -626,7 +626,7 @@ process.on('SIGHUP', () => { void shutdown('SIGHUP'); });
 if (process.env.STASHBASE_SHUTDOWN_TOKEN) {
   startParentWatchdog({
     onOrphaned: () => {
-      log.warn('parent process is gone — shutting down orphaned server');
+      log.info('parent process is gone — shutting down orphaned server');
       void shutdown('parent exited');
     },
   });

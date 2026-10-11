@@ -163,7 +163,7 @@ export class MfsIndexer implements Indexer {
         path: normalizeDaemonPath(filePath),
         path_identity: filesystemPath.identity(filePath),
       });
-      log.warn(`upsert ${filePath}: ${tooLarge}`);
+      log.info(`upsert ${filePath}: ${tooLarge}`);
       return { outcome: 'removed' };
     }
     const text = prepareForIndex(filePath, content);
@@ -211,7 +211,7 @@ export class MfsIndexer implements Indexer {
         path: normalizeDaemonPath(sourceAbs),
         path_identity: filesystemPath.identity(sourceAbs),
       });
-      if (tooLarge) log.warn(`upsert(converted) ${sourceAbs}: ${tooLarge}`);
+      if (tooLarge) log.info(`upsert(converted) ${sourceAbs}: ${tooLarge}`);
       return { outcome: 'removed' };
     }
     const res = await getDaemon().call<IndexUpsertResult & { total_ms: number }>(

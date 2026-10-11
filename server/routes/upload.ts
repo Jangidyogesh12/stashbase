@@ -148,7 +148,7 @@ export function cleanupStaleUploads(
         else fs.rmSync(abs, { force: true });
       }
     } catch (err: unknown) {
-      log.warn(`upload staging cleanup failed for ${entry.name}: ${errorMessage(err)}`);
+      log.warn(`upload staging cleanup failed for ${entry.name}:`, err);
     }
   }
 }
@@ -301,7 +301,7 @@ async function processUploadedFiles(
       }
     } catch (err: unknown) {
       if (signal.aborted) throw signal.reason ?? err;
-      log.warn(`upload: save failed for ${name}: ${errorMessage(err)}`);
+      log.error(`upload: save failed for ${name}:`, err);
       out.push({ file: name, error: errorMessage(err) });
     }
   }
@@ -314,7 +314,7 @@ async function processUploadedFiles(
       try {
         await indexer.upsertFile(sourcePath, text);
       } catch (err: unknown) {
-        log.warn(`upload: index failed for ${name}: ${errorMessage(err)}`);
+        log.warn(`upload: index failed for ${name}:`, err);
       }
     }
   })();
@@ -324,7 +324,7 @@ async function processUploadedFiles(
   // unhandled error) — same discipline as the index loop above.
   for (const { abs, rel } of toConvert) {
     try { queueConvertibleSource(abs, rel, { urgency: 'interactive' }); }
-    catch (err: unknown) { log.warn(`upload: conversion kickoff failed for ${rel}: ${errorMessage(err)}`); }
+    catch (err: unknown) { log.warn(`upload: conversion kickoff failed for ${rel}:`, err); }
   }
 }
 

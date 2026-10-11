@@ -11,6 +11,13 @@ const diagnostic = z.object({
   exit_code: z.number().int().optional(),
 }).strict();
 export type ErrorDiagnostic = z.infer<typeof diagnostic>;
+/** Occurrences since this installation last reported the same diagnostic,
+ * including this one. Absent from envelopes queued by older builds. */
+const occurrences = z.number().int().min(1).max(1_000_000).optional();
+const diagnosticFields = {
+  source: z.enum(['server', 'renderer', 'agent']), operation: z.string().max(100),
+  runtime: runtime.optional(), diagnostic, occurrences,
+};
 export interface ErrorContext {
   source: 'server' | 'renderer' | 'agent';
   operation: string;
@@ -43,10 +50,8 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
     failure_stage: z.enum(['discovery', 'installation', 'authentication', 'mcp']).optional(),
     diagnostic: diagnostic.optional(),
   }).strict(),
-  z.object({ event: z.literal('application_error'),
-    source: z.enum(['server', 'renderer', 'agent']), operation: z.string().max(100),
-    runtime: runtime.optional(), diagnostic,
-  }).strict(),
+  z.object({ event: z.literal('application_error'), ...diagnosticFields }).strict(),
+  z.object({ event: z.literal('application_warning'), ...diagnosticFields }).strict(),
 ]);
 export type TelemetryEvent = z.infer<typeof telemetryEventSchema>;
 /** Authentication, billing and persisted writes are host facts. Renderers

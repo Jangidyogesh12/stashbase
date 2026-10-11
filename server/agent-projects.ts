@@ -156,7 +156,7 @@ export async function createProjectFolder(
   deps.noteTreeChanged();
   void Promise.resolve()
     .then(() => deps.syncFolder(target))
-    .catch((err: unknown) => log.warn(`create_project: background bind/sync failed for ${target}: ${errorMessage(err)}`));
+    .catch((err: unknown) => log.warn(`create_project: background bind/sync failed for ${target}:`, err));
 
   return {
     path: target,

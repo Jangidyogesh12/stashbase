@@ -6,7 +6,7 @@
  * Each Folder is configured as one MFS Internal namespace.
  */
 import express from 'express';
-import { logger, errorMessage } from '../log.ts';
+import { logger } from '../log.ts';
 import { getCurrentFolder } from '../folder.ts';
 import {
   getEmbedderConfig,
@@ -88,10 +88,10 @@ export function mount(app: express.Express): void {
             log.info(`${providerLabel(provider)} key set: starting semantic backfill${cur ? ` (active folder: ${cur})` : ''}`);
             backfillStarted = true;
             void reconcileProjectFolders(`${providerLabel(provider)} embedder key set`)
-              .catch((err: unknown) => log.warn(`key set: semantic backfill failed: ${errorMessage(err)}`));
+              .catch((err: unknown) => log.warn(`key set: semantic backfill failed:`, err));
           }
         } catch (err: unknown) {
-          log.warn(`key set: runtime reset/rebind failed: ${errorMessage(err)}`);
+          log.warn(`key set: runtime reset/rebind failed:`, err);
           runtimeWarning = 'Key saved, but search could not restart. Try again or restart StashBase.';
         }
       });
@@ -120,7 +120,7 @@ export function mount(app: express.Express): void {
           await resetIndexerRuntime({ forgetBindings: true });
           await bootBindAllFolders();
         } catch (err: unknown) {
-          log.warn(`key delete: runtime reset failed: ${errorMessage(err)}`);
+          log.warn(`key delete: runtime reset failed:`, err);
         }
       });
       const cfg = getEmbedderConfig();

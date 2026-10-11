@@ -141,7 +141,7 @@ function probePdfTextLayer(pdfAbsPath: string, signal: AbortSignal): Promise<boo
     try {
       ({ cmd, args } = extractorSpawn('pdf', 'pdf_extract.py', ['--probe-text-layer', pdfAbsPath]));
     } catch (err: unknown) {
-      log.warn(`pdf text probe skipped for ${path.basename(pdfAbsPath)}: ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(`pdf text probe skipped for ${path.basename(pdfAbsPath)}:`, err);
       resolve(false);
       return;
     }

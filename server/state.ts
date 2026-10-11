@@ -121,7 +121,7 @@ export async function bootBindAllFolders(): Promise<void> {
     try {
       await indexer.bindFolder(root, cfg);
     } catch (err: unknown) {
-      log.warn(`boot bind ${root} failed: ${errorMessage(err)}`);
+      log.warn(`boot bind ${root} failed:`, err);
     }
   }
 }
@@ -139,7 +139,7 @@ export async function reconcileProjectFolders(reason: string): Promise<void> {
     try {
       await syncFolderNow(root, { reason });
     } catch (err: unknown) {
-      log.warn(`project reconcile ${root} failed: ${errorMessage(err)}`);
+      log.warn(`project reconcile ${root} failed:`, err);
     }
   }
 }
@@ -161,7 +161,7 @@ export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
   const cfg = resolveEmbedderRuntime();
   const runtime = cfg ?? { provider: getEmbedderConfig().provider };
   if (!cfg) {
-    log.warn(`embedder: no provider key configured — ${folderAbs} bound for keyword search; add an OpenAI or OpenRouter key for search by meaning`);
+    log.info(`embedder: no provider key configured — ${folderAbs} bound for keyword search; add an OpenAI or OpenRouter key for search by meaning`);
   }
   await indexer.bindFolder(filesystemPath.absolute(folderAbs), runtime);
 }
@@ -241,7 +241,7 @@ export async function cancelFolderSyncsAndWait(
   try {
     await interruptIndexer();
   } catch (err: unknown) {
-    log.warn(`folder remove: indexer interrupt failed for ${folderRoot}: ${errorMessage(err)}`);
+    log.warn(`folder remove: indexer interrupt failed for ${folderRoot}:`, err);
   }
   await pending?.catch(() => undefined);
 }
@@ -367,7 +367,7 @@ export function scheduleIndexerSync(folderRoot: string, reason: string, windowId
             },
           });
         } catch (err: unknown) {
-          log.warn(`${reason}: index sync failed for ${folderRoot}: ${errorMessage(err)}`);
+          log.warn(`${reason}: index sync failed for ${folderRoot}:`, err);
         }
       });
     });

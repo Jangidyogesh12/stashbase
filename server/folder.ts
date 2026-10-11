@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { logger, errorMessage } from './log.ts';
+import { logger } from './log.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { projectRegistrySnapshotSchema, type ProjectRegistrySnapshotWire } from '../shared/protocols/http/project.ts';
 import { validateFolderName as validatePortableFolderName } from '../shared/folder-name.ts';
@@ -54,7 +54,7 @@ function notifySwitchListeners(newRoot: string, windowId: string): void {
   setImmediate(() => {
     for (const fn of switchListeners) {
       try { fn(newRoot, windowId); } catch (err) {
-        log.warn(`switch listener threw: ${(err as any)?.message ?? err}`);
+        log.error(`switch listener threw:`, err);
       }
     }
   });
@@ -273,7 +273,7 @@ export function ensureFolderHome(): void {
   try {
     fs.mkdirSync(root, { recursive: true });
   } catch (err) {
-    log.warn(`failed to create folder home ${root}: ${errorMessage(err)}`);
+    log.warn(`failed to create folder home ${root}:`, err);
   }
 }
 
@@ -406,7 +406,7 @@ function clearFolderBinding(id: string): void {
   if (oldRoot) {
     for (const fn of closeListeners) {
       try { fn(oldRoot, id); } catch (err) {
-        log.warn(`close listener threw: ${(err as any)?.message ?? err}`);
+        log.error(`close listener threw:`, err);
       }
     }
   }

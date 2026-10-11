@@ -266,7 +266,7 @@ export async function applyRenamePlanAsync(plan: PlanEntry[]): Promise<AppliedRe
           await withTextFileTransaction(original.name, () =>
             replaceTextSnapshotAsync(original.name, original.content, original.writtenVersion));
         } catch (err: unknown) {
-          log.warn(`failed to roll back link rewrite in ${original.name}: ${errorMessage(err)}`);
+          log.error(`failed to roll back link rewrite in ${original.name}:`, err);
         }
       }
     },

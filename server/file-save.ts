@@ -50,14 +50,14 @@ export async function upsertSavedFile(name: string, content: string): Promise<st
     const tooLarge = contentSizeError(content);
     if (tooLarge) {
       await indexer.deleteFile(toSourcePath(name));
-      log.warn(`save: skipped index update for ${name}: ${tooLarge}`);
+      log.info(`save: skipped index update for ${name}: ${tooLarge}`);
       return `${tooLarge}. This file won't be searchable until you split or reduce it and run sync.`;
     }
     await indexer.upsertFile(toSourcePath(name), content, { waitForIndex: false });
     return undefined;
   } catch (err: unknown) {
     const message = errorMessage(err);
-    log.warn(`save: index update failed for ${name}: ${message}`);
+    log.warn(`save: index update failed for ${name}:`, err);
     return `Saved, but the file couldn't be updated for search: ${message}`;
   }
 }
