@@ -111,11 +111,19 @@ use isolated configuration and fake/local transport, never production PostHog.
 Error classification remains in `server/error-diagnostics.ts`; host/renderer error
 adapters feed the same collector. Tests cover bounded causes/codes, unquoted private
 names, stack paths, non-JSON asset failures and HTTP response failures without
-request payloads. Known gaps: real PostHog person-merge/deduplication behavior has
+request payloads. Diagnostic tests also cover separate warning/error severity,
+counted repeats, shutdown queueing, and account identity across a switch; the
+update bridge test covers one report per persistent error phase. Known gaps:
+real PostHog person-merge/deduplication behavior has
 not been exercised with this schema, signed multi-window account changes remain a
 packaged check, and bounded delivery cannot prove all real-user activity. Silent
 reading is unobserved; completed turns do not establish usefulness; subscription
 observations do not establish new payment revenue.
+
+On 2026-10-12, `pnpm check` passed the complete source gate, including the built
+Electron smoke that drove a two-window update save, delayed install and rollback.
+That run disabled telemetry before launch and establishes updater recovery, not
+production diagnostic delivery or a packaged N→N+1 update.
 
 A 2026-10-09 built-source desktop pass used an isolated application/profile,
 temporary project and intercepted outbound transport. Native document editing

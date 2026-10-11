@@ -153,3 +153,21 @@ it('reports caught update failures and pushed errors without changing recovery s
   expect(onState).toHaveBeenCalledWith(state({ phase: 'error' }));
   expect(report).toHaveBeenCalledTimes(2);
 });
+
+it('reports a standing update error once until the updater leaves it', async () => {
+  const report = vi.fn();
+  const onSnapshot = vi.fn<UpdatesBridge['onSnapshot']>(() => STOP);
+  const updates = createUpdatesAdapter(
+    bridge({ ok: true, snapshot: { ...BUILD, phase: 'error' } }, { onSnapshot }),
+    report,
+  );
+  updates.subscribe(() => undefined);
+  const push = onSnapshot.mock.calls[0]?.[0];
+  await updates.read();
+  await updates.read();
+  push?.({ ...BUILD, phase: 'error' });
+  expect(report).toHaveBeenCalledTimes(1);
+  push?.({ ...BUILD, phase: 'checking' });
+  push?.({ ...BUILD, phase: 'error' });
+  expect(report).toHaveBeenCalledTimes(2);
+});
