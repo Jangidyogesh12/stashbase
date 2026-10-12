@@ -227,6 +227,8 @@ export class MfsDaemon extends EventEmitter {
         env: {
           ...process.env,
           PYTHONUNBUFFERED: '1',
+          // JSON-RPC is UTF-8 in both directions, independent of Windows ANSI locale.
+          PYTHONIOENCODING: 'utf-8',
           // MFS's pinned backend spins up a gRPC server in-process; its client
           // client's default keepalive ping (every 10s) is too aggressive
           // for that loopback server and trips a `ENHANCE_YOUR_CALM`

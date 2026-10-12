@@ -768,6 +768,12 @@ def main() -> int:
     import atexit
     import signal
 
+    # Own the wire encoding here as well as in the launcher: frozen runtimes
+    # and direct launches must not decode Node's UTF-8 JSON with an ANSI locale.
+    sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+    sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+
     parser = argparse.ArgumentParser(description="StashBase public-MFS sidecar")
     parser.add_argument("--store-root", required=True)
     parsed, _unknown = parser.parse_known_args()

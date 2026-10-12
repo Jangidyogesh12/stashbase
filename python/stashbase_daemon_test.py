@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import queue
 import concurrent.futures
 import threading
 import subprocess
@@ -445,6 +447,58 @@ class StashbaseMfsTests(unittest.TestCase):
             self.assertTrue(any(message.get("event") == "ready" for message in messages))
             replies = {message.get("id"): message for message in messages if "id" in message}
             self.assertTrue(replies[1]["ok"])
+
+    def test_stdio_uses_utf8_even_when_started_with_windows_ansi_encoding(self) -> None:
+        content = "x" * 439 + "\U0001f6e0\ufe0f 中文 café"
+        with tempfile.TemporaryDirectory() as root:
+            folder = Path(root) / "project"
+            folder.mkdir()
+            source = folder / "note.md"
+            source.write_text(content, encoding="utf-8")
+            child = subprocess.Popen(
+                [sys.executable, str(Path(stashbase_daemon.__file__).resolve()),
+                 "--store-root", str(Path(root) / "store")],
+                env={**os.environ, "PYTHONIOENCODING": "cp1252:surrogateescape",
+                     "STASHBASE_TELEMETRY_DISABLED": "1", "GRPC_VERBOSITY": "ERROR"},
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            replies = queue.Queue()
+            def read_replies():
+                for line in child.stdout:
+                    replies.put(json.loads(line.decode("utf-8")))
+            reader = threading.Thread(target=read_replies, daemon=True)
+            reader.start()
+            def call(request_id, operation, args):
+                child.stdin.write((json.dumps({"id": request_id, "op": operation, "args": args},
+                                             ensure_ascii=False) + "\n").encode("utf-8"))
+                child.stdin.flush()
+                while True:
+                    reply = replies.get(timeout=15)
+                    if reply.get("id") == request_id:
+                        self.assertTrue(reply["ok"], reply)
+                        return reply["result"]
+            try:
+                while True:
+                    event = replies.get(timeout=15)
+                    if event.get("event") != "starting":
+                        self.assertEqual(event["event"], "ready", event)
+                        break
+                call(1, "bind_folder", {"folder": str(folder)})
+                self.assertEqual(call(2, "upsert", {"path": str(source), "content": content})["outcome"], "added")
+                result = call(3, "grep", {"folder": str(folder), "query": "中文"})
+                self.assertGreater(result["total_matches"], 0)
+                self.assertIn("中文 café", json.dumps(result, ensure_ascii=False))
+                child.stdin.close()
+                self.assertEqual(child.wait(timeout=15), 0)
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait(timeout=5)
+                reader.join(timeout=5)
+                child.stdout.close()
+                child.stderr.close()
+                if not child.stdin.closed:
+                    child.stdin.close()
 
     def test_termination_signal_inventory_is_portable(self) -> None:
         signals = types.SimpleNamespace(SIGTERM=15, SIGINT=2)
