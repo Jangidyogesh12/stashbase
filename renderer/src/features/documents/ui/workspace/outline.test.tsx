@@ -34,21 +34,34 @@ function createRuntime(paths: readonly string[] = ['report.md']): DocumentTabsRu
   return runtime;
 }
 
-/** Publishes `headings` as the active tab's outline and answers with the spy
- *  the outline calls when a heading is picked. */
-function publish(
-  runtime: DocumentTabsRuntime,
+/** Mounts the outline over `paths`, then publishes `headings` as the active
+ *  tab's outline. `select` is the spy the outline calls when a heading is
+ *  picked; `republish` publishes a new outline for the active tab and
+ *  re-renders. */
+function renderOutline(
   headings: DocumentHeading[],
-  activeId: string | null = null,
+  { activeId = null, paths = ['report.md'] }: { activeId?: string | null; paths?: string[] } = {},
 ) {
-  const tabId = runtime.store.getState().activeTabId ?? '';
-  const owner = Symbol('outline-test');
-  const select = vi.fn();
-  act(() => {
-    runtime.navigation.claimOutline(tabId, owner);
-    runtime.navigation.publishOutline(tabId, owner, { activeId, headings }, select);
-  });
-  return select;
+  const runtime = createRuntime(paths);
+  const { rerender } = render(<DocumentOutline runtime={runtime} />);
+  const republish = (next: DocumentHeading[], nextActiveId: string | null = null) => {
+    const tabId = runtime.store.getState().activeTabId ?? '';
+    const owner = Symbol('outline-test');
+    const select = vi.fn();
+    act(() => {
+      runtime.navigation.claimOutline(tabId, owner);
+      runtime.navigation.publishOutline(
+        tabId,
+        owner,
+        { activeId: nextActiveId, headings: next },
+        select,
+      );
+    });
+    rerender(<DocumentOutline runtime={runtime} />);
+    return select;
+  };
+  const select = republish(headings, activeId);
+  return { republish, runtime, select };
 }
 
 afterEach(() => {
@@ -82,10 +95,7 @@ describe('document outline states', () => {
   });
 
   it('separates a document with no headings from one whose outline never arrived', () => {
-    const runtime = createRuntime(['report.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-    publish(runtime, []);
-    rerender(<DocumentOutline runtime={runtime} />);
+    renderOutline([]);
 
     expect(screen.getByLabelText('report.md outline, 0 headings')).not.toBeNull();
     expect(screen.getByText('No headings in this document')).not.toBeNull();
@@ -93,25 +103,17 @@ describe('document outline states', () => {
   });
 
   it('counts one heading in the singular and several in the plural', () => {
-    const runtime = createRuntime(['report.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-
-    publish(runtime, [PLAN]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    const { republish } = renderOutline([PLAN]);
     expect(screen.getByLabelText('report.md outline, 1 heading')).not.toBeNull();
 
-    publish(runtime, [PLAN, DETAILS]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    republish([PLAN, DETAILS]);
     expect(screen.getByLabelText('report.md outline, 2 headings')).not.toBeNull();
   });
 });
 
 describe('document outline tree', () => {
   it('nests a heading under its parent and marks where the reader is', () => {
-    const runtime = createRuntime(['report.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-    publish(runtime, [PLAN, DETAILS], DETAILS.id);
-    rerender(<DocumentOutline runtime={runtime} />);
+    renderOutline([PLAN, DETAILS], { activeId: DETAILS.id });
 
     const nav = screen.getByRole('navigation', { name: 'Document outline' });
     // The nesting wrapper is the app's own structural marker for the heading
@@ -125,30 +127,21 @@ describe('document outline tree', () => {
   });
 
   it('names an untitled section rather than showing an empty row', () => {
-    const runtime = createRuntime(['report.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-    publish(runtime, [UNTITLED]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    renderOutline([UNTITLED]);
 
     const row = screen.getByRole('button', { name: 'Heading level 1: Untitled section' });
     expect(row.title).toBe('Untitled section');
   });
 
   it('sends the picked heading back to the document', async () => {
-    const runtime = createRuntime(['report.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-    const select = publish(runtime, [PLAN, DETAILS]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    const { select } = renderOutline([PLAN, DETAILS]);
 
     await userEvent.click(screen.getByRole('button', { name: 'Heading level 2: Details' }));
     expect(select).toHaveBeenCalledWith(DETAILS);
   });
 
   it('offers a disclosure only to a heading that has children', () => {
-    const runtime = createRuntime(['report.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-    publish(runtime, [PLAN, DETAILS]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    renderOutline([PLAN, DETAILS]);
 
     const toggle = screen.getByRole('button', { name: 'Collapse Plan' });
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
@@ -158,10 +151,7 @@ describe('document outline tree', () => {
 
 describe('document outline collapse', () => {
   it('hides and restores a subtree from its own control', async () => {
-    const runtime = createRuntime(['report.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-    publish(runtime, [PLAN, DETAILS]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    renderOutline([PLAN, DETAILS]);
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('button', { name: 'Collapse Plan' }));
@@ -175,33 +165,26 @@ describe('document outline collapse', () => {
   });
 
   it('opens every subtree again when the reader moves to another document', async () => {
-    const runtime = createRuntime(['report.md', 'other.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-    publish(runtime, [PLAN, DETAILS]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    const { republish, runtime } = renderOutline([PLAN, DETAILS], {
+      paths: ['report.md', 'other.md'],
+    });
     await userEvent.click(screen.getByRole('button', { name: 'Collapse Plan' }));
 
     await act(async () => {
       await runtime.activate('tab-2');
     });
-    publish(runtime, [PLAN, DETAILS]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    republish([PLAN, DETAILS]);
 
     expect(screen.getByLabelText('other.md outline, 2 headings')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Collapse Plan' })).not.toBeNull();
   });
 
   it('forgets a collapsed heading the document no longer publishes', async () => {
-    const runtime = createRuntime(['report.md']);
-    const { rerender } = render(<DocumentOutline runtime={runtime} />);
-    publish(runtime, [PLAN, DETAILS]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    const { republish } = renderOutline([PLAN, DETAILS]);
     await userEvent.click(screen.getByRole('button', { name: 'Collapse Plan' }));
 
-    publish(runtime, [UNTITLED]);
-    rerender(<DocumentOutline runtime={runtime} />);
-    publish(runtime, [PLAN, DETAILS]);
-    rerender(<DocumentOutline runtime={runtime} />);
+    republish([UNTITLED]);
+    republish([PLAN, DETAILS]);
 
     expect(screen.getByRole('button', { name: 'Collapse Plan' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Heading level 2: Details' })).not.toBeNull();

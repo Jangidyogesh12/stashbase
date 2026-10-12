@@ -1,36 +1,17 @@
 /** The composer's bound context: `@` suggestions and the chips they insert,
  *  visual sources as tiles reading their preparation state, dropped and pasted
  *  files, and the send a stale source refuses. */
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { AgentContextPort, AgentSessionPort } from '@/features/agent/application/ports';
-import {
-  createAgentWorkspaceRuntime,
-  type AgentWorkspaceRuntime,
-} from '@/features/agent/application/workspace-runtime';
-import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { SOURCE_DRAG_MIME } from '@/shared/utils/source-drag';
 import { draftOf, pressKey, typeInto } from '@/test/dom';
-import {
-  agentGateLifted,
-  agentCatalogPort,
-  agentContextPort,
-  BUILT_IN_AGENT,
-  CLAUDE_AGENT,
-  CODEX_AGENT,
-  idleAgentSessionPort,
-  agentPersonaApi,
-} from '@/test/fakes/agent';
-import { createTestQueryClient, withQueryClient } from '@/test/query';
+import { agentGateLifted, agentContextPort, idleAgentSessionPort } from '@/test/fakes/agent';
 
-import AgentChats from './chats/chats';
-import ManagedAgentWorkspace from './workspace';
+import { registerWorkspaceCleanup, renderWorkspace, RESEARCH_SCOPE } from './workspace.harness';
 
-const RESEARCH_SCOPE = { kind: 'folder', path: '/Library/Research' } as const;
-
-const runtimes: AgentWorkspaceRuntime[] = [];
+registerWorkspaceCleanup();
 
 beforeEach(() => {
   // The image tile needs a stable object URL so a test can name the preview
@@ -40,53 +21,6 @@ beforeEach(() => {
   );
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 });
-
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-  for (const runtime of runtimes.splice(0)) runtime.dispose();
-});
-
-function renderWorkspace(
-  session: AgentSessionPort,
-  agents: readonly Agent[] = [BUILT_IN_AGENT, CODEX_AGENT, CLAUDE_AGENT],
-  context?: AgentContextPort,
-  onReprocess?: (source: { folderPath: string; path: string }) => void,
-) {
-  let id = 0;
-  const runtime = createAgentWorkspaceRuntime({
-    autostart: false,
-    context,
-    createId: () => `chat-${++id}`,
-    folderPath: RESEARCH_SCOPE.path,
-    port: session,
-  });
-  runtimes.push(runtime);
-  const catalog = agentCatalogPort(agents);
-  const view = withQueryClient(
-    <div>
-      <AgentChats
-        catalog={catalog}
-        onOpenAgentSettings={vi.fn()}
-        runtime={runtime}
-        scope={RESEARCH_SCOPE}
-        workspaceName="Research"
-      />
-      <ManagedAgentWorkspace
-        catalog={catalog}
-        persona={agentPersonaApi()}
-        onOpenAgentSettings={vi.fn()}
-        onOpenExternal={vi.fn()}
-        onSignIn={vi.fn()}
-        onReprocess={onReprocess}
-        runtime={runtime}
-      />
-    </div>,
-    createTestQueryClient(),
-    { strict: true },
-  );
-  return { runtime, view };
-}
 
 const researchEnvironment = {
   folderPath: '/Library/Research',

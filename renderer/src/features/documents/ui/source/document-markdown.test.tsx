@@ -1,68 +1,11 @@
-import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { DocumentSourcePort } from '@/features/documents/application/ports';
-import { createDocumentQueryScope } from '@/features/documents/application/queries';
-import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
-import { DocumentWorkspace } from '@/features/documents/ui/workspace/workspace';
-import {
-  assetApi,
-  docxPreviewApi,
-  genericPreviewApi,
-  sourceApi,
-  textSource,
-} from '@/test/fakes/documents';
-import { createTestQueryClient, withQueryClient } from '@/test/query';
+import { sourceApi, textSource } from '@/test/fakes/documents';
 
-const runtimes: ReturnType<typeof createDocumentTabsRuntime>[] = [];
+import { registerSourceCleanup, renderSource } from './document-source.harness';
 
-afterEach(() => {
-  cleanup();
-  for (const runtime of runtimes.splice(0)) runtime.dispose();
-});
-
-/** A port call that never settles, for the viewers a Markdown tab never opens. */
-function pending(): () => Promise<never> {
-  return () => new Promise<never>(() => undefined);
-}
-
-function renderSource(
-  api: DocumentSourcePort,
-  source = { folderPath: '/project/notes', path: 'plan.md' },
-  options: {
-    onNavigate?: Parameters<typeof DocumentWorkspace>[0]['onNavigate'];
-    onOpenExternal?: Parameters<typeof DocumentWorkspace>[0]['onOpenExternal'];
-  } = {},
-) {
-  const queryClient = createTestQueryClient();
-  const runtime = createDocumentTabsRuntime({
-    api,
-    createId: () => 'tab-1',
-    createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/project/notes',
-    generation: 1,
-    restored: {
-      activeTabId: 'tab-1',
-      tabs: [{ id: 'tab-1', source }],
-    },
-  });
-  runtimes.push(runtime);
-  withQueryClient(
-    <DocumentWorkspace
-      assetApi={assetApi({ load: vi.fn(pending()) })}
-      docxPreviewApi={docxPreviewApi({ load: vi.fn(pending()) })}
-      genericPreviewApi={genericPreviewApi({ load: vi.fn(pending()) })}
-      onNavigate={options.onNavigate}
-      onOpenExternal={options.onOpenExternal}
-      onReveal={vi.fn(async () => undefined)}
-      revealLabel="Show in file manager"
-      runtime={runtime}
-      sourceApi={api}
-    />,
-    queryClient,
-  );
-  return { runtime };
-}
+registerSourceCleanup();
 
 describe('document Markdown source', () => {
   it('loads versioned Markdown into the Milkdown document surface', async () => {

@@ -1,40 +1,10 @@
 /** The skill catalog the runtime reports, and what arming one costs: a skill
  *  applies to a single turn, survives a retry of that turn, and a catalog the
  *  runtime could not read disarms rather than announcing itself. */
-import { describe, expect, it, vi } from 'vite-plus/test';
+import { describe, expect, it } from 'vite-plus/test';
 
-import { agentSessionPort } from '@/test/fakes/agent';
-
-import { type AgentReconnectScheduler, type AgentSessionPort } from './ports';
 import { createAgentSessionRuntime } from './session-runtime';
-
-type AgentConnectRequest = Parameters<AgentSessionPort['connect']>[0];
-
-function harness() {
-  const waits: Array<() => void> = [];
-  const { listeners, port, sent } = agentSessionPort({
-    replay: vi.fn(async () => ({
-      effort: 'high',
-      transcript: [
-        { kind: 'user' as const, id: 'user-1', text: 'Keep this question.' },
-        { kind: 'assistant' as const, id: 'assistant-1', text: 'Keep this answer.' },
-      ],
-    })),
-  });
-  const scheduler: AgentReconnectScheduler = {
-    jitter: (value) => value,
-    wait: vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          waits.push(resolve);
-        }),
-    ),
-  };
-  /** Every connect request in order, read back off the port's own spy. */
-  const requests = (): AgentConnectRequest[] =>
-    vi.mocked(port.connect).mock.calls.map(([request]) => request);
-  return { listeners, port, requests, scheduler, sent, waits };
-}
+import { harness } from './session-runtime.harness';
 
 describe('AgentSessionRuntime skills', () => {
   it('arms a catalog skill for one turn and resends it on retry', async () => {

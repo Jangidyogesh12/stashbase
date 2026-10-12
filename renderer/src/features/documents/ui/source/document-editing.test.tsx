@@ -1,77 +1,17 @@
-import { EditorView } from '@codemirror/view';
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { DOCUMENT_SOURCE_MESSAGES } from '@/features/documents/application/failure-messages';
 import {
   DocumentSourceError,
   type DocumentSourcePort,
 } from '@/features/documents/application/ports';
-import { createDocumentQueryScope } from '@/features/documents/application/queries';
-import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
-import { DocumentWorkspace } from '@/features/documents/ui/workspace/workspace';
-import {
-  assetApi,
-  docxPreviewApi,
-  genericPreviewApi,
-  sourceApi,
-  textSource,
-} from '@/test/fakes/documents';
-import { createTestQueryClient, withQueryClient } from '@/test/query';
+import { sourceApi, textSource } from '@/test/fakes/documents';
 
-const runtimes: ReturnType<typeof createDocumentTabsRuntime>[] = [];
+import { codeEditor, registerSourceCleanup, renderSource } from './document-source.harness';
 
-afterEach(() => {
-  vi.useRealTimers();
-  cleanup();
-  for (const runtime of runtimes.splice(0)) runtime.dispose();
-});
-
-/** A port call that never settles, for the viewers a text tab never opens. */
-function pending(): () => Promise<never> {
-  return () => new Promise<never>(() => undefined);
-}
-
-function renderSource(
-  api: DocumentSourcePort,
-  source = { folderPath: '/project/notes', path: 'plan.md' },
-) {
-  const queryClient = createTestQueryClient();
-  const runtime = createDocumentTabsRuntime({
-    api,
-    createId: () => 'tab-1',
-    createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/project/notes',
-    generation: 1,
-    restored: {
-      activeTabId: 'tab-1',
-      tabs: [{ id: 'tab-1', source }],
-    },
-  });
-  runtimes.push(runtime);
-  withQueryClient(
-    <DocumentWorkspace
-      assetApi={assetApi({ load: vi.fn(pending()) })}
-      docxPreviewApi={docxPreviewApi({ load: vi.fn(pending()) })}
-      genericPreviewApi={genericPreviewApi({ load: vi.fn(pending()) })}
-      onReveal={vi.fn(async () => undefined)}
-      revealLabel="Show in file manager"
-      runtime={runtime}
-      sourceApi={api}
-    />,
-    queryClient,
-  );
-  return { runtime };
-}
-
-function codeEditor(label: string): EditorView {
-  const content = screen.getByLabelText(label);
-  const editor = content.closest<HTMLElement>('.cm-editor');
-  const view = editor ? EditorView.findFromDOM(editor) : null;
-  if (!view) throw new Error(`Could not find CodeMirror editor for ${label}.`);
-  return view;
-}
+registerSourceCleanup();
 
 describe('document text editing', () => {
   it('marks a source from another member folder as read-only', async () => {
