@@ -121,7 +121,7 @@ export interface AgentContextPort {
   resolve(source: SourceReference, signal: AbortSignal): Promise<ResolvedContextFile>;
   /** Uploads transient files outside every project folder; outcomes follow
    *  request order. */
-  upload(files: File[], signal: AbortSignal): Promise<AgentUploadOutcome[]>;
+  upload(files: File[], signal: AbortSignal, folderPath: string): Promise<AgentUploadOutcome[]>;
 }
 
 /** Explicit choices only: opening history and catalog readiness never write this. */

@@ -220,7 +220,7 @@ export function createPromptDispatcher({
       if (disposed() || files.length === 0) return;
       let outcomes;
       try {
-        outcomes = await contextPort.upload(files, signal);
+        outcomes = await contextPort.upload(files, signal, state().scope.path);
       } catch (error) {
         if (disposed()) return;
         refuse(agentFailure(error).message);

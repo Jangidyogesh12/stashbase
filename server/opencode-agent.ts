@@ -1,10 +1,13 @@
 import { reportAgentRuntimeError } from './error-reporting.ts';
 /** OpenCode implementation of StashBase's Shared Agent Contract. */
+import { prepareAgentAttachments } from './agent-attachments.ts';
+import { agentClientEventSchema } from '../shared/protocols/websocket/agent-session.ts';
 import { randomUUID } from 'node:crypto';
 import type { EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
 import type {
   Event,
   FileDiff,
+  FilePartInput,
   Message,
   Part,
   Session,
@@ -27,7 +30,8 @@ import {
 import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { agentTurnErrorEvent } from './agent-turn-failure.ts';
-import { restoreHistoryAttachments } from './agent-history-attachments.ts';
+import { isTransientAttachmentPath } from './routes/attach.ts';
+import { historyImageAttachment, restoreHistoryAttachments } from './agent-history-attachments.ts';
 import { isStashbaseWorkspaceEdit } from './agent-file-permissions.ts';
 import type { AgentAccessMode } from '../shared/agent-runtime.ts';
 import {
@@ -284,6 +288,8 @@ export class OpenCodePanelSession {
   private readonly stopRuntimeExitListener: () => void;
   private readonly onMessage = (data: RawData) => { void this.handleMessage(data); };
   private readonly onClose = () => this.dispose();
+  private preparingAttachments: AbortController | null = null;
+  private attachmentPreparation: Promise<FilePartInput[]> | null = null;
 
   constructor(
     private readonly ws: WebSocket,
@@ -325,6 +331,7 @@ export class OpenCodePanelSession {
     this.pendingPermissions.clear();
     this.seenPermissions.clear();
     this.waitingToolPermissions.clear();
+    this.preparingAttachments?.abort();
     this.abort.abort();
     this.stopRuntimeExitListener();
     this.runtime.endTurn();
@@ -408,7 +415,14 @@ export class OpenCodePanelSession {
 
   private async handleMessage(raw: RawData): Promise<void> {
     let event: AgentClientEvent;
-    try { event = JSON.parse(raw.toString()) as AgentClientEvent; } catch { return; }
+    try {
+      const parsed = agentClientEventSchema.safeParse(JSON.parse(raw.toString()));
+      if (!parsed.success) {
+        send(this.ws, agentTurnErrorEvent('Invalid Agent request. Review the message and its attachments.'));
+        return;
+      }
+      event = parsed.data;
+    } catch { return; }
     if (event.t === 'close') { this.dispose(); return; }
     if (event.t === 'set-mode') {
       if (!this.turnInFlight() && (event.mode === 'default' || event.mode === 'acceptEdits' || event.mode === 'plan')) {
@@ -417,9 +431,10 @@ export class OpenCodePanelSession {
       return;
     }
     if (!this.client || !this.sessionId) return;
+    let preparationSignal: AbortSignal | undefined;
     try {
       switch (event.t) {
-        case 'prompt':
+        case 'prompt': {
           if (this.turnInFlight()) return;
           this.interrupted = false;
           this.runtime.beginTurn(randomUUID());
@@ -431,20 +446,37 @@ export class OpenCodePanelSession {
               body: { title: event.titleHint },
             }).catch(() => {});
           }
+          const preparation = new AbortController();
+          this.preparingAttachments = preparation;
+          preparationSignal = preparation.signal;
+          let attachments;
+          try {
+            this.attachmentPreparation = prepareAgentAttachments(event.attachments ?? [], this.cwd, preparation.signal);
+            attachments = await this.attachmentPreparation;
+          } finally {
+            if (this.preparingAttachments === preparation) {
+              this.preparingAttachments = null;
+              this.attachmentPreparation = null;
+            }
+          }
+          if (this.disposed || this.interrupted || preparation.signal.aborted) return;
           await this.client.session.promptAsync({
             ...DATA_REQUEST,
             path: { id: this.sessionId },
             body: {
               model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
               agent: this.access === 'plan' ? 'stashbase-plan' : this.access === 'acceptEdits' ? 'stashbase-edit' : 'stashbase-folder',
-              parts: [{ type: 'text', text: event.text }],
+              parts: [{ type: 'text', text: event.text }, ...attachments],
             },
           });
           break;
+        }
         case 'interrupt':
+          this.preparingAttachments?.abort();
           this.interrupted = true;
           this.pendingPermissions.clear();
           this.waitingToolPermissions.clear();
+          if (this.attachmentPreparation) await this.attachmentPreparation.catch(() => undefined);
           await this.client.session.abort({ ...DATA_REQUEST, path: { id: this.sessionId } });
           for (const item of this.translator.endTurnAfterInterrupt()) send(this.ws, item);
           this.runtime.endTurn();
@@ -461,7 +493,7 @@ export class OpenCodePanelSession {
           break;
       }
     } catch (error) {
-      this.fail(error, false);
+      if (!this.disposed && !(event.t === 'prompt' && (this.interrupted || preparationSignal?.aborted))) this.fail(error, false);
     }
   }
 
@@ -564,7 +596,13 @@ function textOf(parts: Part[], type: 'text' | 'reasoning'): string {
 export function blocksForMessage(info: Message, parts: Part[]): SessionBlock[] {
   const blocks: SessionBlock[] = [];
   if (info.role === 'user') {
-    const restored = restoreHistoryAttachments(textOf(parts, 'text'));
+    const restored = restoreHistoryAttachments(textOf(parts.filter((part) => part.type !== 'text' || !part.synthetic), 'text'));
+    for (const part of parts) {
+      if (part.type !== 'file' || part.source?.type !== 'file') continue;
+      const reference = part.source.path;
+      if (!isTransientAttachmentPath(reference) || restored.attachments.some(item => item.path === reference)) continue;
+      restored.attachments.push(historyImageAttachment(reference) ?? { path: reference, name: part.filename ?? reference.split(/[\\/]/).at(-1)! });
+    }
     if (restored.text || restored.attachments.length) {
       blocks.push({
         kind: 'user',

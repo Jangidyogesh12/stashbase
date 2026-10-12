@@ -296,6 +296,18 @@ describe('Agent session API', () => {
       { onClose: vi.fn(), onEvent: (event) => events.push(event), onInvalidResponse: vi.fn() },
     );
 
+    connection.send?.({
+      kind: 'prompt',
+      skill: null,
+      text: 'Read the screenshot',
+      attachments: ['/tmp/shot.png'],
+    });
+    expect(JSON.parse(sent.pop() ?? '{}')).toEqual({
+      t: 'prompt',
+      text: 'Read the screenshot',
+      attachments: ['/tmp/shot.png'],
+    });
+
     onMessage?.({
       data: JSON.stringify({ t: 'tool', id: 'tool-1', name: 'Bash', input: { command: 'pwd' } }),
     });

@@ -11,7 +11,9 @@ import multer from 'multer';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { filesystemPath } from '../filesystem-path.ts';
+import { registeredFolderRoots } from '../folder.ts';
 import { sanitizeFilename } from '../files.ts';
 import { errorMessage, logger } from '../log.ts';
 
@@ -30,6 +32,25 @@ const ATTACHMENT_MAX_AGE_MS = 24 * 60 * 60_000;
 // Drafts, queues and retries can retain these files for the entire server
 // lifetime. Age is only a cleanup policy for batches from previous processes.
 const liveBatches = new Set<string>();
+const uploadedFiles = new Map<string, { folder: string; digest: string }>();
+
+/** A path is a local opaque attachment reference, never permission to read an
+ * arbitrary file. Only this process's uploads in the submitted project qualify. */
+export async function readSubmittedAttachment(candidate: string, folder: string, signal: AbortSignal): Promise<Buffer> {
+  const record = uploadedFiles.get(candidate);
+  if (!record?.folder || !filesystemPath.equal(record.folder, folder)) {
+    throw new Error('Attachment unavailable in this project. Reattach it before sending.');
+  }
+  const safe = transientAttachmentPreviewPath(candidate);
+  if (!safe) throw new Error('Attachment unavailable. Reattach it before sending.');
+  const stat = await fs.promises.stat(safe);
+  if (stat.size > 8 * 1024 * 1024) throw new Error('Default accepts up to 8 MiB of attachments per message.');
+  const bytes = await fs.promises.readFile(safe, { signal });
+  if (createHash('sha256').update(bytes).digest('hex') !== record.digest) {
+    throw new Error('Attachment changed. Reattach it before sending.');
+  }
+  return bytes;
+}
 
 /** Root for transient attachment files, outside any folder. */
 export function attachRoot(): string {
@@ -136,6 +157,13 @@ export function mount(app: express.Express): void {
         sendAttachError(res, err);
         return;
       }
+      const requested = req.body?.folder;
+      const folder = typeof requested === 'string' && filesystemPath.isAbsolute(requested) && !requested.includes('\0')
+        ? registeredFolderRoots().find((root) => filesystemPath.equal(root, requested)) : undefined;
+      if (!folder) {
+        res.status(403).json({ error: 'The attachment project is no longer available.' });
+        return;
+      }
       const files = (req.files as Express.Multer.File[]) ?? [];
       if (files.length === 0) { res.status(400).json({ error: 'no files' }); return; }
       const root = ensureAttachmentRoot();
@@ -157,6 +185,7 @@ export function mount(app: express.Express): void {
         try {
           const abs = path.join(dir, name);
           fs.writeFileSync(abs, f.buffer, { mode: 0o600 });
+          uploadedFiles.set(abs, { folder, digest: createHash('sha256').update(f.buffer).digest('hex') });
           out.push({ name, path: abs });
         } catch (err: unknown) {
           log.error(`attach: write ${name} failed:`, err);

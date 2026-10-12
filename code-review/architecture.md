@@ -362,6 +362,16 @@ stable status without download, retry, or a new durable demand latch.
   persona applies from the next turn. Gallery personas are Gallery index data;
   the composition layer adds them through the Agent's library, since the
   features do not import each other. Brainstorming needs no sources/wiki/index.
+- Default receives explicit transient attachment references in the prompt
+  protocol. `server/routes/attach.ts` binds uploads to an explicit registered
+  project and records their digest; `server/agent-attachments.ts` validates
+  ownership and unchanged bytes, bounds preparation, and emits native file parts.
+  DOCX extraction reuses the cancellable worker without project import/indexing.
+  Stop and disposal retire preparation before another model request can be sent.
+  The local hosted broker maps inline PDF file parts to Gemini-compatible
+  `image_url` data parts; it does not fetch URLs, store cloud files, or change
+  accounting. Native history retains content for follow-ups, while replay hides
+  synthetic extraction text and recovers the original attachment cards.
 - Attachment age cleanup excludes batches created by the active server process;
   drafts, queues, and retries may retain them until process exit. They remain
   temporary files, not durable historical attachments.
@@ -626,6 +636,10 @@ authority and retain server path checks. CSP/root containment, navigation/popup/
 webview denial, and narrow preload methods cannot be weakened by document content.
 Only sanitized clipboard write is granted to the application origin; paste needs
 no background clipboard-read permission.
+The production image CSP admits project previews only through the configured
+server's `/asset/` route and temporary attachment previews through
+`/api/agent/attachment-preview`, alongside bundled/data/blob images and the
+Gallery proxy. Asset reads retain the server's project membership and path checks.
 
 Markdown renders schema nodes; DOCX is sanitized inside its worker with the shared
 policy. Local HTML's scripts run in an opaque sandbox without same-origin/preload,
@@ -723,8 +737,8 @@ artifact bytes, paths, logs, and internal identities never enter a GitHub URL.
 Node proxies a validated whole index and restricted screenshots; the renderer
 never contacts arbitrary catalog hosts. Screenshot URLs resolve against the
 native-provided server origin, not the bundled `app://renderer` origin. The
-production image CSP permits only that server’s `/api/gallery/image` proxy in
-addition to bundled/data/blob images; native main-frame request authorization
+production image CSP permits that server’s `/api/gallery/image` proxy in
+addition to project `/asset/` previews and bundled/data/blob images; native main-frame request authorization
 still applies. Normalize URLs before exact host/path
 checks, refuse redirects, validate before caching, and fall back to the bundled
 snapshot on malformed/unreachable publications. The index has no version gate;

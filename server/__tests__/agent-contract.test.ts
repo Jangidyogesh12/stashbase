@@ -51,7 +51,7 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.deepEqual(capabilities.codex!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.equal(capabilities.stashbase!.models, false);
   assert.equal(capabilities.stashbase!.skills, false);
-  assert.equal(capabilities.stashbase!.attachments, false);
+  assert.equal(capabilities.stashbase!.attachments, true);
   assert.equal(capabilities.claude!.attachments, true);
   assert.equal(capabilities.codex!.attachments, true);
 });

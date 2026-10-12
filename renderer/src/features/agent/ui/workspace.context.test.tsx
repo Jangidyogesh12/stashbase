@@ -266,13 +266,13 @@ describe('AgentWorkspace composer context', () => {
     );
   });
 
-  it('drops a non-visual source inline, a visual one as a tile, and uploads only when the runtime reads them', async () => {
+  it('drops project sources and pastes image and text attachments into Default', async () => {
     const context = agentContextPort();
     const { runtime } = renderWorkspace(idleAgentSessionPort(), undefined, context);
     act(() => runtime.setScopeEnvironment(researchEnvironment));
     await screen.findByText('What’s on your mind?');
     await agentGateLifted();
-    expect(screen.queryByRole('button', { name: 'Attach files' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Attach files' })).not.toBeNull();
 
     const composer = screen.getByRole('textbox', { name: 'Message' });
     const drop = (path: string) => {
@@ -302,8 +302,6 @@ describe('AgentWorkspace composer context', () => {
       expect.objectContaining({ format: 'pdf', kind: 'source' }),
     ]);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     expect(await screen.findByRole('button', { name: 'Attach files' })).not.toBeNull();
     const file = new File(['png'], 'shot.png', { type: 'image/png' });
     const document = new File(['# Notes'], 'notes.md', { type: 'text/markdown' });
@@ -311,7 +309,11 @@ describe('AgentWorkspace composer context', () => {
       clipboardData: { files: [file, document], getData: () => '' },
     });
     await waitFor(() =>
-      expect(context.upload).toHaveBeenCalledWith([file, document], expect.any(AbortSignal)),
+      expect(context.upload).toHaveBeenCalledWith(
+        [file, document],
+        expect.any(AbortSignal),
+        RESEARCH_SCOPE.path,
+      ),
     );
     // Uploads become the shared composer's own tiles, not name chips. Images
     // get a preview while ordinary files use the generic file treatment.

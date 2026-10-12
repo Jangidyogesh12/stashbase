@@ -18,7 +18,7 @@ import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, type OpenCodeSes
 import { agentCliPath } from '../agent-cli.ts';
 import type { AgentAccessMode } from '../../shared/agent-runtime.ts';
 
-function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart = true) {
+function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart = true, abortFailure = false) {
   const ws = new FakeWebSocket();
   const feed = new EventEmitter();
   const prompts: Array<{ agent: string }> = [];
@@ -40,7 +40,7 @@ function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart
             if (nativeStart) feed.emit('event', { type: 'session.status', properties: { sessionID: 'mode-session', status: { type: 'busy' } } });
             return { data: true };
           },
-          abort: async () => ({ data: true }),
+          abort: async () => { if (abortFailure) throw new Error('Abort transport failed'); return { data: true }; },
         },
         postSessionIdPermissionsPermissionId: async (reply: typeof replies[number]) => { replies.push(reply); return { data: true }; },
       } as never;
@@ -69,6 +69,32 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
+
+test('Stop retires attachment preparation before another turn and does not report a cancelled read failure', async (t) => {
+  const harness = modeHarness('acceptEdits');
+  t.after(() => harness.session.dispose());
+  await settle();
+  harness.send({ t: 'prompt', text: 'Read this', attachments: ['/unregistered/secret.txt'] });
+  harness.send({ t: 'interrupt' });
+  await settle();
+  assert.equal(harness.prompts.length, 0);
+  assert.equal(harness.events().some(event => event.t === 'error'), false);
+  assert.ok(harness.events().some(event => event.t === 'turn-end'));
+  harness.send({ t: 'prompt', text: 'Continue without the attachment' });
+  await settle();
+  assert.equal(harness.prompts.length, 1);
+});
+
+test('attachment preparation refusal is visible and never submits a partial prompt', async (t) => {
+  const harness = modeHarness('acceptEdits');
+  t.after(() => harness.session.dispose());
+  await settle();
+  harness.send({ t: 'prompt', text: 'Read this', attachments: ['/unregistered/secret.txt'] });
+  await settle();
+  assert.equal(harness.prompts.length, 0);
+  assert.ok(harness.events().some(event => event.t === 'error' && /this project/.test(event.message)));
+  assert.ok(harness.events().some(event => event.t === 'turn-end' && event.isError));
+});
 
 test('Default does not silently complete after tools followed by an empty unknown model response', async (t) => {
   const harness = modeHarness('acceptEdits');
@@ -579,4 +605,19 @@ test('OpenCode forwards current external-directory permission requests to the re
   assert.deepEqual(translator.translate({
     ...event, properties: { ...event.properties, sessionID: 'other-session' },
   }), []);
+});
+
+test('a failed Stop reports its cause and releases the Default turn for retry', async (t) => {
+  const harness = modeHarness('default', '/workspace', false, true);
+  t.after(() => harness.session.dispose());
+  await settle();
+  harness.send({ t: 'prompt', text: 'Start work' });
+  await settle();
+  harness.send({ t: 'interrupt' });
+  await settle();
+  assert.equal(harness.session.turnInFlight(), false);
+  assert.ok(harness.events().some(event => event.t === 'error' && /Abort transport failed/.test(event.message)));
+  harness.send({ t: 'prompt', text: 'Try another task' });
+  await settle();
+  assert.equal(harness.prompts.length, 2);
 });

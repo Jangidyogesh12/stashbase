@@ -341,6 +341,18 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 
 ## J03: Documents
 
+**Local image preview (2026-10-12):** `electron/app-protocol.cjs` permits the
+configured server's `/asset/` image route in production CSP. Previously a valid
+PNG returned HTTP 200 and decoded as a blob, while the same URL failed as an
+image with an `img-src` violation. `electron/renderer/document-image-smoke.cjs`
+runs under the built renderer's real Electron policy and request authorization;
+it checks direct PNG decoding from a folder-scoped URL with encoded filename
+characters and confirms asset reads carry no window authority. The isolated
+built `ImageDocument` was also driven with a controlled 640-by-360 PNG: preview,
+Enlarge image, and Escape back to the preview worked and were reviewed by eye.
+This verifies the source runtime with fixture bytes, not the reported user's
+file, project navigation end to end, or packaged delivery.
+
 **Chinese IME composition (2026-10-11):** `ui/markdown/outline-adapter.ts`
 renders heading anchors through ProseMirror decorations and removes Milkdown's
 competing heading-id synchronizer. Direct heading DOM writes previously made
@@ -1157,6 +1169,30 @@ attachment batches survive age cleanup; old batches from previous processes
 remain temporary. The attachment route test ages a live upload and verifies its
 bytes survive while an abandoned batch is removed. OS/external deletion is not
 prevented, and historical metadata does not restore attachment bytes.
+
+**Default local attachments (2026-10-12):** the composer sends explicit attachment
+references on first send, queue advancement, and Retry. Uploads are bound to the
+registered project and checked against their original digest before model use.
+`server/agent-attachments.ts` prepares bounded UTF-8 text, native images/PDFs, and
+DOCX extracted text; `server/opencode-agent.ts` submits native file parts and
+omits synthetic extraction text from history replay. The local broker adapts
+inline PDF parts to Gemini's compatible input format. No R2 or billing changes.
+Focused tests cover scope refusal, changed/missing files, size/format rejection,
+DOCX extraction, cancelled preparation, and queue/retry snapshots. The pinned
+native-runtime fixture checks actual outgoing media bytes, follow-up retention,
+and history cards. Live hosted probes through the local broker verified text
+markers, PNG/GIF image recognition, and a PDF's title, marker, and rectangle
+color; this is not a general document-quality evaluation. Agent, conversion,
+native-runtime, host type, and Electron tests passed. All renderer gates passed
+(the coverage gate passed on retry after an unrelated application test timeout).
+A built Workspace Story driven in Electron verified Default selection, pasted
+image/text cards, image preview, and removal. Built application Electron smoke
+verified attachment-preview image decoding under the production CSP and request
+authorization; the Story pass uses fixture services, not a full live-model UI
+journey. Existing gateway
+reservation estimates remain unchanged and can reject larger media requests
+before the provider; billing/multimodal estimation is explicitly deferred.
+Temporary original files still are not durable historical attachments.
 
 **General file attachments (2026-09-23):** attachment-capable runtimes accept
 ordinary local files from the picker, drop, and clipboard instead of limiting the

@@ -52,7 +52,6 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     id: 'stashbase', label: 'Default', vendor: 'StashBase · OpenCode · Gemini',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
-      attachments: false,
       // OpenCode has no native risk reviewer for the product's Auto promise.
       modes: ['default', 'acceptEdits', 'plan'],
       effort: false,

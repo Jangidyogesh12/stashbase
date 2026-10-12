@@ -1,3 +1,4 @@
+import { attachmentPdf } from './attachment-fixtures.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -11,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import type { WebSocket } from 'ws';
 import { createOpencodeClient, type Event as LegacyEvent } from '@opencode-ai/sdk';
 import type { EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
-import { OpenCodeEventTranslator, OpenCodePanelSession } from '../opencode-agent.ts';
+import { blocksForMessage, OpenCodeEventTranslator, OpenCodePanelSession } from '../opencode-agent.ts';
 import { ensureMcpLauncher } from '../agent-mcp.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { HostedAgentBroker } from '../hosted-agent-broker.ts';
@@ -423,6 +424,43 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   for (const name of ['stashbase_read_file', 'stashbase_write_file']) {
     assert.ok(folderTools.includes(name), `folder profile omitted ${name}`);
   }
+
+  // Exercise the pinned binary and its provider serializer, not an SDK mock.
+  broker.beginTurn('native-smoke', '00000000-0000-4000-8000-000000000002');
+  const attachmentsSession = (await client.session.create({ body: { title: 'Attachment probe' }, throwOnError: true })).data;
+  const imageBytes = fs.readFileSync('build/icons/16x16.png');
+  const pdfBytes = attachmentPdf();
+  const attachmentPath = path.join(os.tmpdir(), 'stashbase-attachments', 'native-fixture', 'diagram.png');
+  const firstAttachmentCall = gatewayRequests.length;
+  await client.session.prompt({
+    throwOnError: true, path: { id: attachmentsSession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder', parts: [
+      { type: 'text', text: 'Describe the attachments.' },
+      { type: 'file', mime: 'text/plain', filename: 'notes.txt', url: `data:text/plain;base64,${Buffer.from('ATTACHMENT_TEXT_OK').toString('base64')}` },
+      { type: 'file', mime: 'image/png', filename: 'diagram.png', url: `data:image/png;base64,${imageBytes.toString('base64')}`,
+        source: { type: 'file', path: attachmentPath, text: { value: 'diagram.png', start: 0, end: 11 } } },
+      { type: 'file', mime: 'application/pdf', filename: 'report.pdf', url: `data:application/pdf;base64,${pdfBytes.toString('base64')}` },
+    ] },
+  });
+  const firstBody = JSON.stringify(gatewayRequests[firstAttachmentCall]);
+  assert.match(firstBody, /ATTACHMENT_TEXT_OK/);
+  assert.match(firstBody, /image_url/);
+  assert.ok(firstBody.includes(imageBytes.toString('base64')));
+  assert.ok(firstBody.includes(pdfBytes.toString('base64')));
+  const history = (await client.session.messages({ throwOnError: true, path: { id: attachmentsSession.id } })).data;
+  const user = history.find(message => message.info.role === 'user')!;
+  const replay = blocksForMessage(user.info, user.parts);
+  assert.equal(replay[0]?.kind, 'user');
+  assert.equal(replay[0]?.kind === 'user' && replay[0].text, 'Describe the attachments.');
+  assert.equal(replay[0]?.kind === 'user' && replay[0].attachments?.[0]?.path, attachmentPath);
+  await client.session.prompt({
+    throwOnError: true, path: { id: attachmentsSession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder', parts: [{ type: 'text', text: 'Discuss the same attachments again.' }] },
+  });
+  const followUp = JSON.stringify(gatewayRequests.at(-1));
+  assert.match(followUp, /ATTACHMENT_TEXT_OK/);
+  assert.ok(followUp.includes(imageBytes.toString('base64')), 'the next model request retains image content');
+  assert.ok(followUp.includes(pdfBytes.toString('base64')), 'the next model request retains PDF content');
 
   // A hardened-runtime signing mismatch can let Bun finish the request and
   // then have AMFI kill it while it returns to executable memory. Do not let

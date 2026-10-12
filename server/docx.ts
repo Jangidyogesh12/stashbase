@@ -50,7 +50,7 @@ const DOCX_WORKER_SOURCE = [
   '    const mammoth = mammothModule.default || mammothModule;',
   '    const sanitizeHtml = sanitizeHtmlModule.default || sanitizeHtmlModule;',
   '    const result = await mammoth.convertToHtml(',
-  '      { path: workerData.docxPath },',
+  '      typeof workerData.docxPath === "string" ? { path: workerData.docxPath } : { buffer: Buffer.from(workerData.docxPath) },',
   '      { convertImage: mammoth.images.dataUri },',
   '    );',
   '    const html = sanitizeHtml(result.value, {',
@@ -117,8 +117,8 @@ function derivedDocxIsComplete(_docxAbsPath: string, htmlPath: string): boolean 
   }
 }
 
-function extractDocxInWorker(
-  docxAbsPath: string,
+export function extractDocxInWorker(
+  docxAbsPath: string | Buffer,
   signal?: AbortSignal,
 ): Promise<{ html: string; messages: string[] }> {
   if (signal?.aborted) {

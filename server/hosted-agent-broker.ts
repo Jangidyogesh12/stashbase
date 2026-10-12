@@ -141,6 +141,26 @@ async function readBody(request: http.IncomingMessage): Promise<Buffer> {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw Object.assign(new Error('Agent model request must be a JSON object.'), { status: 400 });
   }
+  // The bundled SDK emits OpenAI file parts. The current Gemini-compatible
+  // gateway accepts inline PDFs through image_url instead (verified against
+  // the hosted provider). Preserve the original bytes; no URL fetch or upload.
+  // Other parts, tools, and provider options pass through untouched.
+  const payload = parsed as { messages?: Array<{ role?: string; content?: unknown }> };
+  let changed = false;
+  if (Array.isArray(payload.messages)) {
+    for (const message of payload.messages) {
+      if (message?.role !== 'user' || !Array.isArray(message.content)) continue;
+      message.content = message.content.map((part: unknown) => {
+        if (!part || typeof part !== 'object') return part;
+        const input = part as { type?: string; file?: { file_data?: unknown } };
+        const data = input.file?.file_data;
+        if (input.type !== 'file' || typeof data !== 'string' || !data.startsWith('data:application/pdf;base64,')) return part;
+        changed = true;
+        return { type: 'image_url', image_url: { url: data } };
+      });
+    }
+  }
+  if (changed) return Buffer.from(JSON.stringify(parsed));
   return body;
 }
 

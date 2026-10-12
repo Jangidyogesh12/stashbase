@@ -37,6 +37,7 @@ export const agentClientEventSchema = z.discriminatedUnion("t", [
     .object({
       t: z.literal("prompt"),
       text: boundedText(1_048_576),
+      attachments: z.array(boundedText(16_384)).max(50).optional(),
       titleHint: boundedText(2_000).optional(),
       skill: boundedText(200).optional(),
     })

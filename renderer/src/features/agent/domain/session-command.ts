@@ -14,7 +14,13 @@ export interface AgentPermissionDecision {
 
 export type AgentSessionCommand =
   /** Sends one user turn, optionally under the skill armed for it. */
-  | { kind: 'prompt'; text: string; skill: string | null; titleHint?: string }
+  | {
+      kind: 'prompt';
+      text: string;
+      skill: string | null;
+      titleHint?: string;
+      attachments?: string[];
+    }
   | { kind: 'interrupt' }
   /** Answers one permission request; `always` remembers the decision and
    *  `answers` carry a clarifying question's replies. */

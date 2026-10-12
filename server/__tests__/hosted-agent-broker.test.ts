@@ -306,3 +306,31 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
+
+
+test('hosted broker adapts inline PDFs without changing image bytes, text, tools, or other file parts', async (t) => {
+  let forwarded: Record<string, unknown> | undefined;
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: async (_url, init) => {
+      forwarded = JSON.parse(String(init?.body));
+      return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } });
+    }, upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'test',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const runtime = broker.runtime('attachment-test')!;
+  broker.beginTurn('attachment-test', '00000000-0000-4000-8000-000000000001');
+  const text = { type: 'text', text: 'Read this' };
+  const image = { type: 'image_url', image_url: { url: 'data:image/png;base64,aW1hZ2U=' } };
+  const file = { type: 'file', file: { filename: 'note.txt', file_data: 'data:text/plain;base64,aGVsbG8=' } };
+  const pdf = 'data:application/pdf;base64,JVBERi0xLjQ=';
+  const tool = { role: 'tool', content: 'Saved document', tool_call_id: 'one' };
+  const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+    method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ messages: [{ role: 'user', content: [text, image, file, { type: 'file', file: { file_data: pdf } }] }, tool], stream: true }),
+  });
+  assert.equal(response.status, 200);
+  await response.text();
+  assert.deepEqual(forwarded, { messages: [{ role: 'user', content: [text, image, file, { type: 'image_url', image_url: { url: pdf } }] }, tool], stream: true });
+});

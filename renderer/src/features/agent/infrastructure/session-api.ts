@@ -106,6 +106,7 @@ function clientEvent(command: AgentSessionCommand): AgentClientEvent {
   switch (command.kind) {
     case 'prompt':
       return {
+        ...(command.attachments?.length ? { attachments: command.attachments } : {}),
         t: 'prompt',
         text: command.text,
         ...(command.titleHint ? { titleHint: command.titleHint } : {}),

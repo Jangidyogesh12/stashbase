@@ -78,3 +78,27 @@ export function planQueue(state: AgentSessionState, entries: readonly QueueEntry
   });
   return { queue, draftTaken };
 }
+
+/** The bundled runtime consumes explicit file parts; provider-owned CLIs read
+ * the paths already included in their native prompt text. */
+export function attachmentFields(
+  agent: AgentSessionState['agent'],
+  context: readonly AgentContextItem[] = [],
+): { attachments?: string[] } {
+  const attachments = context.flatMap((item) => (item.kind === 'transient' ? [item.path] : []));
+  return agent === 'stashbase' && attachments.length ? { attachments } : {};
+}
+
+/** Native title hints never replace a title the reader chose. */
+export function promptTitleHint(
+  current: AgentSessionState,
+  prompt: PendingPrompt,
+): string | undefined {
+  return current.transcript.some((block) => block.kind === 'user')
+    ? undefined
+    : current.titleEdited
+      ? current.title
+      : (prompt.display || (prompt.skill ? `/${prompt.skill.label}` : 'Attached files'))
+          .replace(/\s+/g, ' ')
+          .slice(0, 80);
+}

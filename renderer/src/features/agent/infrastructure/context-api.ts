@@ -51,8 +51,9 @@ export function createAgentContextAdapter(
         signal,
       });
     },
-    async upload(files, signal): Promise<AgentUploadOutcome[]> {
+    async upload(files, signal, folderPath): Promise<AgentUploadOutcome[]> {
       const form = new FormData();
+      form.append('folder', folderPath);
       for (const file of files) form.append('files', file, file.name);
       let response: Response;
       try {

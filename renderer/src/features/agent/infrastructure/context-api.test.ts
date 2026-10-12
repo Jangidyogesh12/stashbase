@@ -83,6 +83,7 @@ describe('Agent context API', () => {
     const outcomes = await api.upload(
       [new File(['png'], 'shot.png', { type: 'image/png' }), new File(['x'], 'big.bin')],
       new AbortController().signal,
+      '/project/Research',
     );
     expect(outcomes).toEqual([
       { name: 'shot.png', path: '/tmp/stashbase-attachments/1/shot.png' },
@@ -93,6 +94,7 @@ describe('Agent context API', () => {
     expect(init?.method).toBe('POST');
     const form = init?.body;
     if (!(form instanceof FormData)) throw new Error('The upload sent no multipart body.');
+    expect(form.get('folder')).toBe('/project/Research');
     expect(form.getAll('files').map((entry) => (entry instanceof File ? entry.name : ''))).toEqual([
       'shot.png',
       'big.bin',
@@ -105,7 +107,11 @@ describe('Agent context API', () => {
       origin,
       vi.fn(async () => jsonResponse({ error: 'could not secure attachment storage' }, 500)),
     );
-    const promise = api.upload([new File(['x'], 'a.txt')], new AbortController().signal);
+    const promise = api.upload(
+      [new File(['x'], 'a.txt')],
+      new AbortController().signal,
+      '/project/Research',
+    );
     await expect(promise).rejects.toMatchObject({
       kind: 'unavailable',
       message: 'could not secure attachment storage',

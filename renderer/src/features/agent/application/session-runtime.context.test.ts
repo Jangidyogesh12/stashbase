@@ -302,3 +302,33 @@ describe('AgentSessionRuntime context', () => {
     expect(runtime.store.getState().context).toEqual([]);
   });
 });
+
+it('Default captures attachment references for its queue and retry while preserving newer draft files', async () => {
+  const fake = agentSessionPort();
+  const runtime = createAgentSessionRuntime({
+    agent: 'stashbase',
+    context: agentContextPort(),
+    id: 'attachments',
+    port: fake.port,
+    scope: { kind: 'folder', path: '/project' },
+  });
+  try {
+    const emit = fake.listeners[0]?.onEvent;
+    if (!emit) throw new Error('Expected a connected session');
+    emit({ kind: 'ready' });
+    await runtime.attachFiles([new File(['one'], 'one.txt')]);
+    runtime.setQueue([{ id: 'queued', text: 'Read one' }]);
+    await runtime.attachFiles([new File(['two'], 'two.txt')]);
+    expect(await runtime.continueQueue()).toBe(true);
+    expect(fake.sent.at(-1)).toMatchObject({ attachments: ['/tmp/attach/one.txt'] });
+    emit({ kind: 'turn-started' });
+    emit({ kind: 'failed', message: 'Try later', failure: 'rate-limit' });
+    emit({ kind: 'turn-ended', isError: true });
+    const error = runtime.store.getState().transcript.find((block) => block.kind === 'error');
+    expect(runtime.retry(error?.id ?? '')).toBe(true);
+    expect(fake.sent.at(-1)).toMatchObject({ attachments: ['/tmp/attach/one.txt'] });
+    expect(runtime.store.getState().context).toMatchObject([{ name: 'two.txt' }]);
+  } finally {
+    runtime.dispose();
+  }
+});

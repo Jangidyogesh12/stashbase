@@ -60,6 +60,14 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   picker, drop, or paste. Images and PDFs may have visual previews; other files
   remain named file cards. Attachment acceptance does not promise that every
   runtime can interpret every binary format, and a refused read must stay visible.
+- Default sends local attachments with the model request, without cloud object
+  storage, project import, or indexing. It accepts PNG, JPEG, GIF, WebP, PDF,
+  UTF-8 text, and DOCX. Images and PDFs retain their original media; DOCX supplies
+  extracted text and explicitly excludes embedded images and page layout.
+  Each message accepts up to ten files totaling 8 MiB, with at most 200,000
+  extracted text characters. Oversize, unavailable, changed, and unsupported
+  files fail visibly; content is never silently truncated or omitted. The full
+  model request, including retained history, also has a transport size limit.
 - Model, effort, skills, and permission options follow the selected runtime.
   Remember explicitly chosen thinking effort per project and Agent for new chats,
   including after restart. A model that does not support that effort uses its own

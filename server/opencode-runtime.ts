@@ -170,6 +170,8 @@ export function buildOpenCodeConfig(
         models: {
           [model.model]: {
             name: 'Gemini 3.8 Flash',
+            attachment: true,
+            modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
             tool_call: true,
             reasoning: true,
           },

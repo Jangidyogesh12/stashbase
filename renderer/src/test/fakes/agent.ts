@@ -25,10 +25,9 @@ const nativeAbilities: AgentAbilities = {
   skills: true,
 };
 
-/** A runtime that advertises nothing beyond plain prompts, the way the
- *  bundled agent reaches a conversation. */
+/** The bundled Agent supports attachments but has no model or effort picker. */
 const plainAbilities: AgentAbilities = {
-  attachments: false,
+  attachments: true,
   effort: false,
   models: false,
   modes: ['default', 'plan', 'acceptEdits', 'auto'],

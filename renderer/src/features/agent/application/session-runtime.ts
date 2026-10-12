@@ -21,7 +21,9 @@ import {
   type AgentFilesChanged,
 } from '@/features/agent/application/session/files-changed';
 import {
+  attachmentFields,
   createPromptLedger,
+  promptTitleHint,
   type PendingPrompt,
 } from '@/features/agent/application/session/prompts';
 import type {
@@ -118,15 +120,10 @@ export function createAgentSessionRuntime({
       )
     )
       return false;
-    const titleHint = current.transcript.some((block) => block.kind === 'user')
-      ? undefined
-      : current.titleEdited
-        ? current.title
-        : (prompt.display || (prompt.skill ? `/${prompt.skill.label}` : 'Attached files'))
-            .replace(/\s+/g, ' ')
-            .slice(0, 80);
+    const titleHint = promptTitleHint(current, prompt);
     const sent = transport.send({
       kind: 'prompt',
+      ...attachmentFields(current.agent, prompt.context),
       skill: prompt.skill?.id ?? null,
       text: prompt.wire,
       ...(titleHint ? { titleHint } : {}),
@@ -266,6 +263,7 @@ export function createAgentSessionRuntime({
       const sent = transport.send({
         kind: 'prompt',
         skill,
+        ...attachmentFields(current.agent, turn?.context),
         text: failure.retryablePrompt,
       });
       if (!sent) usage.finish('blocked');

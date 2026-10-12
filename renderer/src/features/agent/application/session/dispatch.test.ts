@@ -176,7 +176,7 @@ describe('unavailableContextPort', () => {
     await expect(
       port.resolve({ folderPath: '/project', path: 'a.md' }, new AbortController().signal),
     ).rejects.toMatchObject({ kind: 'unavailable' });
-    await expect(port.upload([], new AbortController().signal)).rejects.toMatchObject({
+    await expect(port.upload([], new AbortController().signal, '/project')).rejects.toMatchObject({
       kind: 'unavailable',
     });
   });

@@ -33,7 +33,8 @@ const agentAttachOutcomeSchema = z
   })
   .strict();
 
-/** `POST /api/agent/attach` — transient uploads written outside every project
+/** `POST /api/agent/attach` — multipart files plus their explicit registered
+ * project `folder`; transient uploads are written outside every project
  *  folder, answered in request order. */
 export const agentAttachResponseSchema = z
   .object({ files: z.array(agentAttachOutcomeSchema).max(50) })
