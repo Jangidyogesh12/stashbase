@@ -95,7 +95,8 @@ test('packaged OpenCode resolves from the explicit resources path before depende
 });
 
 test('pinned bundled OpenCode completes one SDK session against a fake compatible model gateway', {
-  timeout: 30_000,
+  // Windows also runs the project-skill tool round trip in this fixture.
+  timeout: 60_000,
 }, async (t) => {
   let stage = 'startup';
   let completed = false;
