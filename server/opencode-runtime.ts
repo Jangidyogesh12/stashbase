@@ -18,6 +18,7 @@ import {
   type Config,
   type OpencodeClient,
 } from '@opencode-ai/sdk';
+import type { Config as NativeConfig } from '@opencode-ai/sdk/v2/types';
 import { getHostedAccountSession } from './app-config.ts';
 import { ensureMcpLauncher } from './agent-mcp.ts';
 import { resolveAgentPersona } from './agent-persona.ts';
@@ -119,20 +120,25 @@ export function safeOpenCodeInheritedEnvironment(source: NodeJS.ProcessEnv): Nod
   return { ...environment, PATH: agentCliPath([], inheritedPath ?? '') };
 }
 
-function privateRuntimeEnvironment(config: Config, username: string, password: string): NodeJS.ProcessEnv {
-  const root = path.join(appDataRoot(), 'opencode');
+export function openCodeRuntimeEnvironment(
+  config: Config,
+  username: string,
+  password: string,
+  root = path.join(appDataRoot(), 'opencode'),
+): NodeJS.ProcessEnv {
   for (const name of ['data', 'config', 'cache', 'home']) fs.mkdirSync(path.join(root, name), { recursive: true });
   return {
     ...safeOpenCodeInheritedEnvironment(process.env),
-    // OpenCode discovers ecosystem config and skills under the user home even
-    // in headless mode. Give the bundled runtime a private home so only the
-    // process-injected StashBase config participates.
+    // A private HOME isolates global configuration. The native discovery flags
+    // also prevent walking out of a plain writing folder (whose worktree is /).
     HOME: path.join(root, 'home'),
     USERPROFILE: path.join(root, 'home'),
     OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
     OPENCODE_SERVER_USERNAME: username,
     OPENCODE_SERVER_PASSWORD: password,
     OPENCODE_DISABLE_AUTOUPDATE: 'true',
+    OPENCODE_DISABLE_EXTERNAL_SKILLS: 'true',
+    OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
     XDG_DATA_HOME: path.join(root, 'data'),
     XDG_CONFIG_HOME: path.join(root, 'config'),
     XDG_CACHE_HOME: path.join(root, 'cache'),
@@ -168,8 +174,14 @@ export function buildOpenCodeConfig(
   mcpEnvironment: Record<string, string> = {},
   persona?: string,
   profiles: readonly HostedAgentProfile[] = [],
-): Config {
+  directory?: string,
+): Config & Pick<NativeConfig, 'skills'> {
   const runtimeInstructions = composeAgentRuntimeInstructions(persona);
+  // Disabling native upward config discovery also disables its instruction-file
+  // lookup. Preserve the native filename precedence inside this project, passing
+  // the path so OpenCode still owns reading and presenting the instructions.
+  const instruction = directory && ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md']
+    .map((name) => path.resolve(directory, name)).find((file) => fs.existsSync(file));
   const defaultModel = defaultHostedAgentProfile(profiles)?.id ?? model.model;
   const permission = {
     // Native edit/write/patch tools share this permission; MCP writes stay explicit.
@@ -188,6 +200,8 @@ export function buildOpenCodeConfig(
     autoupdate: false,
     share: 'disabled',
     enabled_providers: ['stashbase'],
+    skills: { paths: ['.agents/skills', '.claude/skills', '.opencode/skills', '.opencode/skill'] },
+    ...(instruction ? { instructions: [instruction] } : {}),
     model: `stashbase/${defaultModel}`,
     small_model: `stashbase/${defaultModel}`,
     provider: {
@@ -244,8 +258,9 @@ function openCodeConfig(
   mcpEnvironment: Record<string, string>,
   persona: string | undefined,
   profiles: readonly HostedAgentProfile[],
+  directory: string,
 ): Config {
-  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, persona, profiles);
+  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, persona, profiles, directory);
 }
 
 class OpenCodeRuntime {
@@ -316,7 +331,7 @@ class OpenCodeRuntime {
   }
 
   async client(directory: string): Promise<OpencodeClient> {
-    const running = await this.start();
+    const running = await this.start(directory);
     return createOpencodeClient({
       baseUrl: running.url,
       directory,
@@ -352,16 +367,16 @@ class OpenCodeRuntime {
     }
   }
 
-  private async start(): Promise<RunningOpenCode> {
+  private async start(directory: string): Promise<RunningOpenCode> {
     runtimes.add(this);
     if (this.running && this.running.process.exitCode == null) return this.running;
     if (this.starting) return this.starting;
     const generation = this.generation;
-    this.starting = this.spawn(generation).finally(() => { this.starting = null; });
+    this.starting = this.spawn(generation, directory).finally(() => { this.starting = null; });
     return this.starting;
   }
 
-  private async spawn(generation: number): Promise<RunningOpenCode> {
+  private async spawn(generation: number, directory: string): Promise<RunningOpenCode> {
     const executable = bundledOpenCodeExecutable();
     if (!executable) throw new Error('The bundled OpenCode runtime is missing.');
     if (this.requireAccount && !getHostedAccountSession()) {
@@ -383,7 +398,7 @@ class OpenCodeRuntime {
       '--pure',
       '--log-level=WARN',
     ], {
-      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona, this.profiles()), username, password),
+      env: openCodeRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona, this.profiles(), directory), username, password),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });

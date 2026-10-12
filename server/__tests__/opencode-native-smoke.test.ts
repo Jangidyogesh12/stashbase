@@ -20,6 +20,7 @@ import {
   BUNDLED_OPENCODE_VERSION,
   buildOpenCodeConfig,
   bundledOpenCodeExecutable,
+  openCodeRuntimeEnvironment,
   safeOpenCodeInheritedEnvironment,
 } from '../opencode-runtime.ts';
 
@@ -111,7 +112,22 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
 
   // Windows TEMP can use an 8.3 alias; the SDK and panel must bind the same
   // canonical directory rather than canonicalizing only the panel's scope.
-  const temporaryRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-opencode-native-')));
+  const fixtureRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-opencode-native-')));
+  const temporaryRoot = path.join(fixtureRoot, 'project');
+  const runtimeRoot = path.join(fixtureRoot, 'runtime');
+  fs.mkdirSync(temporaryRoot);
+  // Reproduce a project below a user's home without a Git boundary. Skills in
+  // these ancestor directories must not enter the project model request.
+  const skillSources = ['.agents/skills', '.claude/skills', '.opencode/skills', '.opencode/skill'];
+  for (const [index, source] of skillSources.entries()) {
+    for (const [scope, root] of [['ancestor', fixtureRoot], ['project', temporaryRoot]] as const) {
+      const name = `${scope}-writing-${index}`;
+      const folder = path.join(root, source, name);
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, 'SKILL.md'), `---\nname: ${name}\ndescription: ${scope.toUpperCase()}_SKILL_${index}\n---\n${scope.toUpperCase()}_SKILL_BODY_${index}\n`);
+    }
+  }
+  fs.writeFileSync(path.join(temporaryRoot, 'AGENTS.md'), 'PROJECT_INSTRUCTIONS_RETAINED\n');
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-outside-probe-'));
   const externalFile = path.join(outside, 'reference.txt');
   fs.writeFileSync(externalFile, 'EXPLICIT_EXTERNAL_READ_OK');
@@ -180,7 +196,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
       } finally {
         gateway.closeAllConnections();
         await new Promise<void>((resolve) => gateway.close(() => resolve()));
-        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }
     }
   });
@@ -196,7 +212,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const serverPort = await unusedPort();
   const username = 'stashbase';
   const password = 'native-smoke-secret';
-  const config = buildOpenCodeConfig(model, '/unused/stashbase-mcp', {}, undefined, SMOKE_PROFILES);
+  const config = buildOpenCodeConfig(model, '/unused/stashbase-mcp', {}, undefined, SMOKE_PROFILES, temporaryRoot);
   config.mcp = {
     stashbase: {
       type: 'local',
@@ -214,18 +230,11 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     'serve', '--hostname=127.0.0.1', `--port=${serverPort}`, '--pure', '--log-level=WARN',
   ], {
     env: {
+      ...openCodeRuntimeEnvironment(config, username, password, runtimeRoot),
       ...safeOpenCodeInheritedEnvironment({
         ...process.env,
         ...(process.platform === 'darwin' ? { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', SHELL: '/bin/zsh' } : {}),
       }),
-      HOME: temporaryRoot,
-      USERPROFILE: temporaryRoot,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
-      OPENCODE_SERVER_USERNAME: username,
-      OPENCODE_SERVER_PASSWORD: password,
-      XDG_DATA_HOME: path.join(temporaryRoot, 'data'),
-      XDG_CONFIG_HOME: path.join(temporaryRoot, 'config'),
-      XDG_CACHE_HOME: path.join(temporaryRoot, 'cache'),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -313,6 +322,11 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     },
   });
   await consumed;
+  const initialRequest = JSON.stringify(gatewayRequests[0]);
+  assert.ok(!initialRequest.includes('ANCESTOR_SKILL_'), 'ancestor skills must not reach the model');
+  assert.match(initialRequest, /PROJECT_INSTRUCTIONS_RETAINED/);
+  for (const index of skillSources.keys()) assert.ok(initialRequest.includes(`PROJECT_SKILL_${index}`));
+  assert.doesNotMatch(initialRequest, /PROJECT_SKILL_BODY_/);
   assert.ok(events.some(event => event.type === 'permission.asked'), 'external read must request permission');
   assert.ok(JSON.stringify(gatewayRequests.slice(1)).includes('EXPLICIT_EXTERNAL_READ_OK'), 'authorized external read must reach model');
   assert.ok(events.some((event) => (
@@ -519,6 +533,18 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.match(followUp, /ATTACHMENT_TEXT_OK/);
   assert.ok(followUp.includes(imageBytes.toString('base64')), 'the next model request retains image content');
   assert.ok(followUp.includes(pdfBytes.toString('base64')), 'the next model request retains PDF content');
+
+  stage = 'project skill invocation';
+  nextTool = { name: 'skill', arguments: JSON.stringify({ name: 'project-writing-0' }) };
+  const skillSession = (await client.session.create({ body: { title: 'Project skill probe' }, throwOnError: true })).data;
+  const firstSkillCall = gatewayRequests.length;
+  await client.session.prompt({
+    throwOnError: true, path: { id: skillSession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder',
+      parts: [{ type: 'text', text: 'Use the project writing skill.' }] },
+  });
+  assert.ok(JSON.stringify(gatewayRequests.slice(firstSkillCall + 1)).includes('PROJECT_SKILL_BODY_0'),
+    'project skill contents must load on native invocation');
 
   // Hosted Claude models refuse a forced tool choice, so every model call the
   // pinned runtime makes, tool continuations included, must leave it open.
