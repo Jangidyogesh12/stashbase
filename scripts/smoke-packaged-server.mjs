@@ -713,9 +713,11 @@ const daemonBin = findSidecarExecutable(resourcesPath, 'stashbase-daemon');
 const bundledExtractBin = findSidecarExecutable(resourcesPath, 'stashbase-extract');
 if (fs.existsSync(bundledExtractBin)) throw new Error('Base installer unexpectedly includes the downloadable extractor');
 const openCodeBin = findPackagedOpenCode(resourcesPath);
+const ripgrepBin = process.platform === 'win32' ? path.join(resourcesPath, 'opencode', 'rg.exe') : null;
 assertFile(electronBin, 'packaged Electron binary');
 assertFile(appRoot, 'app.asar');
 assertFile(openCodeBin, 'packaged OpenCode binary');
+if (ripgrepBin) assertFile(ripgrepBin, 'packaged Windows ripgrep binary');
 assertFile(daemonBin, 'packaged Python daemon sidecar');
 assertFile(path.join(resourcesPath, 'python', 'extractor-runtime.json'), 'pinned extractor component manifest');
 
@@ -725,6 +727,13 @@ if (openCodeProbe.code !== 0 || openCodeProbe.output.trim() !== '1.18.19') {
   throw new Error(`unexpected packaged OpenCode version: exit=${openCodeProbe.code} output=${openCodeProbe.output.trim()}`);
 }
 console.log('[smoke] packaged OpenCode binary is executable and pinned to 1.18.19');
+if (ripgrepBin) {
+  const ripgrepProbe = await runProcess(ripgrepBin, ['--version'], { timeoutMs: 10_000 });
+  if (ripgrepProbe.code !== 0 || !/^ripgrep \d+/m.test(ripgrepProbe.output)) {
+    throw new Error(`unexpected packaged ripgrep binary: exit=${ripgrepProbe.code} output=${ripgrepProbe.output.trim()}`);
+  }
+  console.log('[smoke] packaged Windows ripgrep binary is executable');
+}
 await smokePackagedOpenCode(openCodeBin);
 await smokeDaemon(daemonBin);
 {

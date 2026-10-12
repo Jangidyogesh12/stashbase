@@ -88,6 +88,24 @@ export function bundledOpenCodeExecutable(): string | null {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }
 
+/** Native OpenCode skill reads use ripgrep. Keep Windows independent of a
+ * user's PATH and of OpenCode's on-demand binary download. */
+export function bundledOpenCodeRipgrep(): string | null {
+  if (process.platform !== 'win32') return null;
+  const resourcesRoot = process.env.STASHBASE_RESOURCES_PATH?.trim();
+  if (resourcesRoot) {
+    const packaged = path.join(path.resolve(resourcesRoot), 'opencode', 'rg.exe');
+    if (fs.existsSync(packaged)) return packaged;
+  }
+  try {
+    const { rgPath } = createRequire(import.meta.url)('@vscode/ripgrep') as { rgPath: string };
+    if (fs.existsSync(rgPath)) return rgPath;
+  } catch {
+    // The stable failure below is preferable to a runtime download or hang.
+  }
+  return null;
+}
+
 async function availablePort(): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const server = net.createServer();
@@ -125,10 +143,17 @@ export function openCodeRuntimeEnvironment(
   username: string,
   password: string,
   root = path.join(appDataRoot(), 'opencode'),
+  source = process.env,
 ): NodeJS.ProcessEnv {
   for (const name of ['data', 'config', 'cache', 'home']) fs.mkdirSync(path.join(root, name), { recursive: true });
+  const inherited = safeOpenCodeInheritedEnvironment(source);
+  const ripgrep = process.platform === 'win32' ? bundledOpenCodeRipgrep() : null;
+  if (process.platform === 'win32' && !ripgrep) {
+    throw new Error('Bundled Windows ripgrep is missing from the OpenCode runtime.');
+  }
   return {
-    ...safeOpenCodeInheritedEnvironment(process.env),
+    ...inherited,
+    ...(ripgrep ? { PATH: `${path.dirname(ripgrep)}${path.delimiter}${inherited.PATH ?? ''}` } : {}),
     // A private HOME isolates global configuration. The native discovery flags
     // also prevent walking out of a plain writing folder (whose worktree is /).
     HOME: path.join(root, 'home'),

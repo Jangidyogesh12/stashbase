@@ -21,7 +21,6 @@ import {
   buildOpenCodeConfig,
   bundledOpenCodeExecutable,
   openCodeRuntimeEnvironment,
-  safeOpenCodeInheritedEnvironment,
 } from '../opencode-runtime.ts';
 
 type Event = LegacyEvent | EventPermissionAsked;
@@ -234,13 +233,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const child = spawn(executable, [
     'serve', '--hostname=127.0.0.1', `--port=${serverPort}`, '--pure', '--log-level=WARN',
   ], {
-    env: {
-      ...openCodeRuntimeEnvironment(config, username, password, runtimeRoot),
-      ...safeOpenCodeInheritedEnvironment({
-        ...process.env,
-        ...(process.platform === 'darwin' ? { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', SHELL: '/bin/zsh' } : {}),
-      }),
-    },
+    env: openCodeRuntimeEnvironment(config, username, password, runtimeRoot, {
+      ...process.env,
+      ...(process.platform === 'darwin' ? { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', SHELL: '/bin/zsh' } : {}),
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   ownedChild = child;

@@ -270,6 +270,17 @@ function prepareIntelOpenCode() {
   fs.chmodSync(path.join(runtimeRoot, 'bin', 'opencode.exe'), 0o755);
 }
 
+function prepareWindowsRipgrep() {
+  if (platform !== 'win' || !hostMatchesTarget()) return;
+  const { rgPath } = createRequire(import.meta.url)('@vscode/ripgrep');
+  if (!fs.existsSync(rgPath) || binaryFormat(rgPath) !== 'pe') {
+    throw new Error('Windows packaging requires @vscode/ripgrep-win32-x64. Run pnpm install --frozen-lockfile on Windows.');
+  }
+  const target = path.join(root, 'build', 'native.nosync', 'rg.exe');
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(rgPath, target);
+}
+
 if (!hostMatchesTarget()) {
   await assertSidecarsForPlatform();
   assertClaudeAgentSdkForPlatform();
@@ -285,4 +296,5 @@ if (!hostMatchesTarget()) {
 }
 clearQuarantine();
 prepareIntelOpenCode();
+prepareWindowsRipgrep();
 runElectronBuilder();

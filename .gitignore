@@ -49,3 +49,4 @@ __pycache__/
 python/.venv.nosync/
 python/.venv/
 python/pyinstaller-cache.nosync/
+build/native.nosync/

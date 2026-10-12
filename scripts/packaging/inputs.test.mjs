@@ -158,6 +158,12 @@ test('bundled OpenCode runtime and SDK are pinned with an explicit packaged exec
   const workspace = fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8');
   assert.match(workspace, /^\s*opencode-ai:\s+true\s*$/m);
   assert.ok(fs.existsSync(path.join(root, 'node_modules', 'opencode-ai', 'bin', 'opencode.exe')));
+  assert.equal(pkg.devDependencies?.['@vscode/ripgrep'], '1.18.0');
+  assert.deepEqual(
+    pkg.build?.win?.extraResources?.find((entry) => entry?.to === 'opencode/rg.exe'),
+    { from: 'build/native.nosync/rg.exe', to: 'opencode/rg.exe' },
+    'Windows must ship the native skill read dependency beside OpenCode',
+  );
 });
 
 
@@ -221,4 +227,9 @@ test('the packaging CLI validates component version and bytes before invoking th
   const result = run('--win');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /builder arguments accepted/);
+  if (process.platform === 'win32') {
+    const staged = path.join(tmp, 'build', 'native.nosync', 'rg.exe');
+    assert.ok(fs.existsSync(staged), 'Windows packaging stages the pinned ripgrep binary');
+    assert.equal(fs.readFileSync(staged).subarray(0, 2).toString(), 'MZ');
+  }
 });
