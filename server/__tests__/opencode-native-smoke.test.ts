@@ -100,12 +100,16 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
 }, async (t) => {
   let stage = 'startup';
   let completed = false;
+  const skillEvents: string[] = [];
   const subscriptions = new AbortController();
   let panel: OpenCodePanelSession | undefined;
   let ownedBroker: HostedAgentBroker | undefined;
   let ownedChild: ReturnType<typeof spawn> | undefined;
   t.signal.addEventListener('abort', () => {
-    if (!completed) console.error(`Native OpenCode smoke stopped during: ${stage}`);
+    if (!completed) {
+      console.error(`Native OpenCode smoke stopped during: ${stage}`);
+      if (stage === 'project skill invocation') console.error(`Skill event types: ${skillEvents.slice(-12).join(', ')}`);
+    }
   });
   const executable = bundledOpenCodeExecutable();
   assert.ok(executable, 'bundled OpenCode postinstall target is missing');
@@ -539,11 +543,30 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   nextTool = { name: 'skill', arguments: JSON.stringify({ name: 'project-writing-0' }) };
   const skillSession = (await client.session.create({ body: { title: 'Project skill probe' }, throwOnError: true })).data;
   const firstSkillCall = gatewayRequests.length;
-  await client.session.prompt({
+  // A direct SDK turn must answer native permissions as the panel does.
+  const skillSubscription = await client.event.subscribe({ signal: subscriptions.signal, sseMaxRetryAttempts: 1 });
+  const skillTranslator = new OpenCodeEventTranslator();
+  skillTranslator.bindSession(skillSession.id);
+  const skillConsumed = (async () => {
+    for await (const event of skillSubscription.stream) {
+      skillEvents.push(event.type);
+      for (const translated of skillTranslator.translate(event)) {
+        if (translated.t !== 'permission') continue;
+        await client.postSessionIdPermissionsPermissionId({
+          throwOnError: true,
+          path: { id: skillSession.id, permissionID: translated.id },
+          body: { response: 'once' },
+        });
+      }
+      if (event.type === 'session.idle' && event.properties.sessionID === skillSession.id) return;
+    }
+  })();
+  await client.session.promptAsync({
     throwOnError: true, path: { id: skillSession.id },
     body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder',
       parts: [{ type: 'text', text: 'Use the project writing skill.' }] },
   });
+  await skillConsumed;
   assert.ok(JSON.stringify(gatewayRequests.slice(firstSkillCall + 1)).includes('PROJECT_SKILL_BODY_0'),
     'project skill contents must load on native invocation');
 
