@@ -46,9 +46,12 @@ const editors = vi.hoisted(() => ({ instances: [] as FakeMarkdownEditor[] }));
 vi.mock('@/features/documents/ui/markdown/changes', () => ({
   watchMarkdownChanges: (
     editor: { instance: FakeMarkdownEditor },
-    report: (markdown: string) => void,
+    { accepts, report }: { accepts(): boolean; report(markdown: string): void },
   ) => {
-    editor.instance.change = (_context, markdown) => report(markdown);
+    editor.instance.change = (_context, markdown) => {
+      if (accepts()) report(markdown);
+    };
+    return { flush: () => false, rebase: () => undefined };
   },
 }));
 
