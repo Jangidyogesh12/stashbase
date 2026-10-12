@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { HostedAgentBroker } from '../hosted-agent-broker.ts';
 import { OpenCodeEventTranslator } from '../opencode-agent.ts';
+import { classifyAgentTurnFailure } from '../agent-turn-failure.ts';
 
 test('hosted Agent broker keeps the account credential upstream and streams an OpenAI-compatible response', async (t) => {
   const accessCalls: boolean[] = [];
-  const upstream: Array<{ url: string; authorization: string | null; idempotencyKey: string | null; turnId: string | null; profile: string | null; body: string }> = [];
+  const upstream: Array<{ url: string; authorization: string | null; idempotencyKey: string | null; turnId: string | null; profile: string | null; version: string | null; body: string }> = [];
   const broker = new HostedAgentBroker({
     accessToken: async ({ forceRefresh = false } = {}) => {
       accessCalls.push(forceRefresh);
@@ -18,6 +19,7 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
         idempotencyKey: new Headers(init?.headers).get('idempotency-key'),
         turnId: new Headers(init?.headers).get('x-stashbase-agent-turn-id'),
         profile: new Headers(init?.headers).get('x-stashbase-agent-profile'),
+        version: new Headers(init?.headers).get('x-stashbase-agent-profile-version'),
         body: String(init?.body),
       });
       if (upstream.length === 1) return new Response('{}', { status: 401 });
@@ -50,10 +52,82 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   assert.equal(upstream[0].turnId, '00000000-0000-4000-8000-000000000001');
   assert.equal(upstream[1].turnId, upstream[0].turnId);
   assert.equal(upstream[0].profile, 'stashbase-agent-default');
+  // An unversioned turn leaves the configuration to the service.
+  assert.equal(upstream[0].version, null);
   assert.equal(runtime.model, 'stashbase-agent-default');
   assert.equal(upstream[0].url, 'https://gateway.invalid/v1/agent/chat/completions');
   assert.doesNotMatch(upstream[0].body, /account-token/);
 });
+
+test('a turn keeps the model it began with for every call, and the next turn takes a new choice', async (t) => {
+  const seen: Array<{ turn: string | null; profile: string | null; version: string | null }> = [];
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      seen.push({
+        turn: headers.get('x-stashbase-agent-turn-id'),
+        profile: headers.get('x-stashbase-agent-profile'),
+        version: headers.get('x-stashbase-agent-profile-version'),
+      });
+      return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n', {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    },
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const runtime = broker.runtime('model-turns')!;
+  const call = async () => (await fetch(`${runtime.baseUrl}/chat/completions`, {
+    method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], stream: true }),
+  })).text();
+
+  const model = { profile: 'writer-pro', version: 3 };
+  broker.beginTurn('model-turns', '00000000-0000-4000-8000-000000000011', model);
+  // The caller's object changing later cannot move a turn already running.
+  model.profile = 'other';
+  await call();
+  await call();
+  broker.endTurn('model-turns');
+  broker.beginTurn('model-turns', '00000000-0000-4000-8000-000000000012', { profile: 'writer-fast', version: 1 });
+  await call();
+
+  assert.deepEqual(seen, [
+    { turn: '00000000-0000-4000-8000-000000000011', profile: 'writer-pro', version: '3' },
+    { turn: '00000000-0000-4000-8000-000000000011', profile: 'writer-pro', version: '3' },
+    { turn: '00000000-0000-4000-8000-000000000012', profile: 'writer-fast', version: '1' },
+  ]);
+});
+
+for (const [status, code] of [[422, 'agent_model_configuration_changed'], [503, 'agent_model_unavailable']] as const) {
+  test(`a refused model (${code}) ends without a native retry and asks for a model refresh`, async (t) => {
+    let calls = 0;
+    const broker = new HostedAgentBroker({
+      accessToken: async () => 'fixture-token',
+      fetch: async () => {
+        calls += 1;
+        return Response.json({ code, message: 'Service wording may change.' }, { status });
+      },
+      upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+    });
+    await broker.start();
+    t.after(() => broker.close());
+    const runtime = broker.runtime('model-refused')!;
+    broker.beginTurn('model-refused', '00000000-0000-4000-8000-000000000013', { profile: 'writer-pro', version: 2 });
+    const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+      method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const payload = await response.json() as { error: { code: string; message: string } };
+    // 422 is outside the native runtime's retryable statuses.
+    assert.equal(response.status, 422);
+    assert.equal(payload.error.code, code);
+    assert.equal(classifyAgentTurnFailure(payload.error.message), 'model-changed');
+    assert.equal(calls, 1);
+  });
+}
 
 const emptyResponse = 'data: {"choices":[{"delta":{"role":"assistant","content":""},"finish_reason":null}]}\r\n\r\n'
   + 'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":0}}\r\n\r\ndata: [DONE]\r\n\r\n';

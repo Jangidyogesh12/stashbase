@@ -15,6 +15,7 @@ import { agentQuestions } from '@/features/agent/domain/question';
 import { latestUserBlock, type AgentTranscriptBlock } from '@/features/agent/domain/session';
 import type { AgentPermissionDecision } from '@/features/agent/domain/session-command';
 import { promptTimeLabel, replyTimeLabel, transcriptDayBreaks } from '@/features/agent/domain/time';
+import type { AgentModelRefreshView } from '@/features/agent/hooks/use-agent-model-refresh';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
 import { useShape } from '@/lib/shape-context';
@@ -100,6 +101,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   block,
   closing,
   editable,
+  modelRefresh,
   now,
   onEditPrompt,
   onOpenExternal,
@@ -118,6 +120,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   /** This prompt is the latest and its turn has settled, so it can be taken
    *  back into the composer. */
   editable: boolean;
+  modelRefresh?: AgentModelRefreshView | undefined;
   now: number;
   onEditPrompt?: ((blockId: string) => void) | undefined;
   onOpenExternal(href: string): void;
@@ -238,7 +241,14 @@ const TranscriptBlock = memo(function TranscriptBlock({
     );
   }
   if (block.kind === 'error') {
-    return <TurnFailure block={block} onRetry={onRetry} runtimeUpdate={runtimeUpdate} />;
+    return (
+      <TurnFailure
+        block={block}
+        modelRefresh={modelRefresh}
+        onRetry={onRetry}
+        runtimeUpdate={runtimeUpdate}
+      />
+    );
   }
   const questions = agentQuestions(block.name, block.input);
   if (questions) {
@@ -250,6 +260,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
 export const AgentTranscript = memo(function AgentTranscript({
   activeTurn,
   blocks,
+  modelRefresh,
   onEditPrompt,
   onOpenExternal,
   onOpenSource,
@@ -262,6 +273,9 @@ export const AgentTranscript = memo(function AgentTranscript({
 }: {
   activeTurn: boolean;
   blocks: AgentTranscriptBlock[];
+  /** Reads the hosted models again, offered on a turn refused because the
+   *  chosen model's configuration changed. Absent where no hosted list exists. */
+  modelRefresh?: AgentModelRefreshView | undefined;
   /** Takes a sent prompt back into the composer. Absent when there is no
    *  composer to take it, so no edit control renders. */
   onEditPrompt?: ((blockId: string) => void) | undefined;
@@ -351,6 +365,7 @@ export const AgentTranscript = memo(function AgentTranscript({
               block={group}
               closing={closing.has(group.id)}
               editable={group.id === editableId}
+              modelRefresh={modelRefresh}
               now={now}
               onEditPrompt={onEditPrompt}
               onOpenExternal={onOpenExternal}

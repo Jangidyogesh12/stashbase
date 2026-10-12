@@ -16,6 +16,8 @@ import {
 } from '../opencode-agent.ts';
 import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, type OpenCodeSessionRuntime } from '../opencode-runtime.ts';
 import { agentCliPath } from '../agent-cli.ts';
+import type { HostedAgentTurnModel } from '../hosted-agent-broker.ts';
+import type { HostedAgentProfile } from '../hosted-agent-models.ts';
 import type { AgentAccessMode } from '../../shared/agent-runtime.ts';
 
 function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart = true, abortFailure = false) {
@@ -45,6 +47,7 @@ function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart
         postSessionIdPermissionsPermissionId: async (reply: typeof replies[number]) => { replies.push(reply); return { data: true }; },
       } as never;
     },
+    models: async () => [],
     beginTurn: () => {}, endTurn: () => {}, onExit: () => () => {}, close: async () => {},
   });
   return { ws, feed, session, prompts, replies,
@@ -309,6 +312,7 @@ test('the Default Agent publishes scope retirement once before closing its trans
   const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
     windowId: 'retire-window', folder: '/workspace',
   }, {
+    models: async () => [],
     client: async () => new Promise<never>(() => {}),
     beginTurn: () => {}, endTurn: () => {}, onExit: () => () => {},
     close: async () => { closed += 1; },
@@ -399,6 +403,7 @@ test('an unexpected bundled runtime exit terminates the panel instead of leaving
   let exitListener: ((error: Error) => void) | null = null;
   let closeCalls = 0;
   const runtime: OpenCodeSessionRuntime = {
+    models: async () => [],
     async client(directory) {
       return {
         event: {
@@ -648,4 +653,154 @@ test('Default streamed provider errors retain status, request ID and bounded res
     h.session.dispose();
   }
   assert.equal(safeOpenCodeInheritedEnvironment({ STASHBASE_TELEMETRY_DISABLED: '1' }).STASHBASE_TELEMETRY_DISABLED, '1');
+});
+
+const PROFILES: HostedAgentProfile[] = [
+  { id: 'writer-fast', version: 3, displayName: 'Writer Fast', contextTokenLimit: 1_000_000, outputTokenLimit: 65_536, isDefault: true },
+  { id: 'writer-pro', version: 7, displayName: 'Writer Pro', contextTokenLimit: 200_000, outputTokenLimit: 32_000, isDefault: false },
+];
+
+function modelHarness(options: {
+  profiles?: HostedAgentProfile[] | Error;
+  resume?: string;
+  model?: string;
+  storedModel?: string;
+} = {}) {
+  const ws = new FakeWebSocket();
+  const feed = new EventEmitter();
+  const prompts: Array<{ model: { providerID: string; modelID: string } }> = [];
+  const turns: Array<HostedAgentTurnModel | undefined> = [];
+  const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
+    windowId: 'model-window', folder: '/workspace', access: 'acceptEdits',
+    ...(options.resume ? { resume: options.resume } : {}),
+    ...(options.model ? { model: options.model } : {}),
+  }, {
+    models: async () => {
+      if (options.profiles instanceof Error) throw options.profiles;
+      return options.profiles ?? PROFILES;
+    },
+    async client(directory) {
+      return {
+        event: { subscribe: async ({ signal }: { signal: AbortSignal }) => ({
+          stream: (async function* () {
+            for await (const [event] of on(feed, 'event', { signal })) yield event;
+          })(),
+        }) },
+        session: {
+          create: async () => ({ data: { id: 'model-session', title: 'New Chat', directory } }),
+          get: async () => ({ data: { id: options.resume, title: 'Earlier', directory } }),
+          messages: async () => ({ data: options.storedModel ? [
+            { info: { id: 'u1', role: 'user', model: { providerID: 'stashbase', modelID: 'writer-fast' } }, parts: [] },
+            { info: { id: 'a1', role: 'assistant' }, parts: [] },
+            { info: { id: 'u2', role: 'user', model: { providerID: 'stashbase', modelID: options.storedModel } }, parts: [] },
+          ] : [] }),
+          promptAsync: async ({ body }: { body: typeof prompts[number] }) => {
+            prompts.push(body);
+            feed.emit('event', { type: 'session.status', properties: { sessionID: 'model-session', status: { type: 'busy' } } });
+            return { data: true };
+          },
+          abort: async () => ({ data: true }),
+        },
+      } as never;
+    },
+    beginTurn: (_turnId, model) => { turns.push(model); },
+    endTurn: () => {}, onExit: () => () => {}, close: async () => {},
+  });
+  return { ws, feed, session, prompts, turns,
+    send: (event: unknown) => ws.emit('message', Buffer.from(JSON.stringify(event))),
+    finishTurn: () => feed.emit('event', { type: 'session.status', properties: { sessionID: 'model-session', status: { type: 'idle' } } }),
+    events: () => ws.sent.map(value => JSON.parse(value) as { t: string; [key: string]: unknown }),
+  };
+}
+
+test('a new Default chat offers the hosted models and pins the shown configuration to each turn', async (t) => {
+  const harness = modelHarness();
+  t.after(() => harness.session.dispose());
+  await settle();
+  const models = harness.events().find((event) => event.t === 'models');
+  assert.deepEqual(models, {
+    t: 'models',
+    activeModel: 'writer-fast',
+    models: [
+      { id: 'writer-fast', label: 'Writer Fast', description: '1M context · 64K output', isDefault: true },
+      { id: 'writer-pro', label: 'Writer Pro', description: '200K context · 32K output' },
+    ],
+  });
+  assert.ok(harness.events().findIndex((event) => event.t === 'models') < harness.events().findIndex((event) => event.t === 'ready'));
+
+  harness.send({ t: 'prompt', text: 'First' });
+  await settle();
+  // A choice made while the turn runs waits; it cannot move the running turn.
+  harness.send({ t: 'set-model', model: 'writer-pro' });
+  await settle();
+  harness.finishTurn();
+  await settle();
+  harness.send({ t: 'set-model', model: 'writer-pro' });
+  await settle();
+  harness.send({ t: 'prompt', text: 'Second' });
+  await settle();
+
+  assert.deepEqual(harness.turns, [{ profile: 'writer-fast', version: 3 }, { profile: 'writer-pro', version: 7 }]);
+  assert.deepEqual(harness.prompts.map((prompt) => prompt.model), [
+    { providerID: 'stashbase', modelID: 'writer-fast' },
+    { providerID: 'stashbase', modelID: 'writer-pro' },
+  ]);
+  assert.equal(harness.events().filter((event) => event.t === 'models' && event.activeModel === 'writer-pro').length, 1);
+});
+
+test('a resumed Default chat keeps the model it last ran on, and an explicit pick wins over it', async (t) => {
+  const resumed = modelHarness({ resume: 'earlier', storedModel: 'writer-pro' });
+  t.after(() => resumed.session.dispose());
+  await settle();
+  assert.equal(resumed.events().find((event) => event.t === 'models')?.activeModel, 'writer-pro');
+
+  const picked = modelHarness({ resume: 'earlier', storedModel: 'writer-pro', model: 'writer-fast' });
+  t.after(() => picked.session.dispose());
+  await settle();
+  assert.equal(picked.events().find((event) => event.t === 'models')?.activeModel, 'writer-fast');
+});
+
+test('a chat whose model is gone asks for a new choice instead of sending on another model', async (t) => {
+  const harness = modelHarness({ resume: 'earlier', storedModel: 'retired-model' });
+  t.after(() => harness.session.dispose());
+  await settle();
+  const models = harness.events().find((event) => event.t === 'models');
+  assert.equal(models?.activeModel, undefined);
+  assert.match(String(models?.fallback), /no longer available/);
+
+  harness.send({ t: 'prompt', text: 'Continue' });
+  await settle();
+  assert.equal(harness.prompts.length, 0);
+  assert.deepEqual(harness.turns, []);
+  const refused = harness.events().filter((event) => ['turn-start', 'error', 'turn-end'].includes(event.t));
+  assert.deepEqual(refused.map((event) => event.t), ['turn-start', 'error', 'turn-end']);
+  assert.match(String(refused[1]?.message), /Choose a model/);
+
+  harness.send({ t: 'set-model', model: 'writer-fast' });
+  await settle();
+  harness.send({ t: 'prompt', text: 'Continue' });
+  await settle();
+  assert.deepEqual(harness.turns, [{ profile: 'writer-fast', version: 3 }]);
+});
+
+test('an unreadable model list leaves the Default Agent on its unversioned default', async (t) => {
+  const harness = modelHarness({ profiles: new Error('offline') });
+  t.after(() => harness.session.dispose());
+  await settle();
+  assert.deepEqual(harness.events().find((event) => event.t === 'models'), { t: 'models', models: [] });
+  harness.send({ t: 'prompt', text: 'Hello' });
+  await settle();
+  assert.deepEqual(harness.turns, [undefined]);
+  assert.deepEqual(harness.prompts[0]?.model, { providerID: 'stashbase', modelID: 'stashbase-agent-default' });
+});
+
+test('OpenCode config lists one model per hosted profile with its own limits', () => {
+  const config = buildOpenCodeConfig({ apiKey: 'k', baseUrl: 'http://127.0.0.1:1/v1', model: 'stashbase-agent-default' }, '/mcp', {}, undefined, PROFILES);
+  assert.equal(config.model, 'stashbase/writer-fast');
+  const models = config.provider!.stashbase!.models!;
+  assert.deepEqual(Object.keys(models), ['writer-fast', 'writer-pro']);
+  assert.deepEqual(models['writer-pro']!.limit, { context: 200_000, output: 32_000 });
+  const legacy = buildOpenCodeConfig({ apiKey: 'k', baseUrl: 'http://127.0.0.1:1/v1', model: 'stashbase-agent-default' }, '/mcp');
+  assert.equal(legacy.model, 'stashbase/stashbase-agent-default');
+  assert.deepEqual(Object.keys(legacy.provider!.stashbase!.models!), ['stashbase-agent-default']);
 });

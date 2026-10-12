@@ -14,7 +14,7 @@ import type {
   ToolPart,
 } from '@opencode-ai/sdk';
 import type { WebSocket, RawData } from 'ws';
-import { errorMessage } from './log.ts';
+import { errorMessage, logger } from './log.ts';
 import {
   disposeSessionsBoundToFolder,
   resolveSessionBinding,
@@ -40,8 +40,30 @@ import {
   type OpenCodeSessionRuntime,
 } from './opencode-runtime.ts';
 import type { SessionBlock, SessionInfo } from '../shared/agent-sessions.ts';
+import { rememberAgentModels } from './agent-model-catalog.ts';
+import {
+  DEFAULT_HOSTED_AGENT_PROFILE,
+  defaultHostedAgentProfile,
+  hostedAgentCatalogModels,
+  type HostedAgentProfile,
+} from './hosted-agent-models.ts';
 
+const log = logger('opencode-agent');
 const DATA_REQUEST = { throwOnError: true as const };
+
+const MODEL_GONE = 'That model is no longer available. Choose a model before sending.';
+const STORED_MODEL_GONE = 'The model this chat used is no longer available. Choose a model before sending.';
+const MODEL_REQUIRED = 'Choose a model for this chat, then send again. The model it used is no longer available.';
+
+/** The hosted profile a stored conversation last ran on, as OpenCode recorded
+ * it on the latest prompt. */
+export function storedOpenCodeModel(messages: ReadonlyArray<{ info: Message }>): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const info = messages[index]!.info;
+    if (info.role === 'user' && info.model?.providerID === 'stashbase' && info.model.modelID) return info.model.modelID;
+  }
+  return undefined;
+}
 
 /** Keep OpenCode's provider-specific tool vocabulary behind the adapter.
  * The renderer, history replay, and permission cards all consume the same
@@ -301,6 +323,16 @@ export class OpenCodePanelSession {
   private readonly onClose = () => this.dispose();
   private preparingAttachments: AbortController | null = null;
   private attachmentPreparation: Promise<FilePartInput[]> | null = null;
+  /** The hosted profiles this session offers, as read when it started. The
+   * versions here are the configuration the reader is choosing between. */
+  private profiles: readonly HostedAgentProfile[] = [];
+  private catalogReady = false;
+  /** A pick that arrived before the catalog could check it. */
+  private requestedModel: string | undefined;
+  /** The profile the next turn runs on; null runs the unversioned default. */
+  private model: string | null = null;
+  /** The chat's model is gone and no replacement was chosen yet. */
+  private modelRequired = false;
 
   constructor(
     private readonly ws: WebSocket,
@@ -317,6 +349,7 @@ export class OpenCodePanelSession {
     this.access = options.access === 'auto' ? 'acceptEdits'
       : options.access === 'acceptEdits' || options.access === 'plan' ? options.access : 'default';
     this.windowId = options.windowId;
+    this.requestedModel = options.model ?? undefined;
     this.runtime = runtime ?? createOpenCodeSessionRuntime({
       windowId: this.windowId,
       agentSessionId: this.attributionId,
@@ -362,6 +395,13 @@ export class OpenCodePanelSession {
 
   private async initialize(): Promise<void> {
     try {
+      // Without a readable list the chat still runs, on the default profile
+      // the service picks for an unversioned request.
+      this.profiles = await this.runtime.models().catch((error: unknown) => {
+        log.warn(`could not read the Agent model list: ${errorMessage(error)}`);
+        return [];
+      });
+      if (this.disposed) return;
       this.client = await this.runtime.client(this.cwd);
       const subscription = await this.client.event.subscribe({ signal: this.abort.signal });
       void this.consume(subscription.stream);
@@ -377,11 +417,67 @@ export class OpenCodePanelSession {
       this.translator.bindSession(native.id);
       send(this.ws, { t: 'session-id', id: native.id });
       if (native.title) send(this.ws, { t: 'session-title', title: native.title });
+      const stored = this.options.resume ? await this.storedModel(native.id) : undefined;
+      if (this.disposed) return;
+      this.publishModels(stored);
       send(this.ws, { t: 'skills', skills: [], state: 'empty' });
       send(this.ws, { t: 'ready' });
     } catch (error) {
       this.fail(error, true);
     }
+  }
+
+  private async storedModel(id: string): Promise<string | undefined> {
+    try {
+      const messages = await this.client!.session.messages({ ...DATA_REQUEST, path: { id } });
+      return storedOpenCodeModel(messages.data);
+    } catch (error) {
+      // An unreadable record is not a missing model: run the default.
+      log.debug(`could not read the chat's model: ${errorMessage(error)}`);
+      return undefined;
+    }
+  }
+
+  /** An explicit pick wins, then the model the conversation last ran on,
+   * then the service's default. A pick or a stored model the service no
+   * longer offers is never replaced silently: the reader chooses again. */
+  private publishModels(stored: string | undefined): void {
+    this.catalogReady = true;
+    if (this.profiles.length === 0) {
+      send(this.ws, { t: 'models', models: [] });
+      return;
+    }
+    const models = hostedAgentCatalogModels(this.profiles);
+    rememberAgentModels('stashbase', models);
+    const offered = (id: string) => this.profiles.some((profile) => profile.id === id);
+    const requested = this.requestedModel;
+    const remembered = requested ?? stored;
+    if (remembered !== undefined && !offered(remembered)) {
+      this.modelRequired = true;
+      send(this.ws, { t: 'models', models, fallback: requested !== undefined ? MODEL_GONE : STORED_MODEL_GONE });
+      return;
+    }
+    this.model = remembered ?? defaultHostedAgentProfile(this.profiles)!.id;
+    send(this.ws, { t: 'models', models, activeModel: this.model });
+  }
+
+  /** A choice applies from the next turn; the running one keeps its model. */
+  private selectModel(requested: string | undefined): void {
+    if (this.turnInFlight()) return;
+    if (!this.catalogReady) {
+      this.requestedModel = requested;
+      return;
+    }
+    if (this.profiles.length === 0) return;
+    const models = hostedAgentCatalogModels(this.profiles);
+    const id = requested ?? defaultHostedAgentProfile(this.profiles)!.id;
+    if (!this.profiles.some((profile) => profile.id === id)) {
+      send(this.ws, { t: 'models', models, fallback: MODEL_GONE });
+      return;
+    }
+    this.model = id;
+    this.modelRequired = false;
+    send(this.ws, { t: 'models', models, activeModel: id });
   }
 
   private async consume(stream: AsyncGenerator<Event>): Promise<void> {
@@ -437,6 +533,10 @@ export class OpenCodePanelSession {
       event = parsed.data;
     } catch { return; }
     if (event.t === 'close') { this.dispose(); return; }
+    if (event.t === 'set-model') {
+      this.selectModel(event.model);
+      return;
+    }
     if (event.t === 'set-mode') {
       if (!this.turnInFlight() && (event.mode === 'default' || event.mode === 'acceptEdits' || event.mode === 'plan')) {
         this.access = event.mode;
@@ -449,9 +549,20 @@ export class OpenCodePanelSession {
       switch (event.t) {
         case 'prompt': {
           if (this.turnInFlight()) return;
+          if (this.modelRequired) {
+            for (const translated of this.translator.beginTurn()) send(this.ws, translated);
+            send(this.ws, agentTurnErrorEvent(MODEL_REQUIRED));
+            for (const translated of this.translator.endTurnWithError()) send(this.ws, translated);
+            return;
+          }
           this.interrupted = false;
-          beginAgentDiagnosticTurn(this.ws, event.telemetryTurnId, { model: 'stashbase-agent-default', native_session_id: this.sessionId });
-          this.runtime.beginTurn(event.telemetryTurnId ?? randomUUID());
+          const profile = this.profiles.find((entry) => entry.id === this.model);
+          const modelID = profile?.id ?? DEFAULT_HOSTED_AGENT_PROFILE;
+          beginAgentDiagnosticTurn(this.ws, event.telemetryTurnId, { model: modelID, native_session_id: this.sessionId });
+          this.runtime.beginTurn(
+            event.telemetryTurnId ?? randomUUID(),
+            profile ? { profile: profile.id, version: profile.version } : undefined,
+          );
           for (const translated of this.translator.beginTurn()) send(this.ws, translated);
           if (event.titleHint) {
             void this.client.session.update({
@@ -478,7 +589,7 @@ export class OpenCodePanelSession {
             ...DATA_REQUEST,
             path: { id: this.sessionId },
             body: {
-              model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
+              model: { providerID: 'stashbase', modelID },
               agent: this.access === 'plan' ? 'stashbase-plan' : this.access === 'acceptEdits' ? 'stashbase-edit' : 'stashbase-folder',
               parts: [{ type: 'text', text: event.text }, ...attachments],
             },

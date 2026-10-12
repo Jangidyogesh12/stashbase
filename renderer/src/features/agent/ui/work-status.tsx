@@ -22,7 +22,7 @@ export function AgentWorkStatus({
   const needsRepair =
     failure?.kind === 'error' &&
     failure.failure &&
-    !['network', 'rate-limit'].includes(failure.failure);
+    !['network', 'rate-limit', 'model-changed'].includes(failure.failure);
   if (!status && !state.queuedPrompts.length) return null;
   return (
     <div className="mx-auto flex w-full max-w-[46rem] flex-wrap items-center gap-2 px-5 pb-2 text-caption text-muted-foreground">

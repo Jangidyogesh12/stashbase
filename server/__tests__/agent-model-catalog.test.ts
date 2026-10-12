@@ -212,3 +212,22 @@ test('catalog refresh preserves malformed settings and remains available in memo
     fs.writeFileSync(configPath, previous);
   }
 });
+
+test('the hosted Default catalog stays in memory and is read again once it is old', async () => {
+  let reads = 0;
+  let clock = Date.now();
+  const now = () => clock;
+  const read = async () => {
+    reads += 1;
+    return { models: [{ id: `profile-${reads}`, label: `Profile ${reads}`, isDefault: true }] };
+  };
+  assert.deepEqual((await ensureAgentModelCatalog('stashbase', { read, now }))?.models.map((model) => model.id), ['profile-1']);
+  await ensureAgentModelCatalog('stashbase', { read, now });
+  assert.equal(reads, 1, 'a recent hosted list answers without a read');
+  // The approved list belongs to the account, not to this installation.
+  assert.ok(!Object.keys(readAppConfig().agentModelCatalogs ?? {}).includes('stashbase'));
+
+  clock += 6 * 60_000;
+  assert.deepEqual((await ensureAgentModelCatalog('stashbase', { read, now }))?.models.map((model) => model.id), ['profile-2']);
+  assert.equal(reads, 2);
+});

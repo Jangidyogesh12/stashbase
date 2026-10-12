@@ -7,8 +7,10 @@
  * set of failure kinds and attaches the kind to the protocol `error` event.
  * The renderer switches on the kind alone: transient kinds invite resending,
  * `quota` explains the provider-side reset, `auth-expired` routes to each
- * runtime's real sign-in path, and `runtime-outdated` offers the runtime's
- * own in-app update before the same request is sent again.
+ * runtime's real sign-in path, `runtime-outdated` offers the runtime's
+ * own in-app update before the same request is sent again, and
+ * `model-changed` refreshes a hosted model list that no longer matches the
+ * one the reader chose from.
  *
  * The development turn-failure scripts are provider-shaped and flow through
  * this same classifier, so injecting one in Settings exercises exactly the
@@ -38,8 +40,13 @@ const RATE_LIMIT_PATTERN =
 const NETWORK_PATTERN =
   /\bnetwork\b|econnrefused|econnreset|enotfound|etimedout|esockettimedout|eai_again|epipe|fetch failed|socket hang ?up|getaddrinfo|no internet|connection (error|failed|refused|reset|closed|lost)|(could not|couldn.t|unable to) (connect|reach)/i;
 
+/** The hosted broker's own sentences for a profile the service refused. */
+const MODEL_CHANGED_PATTERN =
+  /selected model configuration has changed|selected model is no longer available|agent_model_configuration_changed|agent_model_unavailable/i;
+
 export function classifyAgentTurnFailure(message: string): AgentTurnFailureKind | null {
   if (RUNTIME_OUTDATED_PATTERN.test(message)) return 'runtime-outdated';
+  if (MODEL_CHANGED_PATTERN.test(message)) return 'model-changed';
   if (AUTH_PATTERN.test(message)) return 'auth-expired';
   if (/hosted_access_restricted|hosted ai access is restricted|agent access is restricted/i.test(message)) return 'access-restricted';
   if (/free agent credits are exhausted|remaining agent credits cannot cover|agent_allowance_exhausted|quota_exhausted|stashbase.{0,30}(agent )?allowance|(weekly|monthly) agent allowance/i.test(message)) return 'allowance-exhausted';

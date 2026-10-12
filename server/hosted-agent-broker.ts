@@ -4,7 +4,7 @@
  * OpenCode receives only a random process-local credential. The StashBase
  * account token is added here immediately before the request leaves the
  * machine, so neither the renderer nor OpenCode's config/history stores can
- * persist it. The hosted service remains the owner of Gemini routing,
+ * persist it. The hosted service remains the owner of model routing,
  * token accounting, and allowance enforcement.
  */
 import crypto from 'node:crypto';
@@ -16,6 +16,7 @@ import {
   stashbaseClientVersion,
   STASHBASE_API_URL,
 } from './hosted-account.ts';
+import { DEFAULT_HOSTED_AGENT_PROFILE } from './hosted-agent-models.ts';
 import { logger } from './log.ts';
 
 const log = logger('hosted-agent-broker');
@@ -23,6 +24,24 @@ const MAX_BODY_BYTES = 16 * 1024 * 1024;
 const AGENT_GATEWAY_PATH = '/v1/agent/chat/completions';
 const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const MAX_EMPTY_PREFIX_BYTES = 64 * 1024;
+
+/** The hosted model profile one turn runs on. `version` is the configuration
+ * the reader was shown; without it the service runs the profile as it is now. */
+export interface HostedAgentTurnModel {
+  profile: string;
+  version?: number;
+}
+
+/** Hosted refusals that a fresh model list resolves, and nothing else does.
+ * Both leave as 422 so the native runtime's provider retry cannot repeat a
+ * request the service will refuse again, and with one message each that the
+ * turn-failure classifier recognizes. */
+const MODEL_REFUSALS: Record<string, string> = {
+  agent_model_configuration_changed:
+    'The selected model configuration has changed. Refresh the models, then review and send again.',
+  agent_model_unavailable:
+    'The selected model is no longer available. Refresh the models and choose another one.',
+};
 
 /** Hold only empty SSE framing before committing the downstream response.
  * Once any output (especially tool arguments) arrives, replay is forbidden.
@@ -172,7 +191,7 @@ export class HostedAgentBroker {
     agentSessionId: string;
     turnId: string | null;
     turnAbort: AbortController;
-    profile: string;
+    model: HostedAgentTurnModel;
   }>();
   private readonly channelBySession = new Map<string, string>();
 
@@ -236,17 +255,23 @@ export class HostedAgentBroker {
         agentSessionId,
         turnId: null,
         turnAbort: new AbortController(),
-        profile: 'stashbase-agent-default',
+        model: { profile: DEFAULT_HOSTED_AGENT_PROFILE },
       });
     }
     return {
       apiKey,
       baseUrl: `http://127.0.0.1:${this.port}/v1`,
-      model: 'stashbase-agent-default',
+      model: DEFAULT_HOSTED_AGENT_PROFILE,
     };
   }
 
-  beginTurn(agentSessionId: string, turnId: string, profile = 'stashbase-agent-default'): void {
+  /** Every model call until `endTurn` — tool continuations included — runs
+   * on the model given here; a different choice waits for the next turn. */
+  beginTurn(
+    agentSessionId: string,
+    turnId: string,
+    model: HostedAgentTurnModel = { profile: DEFAULT_HOSTED_AGENT_PROFILE },
+  ): void {
     const apiKey = this.channelBySession.get(agentSessionId);
     const channel = apiKey ? this.channels.get(apiKey) : undefined;
     if (!channel) throw new Error('The hosted Agent broker channel is unavailable.');
@@ -256,7 +281,7 @@ export class HostedAgentBroker {
     channel.turnAbort.abort();
     channel.turnAbort = new AbortController();
     channel.turnId = turnId;
-    channel.profile = profile;
+    channel.model = { ...model };
   }
 
   endTurn(agentSessionId: string): void {
@@ -314,7 +339,7 @@ export class HostedAgentBroker {
       return;
     }
     const turnId = channel.turnId;
-    const profile = channel.profile;
+    const model = channel.model;
 
     const abort = new AbortController();
     const signal = AbortSignal.any([abort.signal, channel.turnAbort.signal]);
@@ -341,7 +366,8 @@ export class HostedAgentBroker {
             accept: request.headers.accept ?? 'text/event-stream, application/json',
             'idempotency-key': idempotencyKey,
             'x-stashbase-agent-turn-id': turnId,
-            'x-stashbase-agent-profile': profile,
+            'x-stashbase-agent-profile': model.profile,
+            ...(model.version === undefined ? {} : { 'x-stashbase-agent-profile-version': String(model.version) }),
             'x-stashbase-client-version': this.dependencies.clientVersion(),
           },
           body,
@@ -375,6 +401,11 @@ export class HostedAgentBroker {
         const nested = payload?.error;
         const upstreamMessage = nested?.message ?? payload?.message ?? `The Agent gateway failed (HTTP ${upstream.status}).`;
         const upstreamCode = nested?.code ?? payload?.code;
+        const modelRefusal = upstreamCode ? MODEL_REFUSALS[upstreamCode] : undefined;
+        if (modelRefusal) {
+          writeJson(response, 422, { error: { message: modelRefusal, type: 'stashbase_hosted_error', code: upstreamCode } });
+          return;
+        }
         const allowanceMessage = upstreamCode === 'agent_turn_budget_exhausted'
           ? 'This Agent turn has insufficient spending budget for another model call.'
           : upstreamCode === 'agent_allowance_exhausted' || !upstreamCode
@@ -417,7 +448,7 @@ const broker = new HostedAgentBroker();
 export const startHostedAgentBroker = (): Promise<void> => broker.start();
 export const stopHostedAgentBroker = (): Promise<void> => broker.close();
 export const hostedAgentRuntime = (agentSessionId?: string) => broker.runtime(agentSessionId);
-export const beginHostedAgentTurn = (agentSessionId: string, turnId: string, profile?: string) =>
-  broker.beginTurn(agentSessionId, turnId, profile);
+export const beginHostedAgentTurn = (agentSessionId: string, turnId: string, model?: HostedAgentTurnModel) =>
+  broker.beginTurn(agentSessionId, turnId, model);
 export const endHostedAgentTurn = (agentSessionId: string) => broker.endTurn(agentSessionId);
 export const releaseHostedAgentChannel = (agentSessionId: string) => broker.releaseChannel(agentSessionId);

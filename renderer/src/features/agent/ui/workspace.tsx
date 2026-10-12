@@ -22,6 +22,7 @@ import {
 import { EMPTY_CHAT_PROMPTS } from '@/features/agent/domain/starters';
 import { useAgentAccess } from '@/features/agent/hooks/use-agent-access';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
+import { useAgentModelRefresh } from '@/features/agent/hooks/use-agent-model-refresh';
 import { useAgentPersona } from '@/features/agent/hooks/use-agent-persona';
 import { useAgentRuntimeUpdate } from '@/features/agent/hooks/use-agent-runtime-update';
 import { useRenameConversation } from '@/features/agent/hooks/use-conversation-history';
@@ -114,6 +115,7 @@ function ChatWorkspace({
     onRefresh: catalog.refresh,
   });
   const runtimeUpdate = useAgentRuntimeUpdate(active, catalogPort, catalog.refresh);
+  const modelRefresh = useAgentModelRefresh(active, catalog.refresh);
   const activeTurn = agentTurnIsActive(state.connection);
   const busy = agentSessionIsBusy(active.store.getState());
   const notice = connectionNotice(state.connection);
@@ -206,6 +208,7 @@ function ChatWorkspace({
               activeTurn={activeTurn}
               blocks={state.transcript}
               key={activeId}
+              modelRefresh={modelRefresh}
               onEditPrompt={composerShown ? editPrompt : undefined}
               onOpenExternal={onOpenExternal}
               onOpenSource={onOpenSource}

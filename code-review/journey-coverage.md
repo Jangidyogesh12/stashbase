@@ -722,6 +722,23 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+- **Default model selection (2026-10-12):** Default reads approved hosted
+  profiles from `/v1/agent/models` (`server/hosted-agent-models.ts`) and uses
+  the existing model picker. `server/__tests__/opencode-agent.test.ts` covers
+  the default and explicit picks, a version pinned to each turn, changes held
+  until the next turn, the model restored from stored prompts, a withdrawn model
+  that must be chosen again, and the unversioned fallback when the list cannot
+  be read. Broker tests cover per-turn profile/version headers and 422
+  `model-changed` refusals. The pinned OpenCode smoke accepts the per-profile
+  config and its limits; a panel model change reaches the provider body and the
+  profile/version headers, and the stored prompt records the profile. The smoke
+  also asserts that no model call forces a tool choice, which the hosted Claude
+  profiles refuse. Renderer
+  tests cover **Refresh models**: it reconnects, keeps the draft, sends nothing,
+  and enables a manual retry only after the refresh. Not yet proven: a built-app
+  pass against the production model list, or compaction at a real profile's
+  context limit.
+
 - **Low-credit calls (2026-10-11):** the hosted API's account-locked reservation
   reduces output to fit account/monthly and turn capacity while retaining input
   cost. API ledger tests cover positive remaining balance, concurrent last-credit

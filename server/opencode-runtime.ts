@@ -32,7 +32,13 @@ import {
   releaseHostedAgentChannel,
   startHostedAgentBroker,
   stopHostedAgentBroker,
+  type HostedAgentTurnModel,
 } from './hosted-agent-broker.ts';
+import {
+  defaultHostedAgentProfile,
+  fetchHostedAgentProfiles,
+  type HostedAgentProfile,
+} from './hosted-agent-models.ts';
 import type { AgentRuntimeDescriptor } from './agent-contract.ts';
 
 const log = logger('opencode-runtime');
@@ -132,13 +138,38 @@ function privateRuntimeEnvironment(config: Config, username: string, password: s
   };
 }
 
+const modelAbilities = () => ({
+  attachment: true,
+  modalities: { input: ['text', 'image', 'pdf'] as Array<'text' | 'image' | 'pdf'>, output: ['text'] as Array<'text'> },
+  tool_call: true,
+  reasoning: true,
+});
+
+/** One OpenCode model per hosted profile, so each stored message names the
+ * profile it ran on and compaction follows that profile's own limits. With no
+ * readable list, the broker's unversioned default stands in, as it did before
+ * profiles existed. */
+function openCodeModels(
+  fallback: string,
+  profiles: readonly HostedAgentProfile[],
+): NonNullable<NonNullable<Config['provider']>[string]['models']> {
+  if (profiles.length === 0) return { [fallback]: { name: 'StashBase Agent', ...modelAbilities() } };
+  return Object.fromEntries(profiles.map((profile) => [profile.id, {
+    name: profile.displayName,
+    ...modelAbilities(),
+    limit: { context: profile.contextTokenLimit, output: profile.outputTokenLimit },
+  }]));
+}
+
 export function buildOpenCodeConfig(
   model: { apiKey: string; baseUrl: string; model: string },
   mcp: string,
   mcpEnvironment: Record<string, string> = {},
   persona?: string,
+  profiles: readonly HostedAgentProfile[] = [],
 ): Config {
   const runtimeInstructions = composeAgentRuntimeInstructions(persona);
+  const defaultModel = defaultHostedAgentProfile(profiles)?.id ?? model.model;
   const permission = {
     // Native edit/write/patch tools share this permission; MCP writes stay explicit.
     edit: 'deny',
@@ -156,8 +187,8 @@ export function buildOpenCodeConfig(
     autoupdate: false,
     share: 'disabled',
     enabled_providers: ['stashbase'],
-    model: `stashbase/${model.model}`,
-    small_model: `stashbase/${model.model}`,
+    model: `stashbase/${defaultModel}`,
+    small_model: `stashbase/${defaultModel}`,
     provider: {
       stashbase: {
         name: 'StashBase',
@@ -167,15 +198,7 @@ export function buildOpenCodeConfig(
           baseURL: model.baseUrl,
           timeout: false,
         },
-        models: {
-          [model.model]: {
-            name: 'Gemini 3.8 Flash',
-            attachment: true,
-            modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
-            tool_call: true,
-            reasoning: true,
-          },
-        },
+        models: openCodeModels(model.model, profiles),
       },
     },
     mcp: {
@@ -218,9 +241,10 @@ export function buildOpenCodeConfig(
 function openCodeConfig(
   model: { apiKey: string; baseUrl: string; model: string },
   mcpEnvironment: Record<string, string>,
-  persona?: string,
+  persona: string | undefined,
+  profiles: readonly HostedAgentProfile[],
 ): Config {
-  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, persona);
+  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, persona, profiles);
 }
 
 class OpenCodeRuntime {
@@ -235,6 +259,7 @@ class OpenCodeRuntime {
     private readonly persona?: string,
     private readonly requireAccount = true,
     private readonly agentSessionId = 'history',
+    private readonly profiles: () => readonly HostedAgentProfile[] = () => [],
   ) {
     runtimes.add(this);
   }
@@ -357,7 +382,7 @@ class OpenCodeRuntime {
       '--pure',
       '--log-level=WARN',
     ], {
-      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona), username, password),
+      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona, this.profiles()), username, password),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -429,8 +454,11 @@ const runtimes = new Set<OpenCodeRuntime>();
 const historyRuntime = new OpenCodeRuntime({}, undefined, false);
 
 export interface OpenCodeSessionRuntime {
+  /** The hosted model profiles this session offers. Read once, before the
+   * first `client`, whose runtime is then configured with the same list. */
+  models(): Promise<readonly HostedAgentProfile[]>;
   client(directory: string): Promise<OpencodeClient>;
-  beginTurn(turnId: string, profile?: string): void;
+  beginTurn(turnId: string, model?: HostedAgentTurnModel): void;
   endTurn(): void;
   onExit(listener: (error: Error) => void): () => void;
   close(): Promise<void>;
@@ -447,13 +475,16 @@ export function createOpenCodeSessionRuntime(
     persona: string | undefined;
   },
 ): OpenCodeSessionRuntime {
+  let profiles: readonly HostedAgentProfile[] = [];
+  let reading: Promise<readonly HostedAgentProfile[]> | null = null;
   const sessionRuntime = new OpenCodeRuntime({
     STASHBASE_WINDOW_ID: context.windowId,
     STASHBASE_AGENT_SESSION_ID: context.agentSessionId,
-  }, resolveAgentPersona(context.persona), true, context.agentSessionId);
+  }, resolveAgentPersona(context.persona), true, context.agentSessionId, () => profiles);
   return {
+    models: () => reading ??= fetchHostedAgentProfiles().then((list: readonly HostedAgentProfile[]) => { profiles = list; return list; }),
     client: (directory) => sessionRuntime.client(directory),
-    beginTurn: (turnId, profile) => beginHostedAgentTurn(context.agentSessionId, turnId, profile),
+    beginTurn: (turnId, model) => beginHostedAgentTurn(context.agentSessionId, turnId, model),
     endTurn: () => endHostedAgentTurn(context.agentSessionId),
     onExit: (listener) => sessionRuntime.onExit(listener),
     close: () => sessionRuntime.close(),

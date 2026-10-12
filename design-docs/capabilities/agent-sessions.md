@@ -79,6 +79,16 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   resolves to, in the runtime's own words, so the reader can tell which model
   the choice actually runs. A model chosen while a session is still starting applies
   before its first turn.
+- Default offers the models the StashBase service approves for the account,
+  named and sized (context and output) as the service lists them; the service
+  owns each model's provider, price, and reasoning level, so Default has no
+  separate thinking choice. Without an explicit choice a chat runs on the
+  service's default. Unlike Claude, a Default chat may change model between any
+  two turns, including after history is restored; restoring keeps the model the
+  conversation last ran on. A model the service no longer offers is never
+  replaced silently: the chat names the loss and asks for a new choice before
+  it sends. If the list cannot be read, Default keeps working on the service's
+  default model. Credits and prices stay with the service.
   Options remain fixed during a turn. A persona is standing session guidance
   chosen per Chat in the composer from the reader's persona library, or none.
   Switching between personas is the reason to keep several; a persona that
@@ -121,6 +131,11 @@ repair, an outdated runtime, provider limits, transport loss, and turn failure s
 recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
+When the service changes the configuration of the Default model a reader
+chose, or withdraws it, the refused turn offers **Refresh models**. Refreshing
+reconnects the same conversation to read the list again and keeps the
+transcript, draft, and paused queue. It never resends; the failed turn offers
+a manual retry only after the refresh, so the reader can review the model first.
 Default retries an empty model response once within the current turn, retaining
 completed tool results and file changes. Once a model response has begun producing
 output, it is not automatically replayed. Exhausted recovery or an unknown native

@@ -476,6 +476,14 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   a budget from the displayed percentage. Hosted quota failures distinguish
   insufficient request credits from insufficient turn budget and preserve their
   recovery classification through the native runtime message boundary.
+  `server/hosted-agent-models.ts` reads the approved model profiles. Each
+  OpenQuill chat reads them once at start and configures its OpenCode process
+  with the same list, so stored prompts name their profile and compaction uses
+  that profile's limits. A turn sends the profile and the version the reader was
+  shown; the broker pins both to the turn, tool continuations included. Changed
+  or withdrawn profiles leave the broker as 422, outside native retries, and
+  classify as `model-changed`. Versions, limits, and upstream identity stay in
+  the host; the listing keeps the hosted catalog in memory only.
   Hosted quota/accounting and Stripe billing stay external; the desktop exposes
   bounded usage, plans, and subscription status. The host requests Checkout and
   Portal pages with the account session and hands the renderer only a verified

@@ -110,6 +110,13 @@ export function agentUpdateFailure(error: unknown): string {
 const UPDATE_FAILED = 'The update did not finish. Check Agent settings and try again.';
 
 /** The runtime is updated, but this conversation could not come back on it. */
+/** Why a hosted model list could not be refreshed by reconnecting. */
+export function agentModelRefreshFailure(outcome: 'settled' | 'timeout'): string {
+  return outcome === 'timeout'
+    ? 'This conversation did not reconnect in time, so the models were not refreshed. Try again.'
+    : 'This conversation could not reconnect, so the models were not refreshed. Try again.';
+}
+
 export function agentReconnectAfterUpdateFailure(
   label: string,
   outcome: 'settled' | 'timeout',

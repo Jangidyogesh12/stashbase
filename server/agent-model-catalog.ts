@@ -11,7 +11,9 @@ import { retireAgentProcess } from './agent-process.ts';
  * running with nothing chosen is remembered as the runtime's default for a
  * runtime that flags none. Claude's read lives in `claude-model-catalog.ts`,
  * because its default comes from the CLI's own settings rather than from the
- * handshake. */
+ * handshake. The Default Agent's catalog is the hosted service's list of
+ * approved profiles: it belongs to the account rather than this machine, so
+ * it is kept in memory only and read again once it is a few minutes old. */
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import os from 'node:os';
 import readline from 'node:readline';
@@ -21,12 +23,13 @@ import { readAppConfig, readAppConfigStrict, writeAppConfigStrict } from './app-
 import { readClaudeModelCatalog } from './claude-model-catalog.ts';
 import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
 import { loadCodexModelCatalog } from './codex-model-catalog.ts';
+import { fetchHostedAgentProfiles, hostedAgentCatalogModels } from './hosted-agent-models.ts';
 import { CodexRpcPeer } from './codex-rpc-transport.ts';
 import { errorMessage, logger } from './log.ts';
 
 const log = logger('agent-model-catalog');
 
-type RememberedAgentId = Exclude<AgentId, 'stashbase'>;
+type PersistedAgentId = Exclude<AgentId, 'stashbase'>;
 
 /** One runtime-level reading: the catalog, and the default it names when the
  * runtime keeps that outside the catalog. */
@@ -40,9 +43,13 @@ export interface CatalogReading {
  * does not slow every listing. */
 const READ_RETRY_MS = 5 * 60_000;
 
-const memory = new Map<RememberedAgentId, AgentModelCatalog>();
-const inFlight = new Map<RememberedAgentId, Promise<AgentModelCatalog | undefined>>();
-const attemptedAt = new Map<RememberedAgentId, number>();
+/** How long the hosted profile list stands before a listing reads it again.
+ * Sessions read their own list when they start, whatever this memory holds. */
+const HOSTED_CATALOG_TTL_MS = 5 * 60_000;
+
+const memory = new Map<AgentId, AgentModelCatalog>();
+const inFlight = new Map<AgentId, Promise<AgentModelCatalog | undefined>>();
+const attemptedAt = new Map<AgentId, number>();
 
 /** A memory a session wrote before the runtime's default was known: it lists
  * models but names none as the one an unchosen turn runs on. */
@@ -51,8 +58,12 @@ function incomplete(catalog: AgentModelCatalog): boolean {
 }
 let loaded = false;
 
-function remembered(id: AgentId): id is RememberedAgentId {
+function persisted(id: AgentId): id is PersistedAgentId {
   return id === 'claude' || id === 'codex';
+}
+
+function stale(id: AgentId, catalog: AgentModelCatalog, now: number): boolean {
+  return id === 'stashbase' && !(now - Date.parse(catalog.readAt) < HOSTED_CATALOG_TTL_MS);
 }
 
 function load(): void {
@@ -73,7 +84,7 @@ function load(): void {
 function persist(): void {
   try {
     const config = readAppConfigStrict();
-    config.agentModelCatalogs = Object.fromEntries(memory);
+    config.agentModelCatalogs = Object.fromEntries([...memory].filter(([id]) => persisted(id)));
     writeAppConfigStrict(config);
   } catch (err: unknown) {
     // Disposable catalog caching must neither replace unreadable settings nor
@@ -83,7 +94,6 @@ function persist(): void {
 }
 
 export function recallAgentModels(id: AgentId): AgentModelCatalog | undefined {
-  if (!remembered(id)) return undefined;
   load();
   return memory.get(id);
 }
@@ -91,18 +101,18 @@ export function recallAgentModels(id: AgentId): AgentModelCatalog | undefined {
 /** Keeps a catalog a session or a runtime-level read has just produced. An
  * observed default survives as long as the new catalog still lists it. */
 export function rememberAgentModels(id: AgentId, models: AgentModel[]): void {
-  if (!remembered(id) || models.length === 0) return;
+  if (models.length === 0) return;
   load();
   const previous = memory.get(id)?.defaultModel;
   const defaultModel = previous && models.some((model) => model.id === previous) ? previous : undefined;
   memory.set(id, { models, ...(defaultModel ? { defaultModel } : {}), readAt: new Date().toISOString() });
-  persist();
+  if (persisted(id)) persist();
 }
 
 /** Keeps the model a runtime reported running when nothing was chosen. Only
  * a listed model can be a default; an unlisted one is not invented. */
 export function rememberAgentDefaultModel(id: AgentId, modelId: string): void {
-  if (!remembered(id)) return;
+  if (!persisted(id)) return;
   load();
   const entry = memory.get(id);
   if (!entry || entry.defaultModel === modelId || !entry.models.some((model) => model.id === modelId)) return;
@@ -154,8 +164,13 @@ export async function readCodexModelCatalog(
   }
 }
 
+/** The Default Agent's approved profiles, as the picker names them. */
+export async function readHostedAgentModelCatalog(): Promise<CatalogReading> {
+  return { models: hostedAgentCatalogModels(await fetchHostedAgentProfiles()) };
+}
+
 /** The runtime's catalog for the listing: what is remembered, or with nothing
- * complete remembered yet, one runtime-level read shared by every caller
+ * complete (or, for the hosted list, nothing recent) remembered yet, one runtime-level read shared by every caller
  * waiting on it. A read that fails, or that still names no default, leaves
  * what was remembered in place and is not repeated until the retry pause has
  * passed or a session reads a catalog of its own. */
@@ -164,13 +179,14 @@ export function ensureAgentModelCatalog(
   options: { read?: () => Promise<CatalogReading>; now?: () => number } = {},
 ): Promise<AgentModelCatalog | undefined> {
   const known = recallAgentModels(id);
-  if (!remembered(id) || (known && !incomplete(known))) return Promise.resolve(known);
   const now = options.now ?? Date.now;
+  if (known && !incomplete(known) && !stale(id, known, now())) return Promise.resolve(known);
   const lastAttempt = attemptedAt.get(id);
   if (lastAttempt !== undefined && now() - lastAttempt < READ_RETRY_MS) return Promise.resolve(known);
   const pending = inFlight.get(id);
   if (pending) return pending;
-  const read = options.read ?? (id === 'codex' ? readCodexModelCatalog : readClaudeModelCatalog);
+  const read = options.read ?? (id === 'stashbase' ? readHostedAgentModelCatalog
+    : id === 'codex' ? readCodexModelCatalog : readClaudeModelCatalog);
   const reading = read()
     .then((result) => {
       rememberAgentModels(id, result.models);
