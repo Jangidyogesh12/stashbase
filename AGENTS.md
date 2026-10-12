@@ -50,6 +50,7 @@ Respect the requested scope, including whether frontend UI is excluded.
 | Review a user journey | Select its Jxx section in [Journey Coverage](code-review/journey-coverage.md). Follow its renderer and host/service entries through the operation, failure, cancellation, and recovery paths. Read the linked product intent and boundaries. |
 | Review a branch, commit, PR, or working tree | Pin the comparison point; include relevant uncommitted/new files. Follow the [diff-first route](code-review/README.md#diff-first-review), expanding through callers and crossed boundaries. |
 | Diagnose or fix a bug | Find the affected journey/boundary, reproduce the failure, and trace its state owner. Verify the fix at the lowest useful layer and through the affected runtime flow when needed. |
+| Measure or improve performance | Run the matching scenario in [scripts/profiling](scripts/profiling/README.md) before and after the change, and report the compared ranges. Add a scenario when none covers the task. |
 | Simplify code or audit shared infrastructure | Start from [Engineering Boundaries](code-review/architecture.md). Trace real callers and the purpose they serve; absence from a journey map alone is not proof of dead code. |
 
 ## Vertical and Horizontal Review

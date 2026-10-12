@@ -93,6 +93,14 @@ Real-provider evaluations and packaged verification stay in the
 [release workflow](code-review/release-pipeline.md); a passing source gate does
 not establish model quality or a complete user journey.
 
+## Profiling
+
+To measure a performance change, run a profiling scenario before and after it
+and compare the results. The harness launches an isolated development app and
+drives it over the DevTools Protocol; see
+[scripts/profiling/README.md](scripts/profiling/README.md) for the workflow,
+the scenarios, and how to add one.
+
 ## Debugging
 
 - Renderer logs: **View -> Toggle Developer Tools**
