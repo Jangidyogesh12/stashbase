@@ -7,7 +7,7 @@ export const RENDERER_SERVER_ORIGIN_ARGUMENT = '--stashbase-server-origin=';
  *  already wears it. Absent on a first launch. */
 export const RENDERER_APPEARANCE_ARGUMENT = '--stashbase-appearance=';
 
-export const rendererServerOriginSchema = z.string().url().superRefine((value, context) => {
+const rendererServerOriginSchema = z.string().url().superRefine((value, context) => {
   const url = new URL(value);
   if (
     url.protocol !== 'http:' ||

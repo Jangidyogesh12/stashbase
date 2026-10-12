@@ -22,14 +22,14 @@ export const BUG_REPORT_REVIEW_CHANNEL = Object.freeze({
   UPDATE_DESCRIPTION: 'bug-report-review:update-description',
 });
 
-export const BUG_REPORT_MAX_FIELD_LENGTH = 12_000;
+const BUG_REPORT_MAX_FIELD_LENGTH = 12_000;
 
 const idSchema = z.string().min(1).max(256);
 const isoTimestampSchema = z.string().datetime();
 const countSchema = z.number().int().nonnegative();
 const fieldSchema = z.string().max(BUG_REPORT_MAX_FIELD_LENGTH);
 
-export const bugReportArtifactKindSchema = z.enum(['screenshot', 'log', 'diagnostics']);
+const bugReportArtifactKindSchema = z.enum(['screenshot', 'log', 'diagnostics']);
 
 export const bugReportDescriptionSchema = z
   .object({ problem: fieldSchema, reproduction: fieldSchema })
@@ -38,7 +38,7 @@ export const bugReportDescriptionSchema = z
 /** Artifact channels take the bare opaque id, as the legacy review page already sends. */
 export const bugReportArtifactIdSchema = idSchema;
 
-export const bugReportErrorCodeSchema = z.enum([
+const bugReportErrorCodeSchema = z.enum([
   'ARTIFACT_UNAVAILABLE',
   'DOWNLOADS_FAILED',
   'FORBIDDEN',
@@ -57,7 +57,7 @@ export const bugReportErrorCodeSchema = z.enum([
   'UNAVAILABLE',
 ]);
 
-export const bugReportErrorSchema = z
+const bugReportErrorSchema = z
   .object({
     code: bugReportErrorCodeSchema,
     message: z.string().trim().min(1).max(240),
@@ -83,7 +83,7 @@ const logSummarySchema = z
   })
   .strict();
 
-export const bugReportDiagnosticsDetailsSchema = z
+const bugReportDiagnosticsDetailsSchema = z
   .object({
     appName: z.string(),
     appVersion: z.string(),
@@ -104,7 +104,7 @@ const artifactBase = {
 
 /** One checklist row. `summary`/`details` are present exactly when the
  *  artifact is available; an unavailable row is the bare base. */
-export const bugReportReviewArtifactSchema = z.discriminatedUnion('kind', [
+const bugReportReviewArtifactSchema = z.discriminatedUnion('kind', [
   z
     .object({
       ...artifactBase,
@@ -124,7 +124,7 @@ export const bugReportReviewArtifactSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
-export const bugReportApprovedReportSchema = z
+const bugReportApprovedReportSchema = z
   .object({
     approvedAt: isoTimestampSchema,
     artifacts: z.array(z.object({ id: idSchema, kind: bugReportArtifactKindSchema }).strict()),
@@ -146,7 +146,7 @@ export const bugReportReviewModelSchema = z
 
 /** The bounded safe preview: a PNG data URL or sanitized text, never bytes
  *  beyond what the service already retains for approval. */
-export const bugReportArtifactPreviewSchema = z.discriminatedUnion('kind', [
+const bugReportArtifactPreviewSchema = z.discriminatedUnion('kind', [
   z
     .object({
       byteLength: countSchema,
@@ -174,7 +174,7 @@ export const bugReportArtifactPreviewSchema = z.discriminatedUnion('kind', [
 const failure = <Extra extends z.ZodRawShape>(extra: Extra) =>
   z.object({ error: bugReportErrorSchema, ok: z.literal(false), ...extra }).strict();
 
-export const bugReportReviewFailureSchema = failure({});
+const bugReportReviewFailureSchema = failure({});
 
 export const bugReportReviewDraftResponseSchema = z.discriminatedUnion('ok', [
   z.object({ draft: bugReportReviewModelSchema, ok: z.literal(true) }).strict(),
@@ -218,7 +218,6 @@ export const bugReportDiscardResponseSchema = z.discriminatedUnion('ok', [
   bugReportReviewFailureSchema,
 ]);
 
-export type BugReportArtifactKind = z.infer<typeof bugReportArtifactKindSchema>;
 export type BugReportDescription = z.infer<typeof bugReportDescriptionSchema>;
 export type BugReportError = z.infer<typeof bugReportErrorSchema>;
 export type BugReportErrorCode = z.infer<typeof bugReportErrorCodeSchema>;
@@ -226,7 +225,6 @@ export type BugReportReviewArtifact = z.infer<typeof bugReportReviewArtifactSche
 export type BugReportReviewModel = z.infer<typeof bugReportReviewModelSchema>;
 export type BugReportApprovedReport = z.infer<typeof bugReportApprovedReportSchema>;
 export type BugReportArtifactPreview = z.infer<typeof bugReportArtifactPreviewSchema>;
-export type BugReportDiagnosticsDetails = z.infer<typeof bugReportDiagnosticsDetailsSchema>;
 export type BugReportReviewDraftResponse = z.infer<typeof bugReportReviewDraftResponseSchema>;
 export type BugReportArtifactPreviewResponse = z.infer<
   typeof bugReportArtifactPreviewResponseSchema

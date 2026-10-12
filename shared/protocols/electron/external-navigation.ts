@@ -38,5 +38,4 @@ export const externalNavigationResponseSchema = z.discriminatedUnion('ok', [
     .strict(),
 ]);
 
-export type ExternalNavigationRequest = z.infer<typeof externalNavigationRequestSchema>;
 export type ExternalNavigationResponse = z.infer<typeof externalNavigationResponseSchema>;

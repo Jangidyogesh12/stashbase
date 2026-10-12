@@ -3,20 +3,20 @@ import test from 'node:test';
 
 import {
   preparationCancelResponseSchema,
-  preparationReprocessRequestSchema,
   preparationReprocessResponseSchema,
+  preparationSourceRequestSchema,
 } from './preparation.ts';
 
-test('reprocess carries an explicit folder without media options', () => {
+test('a preparation source request carries an explicit folder without media options', () => {
   assert.equal(
-    preparationReprocessRequestSchema.safeParse({
+    preparationSourceRequestSchema.safeParse({
       folder: '/project/research',
       path: 'papers/report.pdf',
     }).success,
     true,
   );
   assert.equal(
-    preparationReprocessRequestSchema.safeParse({ path: 'papers/report.pdf' }).success,
+    preparationSourceRequestSchema.safeParse({ path: 'papers/report.pdf' }).success,
     false,
   );
 });

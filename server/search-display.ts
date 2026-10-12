@@ -10,8 +10,8 @@ export type { KeywordHitFile, KeywordMatch } from '../shared/search-results.ts';
 /**
  * The MFS exact-search output after product display mapping, before a route
  * echoes the request onto it. Deliberately NOT the `/api/keyword-search` response — that is
- * `KeywordSearchResult` in `shared/search-results.ts`, which additionally
- * carries the `query` and `folder` the caller asked for.
+ * `exactSearchResponseSchema`, whose files (`ProjectKeywordFile` in
+ * `shared/search-results.ts`) additionally carry the member `folder`.
  */
 export interface KeywordScanResult {
   files: KeywordHitFile[];

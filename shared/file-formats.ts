@@ -57,7 +57,6 @@ export const VIEWABLE_FILE_EXTENSIONS = [
 ] as const;
 
 export const AUDIO_SOURCE_EXTENSION_ALTERNATION = extensionAlternation(AUDIO_SOURCE_EXTENSIONS);
-export const DIRECT_TEXT_EXTENSION_ALTERNATION = extensionAlternation(DIRECT_TEXT_EXTENSIONS);
 export const PDF_EXTENSION_ALTERNATION = extensionAlternation(PDF_EXTENSIONS);
 export const IMAGE_SOURCE_EXTENSION_ALTERNATION = extensionAlternation(IMAGE_SOURCE_EXTENSIONS);
 export const DOCX_EXTENSION_ALTERNATION = extensionAlternation(DOCX_EXTENSIONS);
@@ -89,7 +88,7 @@ export type DirectTextFormat = 'md' | 'html' | 'json' | 'txt';
  * server's file listing emits it and the renderer routes tabs on it, so the
  * two must agree value for value.
  */
-export type KnownViewerFormat = DirectTextFormat | 'pdf' | 'image' | 'docx' | 'audio';
+export type KnownViewerFormat = Exclude<ViewerFormat, 'generic'>;
 
 /**
  * The complete workspace-tree format vocabulary. `generic` is deliberately
@@ -98,7 +97,19 @@ export type KnownViewerFormat = DirectTextFormat | 'pdf' | 'image' | 'docx' | 'a
  * inspection and may produce either a read-only text view or an honest
  * binary/unavailable placeholder.
  */
-export type ViewerFormat = KnownViewerFormat | 'generic';
+export const VIEWER_FORMATS = [
+  'md',
+  'html',
+  'json',
+  'txt',
+  'pdf',
+  'image',
+  'docx',
+  'audio',
+  'generic',
+] as const;
+
+export type ViewerFormat = (typeof VIEWER_FORMATS)[number];
 
 /** Search and automatic Agent context may consume only these formats. */
 export function isRetrievableViewerFormat(format: ViewerFormat): format is Exclude<KnownViewerFormat, 'audio'> {

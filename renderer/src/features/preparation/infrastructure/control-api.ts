@@ -14,7 +14,6 @@ import {
   preparationAcknowledgementSchema,
   preparationCancelResponseSchema,
   preparationFailureResponseSchema,
-  preparationReprocessRequestSchema,
   preparationReprocessResponseSchema,
   preparationSourceRequestSchema,
 } from '@/protocols/http/preparation';
@@ -82,7 +81,7 @@ export function createPreparationControlAdapter(client: HttpClient): Preparation
       });
     },
     async reprocess(source, signal) {
-      const body = preparationReprocessRequestSchema.parse({
+      const body = preparationSourceRequestSchema.parse({
         folder: source.folderPath,
         path: source.path,
       });

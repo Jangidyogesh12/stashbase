@@ -13,7 +13,7 @@ const urlSchema = z.string().min(1).max(2048);
 const portSchema = z.number().int().min(1).max(65_535);
 
 /** The Streamable HTTP listener state, as `shared/mcp.ts` declares it. */
-export const mcpHttpStatusSchema = z
+const mcpHttpStatusSchema = z
   .object({
     dockerAccess: z.boolean(),
     dockerActive: z.boolean(),
@@ -49,6 +49,4 @@ export const mcpDockerPortRequestSchema = z
 
 export const mcpFailureSchema = z.object({ error: z.string().trim().min(1).max(500) }).passthrough();
 
-export type McpStatusWire = z.infer<typeof mcpStatusSchema>;
 export type McpHttpStatusWire = z.infer<typeof mcpHttpStatusSchema>;
-export type McpDockerPortRequestWire = z.infer<typeof mcpDockerPortRequestSchema>;

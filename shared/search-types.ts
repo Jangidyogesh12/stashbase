@@ -23,7 +23,7 @@ export function toSearchMode(mode: RetrievalMode): SearchMode {
 
 export type SearchMode = (typeof SEARCH_MODES)[number];
 
-export function isSearchTypeCategory(value: unknown): value is SearchTypeCategory {
+function isSearchTypeCategory(value: unknown): value is SearchTypeCategory {
   return typeof value === 'string' && (SEARCH_TYPE_CATEGORIES as readonly string[]).includes(value);
 }
 
