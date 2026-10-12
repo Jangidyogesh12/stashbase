@@ -1,6 +1,7 @@
 /** One Node owner for identity, opt-out and durable delivery across windows.
  * Only allowlisted facts enter the queue; account credentials never do. */
 import { createNativeDiagnostics, type NativeDiagnostic } from './native-diagnostics.ts';
+import { telemetryAvailable } from './telemetry-environment.ts';
 import { randomUUID } from 'node:crypto';
 import type { AppConfigFile } from './app-config.ts';
 import { readAppConfigStrict, writeAppConfigStrict } from './app-config.ts';
@@ -325,8 +326,7 @@ export function createTelemetry(options: {
   };
 }
 
-const available = process.env.STASHBASE_TELEMETRY_DISABLED !== '1'
-  && process.env.STASHBASE_PACKAGED === '1'
+const available = telemetryAvailable(process.env.STASHBASE_PACKAGED === '1')
   && destination.projectToken.startsWith('phc_') && destination.host.startsWith('https://');
 export const telemetry = createTelemetry({
   available,

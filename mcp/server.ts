@@ -26,7 +26,7 @@
 import './stdio-guard.ts';
 
 import { readAppConfigStrict } from '../server/app-config.ts';
-import { createNativeDiagnostics } from '../server/native-diagnostics.ts';
+import { createNativeDiagnostics, telemetryAvailable } from '../server/native-diagnostics.ts';
 import packageInfo from '../package.json' with { type: 'json' };
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createProjectMcpServer } from './project-server.ts';
@@ -59,7 +59,7 @@ async function main() {
 
 const configPath = process.env.STASHBASE_DIAGNOSTICS_CONFIG;
 const diagnostics = createNativeDiagnostics({
-  available: process.env.STASHBASE_PACKAGED === '1' && process.env.STASHBASE_TELEMETRY_DISABLED !== '1' && Boolean(configPath && process.env.STASHBASE_DIAGNOSTICS_ROOT),
+  available: telemetryAvailable(process.env.STASHBASE_PACKAGED === '1') && Boolean(configPath && process.env.STASHBASE_DIAGNOSTICS_ROOT),
   version: packageInfo.version, directory: process.env.STASHBASE_DIAGNOSTICS_ROOT,
   // The launcher pins the host's paths, even under Default Agent's private home.
   read: () => readAppConfigStrict(configPath),

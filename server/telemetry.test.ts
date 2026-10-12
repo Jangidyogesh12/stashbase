@@ -11,14 +11,28 @@ import { mount } from './routes/telemetry.ts';
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 test('test launches suppress every event without changing saved preferences, including through Electron', () => {
-  for (const [packaged, disabled] of [['1', '1'], ['1', '0'], ['0', '0']]) {
+  const cases = [
+    { packaged: '1', disabled: '1', available: false },
+    { packaged: '1', disabled: '0', available: true },
+    { packaged: '0', disabled: '0', available: false },
+    { packaged: '1', disabled: '0', available: false, marker: { NODE_TEST_CONTEXT: 'child-v8' } },
+    { packaged: '1', disabled: '0', available: false, marker: { NODE_ENV: 'test' } },
+    { packaged: '1', disabled: '0', available: false, marker: { VITEST: 'true' } },
+    { packaged: '1', disabled: '0', available: false, marker: { JEST_WORKER_ID: '1' } },
+  ];
+  for (const { packaged, disabled, available, marker } of cases) {
+    const environment = { ...process.env };
+    for (const key of ['NODE_TEST_CONTEXT', 'NODE_ENV', 'VITEST', 'JEST_WORKER_ID']) delete environment[key];
     const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', `
       import './server/__tests__/isolated-home.ts';
       import assert from 'node:assert/strict';
       import { createServerChildEnvironment } from './electron/main-probe.cjs';
 
+      // This controlled subprocess has a replaced transport; emulate a real
+      // launch even though the shared test fixture suppresses normal tests.
+      process.env.STASHBASE_TELEMETRY_DISABLED = process.env.EXPECT_TELEMETRY_DISABLED;
       const packaged = process.env.STASHBASE_PACKAGED === '1';
-      const available = packaged && process.env.STASHBASE_TELEMETRY_DISABLED !== '1';
+      const available = process.env.EXPECT_TELEMETRY_AVAILABLE === '1';
       Object.assign(process.env, createServerChildEnvironment({
         baseEnv: process.env, packaged,
         packagedEnv: { STASHBASE_PACKAGED: packaged ? '1' : '0' },
@@ -48,8 +62,10 @@ test('test launches suppress every event without changing saved preferences, inc
       telemetry.capture({ event: 'app_opened' });
       telemetry.capture({ event: 'agent_turn_started', runtime: 'codex' });
       telemetry.capture({ event: 'document_write_result', outcome: 'success' });
-      await tick();
-      assert.deepEqual(sent, available ? ['app_opened', 'agent_turn_started', 'document_write_result'] : []);
+      telemetry.captureError(new Error('skills unavailable'), { source: 'server', operation: 'runtime', runtime: 'codex' });
+      telemetry.captureWarning(new Error('sandbox service unavailable'), { source: 'server', operation: 'runtime', runtime: 'codex' });
+      await telemetry.flush();
+      assert.deepEqual(sent, available ? ['app_opened', 'agent_turn_started', 'document_write_result', 'application_error', 'application_warning'] : []);
       assert.deepEqual(telemetry.preferences(), { enabled: true, available });
       if (!available) assert.deepEqual(readAppConfigStrict(), saved);
 
@@ -58,17 +74,26 @@ test('test launches suppress every event without changing saved preferences, inc
       telemetry.capture({ event: 'project_entry_result', outcome: 'success' });
       await tick();
       assert.deepEqual(sent, available ? [
-        'app_opened', 'agent_turn_started', 'document_write_result',
+        'app_opened', 'agent_turn_started', 'document_write_result', 'application_error', 'application_warning',
         'project_entry_result',
       ] : []);
       if (!available) assert.deepEqual(readAppConfigStrict(), { telemetry: { enabled: true } });
       telemetry.close();
+      // Electron and MCP use this same native boundary: a suppressed launch
+      // must not leave diagnostics that a later real launch could upload.
+      const { createNativeDiagnostics, telemetryAvailable } = await import('./server/native-diagnostics.ts');
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const directory = path.join(process.env.STASHBASE_LOCAL_DATA_ROOT, 'native-admission');
+      const native = createNativeDiagnostics({ available: telemetryAvailable(packaged), version: 'test', directory });
+      native.record(new Error('test native failure'), 'startup');
+      assert.equal(fs.existsSync(directory), available);
     `], {
       cwd: fileURLToPath(new URL('..', import.meta.url)),
-      env: { ...process.env, STASHBASE_PACKAGED: packaged, STASHBASE_TELEMETRY_DISABLED: disabled },
+      env: { ...environment, ...marker, STASHBASE_PACKAGED: packaged, STASHBASE_TELEMETRY_DISABLED: disabled, EXPECT_TELEMETRY_AVAILABLE: available ? '1' : '0', EXPECT_TELEMETRY_DISABLED: disabled },
       encoding: 'utf8', timeout: 10_000,
     });
-    assert.equal(result.status, 0, `packaged=${packaged}, disabled=${disabled}\n${result.stderr}`);
+    assert.equal(result.status, 0, `packaged=${packaged}, disabled=${disabled}, marker=${JSON.stringify(marker)}\n${result.stderr}`);
   }
 });
 
@@ -299,6 +324,7 @@ test('HTTP failures retain route, method, request ID and original cause without 
     assert.equal(f.sent[0].body.properties.diagnostic.code, 'EACCES');
     assert.deepEqual(f.sent[0].body.properties.context, { method: 'POST', route: '/api/files/*' });
     assert.match(f.sent[0].body.properties.request_id, /^[0-9a-f-]{36}$/);
+    assert.equal(response.headers.get('x-request-id'), f.sent[0].body.properties.request_id);
     assert.match(f.sent[0].body.properties.diagnostic.causes[0].stack, /telemetry.test.ts/);
     for (const value of ['private-project', 'private document content']) assert.equal(JSON.stringify(f.sent).includes(value), false);
   } finally { f.service.close(); server.closeAllConnections(); server.close(); }

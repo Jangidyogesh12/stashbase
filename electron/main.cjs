@@ -146,8 +146,8 @@ const SERVER_ENTRY = app.isPackaged
   : path.join(PROJECT_ROOT, 'server', 'index.ts');
 const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
-const { createNativeDiagnostics } = require('../dist/electron/diagnostics/native.cjs');
-const nativeDiagnostics = createNativeDiagnostics({ available: app.isPackaged && process.env.STASHBASE_TELEMETRY_DISABLED !== '1', version: app.getVersion() });
+const { createNativeDiagnostics, telemetryAvailable } = require('../dist/electron/diagnostics/native.cjs');
+const nativeDiagnostics = createNativeDiagnostics({ available: telemetryAvailable(app.isPackaged), version: app.getVersion() });
 process.on('uncaughtExceptionMonitor', (error) => nativeDiagnostics.record(error, 'uncaught', { process: 'electron-main' }));
 app.on('child-process-gone', (_event, details) => {
   if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Child process exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: details.type, reason: details.reason });

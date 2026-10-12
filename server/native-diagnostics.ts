@@ -1,5 +1,7 @@
 /** Native processes only spool diagnostics. The host remains the sole owner
  * of analytics identity, consent, queueing and network delivery. */
+// The Electron boundary bundle exposes the same admission rule as the host.
+export { telemetryAvailable } from './telemetry-environment.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';

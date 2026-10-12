@@ -70,7 +70,9 @@ check architecture, or collect coverage. `pnpm check:web` is the complete
 renderer gate, including coverage, accessibility, static checks, and both builds.
 Build and lint commands do only their named work.
 
-Automated Electron and packaged-server smoke launches disable production telemetry.
+Host test workers automatically suppress production telemetry, including when
+`STASHBASE_PACKAGED=1` is inherited. The shared isolated fixture also suppresses
+child processes. Automated Electron and packaged-server smoke launches disable it too.
 Manual packaged checks must set `STASHBASE_TELEMETRY_DISABLED=1` before launching;
 see [testing packaged builds](docs/usage-statistics.md#testing-packaged-builds).
 
