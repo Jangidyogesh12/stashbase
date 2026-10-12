@@ -131,6 +131,7 @@ export class OpenCodeEventTranslator {
   private readonly diffs = new Set<string>();
   private diffCounter = 0;
   private readonly errors = new Set<string>();
+  private readonly retryNotices = new Set<string>();
   /** OpenCode streams the reader's own prompt as parts too; only its role,
    * announced on the message before its parts, tells them from the reply. */
   private readonly userMessages = new Set<string>();
@@ -144,6 +145,7 @@ export class OpenCodeEventTranslator {
     this.lastFinishReason = undefined;
     this.completion = {};
     this.diffs.clear();
+    this.retryNotices.clear();
     return [{ t: 'turn-start' }];
   }
   isTurnActive(): boolean { return this.turnActive; }
@@ -169,7 +171,10 @@ export class OpenCodeEventTranslator {
           return events;
         }
         if (event.properties.status.type === 'retry') {
-          return [{ t: 'notice', message: event.properties.status.message }];
+          const message = event.properties.status.message;
+          if (this.retryNotices.has(message)) return [];
+          this.retryNotices.add(message);
+          return [{ t: 'notice', message }];
         }
         return this.finishTurn(false);
       }

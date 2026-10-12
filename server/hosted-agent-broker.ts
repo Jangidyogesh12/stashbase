@@ -137,10 +137,11 @@ export interface HostedAgentBrokerDependencies {
   clientVersion(): string;
 }
 
-function writeJson(response: http.ServerResponse, status: number, value: unknown): void {
+function writeJson(response: http.ServerResponse, status: number, value: unknown, headers: Record<string, string> = {}): void {
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
+    ...headers,
   });
   response.end(JSON.stringify(value));
 }
@@ -425,6 +426,8 @@ export class HostedAgentBroker {
           : upstreamCode === 'agent_allowance_exhausted' || !upstreamCode
             ? 'Remaining Agent credits cannot cover this request. Try a shorter conversation or wait for credits to refill.'
             : upstreamMessage;
+        const retryAfter = upstream.status === 429 || upstream.status === 503
+          ? upstream.headers.get('retry-after') : null;
         writeJson(response, upstream.status, {
           error: {
             message: upstream.status === 402
@@ -433,7 +436,7 @@ export class HostedAgentBroker {
             type: 'stashbase_hosted_error',
             code: upstreamCode ?? (upstream.status === 402 ? 'agent_allowance_exhausted' : 'hosted_error'),
           },
-        });
+        }, retryAfter ? { 'retry-after': retryAfter } : undefined);
         return;
       }
 

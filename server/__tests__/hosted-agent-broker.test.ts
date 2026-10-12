@@ -59,6 +59,29 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   assert.doesNotMatch(upstream[0].body, /account-token/);
 });
 
+test('hosted Agent broker retains the gateway retry delay on a short-term limit', async (t) => {
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: async () => Response.json({ code: 'agent_rate_limited', message: 'Too many Agent requests or too much short-term usage.' },
+      { status: 429, headers: { 'retry-after': '37' } }),
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const runtime = broker.runtime('short-term-limit')!;
+  broker.beginTurn('short-term-limit', '00000000-0000-4000-8000-000000000020');
+  const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+    method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], stream: true }),
+  });
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get('retry-after'), '37');
+  assert.deepEqual(await response.json(), { error: {
+    message: 'Too many Agent requests or too much short-term usage.',
+    type: 'stashbase_hosted_error', code: 'agent_rate_limited',
+  } });
+});
+
 test('a turn keeps the model it began with for every call, and the next turn takes a new choice', async (t) => {
   const seen: Array<{ turn: string | null; profile: string | null; version: string | null }> = [];
   const broker = new HostedAgentBroker({

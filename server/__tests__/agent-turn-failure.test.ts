@@ -42,6 +42,7 @@ test('live provider messages classify by their vocabulary', () => {
   assert.equal(classifyAgentTurnFailure('Hosted AI access is restricted for this account.'), 'access-restricted');
   // Transient rate limiting.
   assert.equal(classifyAgentTurnFailure('429 rate_limit_error: Too many requests'), 'rate-limit');
+  assert.equal(classifyAgentTurnFailure('Too many Agent requests or too much short-term usage.'), 'rate-limit');
   assert.equal(classifyAgentTurnFailure('Rate limit reached for requests'), 'rate-limit');
   assert.equal(classifyAgentTurnFailure('overloaded_error: The API is temporarily overloaded'), 'rate-limit');
   // Connectivity.

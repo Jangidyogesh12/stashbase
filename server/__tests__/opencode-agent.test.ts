@@ -174,6 +174,23 @@ test('Default errors wait for native idle and late message errors cannot fail th
   assert.deepEqual(translator.translate(idle), [{ t: 'turn-end', isError: true }]);
 });
 
+test('repeated native retry status does not repeat the same provider error in one turn', () => {
+  const translator = new OpenCodeEventTranslator();
+  translator.bindSession('session-1');
+  const retry = (message: string) => ({ type: 'session.status', properties: {
+    sessionID: 'session-1', status: { type: 'retry', message, attempt: 1, next: 1000 },
+  } }) as Event;
+  const error = 'Too many Agent requests or too much short-term usage.';
+  translator.beginTurn();
+  assert.deepEqual(translator.translate(retry(error)), [{ t: 'notice', message: error }]);
+  assert.deepEqual(translator.translate(retry(error)), []);
+  assert.deepEqual(translator.translate(retry('The service is temporarily unavailable.')),
+    [{ t: 'notice', message: 'The service is temporarily unavailable.' }]);
+  translator.endTurnWithError();
+  translator.beginTurn();
+  assert.deepEqual(translator.translate(retry(error)), [{ t: 'notice', message: error }]);
+});
+
 test('Default Agent applies the selected mode to each turn and freezes it while working', async () => {
   const { session, prompts, send, feed } = modeHarness('plan');
   try {
