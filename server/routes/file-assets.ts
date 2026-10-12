@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from '../html.ts';
-import { resolveAssetAsync, resolveExistingAsync } from '../files.ts';
+import { resolveAssetAsync, resolveExistingAsync } from '../active-file-operations.ts';
 import { detectViewerFormat } from '../format.ts';
 import { currentDerivedTextPathForDocxAsync, derivedHtmlPathForDocx } from '../docx.ts';
 import { isConversionTextUnavailable } from '../conversion.ts';

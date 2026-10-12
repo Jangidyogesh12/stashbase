@@ -18,11 +18,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import {
-  detectFormat,
-  sanitizeFilename,
-} from '../files.ts';
-import { isConvertibleSource, isNoteName } from '../format.ts';
+import { sanitizeFilename } from '../file-paths.ts';
+import { detectFormat, isConvertibleSource, isNoteName } from '../format.ts';
 import { normalizeFolderRelativePath } from '../folder-relative-path.ts';
 import { errorMessage, logger } from '../log.ts';
 import {
@@ -104,7 +101,7 @@ export function mount(app: express.Express): void {
         // connection-time async context — which drops the windowId that
         // `withWindowContext` stored in AsyncLocalStorage. Without re-binding
         // it here, every folder-scoped lookup inside the handler
-        // (getCurrentFolder, saveBytes → resolveSafe) falls back to
+        // (getCurrentFolder, saveBytesAsync → resolveSafeAsync) falls back to
         // DEFAULT_WINDOW_ID and the upload fails with "no folder open" even
         // though the client sent the right window header. Re-establish the
         // context from the header before doing any per-window work.
@@ -331,7 +328,7 @@ async function processUploadedFiles(
 /** Compute the on-disk paths for a batch up front so any top-level entry
  *  that would clash with an existing one gets a `-2` / `-3` suffix —
  *  a drag means "add this", so we keep both rather than silently
- *  overwriting (which `saveBytes` would otherwise do for non-note
+ *  overwriting (which `saveBytesAsync` would otherwise do for non-note
  *  files). This applies to BOTH top-level files AND top-level folders:
  *  re-dropping the same folder lands a fresh `<folder>-2/` copy instead
  *  of overwriting the first in place — folder-nested paths previously
@@ -339,7 +336,7 @@ async function processUploadedFiles(
  *  Notes additionally reserve against their `<stem>_files/` bundle and
  *  carry it along when renamed. A renamed folder moves as a unit, so any
  *  bundle that lives *inside* it follows along untouched. */
-export function validateUploadPath(relPath: string): void {
+function validateUploadPath(relPath: string): void {
   normalizeFolderRelativePath(relPath, { label: 'upload path', writable: true, allowQuotes: true });
 }
 
@@ -348,7 +345,7 @@ function rawUploadPathFor(files: Express.Multer.File[], paths: string[], idx: nu
   return paths[idx] && paths[idx].length ? paths[idx] : f.originalname;
 }
 
-export async function computeFinalNamesAsync(
+async function computeFinalNamesAsync(
   files: Express.Multer.File[],
   paths: string[],
   prefix: string,

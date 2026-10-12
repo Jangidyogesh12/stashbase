@@ -1,10 +1,7 @@
 import express from 'express';
-import {
-  detectFormat,
-  sanitizeFilename,
-} from '../files.ts';
+import { sanitizeFilename } from '../file-paths.ts';
 import { toSourcePath } from '../folder.ts';
-import { detectViewerFormat } from '../format.ts';
+import { detectFormat, detectViewerFormat } from '../format.ts';
 import { guardExplicitFolder, sendError } from '../http.ts';
 import { planRenameLinksAsync, type RenameEntry } from '../links.ts';
 import { bundleRenameEntryAsync } from '../rename-helpers.ts';

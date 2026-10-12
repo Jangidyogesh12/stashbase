@@ -179,7 +179,7 @@ test('file operations cancel queued/running conversion work and await release', 
     const { cancelConversionAndWait, getScheduledConversion, maybeConvert } = await import('./conversion.ts');
     const { runWithFolderRoot } = await import('./folder.ts');
     const { filesystemPath } = await import('./filesystem-path.ts');
-    const { prepareFileOperation } = await import('./routes/files.ts');
+    const { prepareFileOperation } = await import('./file-operation-guard.ts');
     const spec = {
       kind: 'guard_test',
       lane: 'light',
