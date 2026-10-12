@@ -1,3 +1,22 @@
+/** The owner/name slug from GITHUB_REPOSITORY, else package.json's repository URL. */
+export function releaseRepository(pkg) {
+  const repo = process.env.GITHUB_REPOSITORY || repositorySlug(pkg.repository?.url);
+  if (!repo) {
+    throw new Error('Unable to determine GitHub repository. Set GITHUB_REPOSITORY=owner/repo.');
+  }
+  return repo;
+}
+
+function repositorySlug(value) {
+  if (!value) return null;
+  return String(value)
+    .replace(/^git\+/, '')
+    .replace(/^git@github\.com:/, 'https://github.com/')
+    .replace(/^https?:\/\/github\.com\//, '')
+    .replace(/\.git$/, '')
+    .replace(/\/$/, '');
+}
+
 export async function findDraftReleaseByTag({ request, repo, tag }) {
   const [owner, name, ...extra] = repo.split('/');
   if (!owner || !name || extra.length > 0) {

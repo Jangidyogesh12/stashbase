@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { releaseRepository } from './github-release-api.mjs';
 import { assertMacUpdateArtifacts } from './update-artifact-contract.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,25 +15,11 @@ const skipBuild = args.has('--skip-build');
 const skipSmoke = args.has('--skip-smoke');
 const requireDraft = args.has('--require-draft');
 const tag = `v${pkg.version}`;
-const repo = process.env.GITHUB_REPOSITORY || repositorySlug(pkg.repository?.url);
+const repo = releaseRepository(pkg);
 
 // Release packaging creates the independent PDF/OCR component and embeds its
 // exact manifest; the base installer never carries the extractor payload.
 if (process.platform === 'darwin') process.env.STASHBASE_RELEASE_BUILD = '1';
-
-if (!repo) {
-  throw new Error('Unable to determine GitHub repository. Set GITHUB_REPOSITORY=owner/repo.');
-}
-
-function repositorySlug(value) {
-  if (!value) return null;
-  return String(value)
-    .replace(/^git\+/, '')
-    .replace(/^git@github\.com:/, 'https://github.com/')
-    .replace(/^https?:\/\/github\.com\//, '')
-    .replace(/\.git$/, '')
-    .replace(/\/$/, '');
-}
 
 function run(command, commandArgs) {
   execFileSync(command, commandArgs, {
