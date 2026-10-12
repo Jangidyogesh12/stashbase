@@ -248,4 +248,27 @@ describe('agent composer model-and-thinking control', () => {
     expect(optionNames()).toEqual(['Codex Max', 'Codex Mini']);
     expect(screen.queryByRole('menuitem', { name: 'Back' })).toBeNull();
   });
+
+  /** The hosted Default Agent prices some models several times its default;
+   *  those rows stay listed with their cost multiple but cannot be chosen. */
+  it('locks a model priced well above the default and names its cost multiple', async () => {
+    const { user } = renderControl({
+      activeAgent: { ...CODEX_AGENT, abilities: { ...CODEX_AGENT.abilities, effort: false } },
+      state: sessionState({
+        models: [
+          { ...MINI, id: 'flash', isDefault: true, label: 'Flash', relativeCost: 1 },
+          { ...MINI, id: 'lite', label: 'Lite', relativeCost: 0.6 },
+          { ...MINI, id: 'opus', label: 'Opus', relativeCost: 5.3 },
+        ],
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Model and thinking: Flash' }));
+    expect(optionNames()).toEqual(['Flash', 'Lite', 'Opus, 5× cost']);
+    const opus = screen.getByRole('menuitemradio', { name: 'Opus, 5× cost' });
+    expect(opus.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      screen.getByRole('menuitemradio', { name: 'Lite' }).getAttribute('aria-disabled'),
+    ).not.toBe('true');
+  });
 });

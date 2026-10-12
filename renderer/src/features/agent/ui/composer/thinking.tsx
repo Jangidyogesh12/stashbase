@@ -5,7 +5,7 @@
  *  at the composer's right edge beside Send, where the reader looks last
  *  before sending; the runtime, its permission mode, and the persona keep
  *  the left. */
-import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Zap } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Lock, RefreshCw, Zap } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import { MenuItem } from '@/components/ui/menu-item';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { modelChoice, type ModelChoice } from '@/features/agent/domain/model-choice';
+import type { AgentModel } from '@/features/agent/domain/runtime-catalog';
 import type { AgentSessionState } from '@/features/agent/domain/session';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,14 @@ function effortLabel(effort: string): string {
     .replace(/^xhigh$/u, 'Extra high')
     .replace(/[-_]+/gu, ' ')
     .replace(/^./u, (letter) => letter.toUpperCase());
+}
+
+/** A model priced well above the runtime's default is locked for now: the
+ *  row stays listed with its cost multiple and a lock, but cannot be chosen,
+ *  so readers stay on the default. */
+function costLock(model: AgentModel): { badge: string } | null {
+  const cost = model.relativeCost;
+  return cost !== undefined && cost >= 1.5 ? { badge: `${Math.round(cost)}× cost` } : null;
 }
 
 function effortDescription(effort: string): string | undefined {
@@ -174,23 +183,27 @@ function ModelLayer({
           onSelect={() => onModelChange(null)}
         />
       )}
-      {state.models.map((model) => (
-        <MenuItem
-          checked={model.id === choice.model?.id}
-          closeOnClick
-          disabled={runtimeUpdate?.busy === true}
-          // A runtime's model labels are aliases: "Opus" is whichever Opus
-          // that build runs. The release it resolves to is in the runtime's
-          // own description, which is the only place a reader can see that
-          // their Opus is now 5.5, so the rows carry it the way the levels
-          // above them already do.
-          {...(model.description === undefined ? {} : { description: model.description })}
-          key={model.id}
-          label={model.label}
-          layout="wrap"
-          onSelect={() => onModelChange(model.id)}
-        />
-      ))}
+      {state.models.map((model) => {
+        const lock = costLock(model);
+        return (
+          <MenuItem
+            checked={model.id === choice.model?.id}
+            closeOnClick
+            disabled={runtimeUpdate?.busy === true || lock !== null}
+            // A runtime's model labels are aliases: "Opus" is whichever Opus
+            // that build runs. The release it resolves to is in the runtime's
+            // own description, which is the only place a reader can see that
+            // their Opus is now 5.5, so the rows carry it the way the levels
+            // above them already do.
+            {...(model.description === undefined ? {} : { description: model.description })}
+            {...(lock === null ? {} : { badge: lock.badge, trailingIcon: Lock })}
+            key={model.id}
+            label={model.label}
+            layout="wrap"
+            onSelect={() => onModelChange(model.id)}
+          />
+        );
+      })}
       {runtimeUpdate && (
         <>
           <DropdownSeparator />

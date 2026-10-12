@@ -22,6 +22,8 @@ const hostedAgentProfileSchema = z.object({
   contextTokenLimit: z.number().int().positive(),
   outputTokenLimit: z.number().int().positive(),
   isDefault: z.boolean(),
+  // A cost the client cannot read leaves the row unflagged, not hidden.
+  relativeCost: z.number().positive().max(10_000).optional().catch(undefined),
 }).passthrough();
 
 export interface HostedAgentProfile {
@@ -31,6 +33,8 @@ export interface HostedAgentProfile {
   contextTokenLimit: number;
   outputTokenLimit: number;
   isDefault: boolean;
+  /** Price relative to the default profile (1), as the service ranks it. */
+  relativeCost?: number;
 }
 
 export interface HostedAgentModelDependencies {
@@ -52,8 +56,11 @@ export function parseHostedAgentProfiles(payload: unknown): HostedAgentProfile[]
   for (const entry of models) {
     const parsed = hostedAgentProfileSchema.safeParse(entry);
     if (!parsed.success || profiles.some((profile) => profile.id === parsed.data.id)) continue;
-    const { id, version, displayName, contextTokenLimit, outputTokenLimit, isDefault } = parsed.data;
-    profiles.push({ id, version, displayName, contextTokenLimit, outputTokenLimit, isDefault });
+    const { id, version, displayName, contextTokenLimit, outputTokenLimit, isDefault, relativeCost } = parsed.data;
+    profiles.push({
+      id, version, displayName, contextTokenLimit, outputTokenLimit, isDefault,
+      ...(relativeCost === undefined ? {} : { relativeCost }),
+    });
   }
   return profiles;
 }
@@ -98,12 +105,25 @@ function tokenCount(value: number): string {
   return String(value);
 }
 
+/** Until every deployed service reports `relativeCost`, the approved premium
+ * profiles carry the multiple their published prices give against the Gemini
+ * default, so the picker locks them either way. A reported cost wins. */
+const KNOWN_RELATIVE_COST: Readonly<Record<string, number>> = {
+  'claude-opus-5-5': 5.3,
+  'gpt-6-1-sol': 4.2,
+  'claude-sonnet-5-5': 2.7,
+};
+
 /** The picker's view of a profile. Versions and limits stay on the host. */
 export function hostedAgentCatalogModels(profiles: readonly HostedAgentProfile[]): AgentModel[] {
-  return profiles.map((profile) => ({
-    id: profile.id,
-    label: profile.displayName,
-    description: `${tokenCount(profile.contextTokenLimit)} context · ${tokenCount(profile.outputTokenLimit)} output`,
-    ...(profile.isDefault ? { isDefault: true } : {}),
-  }));
+  return profiles.map((profile) => {
+    const relativeCost = profile.relativeCost ?? KNOWN_RELATIVE_COST[profile.id];
+    return {
+      id: profile.id,
+      label: profile.displayName,
+      description: `${tokenCount(profile.contextTokenLimit)} context · ${tokenCount(profile.outputTokenLimit)} output`,
+      ...(profile.isDefault ? { isDefault: true } : {}),
+      ...(relativeCost === undefined ? {} : { relativeCost }),
+    };
+  });
 }

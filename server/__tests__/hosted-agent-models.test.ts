@@ -13,14 +13,25 @@ test('the model list keeps what this client can run and drops entries it cannot 
     profile,
     { ...profile, id: 'writer-fast', version: 4 },
     { id: 'no-version', displayName: 'Broken', contextTokenLimit: 1, outputTokenLimit: 1, isDefault: false },
-    { ...profile, id: 'writer-pro', version: 1, isDefault: false, futureField: 'ignored' },
+    { ...profile, id: 'writer-pro', version: 1, isDefault: false, relativeCost: 5.3, futureField: 'ignored' },
+    { ...profile, id: 'writer-odd', version: 1, isDefault: false, relativeCost: 'high' },
   ] });
-  assert.deepEqual(profiles.map((entry) => [entry.id, entry.version]), [['writer-fast', 3], ['writer-pro', 1]]);
+  assert.deepEqual(profiles.map((entry) => [entry.id, entry.version]), [['writer-fast', 3], ['writer-pro', 1], ['writer-odd', 1]]);
+  // The service's price ranking reaches the picker; an unreadable one leaves the row unflagged.
+  assert.deepEqual(hostedAgentCatalogModels(profiles).map((model) => model.relativeCost), [undefined, 5.3, undefined]);
   // Upstream identity and reasoning settings never reach the picker.
   assert.deepEqual(hostedAgentCatalogModels(profiles)[0], {
     id: 'writer-fast', label: 'Writer Fast', description: '1M context · 8K output', isDefault: true,
   });
   assert.throws(() => parseHostedAgentProfiles({ data: [] }), /unexpected shape/);
+});
+
+test('an approved premium profile is costed even when the service does not report it', () => {
+  const costs = hostedAgentCatalogModels([
+    { ...profile, id: 'claude-opus-5-5', isDefault: false },
+    { ...profile, id: 'gpt-6-1-sol', isDefault: false, relativeCost: 3 },
+  ]).map((model) => model.relativeCost);
+  assert.deepEqual(costs, [5.3, 3]);
 });
 
 test('the model list is read with the account token, refreshed once on 401', async () => {

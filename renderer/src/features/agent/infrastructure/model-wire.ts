@@ -14,5 +14,6 @@ export function toModel(wire: AgentModelWire): AgentModel {
     ...(wire.supportedEfforts === undefined ? {} : { supportedEfforts: wire.supportedEfforts }),
     ...(wire.defaultEffort === undefined ? {} : { defaultEffort: wire.defaultEffort }),
     ...(wire.isDefault === undefined ? {} : { isDefault: wire.isDefault }),
+    ...(wire.relativeCost === undefined ? {} : { relativeCost: wire.relativeCost }),
   };
 }

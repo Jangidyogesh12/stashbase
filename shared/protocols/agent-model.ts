@@ -13,6 +13,9 @@ export const agentModelSchema = z
     defaultEffort: z.string().max(64).optional(),
     /** Whether the runtime runs this model when none is chosen. */
     isDefault: z.boolean().optional(),
+    /** Price relative to the runtime's default model (1), for a runtime that
+     *  bills through StashBase; the picker flags the expensive ones. */
+    relativeCost: z.number().positive().max(10_000).optional(),
   })
   .strict();
 

@@ -14,6 +14,9 @@ export interface AgentModel {
   /** Whether the runtime runs this model when none is chosen. Codex flags its
    *  newest model; a runtime that says nothing leaves every entry unflagged. */
   isDefault?: boolean;
+  /** Price relative to the runtime's default model (1). Only the hosted
+   *  Default Agent reports it; the picker flags models well above 1. */
+  relativeCost?: number;
 }
 
 export interface AgentSkill {

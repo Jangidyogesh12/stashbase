@@ -28,6 +28,7 @@ import { forwardRef, type HTMLAttributes } from 'react';
 
 import { MenuItemCheck } from '@/components/internal/menu-item-check';
 import { useProximityRow } from '@/components/internal/proximity-row';
+import { Badge } from '@/components/ui/badge';
 import { WeightedLabel } from '@/components/ui/weighted-label';
 import type { IconComponent } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
@@ -55,6 +56,9 @@ interface MenuItemProps extends HTMLAttributes<HTMLDivElement> {
   /** Optional explanatory copy for choices whose consequence cannot be
    *  understood from the short label alone. */
   description?: string;
+  /** A short neutral tag on the label's line, for a fact a reader should
+   *  weigh before choosing the row (a model's relative cost). */
+  badge?: string;
   /** How the row lays its text out. "stacked" — the default — truncates a
    *  long label on one line and puts any description under it. "inline" puts
    *  a short description beside the label, for compact choice menus.
@@ -87,6 +91,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       icon: Icon,
       label,
       description,
+      badge,
       layout = 'stacked',
       checked,
       onSelect,
@@ -138,7 +143,8 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       }
     };
 
-    const accessibleLabel = description ? `${label}. ${description}` : label;
+    const named = badge ? `${label}, ${badge}` : label;
+    const accessibleLabel = description ? `${named}. ${description}` : named;
     const itemClassName = cn(
       // Fixed height (was py-2 around a 19.5px line box ≈ 35.5px) so the
       // text-box trim on the label doesn't shrink the row. shrink-0 because
@@ -149,6 +155,18 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       stackedDescription && 'min-h-14',
       disabled && 'pointer-events-none opacity-50',
       className,
+    );
+
+    const labelText = (
+      <WeightedLabel
+        className="min-w-0 flex-1"
+        data-menu-item-label
+        emphasized={false}
+        lit={isActive || checked === true}
+        overflow={wrapsLabel ? 'wrap' : 'truncate'}
+      >
+        {label}
+      </WeightedLabel>
     );
 
     const content = (
@@ -180,15 +198,16 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
           )}
           data-menu-item-content
         >
-          <WeightedLabel
-            className="min-w-0 flex-1"
-            data-menu-item-label
-            emphasized={false}
-            lit={isActive || checked === true}
-            overflow={wrapsLabel ? 'wrap' : 'truncate'}
-          >
-            {label}
-          </WeightedLabel>
+          {badge ? (
+            <span className="flex min-w-0 items-center gap-2">
+              {labelText}
+              <Badge aria-hidden="true" className="-my-1 shrink-0" size="compact">
+                {badge}
+              </Badge>
+            </span>
+          ) : (
+            labelText
+          )}
           {description && (
             <span
               className={cn(
