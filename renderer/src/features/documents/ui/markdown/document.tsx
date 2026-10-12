@@ -108,7 +108,7 @@ export function MarkdownDocument({
   const editorRef = useRef<CrepeBuilder | null>(null);
   const onChangeRef = useRef(onChange);
   const holdEditsRef = useRef(holdEdits);
-  const flushEditRef = useRef<() => boolean>(() => false);
+  const changesRef = useRef<ReturnType<typeof watchMarkdownChanges> | null>(null);
   const readOnlyRef = useRef(readOnly);
   const valueRef = useRef(value);
   const activeRef = useRef(active);
@@ -208,7 +208,7 @@ export function MarkdownDocument({
         updateHeadings();
       },
     });
-    flushEditRef.current = changes.flush;
+    changesRef.current = changes;
     const releaseHeldEdits = holdEditsRef.current(changes.flush);
 
     const stopCreation = startMarkdownEditorCreation(editor, {
@@ -218,6 +218,7 @@ export function MarkdownDocument({
       },
       ready: () => {
         editorRef.current = editor;
+        changes.rebase(initial.body);
         editor.setReadonly(readOnlyRef.current);
         updateHeadings();
         setCreationState('ready');
@@ -246,14 +247,14 @@ export function MarkdownDocument({
     // reconcile would otherwise replace the text the review describes.
     if (!editor || creationState !== 'ready' || dirty || reviewActive) return;
     // A held edit is dirty work this render has not seen yet.
-    if (flushEditRef.current()) return;
+    if (changesRef.current?.flush()) return;
     if (observedValueRef.current === value) return;
     observedValueRef.current = value;
     const incoming = splitLeadingYamlFrontmatter(value);
     frontmatterRef.current = incoming.source;
-    if (editor.getMarkdown() === incoming.body) return;
     suppressChangeRef.current = true;
-    editor.editor.action(replaceAll(incoming.body));
+    if (editor.getMarkdown() !== incoming.body) editor.editor.action(replaceAll(incoming.body));
+    changesRef.current?.rebase(incoming.body);
     queueMicrotask(() => {
       suppressChangeRef.current = false;
       refreshHeadingsRef.current();
