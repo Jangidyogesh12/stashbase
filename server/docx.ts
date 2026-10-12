@@ -7,22 +7,14 @@
  * search, Agent text reads, and semantic indexing under the original `.docx`
  * path.
  */
-import fs, { closeSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { isDocxFile } from './format.ts';
 import { derivedDir, derivedHtmlFor } from './derived-store.ts';
-import {
-  derivedIsFresh,
-  discoverCandidateSources,
-  discoverNewSources,
-  indexFreshDerived,
-  maybeConvert,
-  TransientConversionError,
-  type ConversionSpec,
-} from './conversion.ts';
+import { TransientConversionError, type ConversionSpec } from './conversion.ts';
 import { logger } from './log.ts';
 import { hasNoExtractableText } from './indexable.ts';
 import { validatePreparedDocxText } from './prepared-validation.ts';
@@ -73,48 +65,6 @@ const DOCX_WORKER_SOURCE = [
 
 export function derivedHtmlPathForDocx(docxAbsPath: string): string {
   return derivedHtmlFor(docxAbsPath);
-}
-
-export function currentDerivedTextPathForDocx(sourceAbs: string, known?: { sourceMtimeMs: number; derivedMtimeMs: number }): string | null {
-  return derivedIsFresh(DOCX_SPEC, sourceAbs, known) ? derivedHtmlPathForDocx(sourceAbs) : null;
-}
-
-export async function currentDerivedTextPathForDocxAsync(
-  sourceAbs: string,
-  known: { sourceMtimeMs: number; derivedMtimeMs: number },
-): Promise<string | null> {
-  if (known.derivedMtimeMs < known.sourceMtimeMs) return null;
-  const htmlPath = derivedHtmlPathForDocx(sourceAbs);
-  try {
-    const html = await fs.promises.readFile(htmlPath);
-    if (!html.subarray(Math.max(0, html.length - 2048)).toString('utf8').includes(DOCX_COMPLETE_MARKER)) return null;
-    return await validatePreparedDocxText(html) ? htmlPath : null;
-  } catch {
-    return null;
-  }
-}
-
-function cleanupDerivedDocx(docxAbsPath: string): void {
-  rmSync(derivedHtmlPathForDocx(docxAbsPath), { force: true });
-}
-
-function derivedDocxIsComplete(_docxAbsPath: string, htmlPath: string): boolean {
-  let fd: number | null = null;
-  try {
-    fd = openSync(htmlPath, 'r');
-    const tailBytes = 2048;
-    const size = statSync(htmlPath).size;
-    const start = Math.max(0, size - tailBytes);
-    const buf = Buffer.alloc(size - start);
-    readSync(fd, buf, 0, buf.length, start);
-    return buf.toString('utf8').includes(DOCX_COMPLETE_MARKER) && !hasNoExtractableText(htmlPath);
-  } catch {
-    return false;
-  } finally {
-    if (fd != null) {
-      try { closeSync(fd); } catch { /* ignore */ }
-    }
-  }
 }
 
 export function extractDocxInWorker(
@@ -236,32 +186,16 @@ function escapeHtml(raw: string): string {
     .replace(/"/g, '&quot;');
 }
 
-const DOCX_SPEC: ConversionSpec = {
+export const DOCX_SPEC: ConversionSpec = {
   kind: 'docx_extract',
   lane: 'light',
   cost: 0,
   matches: isDocxFile,
   derivedNote: derivedHtmlPathForDocx,
-  derivedReady: derivedDocxIsComplete,
+  completeMarker: { text: DOCX_COMPLETE_MARKER, tailBytes: 2048 },
+  derivedReady: (_docxAbsPath, htmlPath) => !hasNoExtractableText(htmlPath),
+  validatePrepared: validatePreparedDocxText,
+  interactive: true,
   convert: convertDocx,
-  cleanupDerived: cleanupDerivedDocx,
+  cleanupDerived: (docxAbsPath) => rmSync(derivedHtmlPathForDocx(docxAbsPath), { force: true }),
 };
-
-export function maybeConvertDocx(
-  docxAbsPath: string,
-  opts: { urgency?: 'interactive' } = {},
-): Promise<void> | null {
-  return maybeConvert(docxAbsPath, DOCX_SPEC, { urgency: opts.urgency ?? 'background' });
-}
-
-export async function discoverNewDocx(folderAbs: string, candidates?: readonly string[]): Promise<void> {
-  if (candidates) {
-    await discoverCandidateSources(candidates, DOCX_SPEC);
-    return;
-  }
-  await discoverNewSources(folderAbs, DOCX_SPEC);
-}
-
-export function indexFreshDocx(docxAbsPath: string) {
-  return indexFreshDerived(docxAbsPath, DOCX_SPEC);
-}

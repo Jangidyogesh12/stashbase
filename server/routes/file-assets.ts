@@ -4,7 +4,8 @@ import path from 'node:path';
 import { analyzeHtml } from '../html.ts';
 import { resolveAssetAsync, resolveExistingAsync } from '../active-file-operations.ts';
 import { detectViewerFormat } from '../format.ts';
-import { currentDerivedTextPathForDocxAsync, derivedHtmlPathForDocx } from '../docx.ts';
+import { derivedHtmlPathForDocx } from '../docx.ts';
+import { currentPreparedTextPathAsync } from '../conversion-dispatch.ts';
 import { isConversionTextUnavailable } from '../conversion.ts';
 import { hasFailed } from '../conversion-status.ts';
 import { filesystemPath } from '../filesystem-path.ts';
@@ -92,7 +93,7 @@ export function mountFileAssetRoutes(app: express.Express): void {
           const [sourceStat, derivedStat] = await Promise.all([
             fs.promises.stat(sourceAbs), fs.promises.stat(derivedHtmlPathForDocx(sourceAbs)),
           ]);
-          const htmlAbs = await currentDerivedTextPathForDocxAsync(sourceAbs, {
+          const htmlAbs = await currentPreparedTextPathAsync(sourceAbs, sourceAbs, {
             sourceMtimeMs: sourceStat.mtimeMs, derivedMtimeMs: derivedStat.mtimeMs,
           });
           if (!htmlAbs) throw new Error('document conversion is incomplete or stale');

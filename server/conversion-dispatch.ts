@@ -1,17 +1,26 @@
 /**
  * Deep dispatch module for AppData-derived source formats.
  *
- * Format adapters stay private. Callers ask for lifecycle operations without
- * repeating format switches, cleanup rules, or interactive-promotion logic.
+ * Each format owns one `ConversionSpec`; this module iterates them so callers
+ * ask for lifecycle operations without repeating format switches, cleanup
+ * rules, or interactive-promotion logic.
  */
 import fs from 'node:fs';
-import { collectSourceCandidates, isConversionTextUnavailable, promoteConversion } from './conversion.ts';
+import {
+  collectSourceCandidates,
+  currentDerivedTextPath,
+  discoverCandidateSources,
+  indexFreshDerived,
+  isConversionTextUnavailable,
+  maybeConvert,
+  promoteConversion,
+  type ConversionSpec,
+} from './conversion.ts';
 import { clearRecord } from './conversion-status.ts';
-import { currentDerivedTextPathForDocxAsync, derivedHtmlPathForDocx, discoverNewDocx, indexFreshDocx, maybeConvertDocx } from './docx.ts';
+import { DOCX_SPEC } from './docx.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { isDocxFile, isImageFile } from './format.ts';
-import { currentDerivedTextPathForImageAsync, derivedNotePathForImage, discoverNewImages, indexFreshImage, maybeConvertImage } from './image.ts';
-import { currentDerivedTextPathForPdfAsync, derivedPathsForPdf, discoverNewPdfs, indexFreshPdf, maybeConvertPdf } from './pdf.ts';
+import { IMAGE_SPEC } from './image.ts';
+import { PDF_SPEC } from './pdf.ts';
 import type { IndexUpsertResult } from './indexer.ts';
 
 export interface ConvertibleOptions {
@@ -22,62 +31,16 @@ export type ConvertibleReprocessResult =
   | { status: 'unsupported' }
   | { status: 'queued' };
 
-interface ConvertibleFormatAdapter {
-  matches(path: string): boolean;
-  queue(sourceAbs: string, options: ConvertibleOptions): void;
-  discover(folderAbs: string, candidates?: readonly string[]): Promise<void>;
-  indexFresh(sourceAbs: string): Promise<IndexUpsertResult | null>;
-  reset(sourceAbs: string): void;
-  interactive: boolean;
-  currentTextPathAsync(sourceAbs: string, known: { sourceMtimeMs: number; derivedMtimeMs: number }): Promise<string | null>;
-  textCandidatePath(sourceAbs: string): string;
-}
-
-const FORMATS: readonly ConvertibleFormatAdapter[] = [
-  {
-    matches: (candidate) => /\.pdf$/i.test(candidate),
-    queue: (sourceAbs, options) => maybeConvertPdf(sourceAbs, urgencyOnly(options)),
-    discover: discoverNewPdfs,
-    indexFresh: indexFreshPdf,
-    reset: (sourceAbs) => {
-      const { notePath, bundleDir } = derivedPathsForPdf(sourceAbs);
-      fs.rmSync(notePath, { force: true });
-      fs.rmSync(bundleDir, { recursive: true, force: true });
-    },
-    interactive: false,
-    currentTextPathAsync: currentDerivedTextPathForPdfAsync,
-    textCandidatePath: (source) => derivedPathsForPdf(source).notePath,
-  },
-  {
-    matches: isImageFile,
-    queue: (sourceAbs, options) => maybeConvertImage(sourceAbs, urgencyOnly(options)),
-    discover: discoverNewImages,
-    indexFresh: indexFreshImage,
-    reset: (sourceAbs) => fs.rmSync(derivedNotePathForImage(sourceAbs), { force: true }),
-    interactive: false,
-    currentTextPathAsync: currentDerivedTextPathForImageAsync,
-    textCandidatePath: derivedNotePathForImage,
-  },
-  {
-    matches: isDocxFile,
-    queue: (sourceAbs, options) => maybeConvertDocx(sourceAbs, urgencyOnly(options)),
-    discover: discoverNewDocx,
-    indexFresh: indexFreshDocx,
-    reset: (sourceAbs) => fs.rmSync(derivedHtmlPathForDocx(sourceAbs), { force: true }),
-    interactive: true,
-    currentTextPathAsync: currentDerivedTextPathForDocxAsync,
-    textCandidatePath: derivedHtmlPathForDocx,
-  },
-];
+const SPECS: readonly ConversionSpec[] = [PDF_SPEC, IMAGE_SPEC, DOCX_SPEC];
 
 export function queueConvertibleSource(
   sourceAbs: string,
   displayName = sourceAbs,
   options: ConvertibleOptions = {},
 ): boolean {
-  const format = findFormat(displayName);
-  if (!format) return false;
-  format.queue(sourceAbs, options);
+  const spec = findSpec(displayName);
+  if (!spec) return false;
+  queue(spec, sourceAbs, options);
   return true;
 }
 
@@ -86,20 +49,20 @@ export function reprocessConvertibleSource(
   displayName = sourceAbs,
   options: ConvertibleOptions = {},
 ): ConvertibleReprocessResult {
-  const format = findFormat(displayName);
-  if (!format) return { status: 'unsupported' };
+  const spec = findSpec(displayName);
+  if (!spec) return { status: 'unsupported' };
   clearRecord(filesystemPath.absolute(sourceAbs));
-  format.reset(sourceAbs);
-  format.queue(sourceAbs, { ...options, urgency: 'interactive' });
+  (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(sourceAbs);
+  queue(spec, sourceAbs, { ...options, urgency: 'interactive' });
   return { status: 'queued' };
 }
 
 export function prepareConvertibleSource(sourceAbs: string, displayName = sourceAbs): boolean {
-  const format = findFormat(displayName);
-  if (!format?.interactive) return false;
+  const spec = findSpec(displayName);
+  if (!spec?.interactive) return false;
   const sourcePath = filesystemPath.absolute(sourceAbs);
   if (!promoteConversion(sourcePath, 'interactive')) {
-    format.queue(sourceAbs, { urgency: 'interactive' });
+    queue(spec, sourceAbs, { urgency: 'interactive' });
   }
   return true;
 }
@@ -109,15 +72,16 @@ export async function discoverConvertibleSources(
   knownCandidates?: readonly string[],
 ): Promise<void> {
   const candidates = knownCandidates
-    ?? await collectSourceCandidates(folderAbs, (candidate) => findFormat(candidate) != null);
-  for (const format of FORMATS) await format.discover(folderAbs, candidates);
+    ?? await collectSourceCandidates(folderAbs, (candidate) => findSpec(candidate) != null);
+  for (const spec of SPECS) await discoverCandidateSources(candidates, spec);
 }
 
 export function indexFreshConvertibleSource(
   sourceAbs: string,
   displayName = sourceAbs,
 ): Promise<IndexUpsertResult | null> {
-  return findFormat(displayName)?.indexFresh(sourceAbs) ?? Promise.resolve(null);
+  const spec = findSpec(displayName);
+  return spec ? indexFreshDerived(sourceAbs, spec) : Promise.resolve(null);
 }
 
 export async function currentPreparedTextPathAsync(
@@ -125,17 +89,17 @@ export async function currentPreparedTextPathAsync(
   displayName = sourceAbs,
   known?: { sourceMtimeMs: number; derivedMtimeMs: number },
 ): Promise<string | null> {
-  const format = findFormat(displayName);
-  if (!format || isConversionTextUnavailable(sourceAbs)) return null;
+  const spec = findSpec(displayName);
+  if (!spec || isConversionTextUnavailable(sourceAbs)) return null;
   try {
     if (!known) {
       const [source, derived] = await Promise.all([
-        fs.promises.stat(sourceAbs), fs.promises.stat(format.textCandidatePath(sourceAbs)),
+        fs.promises.stat(sourceAbs), fs.promises.stat(spec.derivedNote(sourceAbs)),
       ]);
       if (!source.isFile() || !derived.isFile()) return null;
       known = { sourceMtimeMs: source.mtimeMs, derivedMtimeMs: derived.mtimeMs };
     }
-    const current = await format.currentTextPathAsync(sourceAbs, known);
+    const current = await currentDerivedTextPath(spec, sourceAbs, known);
     return isConversionTextUnavailable(sourceAbs) ? null : current;
   } catch {
     return null;
@@ -143,13 +107,13 @@ export async function currentPreparedTextPathAsync(
 }
 
 export function preparedTextCandidatePath(sourceAbs: string, displayName = sourceAbs): string | null {
-  return findFormat(displayName)?.textCandidatePath(sourceAbs) ?? null;
+  return findSpec(displayName)?.derivedNote(sourceAbs) ?? null;
 }
 
-function findFormat(candidate: string): ConvertibleFormatAdapter | null {
-  return FORMATS.find((format) => format.matches(candidate)) ?? null;
+function findSpec(candidate: string): ConversionSpec | null {
+  return SPECS.find((spec) => spec.matches(candidate)) ?? null;
 }
 
-function urgencyOnly(options: ConvertibleOptions): { urgency?: 'interactive' } {
-  return options.urgency ? { urgency: options.urgency } : {};
+function queue(spec: ConversionSpec, sourceAbs: string, options: ConvertibleOptions): void {
+  maybeConvert(sourceAbs, spec, { urgency: options.urgency ?? 'background' });
 }

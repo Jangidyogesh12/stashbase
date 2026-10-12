@@ -77,9 +77,16 @@ export interface ConversionSpec {
   matches: (name: string) => boolean;
   /** The AppData derived-note path for a source file. */
   derivedNote: (absPath: string) => string;
-  /** Optional completeness check for formats whose derived note can be
-   *  assembled from resumable partial work. */
+  /** Marker the extractor writes last; a derived file is complete only when
+   *  its final `tailBytes` contain `text`. */
+  completeMarker?: { text: string; tailBytes: number };
+  /** Optional extra synchronous completeness check after the marker. */
   derivedReady?: (absPath: string, derivedAbsPath: string) => boolean;
+  /** Optional off-thread validation of the full derived bytes before they are
+   *  served as current prepared text. */
+  validatePrepared?: (derived: Buffer) => Promise<boolean>;
+  /** Opening the source promotes or queues its preparation (DOCX preview). */
+  interactive?: boolean;
   /** Register format-owned resources for each new task, including automatic
    * rediscovery. Coalesced requests do not transfer that ownership. */
   onScheduled?: (sourceAbs: string, completion: Promise<void>, urgency: ConversionUrgency) => void;
@@ -100,7 +107,7 @@ export interface ConversionSpec {
 
 export type DerivedFreshnessSpec = Pick<
   ConversionSpec,
-  'derivedNote' | 'derivedReady'
+  'derivedNote' | 'completeMarker' | 'derivedReady'
 >;
 
 export class TransientConversionError extends Error {
@@ -140,9 +147,73 @@ export function derivedIsFresh(
     const derivedAbs = spec.derivedNote(absPath);
     const derivedMtime = known?.derivedMtimeMs ?? fs.statSync(derivedAbs).mtimeMs;
     const sourceMtime = known?.sourceMtimeMs ?? fs.statSync(absPath).mtimeMs;
-    return derivedMtime >= sourceMtime && (spec.derivedReady?.(absPath, derivedAbs) ?? true);
+    return derivedMtime >= sourceMtime && derivedIsComplete(spec, absPath, derivedAbs);
   } catch {
     return false; // derived missing (or source gone) → not fresh
+  }
+}
+
+function derivedIsComplete(spec: DerivedFreshnessSpec, absPath: string, derivedAbs: string): boolean {
+  return (!spec.completeMarker || derivedTailContainsSync(derivedAbs, spec.completeMarker))
+    && (spec.derivedReady?.(absPath, derivedAbs) ?? true);
+}
+
+function tailContains(bytes: Buffer, marker: { text: string; tailBytes: number }): boolean {
+  return bytes.subarray(Math.max(0, bytes.length - marker.tailBytes)).toString('utf8').includes(marker.text);
+}
+
+function derivedTailContainsSync(file: string, marker: { text: string; tailBytes: number }): boolean {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(file, 'r');
+    const size = fs.fstatSync(fd).size;
+    const buffer = Buffer.alloc(Math.min(size, marker.tailBytes));
+    fs.readSync(fd, buffer, 0, buffer.length, size - buffer.length);
+    return tailContains(buffer, marker);
+  } catch {
+    return false;
+  } finally {
+    if (fd != null) {
+      try { fs.closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}
+
+async function derivedTailContains(file: string, marker: { text: string; tailBytes: number }): Promise<boolean> {
+  let handle: fs.promises.FileHandle | null = null;
+  try {
+    handle = await fs.promises.open(file, 'r');
+    const { size } = await handle.stat();
+    const buffer = Buffer.alloc(Math.min(size, marker.tailBytes));
+    await handle.read(buffer, 0, buffer.length, size - buffer.length);
+    return tailContains(buffer, marker);
+  } catch {
+    return false;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+/** Async freshness check for serving prepared text: the caller supplies
+ *  known mtimes, and the derived file must be complete (and valid, for formats
+ *  with `validatePrepared`). Returns the derived path or null. */
+export async function currentDerivedTextPath(
+  spec: Pick<ConversionSpec, 'derivedNote' | 'completeMarker' | 'validatePrepared'>,
+  sourceAbs: string,
+  known: { sourceMtimeMs: number; derivedMtimeMs: number },
+): Promise<string | null> {
+  if (known.derivedMtimeMs < known.sourceMtimeMs) return null;
+  const derivedAbs = spec.derivedNote(sourceAbs);
+  if (!spec.validatePrepared) {
+    return !spec.completeMarker || await derivedTailContains(derivedAbs, spec.completeMarker) ? derivedAbs : null;
+  }
+  // Validation needs the whole file; check the marker on the same bytes.
+  try {
+    const bytes = await fs.promises.readFile(derivedAbs);
+    if (spec.completeMarker && !tailContains(bytes, spec.completeMarker)) return null;
+    return await spec.validatePrepared(bytes) ? derivedAbs : null;
+  } catch {
+    return null;
   }
 }
 
@@ -333,7 +404,7 @@ async function executeConversion(
       return 'rediscover';
     }
     const completedDerived = spec.derivedNote(absPath);
-    if (spec.derivedReady && !spec.derivedReady(absPath, completedDerived)) {
+    if (!derivedIsComplete(spec, absPath, completedDerived)) {
       log.info(`${spec.kind}: derived output became stale during indexing, rediscovering ${absPath}`);
       try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
         log.warn(`${spec.kind}: stale derived cleanup failed after indexing ${absPath}:`, cleanupErr);
