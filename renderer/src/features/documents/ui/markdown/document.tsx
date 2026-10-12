@@ -61,6 +61,8 @@ export interface MarkdownDocumentProps {
   active: boolean;
   canChangeMode: boolean;
   dirty: boolean;
+  /** Registers the surface's held edit with the document runtime. */
+  holdEdits(flush: () => void): () => void;
   mode: MarkdownViewMode;
   name: string;
   /** Ask Agent on the selection toolbar, with the exact selection. Absent
@@ -86,6 +88,7 @@ export function MarkdownDocument({
   active,
   canChangeMode,
   dirty,
+  holdEdits,
   mode,
   name,
   onAskAgent,
@@ -104,6 +107,8 @@ export function MarkdownDocument({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<CrepeBuilder | null>(null);
   const onChangeRef = useRef(onChange);
+  const holdEditsRef = useRef(holdEdits);
+  const changesRef = useRef<ReturnType<typeof watchMarkdownChanges> | null>(null);
   const readOnlyRef = useRef(readOnly);
   const valueRef = useRef(value);
   const activeRef = useRef(active);
@@ -140,6 +145,7 @@ export function MarkdownDocument({
   openExternalRef.current = onOpenExternal;
   sourceRef.current = source;
   onChangeRef.current = onChange;
+  holdEditsRef.current = holdEdits;
   readOnlyRef.current = readOnly;
   valueRef.current = value;
 
@@ -192,11 +198,18 @@ export function MarkdownDocument({
     refreshHeadingsRef.current = updateHeadings;
     editor.setReadonly(readOnlyRef.current);
     attachWritingAids(editor, wordCounter);
-    watchMarkdownChanges(editor, (markdown) => {
-      if (readOnlyRef.current || suppressChangeRef.current) return;
-      onChangeRef.current(frontmatterRef.current + markdown);
-      updateHeadings();
+    const changes = watchMarkdownChanges(editor, {
+      accepts: () => !readOnlyRef.current && !suppressChangeRef.current,
+      report: (markdown) => {
+        const next = frontmatterRef.current + markdown;
+        // Seen here, the store's echo of it skips a second serialize in reconcile.
+        observedValueRef.current = next;
+        onChangeRef.current(next);
+        updateHeadings();
+      },
     });
+    changesRef.current = changes;
+    const releaseHeldEdits = holdEditsRef.current(changes.flush);
 
     const stopCreation = startMarkdownEditorCreation(editor, {
       failed: () => {
@@ -205,6 +218,7 @@ export function MarkdownDocument({
       },
       ready: () => {
         editorRef.current = editor;
+        changes.rebase(initial.body);
         editor.setReadonly(readOnlyRef.current);
         updateHeadings();
         setCreationState('ready');
@@ -218,6 +232,7 @@ export function MarkdownDocument({
         refreshHeadingsRef.current = () => undefined;
       }
       stopCreation();
+      releaseHeldEdits();
     };
   }, [askAgentRun, attachReview, attempt, navigation, tabId, wordCounter]);
 
@@ -231,13 +246,15 @@ export function MarkdownDocument({
     // for, and nothing accepted yet leaves the buffer clean, so a background
     // reconcile would otherwise replace the text the review describes.
     if (!editor || creationState !== 'ready' || dirty || reviewActive) return;
+    // A held edit is dirty work this render has not seen yet.
+    if (changesRef.current?.flush()) return;
     if (observedValueRef.current === value) return;
     observedValueRef.current = value;
     const incoming = splitLeadingYamlFrontmatter(value);
     frontmatterRef.current = incoming.source;
-    if (editor.getMarkdown() === incoming.body) return;
     suppressChangeRef.current = true;
-    editor.editor.action(replaceAll(incoming.body));
+    if (editor.getMarkdown() !== incoming.body) editor.editor.action(replaceAll(incoming.body));
+    changesRef.current?.rebase(incoming.body);
     queueMicrotask(() => {
       suppressChangeRef.current = false;
       refreshHeadingsRef.current();

@@ -203,6 +203,14 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   background: transparent;
 }
 
+/* Off-screen prose skips layout and paint, so a long document costs what is
+   on screen rather than its length. Blocks with controls that overflow their
+   box (code, tables, math) keep normal painting. */
+.markdown-crepe .milkdown .ProseMirror > :where(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 2lh;
+}
+
 /* Three classes intentionally outrank Crepe's later-loaded frame padding. */
 .markdown-crepe .milkdown .ProseMirror {
   box-sizing: border-box;

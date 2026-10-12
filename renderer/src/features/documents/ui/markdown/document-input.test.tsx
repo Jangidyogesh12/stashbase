@@ -17,6 +17,7 @@ it('renders unique heading anchors without turning presentation into document ed
       active
       canChangeMode
       dirty={false}
+      holdEdits={() => () => undefined}
       mode="writer"
       name="input.md"
       navigation={createDocumentNavigationRuntime('input')}

@@ -58,8 +58,14 @@ vi.mock('@milkdown/crepe/builder', () => ({
 }));
 
 vi.mock('./changes', () => ({
-  watchMarkdownChanges: (_editor: unknown, report: (markdown: string) => void) => {
-    editorHarness.change = (_context, markdown) => report(markdown);
+  watchMarkdownChanges: (
+    _editor: unknown,
+    { accepts, report }: { accepts(): boolean; report(markdown: string): void },
+  ) => {
+    editorHarness.change = (_context, markdown) => {
+      if (accepts()) report(markdown);
+    };
+    return { flush: () => false, rebase: () => undefined };
   },
 }));
 
@@ -79,6 +85,7 @@ describe('Markdown document surface', () => {
         active
         canChangeMode
         dirty={false}
+        holdEdits={() => () => undefined}
         mode="reading"
         name="plan.md"
         onChange={vi.fn()}
@@ -107,6 +114,7 @@ describe('Markdown document surface', () => {
         active
         canChangeMode
         dirty={false}
+        holdEdits={() => () => undefined}
         mode="writer"
         name="plan.md"
         onChange={onChange}
@@ -141,6 +149,7 @@ describe('Markdown document surface', () => {
         active
         canChangeMode
         dirty={false}
+        holdEdits={() => () => undefined}
         mode="writer"
         name="plan.md"
         onChange={vi.fn()}
@@ -164,6 +173,7 @@ describe('Markdown document surface', () => {
         active
         canChangeMode
         dirty={false}
+        holdEdits={() => () => undefined}
         mode="reading"
         name="plan.md"
         onChange={vi.fn()}

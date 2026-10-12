@@ -97,6 +97,7 @@ function Surface({
       active
       canChangeMode
       dirty={editor !== null && editor.value !== editor.baseline}
+      holdEdits={() => () => undefined}
       mode="writer"
       name="plan.md"
       navigation={navigation}

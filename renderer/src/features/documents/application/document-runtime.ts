@@ -72,6 +72,8 @@ export function createDocumentRuntime({
   );
   let disposed = false;
   let saveInFlight: Promise<boolean> | null = null;
+  let heldEdit: (() => void) | null = null;
+  const settleEdits = () => heldEdit?.();
 
   const { accept, capture, retireOperations } = createScopeGuard<DocumentScope>({
     disposed: () => disposed,
@@ -167,6 +169,7 @@ export function createDocumentRuntime({
   };
 
   const save = async (api: DocumentSourcePort): Promise<boolean> => {
+    settleEdits();
     while (true) {
       const pendingSave = saveInFlight;
       if (pendingSave) {
@@ -224,6 +227,13 @@ export function createDocumentRuntime({
         recordUsage?.({ event: 'document_engaged', activity: 'edit', format });
       }
     },
+    holdEdits(flush) {
+      heldEdit = flush;
+      return () => {
+        if (heldEdit === flush) heldEdit = null;
+      };
+    },
+    settleEdits,
     publishRevisionCount(reviewId, pending) {
       if (disposed) return;
       store.setState((state) => publishDocumentRevisionCount(state, reviewId, pending));
@@ -264,6 +274,9 @@ export function createDocumentRuntime({
     },
     reconcile(nextSource) {
       if (disposed) return;
+      // A held edit makes the buffer dirty, which is what keeps a reconcile
+      // from replacing it.
+      settleEdits();
       const next = reconcileDocumentSource(store.getState(), nextSource);
       if (next === store.getState()) return;
       // The bytes under the editor were replaced, so a save still in flight is
@@ -272,6 +285,7 @@ export function createDocumentRuntime({
       store.setState(next);
     },
     async finishMerge(api) {
+      settleEdits();
       const editor = store.getState().editor;
       if (disposed || saveInFlight || editor?.save.kind !== 'merging' || editor.save.finishing)
         return false;
@@ -290,6 +304,7 @@ export function createDocumentRuntime({
       }
     },
     resolveConflict(api, resolution) {
+      settleEdits();
       return disposed
         ? Promise.resolve(false)
         : resolveDocumentConflict(resolutionContext, api, resolution);

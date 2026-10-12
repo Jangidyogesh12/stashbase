@@ -280,6 +280,36 @@ describe('Document tabs runtime', () => {
     );
   });
 
+  it('settles an edit the surface still holds before saving or reconciling over it', async () => {
+    const api = createApi();
+    const runtime = createDocumentTabsRuntime({
+      api,
+      createId: idFactory(),
+      createQueries: () => documentQueryScope(),
+      folderPath: '/project/notes',
+      generation: 1,
+    });
+    const document = await runtime.open({ folderPath: '/project/notes', path: 'one.md' });
+    document?.reconcile(textSource({ content: 'before', version: 'v1' }));
+    let held: string | null = 'typed';
+    document?.holdEdits(() => {
+      if (held === null) return;
+      document.change(held);
+      held = null;
+    });
+
+    document?.reconcile(textSource({ content: 'external', version: 'v2' }));
+    expect(document?.store.getState().editor?.value).toBe('typed');
+
+    held = 'typed more';
+    await expect(runtime.close('tab-1')).resolves.toBe(true);
+    expect(api.save).toHaveBeenLastCalledWith(
+      { folderPath: '/project/notes', path: 'one.md' },
+      { baseVersion: 'v1', content: 'typed more' },
+      expect.any(AbortSignal),
+    );
+  });
+
   it('retires a token once the open set has moved past it', async () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),

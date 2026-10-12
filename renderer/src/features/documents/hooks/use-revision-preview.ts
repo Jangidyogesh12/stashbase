@@ -32,6 +32,7 @@ export function useRevisionPreview(
       if (!enabled || !documents) return;
       const activeTabId = documents.store.getState().activeTabId;
       const active = activeTabId ? documents.getDocument(activeTabId) : null;
+      active?.settleEdits();
       const editor = active?.store.getState().editor ?? null;
       if (!active || !editor) {
         setRefusal(NO_DOCUMENT);

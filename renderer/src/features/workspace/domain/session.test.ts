@@ -140,6 +140,19 @@ describe('workspace session state', () => {
     expect(normalized.shell.sidebarWidth).toBe(360);
   });
 
+  it('keeps the snapshot when a recorded folder projection is unchanged', () => {
+    const state = { ...createWorkspaceState(scope), expanded: { drafts: true as const } };
+    const documents = { activeTabId: 'tab-1', tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }] };
+    const snapshot = recordFolderSession(createWorkspaceSessionSnapshot(), state, documents);
+
+    expect(
+      recordFolderSession(snapshot, { ...state, expanded: { drafts: true } }, { ...documents }),
+    ).toBe(snapshot);
+    expect(
+      recordFolderSession(snapshot, { ...state, selectedPath: 'drafts/plan.md' }, documents),
+    ).not.toBe(snapshot);
+  });
+
   it('clamps the Agent pane width and keeps unchanged widths referentially stable', () => {
     const snapshot = createWorkspaceSessionSnapshot();
     expect(setSessionAgentPaneWidth(snapshot, 5_000).shell.agentPaneWidth).toBe(960);
