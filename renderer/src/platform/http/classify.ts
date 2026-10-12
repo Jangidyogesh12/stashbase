@@ -1,10 +1,11 @@
 /**
  * The one place a refused HTTP call becomes a feature's own failure.
  *
- * Every adapter names the ladder it reports on, the sentences its kinds read
- * as, and the statuses only it can classify; everything else — the shared
- * status ladder, the server's own sentence, the schema check — happens here,
- * so no adapter invents its own idea of what a 404 means.
+ * Every adapter names the ladder it reports on and the statuses only it can
+ * classify; everything else — the shared status ladder, the server's own
+ * sentence, the schema check — happens here, so no adapter invents its own
+ * idea of what a 404 means. A failure's message is diagnostic: surfaces read
+ * the kind, and the server's sentence through the cause.
  */
 import type { HttpClient, HttpRequest, HttpResponse } from '@/platform/http/client';
 import type {
@@ -29,9 +30,6 @@ export interface ResponseSchema<T> {
 /** StashBase failure bodies all carry one sentence written for the reader. */
 type FailureBodySchema = ResponseSchema<{ error: string }>;
 
-/** One user-facing sentence per transport kind, overridable per call. */
-type TransportMessages = Partial<Record<TransportFailureKind, string>>;
-
 /** What the shared ladder made of a refusal, for adapters that add kinds. */
 export interface TransportFailure {
   /** The kind the shared ladder would report for this status. */
@@ -47,12 +45,11 @@ export interface TransportOptions<Extra extends string = never> {
   /** First refusal on a non-2xx response; return null to fall through to the
    *  shared ladder. Adapters use it for the kinds only they can meet. */
   readonly failure?: ((failure: TransportFailure) => FeatureError<Extra> | null) | undefined;
-  /** Reads the server's sentence out of a refusal body. It becomes the cause,
-   *  and the message too when `serverMessage` is set. */
+  /** Reads the server's sentence out of a refusal body. It becomes the cause. */
   readonly failureSchema?: FailureBodySchema | undefined;
-  readonly messages?: TransportMessages | undefined;
-  /** Surface the server's own sentence instead of the per-kind fallback. */
-  readonly serverMessage?: boolean | undefined;
+  /** The kind a 400 reads as when it is the reader's own request coming back
+   *  rather than a capability that could not answer. */
+  readonly invalidRequest?: Extra | undefined;
 }
 
 export interface TransportRequest<Extra extends string = never> extends TransportOptions<Extra> {
@@ -62,7 +59,7 @@ export interface TransportRequest<Extra extends string = never> extends Transpor
   readonly signal?: AbortSignal | undefined;
 }
 
-/** What one call names on top of its adapter's fixed ladder and sentences.
+/** What one call names on top of its adapter's fixed ladder.
  *  `body` and `method` are absent for a plain GET rather than present and
  *  undefined, which is what `exactOptionalPropertyTypes` refuses. */
 export interface TransportCall<Extra extends string = never> extends TransportOptions<Extra> {
@@ -86,6 +83,7 @@ export function requestOptions<Extra extends string = never>(
   };
 }
 
+/** Diagnostic sentences for reports and logs; surfaces read the kind. */
 const FALLBACK_MESSAGES: Record<TransportFailureKind, string> = {
   'invalid-response': 'StashBase returned an unexpected response.',
   'scope-lost': 'That folder is no longer available in this window.',
@@ -105,10 +103,6 @@ export function classifyResponse(response: HttpResponse): TransportFailureKind {
   return 'unavailable';
 }
 
-function messageFor(messages: TransportMessages | undefined, kind: TransportFailureKind): string {
-  return messages?.[kind] ?? FALLBACK_MESSAGES[kind];
-}
-
 function serverSentence(schema: FailureBodySchema | undefined, body: unknown): string | null {
   if (!schema) return null;
   const parsed = schema.safeParse(body);
@@ -124,15 +118,11 @@ export function transportError<Extra extends string = never>(
   const serverMessage = serverSentence(options.failureSchema, response.body);
   const owned = options.failure?.({ kind, response, serverMessage });
   if (owned) return owned;
-  const message =
-    options.serverMessage === true && serverMessage !== null
-      ? serverMessage
-      : messageFor(options.messages, kind);
-  return new options.error(
-    kind,
-    message,
-    serverMessage === null ? undefined : { cause: new Error(serverMessage) },
-  );
+  const cause = serverMessage === null ? undefined : { cause: new Error(serverMessage) };
+  if (response.status === 400 && options.invalidRequest !== undefined) {
+    return new options.error(options.invalidRequest, 'StashBase refused the request.', cause);
+  }
+  return new options.error(kind, FALLBACK_MESSAGES[kind], cause);
 }
 
 /** Reports an unreachable server on the owning feature's ladder. An abort the
@@ -142,7 +132,7 @@ function unreachable<Extra extends string>(
   options: TransportRequest<Extra>,
 ): unknown {
   if (options.signal?.aborted) return cause;
-  return new options.error('unavailable', messageFor(options.messages, 'unavailable'), { cause });
+  return new options.error('unavailable', FALLBACK_MESSAGES.unavailable, { cause });
 }
 
 /** Performs one call and classifies transport and refusal failure, leaving the
@@ -179,7 +169,7 @@ export async function request<T, Extra extends string = never>(
   if (!parsed.success) {
     const error = new options.error(
       'invalid-response',
-      messageFor(options.messages, 'invalid-response'),
+      FALLBACK_MESSAGES['invalid-response'],
       parsed.error
         ? {
             cause: new Error(

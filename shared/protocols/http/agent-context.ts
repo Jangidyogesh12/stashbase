@@ -40,7 +40,3 @@ export const agentAttachResponseSchema = z
   .object({ files: z.array(agentAttachOutcomeSchema).max(50) })
   .strict();
 
-export type AgentContextFileWire = z.infer<
-  typeof agentContextFileResponseSchema
->;
-export type AgentAttachResponseWire = z.infer<typeof agentAttachResponseSchema>;

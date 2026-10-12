@@ -14,9 +14,8 @@
  * MFS receives raw Markdown/JSON/TXT and markdown-shaped HTML plaintext; all format knowledge lives here / in
  * the converters, never in MFS.
  *
- * Lives separately from `files.ts` because `files.ts` imports from
- * `watcher.ts` (→ `state.ts`, which instantiates `MfsIndexer` at module
- * top level). The MCP bundle entry only needs `detectFormat`, so
+ * Keep this module free of `watcher.ts` / `state.ts` imports (`state.ts`
+ * instantiates `MfsIndexer` at module top level). The MCP bundle entry only needs `detectFormat`, so
  * isolating it here keeps `mcp/server.ts` → `indexer.mfs.ts` from
  * pulling watcher/state into the bundle and creating an init-order
  * cycle that the packaged bundle can't resolve correctly.
@@ -38,7 +37,6 @@ import {
   STRUCTURED_DATA_EXTENSIONS,
   type DirectTextFormat,
   type KnownViewerFormat,
-  type ViewerFormat,
 } from '../shared/file-formats.ts';
 import { SEARCH_TYPE_CATEGORIES, type SearchTypeCategory } from '../shared/search-types.ts';
 
@@ -169,15 +167,6 @@ export function searchExtensionsForTypes(types: readonly SearchTypeCategory[]): 
   const unique = [...new Set(types)];
   if (unique.length === 0 || unique.length === SEARCH_TYPE_CATEGORIES.length) return null;
   return unique.flatMap((t) => SEARCH_TYPE_EXTENSIONS[t].map((ext) => `.${ext}`));
-}
-
-/** True when `name`'s extension belongs to one of the given categories. */
-export function matchesSearchTypes(name: string, types: readonly SearchTypeCategory[]): boolean {
-  if (types.length === 0) return true;
-  const exts = searchExtensionsForTypes(types);
-  if (exts == null) return true;
-  const lower = name.toLowerCase();
-  return exts.some((ext) => lower.endsWith(ext));
 }
 
 function pathBasename(name: string): string {

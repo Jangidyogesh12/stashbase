@@ -88,6 +88,6 @@ describe('exact search API', () => {
         },
         new AbortController().signal,
       ),
-    ).rejects.toMatchObject({ kind: 'unavailable', message: 'Search is unavailable.' });
+    ).rejects.toMatchObject({ kind: 'unavailable' });
   });
 });

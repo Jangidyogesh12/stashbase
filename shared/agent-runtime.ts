@@ -133,7 +133,3 @@ export interface Agent {
   upgrade?: AgentUpgradeOffer;
 }
 
-export interface AgentsResponse {
-  clis: Agent[];
-  debug?: AgentRuntimeDebugState;
-}

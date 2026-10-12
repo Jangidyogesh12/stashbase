@@ -1,9 +1,15 @@
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import readline from 'node:readline';
+import { appVersion } from './codex-app-server-process.ts';
+import { logger } from './log.ts';
 import {
   errorFromUnknown,
   rpcError,
   type JsonObject,
   type JsonRpcId,
 } from './codex-protocol.ts';
+
+const log = logger('codex-app-server');
 
 export const CODEX_RPC_REQUEST_TIMEOUT_MS = 30000;
 
@@ -132,4 +138,68 @@ export class CodexRpcPeer {
     cancelTimeout(pending.timer);
     pending.timer = undefined;
   }
+}
+
+export interface CodexAppServerConnection {
+  readonly rpc: CodexRpcPeer;
+  /** The StashBase client handshake every app-server connection begins with. */
+  initialize(): Promise<unknown>;
+  /** Close the RPC peer and stop reading the process streams. Idempotent. */
+  close(error?: Error): void;
+}
+
+/** Wire a spawned app-server's stdio to a JSON-RPC peer. A process exit or
+ * spawn error closes the connection with its cause, then reports it through
+ * `onExit`; an explicit `close()` reports nothing. Retiring the process stays
+ * with the caller. */
+export function connectCodexAppServer(
+  proc: ChildProcessWithoutNullStreams,
+  options: Pick<CodexRpcPeerOptions, 'requestTimeoutMs' | 'onRequest' | 'onNotification'> & {
+    onExit?: (error: Error) => void;
+  } = {},
+): CodexAppServerConnection {
+  const rpc = new CodexRpcPeer((line) => {
+    if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
+    proc.stdin.write(`${line}\n`);
+  }, options);
+  const stdout = readline.createInterface({ input: proc.stdout });
+  const stderr = readline.createInterface({ input: proc.stderr });
+  stdout.on('line', (line) => rpc.receiveLine(line));
+  stderr.on('line', (line) => {
+    const clean = line.trim();
+    if (clean) log.debug(clean);
+  });
+  let closed = false;
+  const close = (error?: Error): boolean => {
+    if (closed) return false;
+    closed = true;
+    rpc.close(error);
+    stdout.close();
+    stderr.close();
+    return true;
+  };
+  const exit = (error: Error): void => {
+    if (close(error)) options.onExit?.(error);
+  };
+  proc.once('error', (err) => exit(errorFromUnknown(err)));
+  proc.once('close', (code, signal) => {
+    exit(new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`));
+  });
+  return {
+    rpc,
+    initialize: () => rpc.request('initialize', {
+      clientInfo: { name: 'StashBase', title: null, version: appVersion() },
+      capabilities: {
+        experimentalApi: true,
+        requestAttestation: false,
+        // Guardian also emits a prose summary for every automatic review.
+        // Live sessions prefer the structured completion event so successful
+        // Auto reviews stay quiet while denied or interrupted reviews remain
+        // visible. Older app-servers that ignore this capability continue
+        // through the legacy guardianWarning handler.
+        optOutNotificationMethods: ['guardianWarning'],
+      },
+    }),
+    close: (error) => { close(error); },
+  };
 }

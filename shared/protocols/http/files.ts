@@ -1,26 +1,20 @@
 import { z } from 'zod';
+import { VIEWER_FORMATS } from '../../file-formats';
 
 const relativePathSchema = z.string().trim().min(1).max(4096);
 const folderPathSchema = z.string().trim().min(1).max(4096);
 const sourceVersionSchema = z.string().trim().min(1).max(256);
 const boundedSourceTextSchema = z.string().max(8 * 1024 * 1024);
 
-export const viewerFormatSchema = z.enum([
-  'md',
-  'html',
-  'json',
-  'txt',
-  'pdf',
-  'image',
-  'docx',
-  'audio',
-  'generic',
-]);
+const viewerFormatSchema = z.enum(VIEWER_FORMATS);
 
-export const workspaceFileSchema = z
+export const WORKSPACE_FILE_KINDS = ['regular', 'symlink', 'special', 'cloud-placeholder'] as const;
+export const WORKSPACE_ENTRY_AVAILABILITIES = ['available', 'unreadable'] as const;
+
+const workspaceFileSchema = z
   .object({
-    availability: z.enum(['available', 'unreadable']).optional(),
-    entryKind: z.enum(['regular', 'symlink', 'special', 'cloud-placeholder']).optional(),
+    availability: z.enum(WORKSPACE_ENTRY_AVAILABILITIES).optional(),
+    entryKind: z.enum(WORKSPACE_FILE_KINDS).optional(),
     format: viewerFormatSchema,
     heading: z.string().max(16_384),
     imported_at: z.string().max(64),
@@ -30,7 +24,7 @@ export const workspaceFileSchema = z
   })
   .strict();
 
-export const workspaceFolderSchema = z
+const workspaceFolderSchema = z
   .object({
     kind: z.enum(['normal', 'excluded', 'unreadable']).optional(),
     path: relativePathSchema,
@@ -67,7 +61,7 @@ export const workspaceRevealRequestSchema = z
 /** One leaf name: no separators, no traversal, and something left once
  *  trimmed. Whether the server keeps or completes an extension is the
  *  server's rule; the wire only rules out names that could leave the parent. */
-export const workspaceEntryNameSchema = z
+const workspaceEntryNameSchema = z
   .string()
   .trim()
   .min(1)
@@ -76,7 +70,7 @@ export const workspaceEntryNameSchema = z
     message: 'entry names cannot contain separators',
   });
 
-export const workspaceEntryKindSchema = z.enum(['file', 'folder']);
+const workspaceEntryKindSchema = z.enum(['file', 'folder']);
 
 /** Identity of one file or folder inside an explicit member folder. */
 export const workspaceEntryRequestSchema = z
@@ -226,18 +220,6 @@ export const documentTextSaveFailureSchema = z
   .strict();
 
 export type WorkspaceFilesWire = z.infer<typeof workspaceFilesSchema>;
-export type WorkspaceRevealRequestWire = z.infer<typeof workspaceRevealRequestSchema>;
-export type WorkspaceEntryKindWire = z.infer<typeof workspaceEntryKindSchema>;
-export type WorkspaceEntryRequestWire = z.infer<typeof workspaceEntryRequestSchema>;
-export type WorkspaceCreateEntryRequestWire = z.infer<typeof workspaceCreateEntryRequestSchema>;
-export type WorkspaceRenameEntryRequestWire = z.infer<typeof workspaceRenameEntryRequestSchema>;
-export type WorkspaceEntryPathResponseWire = z.infer<typeof workspaceEntryPathResponseSchema>;
-export type DocumentTextSourceRequestWire = z.infer<typeof documentTextSourceRequestSchema>;
-export type DocumentTextSourceResponseWire = z.infer<typeof documentTextSourceResponseSchema>;
-export type GenericFilePreviewResponseWire = z.infer<typeof genericFilePreviewResponseSchema>;
-export type DocumentTextSaveRequestWire = z.infer<typeof documentTextSaveRequestSchema>;
-export type DocumentTextOverwriteRequestWire = z.infer<typeof documentTextOverwriteRequestSchema>;
-export type DocumentTextSaveResponseWire = z.infer<typeof documentTextSaveResponseSchema>;
 
 /** Original JSON response of a file mutation, queried without replaying it. */
 export const fileOperationReceiptSchema = z.object({

@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Suspense, useEffect, useRef, type ReactNode } from 'react';
 
-import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentAsset, DocumentAssetPort } from '@/features/documents/application/ports';
 import { documentAssetQuery } from '@/features/documents/application/queries';
+import { RefreshFailedBanner } from '@/features/documents/ui/banner';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import type { DocumentViewerStatus, PreparationSlotFormat, PreparedOnOpenFormat } from './viewer';
@@ -70,14 +70,7 @@ export function AssetSurface({
   // viewer's own chunk is still arriving.
   return (
     <>
-      {asset.isError && (
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
-          <span role="status">Refresh failed. Showing the last loaded preview.</span>
-          <Button onClick={retry} size="compact" variant="tertiary">
-            Retry
-          </Button>
-        </div>
-      )}
+      {asset.isError && <RefreshFailedBanner onRetry={retry} />}
       {preparationSlot === undefined ? null : renderPreparation?.(source, preparationSlot)}
       <Suspense fallback={status({ name })}>{children({ asset: asset.data, retry })}</Suspense>
     </>

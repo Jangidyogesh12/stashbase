@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 
 import {
@@ -11,6 +10,7 @@ import {
   windowFullScreenSchema,
   windowContextReleaseResponseSchema,
 } from '../../shared/protocols/electron/window-lifecycle.ts';
+import { createAckCoordinator } from '../ack-coordinator.ts';
 import { authorizeSender, type SenderAuthorization } from '../project/dialog.ts';
 
 export { WINDOW_LIFECYCLE_CAPABILITY };
@@ -33,32 +33,19 @@ export interface WindowLifecycleDependencies extends SenderAuthorization {
 export function registerWindowLifecycle(
   dependencies: WindowLifecycleDependencies,
   {
-    createRequestId = () => crypto.randomUUID(),
-    timeoutMs = 5_000,
+    createRequestId,
+    timeoutMs,
   }: { createRequestId?: () => string; timeoutMs?: number } = {},
 ) {
   const loaded = new WeakSet<LifecycleWindow>();
   const approvedClose = new WeakSet<LifecycleWindow>();
   const closing = new WeakSet<LifecycleWindow>();
-  const pendingByWebContents = new Map<
-    number,
-    {
-      promise: Promise<boolean>;
-      reason: WindowContextReleaseReason;
-      requestId: string;
-      resolve: (ready: boolean) => void;
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
-
-  const settle = (webContentsId: number, ready: boolean) => {
-    const pending = pendingByWebContents.get(webContentsId);
-    if (!pending) return false;
-    pendingByWebContents.delete(webContentsId);
-    clearTimeout(pending.timer);
-    pending.resolve(ready);
-    return true;
-  };
+  const acks = createAckCoordinator({
+    channel: WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL,
+    message: (reason, requestId) => ({ reason, requestId }),
+    createRequestId,
+    timeoutMs,
+  });
 
   const request = (
     window: LifecycleWindow,
@@ -66,22 +53,7 @@ export function registerWindowLifecycle(
   ): Promise<boolean> => {
     if (window.isDestroyed() || window.webContents.isDestroyed()) return Promise.resolve(false);
     if (!loaded.has(window)) return Promise.resolve(true);
-    const webContentsId = window.webContents.id;
-    const existing = pendingByWebContents.get(webContentsId);
-    if (existing) {
-      return existing.reason === reason ? existing.promise : Promise.resolve(false);
-    }
-
-    const requestId = createRequestId();
-    let resolve!: (ready: boolean) => void;
-    const promise = new Promise<boolean>((done) => {
-      resolve = done;
-    });
-    const timer = setTimeout(() => settle(webContentsId, false), timeoutMs);
-    timer.unref?.();
-    pendingByWebContents.set(webContentsId, { promise, reason, requestId, resolve, timer });
-    window.webContents.send(WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL, { reason, requestId });
-    return promise;
+    return acks.request(window.webContents, reason);
   };
 
   dependencies.ipcMain.handle(
@@ -94,16 +66,14 @@ export function registerWindowLifecycle(
       ) as LifecycleWindow | null;
       if (!senderWindow) return windowContextReleaseResponseSchema.parse({ ok: true });
       const response = windowContextReleaseReadySchema.safeParse(rawResponse);
-      const pending = pendingByWebContents.get(event.sender.id);
-      if (
-        !response.success ||
-        !pending ||
-        pending.requestId !== response.data.requestId ||
-        pending.reason !== response.data.reason
-      ) {
-        return windowContextReleaseResponseSchema.parse({ ok: true });
+      if (response.success) {
+        acks.acknowledge(
+          event.sender.id,
+          response.data.requestId,
+          response.data.reason,
+          response.data.ready,
+        );
       }
-      settle(event.sender.id, response.data.ready);
       return windowContextReleaseResponseSchema.parse({ ok: true });
     },
   );
@@ -131,7 +101,7 @@ export function registerWindowLifecycle(
         // A gone renderer has already lost its buffers and cannot acknowledge
         // a save barrier. A live but unresponsive renderer still must do so.
         loaded.delete(window);
-        settle(webContentsId, true);
+        acks.settle(webContentsId, true);
       });
       window.on('close', (event) => {
         if (approvedClose.has(window) || !loaded.has(window)) return;
@@ -148,7 +118,7 @@ export function registerWindowLifecycle(
           })
           .finally(() => closing.delete(window));
       });
-      window.on('closed', () => settle(webContentsId, false));
+      window.on('closed', () => acks.settle(webContentsId, false));
     },
     hasLoadedRenderer(window: LifecycleWindow) {
       return loaded.has(window);

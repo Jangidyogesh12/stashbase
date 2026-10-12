@@ -62,9 +62,9 @@ export const updatesSnapshotSchema = z.discriminatedUnion('phase', [
 
 /** `unauthorized` is this window not being allowed to manage updates at all;
  *  `invalid-request` is a malformed payload; `failed` is main not answering. */
-export const UPDATE_FAILURE_KINDS = ['unauthorized', 'invalid-request', 'failed'] as const;
+const UPDATE_FAILURE_KINDS = ['unauthorized', 'invalid-request', 'failed'] as const;
 
-export const updatesFailureSchema = z
+const updatesFailureSchema = z
   .object({ kind: z.enum(UPDATE_FAILURE_KINDS) })
   .strict();
 
@@ -79,7 +79,7 @@ export const updatesSetAutoCheckRequestSchema = z.object({ enabled: z.boolean() 
 
 /** Development-only. The value walks the surface through phases a packaged
  *  build reaches only against a real release. */
-export const UPDATE_SIMULATION_VALUES = [
+const UPDATE_SIMULATION_VALUES = [
   'off',
   'available',
   'downloading',
@@ -93,9 +93,7 @@ export const updatesSetSimulationRequestSchema = z
   .strict();
 
 export type UpdatesSnapshot = z.infer<typeof updatesSnapshotSchema>;
-export type UpdatePhase = UpdatesSnapshot['phase'];
 export type UpdatesResult = z.infer<typeof updatesResultSchema>;
-export type UpdatesFailure = z.infer<typeof updatesFailureSchema>;
+type UpdatesFailure = z.infer<typeof updatesFailureSchema>;
 export type UpdateFailureKind = UpdatesFailure['kind'];
-export type UpdatesSetAutoCheckRequest = z.infer<typeof updatesSetAutoCheckRequestSchema>;
 export type UpdateSimulationValue = (typeof UPDATE_SIMULATION_VALUES)[number];

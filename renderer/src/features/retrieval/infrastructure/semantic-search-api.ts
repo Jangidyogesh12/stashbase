@@ -10,6 +10,7 @@ import {
 import { request, type TransportFailure } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
+  EMBEDDER_KEY_REQUIRED_CODE,
   semanticSearchFailureSchema,
   semanticSearchRequestSchema,
   semanticSearchResponseSchema,
@@ -45,7 +46,7 @@ function readinessFailure({
 }: TransportFailure): SemanticSearchError | null {
   const failure = semanticSearchFailureSchema.safeParse(response.body);
   const cause = serverMessage === null ? undefined : { cause: new Error(serverMessage) };
-  if (response.status === 412 || failure.data?.code === 'EMBEDDER_KEY_REQUIRED') {
+  if (response.status === 412 || failure.data?.code === EMBEDDER_KEY_REQUIRED_CODE) {
     return new SemanticSearchError(
       'not-set-up',
       'To search by meaning, set it up in StashBase Settings.',
@@ -70,10 +71,6 @@ export function createSemanticSearchAdapter(client: HttpClient): SemanticSearchP
           error: SemanticSearchError,
           failure: readinessFailure,
           failureSchema: semanticSearchFailureSchema,
-          messages: {
-            'invalid-response': 'Search returned an invalid response.',
-            unavailable: 'Search is unavailable.',
-          },
           method: 'POST',
           path: '/api/project/search',
           schema: semanticSearchResponseSchema,

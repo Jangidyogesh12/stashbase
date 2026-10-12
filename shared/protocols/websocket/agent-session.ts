@@ -5,9 +5,9 @@ import { agentIdSchema } from "../http/agent-runtime";
 const boundedText = (maximum: number) => z.string().max(maximum);
 const recordSchema = z.record(z.string(), z.unknown());
 
-export const agentAccessModeSchema = z.enum(["default", "acceptEdits", "plan", "auto"]);
+const agentAccessModeSchema = z.enum(["default", "acceptEdits", "plan", "auto"]);
 
-export const agentTurnFailureKindSchema = z.enum([
+const agentTurnFailureKindSchema = z.enum([
   "rate-limit",
   "quota",
   "allowance-exhausted",
@@ -17,13 +17,13 @@ export const agentTurnFailureKindSchema = z.enum([
   "runtime-outdated",
 ]);
 
-export const agentTurnFailureSchema = z.object({ kind: agentTurnFailureKindSchema }).strict();
+const agentTurnFailureSchema = z.object({ kind: agentTurnFailureKindSchema }).strict();
 
 import { agentModelSchema } from '../agent-model';
 
 export { agentModelSchema };
 
-export const agentSkillSchema = z
+const agentSkillSchema = z
   .object({
     id: boundedText(200),
     label: boundedText(500),
@@ -63,7 +63,7 @@ export const agentClientEventSchema = z.discriminatedUnion("t", [
 
 /** One Markdown file an Agent turn left different on disk. `path` is absolute
  *  POSIX; the counts are lines, not hunks. */
-export const agentTurnChangedFileSchema = z
+const agentTurnChangedFileSchema = z
   .object({
     path: boundedText(16_384),
     change: z.enum(["created", "edited", "deleted"]),
@@ -197,4 +197,3 @@ export type AgentSkill = z.infer<typeof agentSkillSchema>;
 export type AgentClientEvent = z.infer<typeof agentClientEventSchema>;
 export type AgentServerEvent = z.infer<typeof agentServerEventSchema>;
 export type AgentTurnChangedFile = z.infer<typeof agentTurnChangedFileSchema>;
-export type AgentSessionConnectWire = z.infer<typeof agentSessionConnectSchema>;

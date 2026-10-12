@@ -8,6 +8,8 @@
  * is what lets the renderer highlight in place. Nothing useful is gained by
  * forcing them into one type.
  */
+import type { z } from 'zod';
+import type { exactSearchResponseSchema } from './protocols/http/search.ts';
 
 export interface SearchHit {
   /** The indexer emits an absolute POSIX source path here; the search route
@@ -36,38 +38,13 @@ export interface SearchHit {
   score: number;
 }
 
-export interface KeywordMatch {
-  line: number;
-  text: string;
-  ranges: Array<[number, number]>;
-  pdfPage?: number;
-}
+/** One keyword-hit file from an explicit Folder query, as the
+ *  `/api/keyword-search` response carries it. `folder` retains the selected
+ *  member identity so a caller can open the result directly. */
+export type ProjectKeywordFile = z.infer<typeof exactSearchResponseSchema>['files'][number];
 
-export interface KeywordHitFile {
-  path: string;
-  matches: KeywordMatch[];
-  totalMatches: number;
-}
+/** The folder-local hit file the MFS adapter produces, before the route
+ *  stamps the member folder on it. */
+export type KeywordHitFile = Omit<ProjectKeywordFile, 'folder'>;
 
-/**
- * The `/api/keyword-search` response. `query` and `folder` are echoed back
- * by the route so a late response can be matched to the request that asked
- * for it; `folder` is the absolute folder root, not a display label.
- *
- * The MFS adapter produces only `files`/`totalMatches`/`truncated` —
- * see `KeywordScanResult` in `server/search-display.ts`, which is that
- * narrower internal shape and deliberately not this type.
- */
-export interface KeywordSearchResult {
-  query: string;
-  folder: string;
-  files: KeywordHitFile[];
-  totalMatches: number;
-  truncated: boolean;
-}
-
-/** One keyword-hit file from an explicit Folder query. `folder` retains the
- *  selected member identity so a caller can open the result directly. */
-export interface ProjectKeywordFile extends KeywordHitFile {
-  folder: string;
-}
+export type KeywordMatch = KeywordHitFile['matches'][number];

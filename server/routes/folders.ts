@@ -7,13 +7,12 @@ import express from 'express';
 import {
   createFolderAsync,
   deleteFolderAsync,
-  listIndexableTextFilesUnderAsync,
-  isSameExistingPathAsync,
   pathExistsAsync,
   readTextAsync,
   renameFolderAsync,
-  sanitizeFilename,
-} from '../files.ts';
+} from '../active-file-operations.ts';
+import { isSameExistingPathAsync, sanitizeFilename } from '../file-paths.ts';
+import { listIndexableTextFilesUnderAsync } from '../file-listing.ts';
 import { applyRenamePlanAsync, planRenameLinksAsync } from '../links.ts';
 import { toSourcePath } from '../folder.ts';
 import { logger } from '../log.ts';

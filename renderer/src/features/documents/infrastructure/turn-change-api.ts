@@ -32,12 +32,6 @@ export function createDocumentTurnChangesAdapter(client: HttpClient): DocumentTu
           response.status === 404 && expiredBody(response.body)
             ? new DocumentTurnChangesError('expired', 'That turn is no longer available.')
             : null,
-        messages: {
-          'invalid-response': 'The text from before that turn could not be read.',
-          'scope-lost': 'That folder is no longer available in this window.',
-          unauthorized: 'This window can no longer review that file.',
-          unavailable: 'The text from before that turn could not be loaded.',
-        },
         path: `/api/turn-changes?${query}`,
         schema: turnChangeResponseSchema,
         signal,

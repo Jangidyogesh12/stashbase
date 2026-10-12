@@ -11,8 +11,6 @@ import {
 } from '@/features/documents/ui/code-editor/editor';
 import { codeSyntaxHighlighting } from '@/features/documents/ui/code-editor/surface';
 
-export { textMatches } from '@/features/documents/ui/code-editor/find-controller';
-
 const invalidDecorations = EditorView.decorations.compute(['doc'], (state) => {
   const marks: Range<Decoration>[] = [];
   syntaxTree(state).iterate({

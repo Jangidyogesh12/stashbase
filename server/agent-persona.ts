@@ -13,6 +13,7 @@ import {
   type AgentPersonaInput,
 } from '../shared/agent-persona.ts';
 import { appDataRoot } from './local-data.ts';
+import { writeFileAtomic } from './atomic-write.ts';
 
 /**
  * The reader's persona library and which persona each Chat runs under.
@@ -72,7 +73,7 @@ function boundedLine(value: unknown, field: string, max: number, required: boole
 
 /** Validates what a reader wrote. Whitespace inside the prompt is the
  * reader's; only its ends are trimmed. */
-export function normalizedPersonaInput(value: unknown): Required<AgentPersonaInput> {
+function normalizedPersonaInput(value: unknown): Required<AgentPersonaInput> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw inputError('A persona is required');
   const input = value as Record<string, unknown>;
   const name = boundedLine(input.name, 'name', MAX_AGENT_PERSONA_NAME_LENGTH, true);
@@ -118,7 +119,7 @@ export function parsePersonaFile(id: string, source: string): AgentPersona | nul
   };
 }
 
-export function serializePersona(persona: Omit<AgentPersona, 'id'>): string {
+function serializePersona(persona: Omit<AgentPersona, 'id'>): string {
   const meta: Record<string, string> = { name: persona.name };
   if (persona.description) meta.description = persona.description;
   meta.icon = persona.icon;
@@ -139,18 +140,6 @@ function newId(name: string, taken: (id: string) => boolean): string {
   for (;;) {
     const id = `${slug}-${crypto.randomBytes(3).toString('hex')}`;
     if (!taken(id)) return id;
-  }
-}
-
-function writeAtomic(file: string, contents: string): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  try {
-    fs.writeFileSync(temporary, contents, 'utf8');
-    fs.renameSync(temporary, file);
-  } catch (error) {
-    fs.rmSync(temporary, { force: true });
-    throw error;
   }
 }
 
@@ -216,7 +205,7 @@ export function createAgentPersonaLibrary(io: {
     ensureSeeded();
     const input = normalizedPersonaInput(value);
     const id = newId(input.name, (candidate) => fs.existsSync(fileOf(candidate)));
-    writeAtomic(fileOf(id), serializePersona(input));
+    writeFileAtomic(fileOf(id), serializePersona(input));
     return { id, ...input };
   }
 
@@ -224,7 +213,7 @@ export function createAgentPersonaLibrary(io: {
     const previous = read(id);
     if (!previous) throw inputError('That persona no longer exists', 404);
     const input = normalizedPersonaInput({ gallery: previous.gallery, ...(value as object) });
-    writeAtomic(fileOf(id), serializePersona(input));
+    writeFileAtomic(fileOf(id), serializePersona(input));
     return { id, ...input };
   }
 
@@ -256,7 +245,7 @@ export function createAgentPersonaLibrary(io: {
     delete chats[key];
     if (persona) chats[key] = persona;
     const entries = Object.entries(chats);
-    writeAtomic(io.chatsFile, JSON.stringify(Object.fromEntries(entries.slice(-MAX_CHAT_RECORDS))));
+    writeFileAtomic(io.chatsFile, JSON.stringify(Object.fromEntries(entries.slice(-MAX_CHAT_RECORDS))));
   }
 
   function chatPersona(agent: string, sessionId: string): string | null {

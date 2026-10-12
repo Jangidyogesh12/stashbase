@@ -3,13 +3,13 @@
  * routes:
  *   - `renameWithRollback` — disk-first, index-second, with rollback
  *     of the disk rename if the index step fails.
- *   - `bundleRenameEntry` — when a note `<stem>.{md,html}` moves, its
+ *   - `bundleRenameEntryAsync` — when a note `<stem>.{md,html}` moves, its
  *     `<stem>_files/` sidecar (the dir holding iframe assets) also
  *     moves; this builds the folder-style rename entry the link
  *     cascade needs to rewrite external pointers into the bundle.
  */
 import express from 'express';
-import { pathExists, pathExistsAsync } from './files.ts';
+import { pathExistsAsync } from './active-file-operations.ts';
 import type { RenameEntry } from './links.ts';
 import { logger, errorMessage } from './log.ts';
 import { sendError } from './http.ts';
@@ -61,29 +61,13 @@ export async function renameWithRollback(opts: {
   }
 }
 
-/** When a note `<stem>.{md,html}` is renamed, `renameOnDisk` also
+/** When a note `<stem>.{md,html}` is renamed, `renameOnDiskAsync` also
  *  moves its sidecar bundle `<stem>_files/` (the dir that holds the
  *  iframe's images / CSS). Build a folder-style rename entry so the
  *  cascade rewrites any external links into that bundle. The
  *  `present` flag selects which end of the rename to probe on disk —
  *  cascade runs post-rename (`'post'`), preview runs pre-rename
  *  (`'pre'`). Returns null when there's no bundle to track. */
-export function bundleRenameEntry(
-  oldName: string,
-  newName: string,
-  present: 'pre' | 'post',
-): RenameEntry | null {
-  const stemRe = /\.(md|markdown|html|htm)$/i;
-  const oldStem = oldName.replace(stemRe, '');
-  const newStem = newName.replace(stemRe, '');
-  if (oldStem === newStem) return null;
-  const oldBundle = oldStem + '_files';
-  const newBundle = newStem + '_files';
-  const probe = present === 'pre' ? oldBundle : newBundle;
-  if (!pathExists(probe)) return null;
-  return { kind: 'folder', old: oldBundle, new: newBundle };
-}
-
 export async function bundleRenameEntryAsync(
   oldName: string,
   newName: string,

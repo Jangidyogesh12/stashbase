@@ -4,13 +4,13 @@ const folderPathSchema = z.string().min(1).max(4096)
   .refine((value) => value.trim().length > 0, 'Path must contain a visible character.');
 const folderNameSchema = z.string().min(1).max(255);
 
-export const registeredProjectSchema = z.object({
+const registeredProjectSchema = z.object({
   favorite: z.boolean().optional(),
   openedAt: z.string().trim().min(1).max(64),
   path: folderPathSchema,
 });
 
-export const activeProjectFolderSchema = z.object({
+const activeProjectFolderSchema = z.object({
   name: folderNameSchema,
   path: folderPathSchema,
 });
@@ -39,6 +39,3 @@ export const projectFailureSchema = z.object({
 });
 
 export type ProjectRegistrySnapshotWire = z.infer<typeof projectRegistrySnapshotSchema>;
-export type ProjectOpenFolderRequestWire = z.infer<typeof projectOpenFolderRequestSchema>;
-export type ProjectRemoveFolderRequestWire = z.infer<typeof projectRemoveFolderRequestSchema>;
-export type ProjectFailureWire = z.infer<typeof projectFailureSchema>;

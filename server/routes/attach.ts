@@ -14,7 +14,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { filesystemPath } from '../filesystem-path.ts';
 import { registeredFolderRoots } from '../folder.ts';
-import { sanitizeFilename } from '../files.ts';
+import { sanitizeFilename } from '../file-paths.ts';
 import { errorMessage, logger } from '../log.ts';
 
 const log = logger('routes/attach');
@@ -106,7 +106,7 @@ export function transientAttachmentPreviewUrl(filePath: string): string {
   return `/api/agent/attachment-preview?path=${encodeURIComponent(filePath)}`;
 }
 
-export function safeAttachmentName(original: string): string {
+function safeAttachmentName(original: string): string {
   const raw = original && original.trim() ? original : 'file';
   const base = path.posix.basename(raw.replace(/\\/g, '/')) || 'file';
   const sanitized = sanitizeFilename(base)
@@ -136,7 +136,7 @@ export function cleanupStaleAttachments(root = attachRoot(), maxAgeMs = ATTACHME
   }
 }
 
-export function uniqueAttachmentName(original: string, used: Set<string>): string {
+function uniqueAttachmentName(original: string, used: Set<string>): string {
   const safe = safeAttachmentName(original);
   let candidate = safe;
   const ext = path.extname(safe);

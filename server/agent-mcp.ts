@@ -14,6 +14,7 @@ import { parseTOML, getStaticTOMLValue } from 'toml-eslint-parser';
 import os from 'node:os';
 import path from 'node:path';
 import { appDataRoot } from './local-data.ts';
+import { writeFileAtomic } from './atomic-write.ts';
 import { claudeConfigPath, codexConfigPath } from './agent-config-paths.ts';
 
 const APP_ROOT = process.env.STASHBASE_APP_ROOT
@@ -129,7 +130,7 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
         '',
       ].join('\n');
   fs.mkdirSync(binDir, { recursive: true });
-  writeTextAtomic(wrapper, content, 0o755);
+  writeFileAtomic(wrapper, content, { mode: 0o755 });
   return wrapper;
 }
 
@@ -147,7 +148,7 @@ function readJsonObject(file: string): Record<string, unknown> | null {
 }
 
 function writeJson(file: string, value: unknown): void {
-  writeTextAtomic(file, JSON.stringify(value, null, 2) + '\n');
+  writeFileAtomic(file, JSON.stringify(value, null, 2) + '\n');
 }
 
 function configureJsonMcp(file: string, serverConfig: Record<string, unknown>): void {
@@ -198,7 +199,7 @@ function configureCodex(file: string, wrapper: string): void {
   let updated: string;
   try { updated = replaceCodexMcpTables(raw, block); }
   catch { throw new Error(`Could not safely update StashBase MCP in ${file}; leaving it untouched. Check the TOML configuration.`); }
-  if (updated !== raw) writeTextAtomic(file, updated);
+  if (updated !== raw) writeFileAtomic(file, updated);
 }
 
 const CODEX_AUTO_APPROVED_STASHBASE_TOOLS = [
@@ -208,16 +209,3 @@ const CODEX_AUTO_APPROVED_STASHBASE_TOOLS = [
   'reindex',
   'search_project',
 ];
-
-function writeTextAtomic(file: string, content: string, mode?: number): void {
-  const dir = path.dirname(file);
-  fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
-  try {
-    fs.writeFileSync(tmp, content, { encoding: 'utf8', ...(mode === undefined ? {} : { mode }) });
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
-    throw err;
-  }
-}

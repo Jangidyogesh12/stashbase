@@ -68,21 +68,6 @@ export async function isSameExistingPathAsync(oldRel: string, newRel: string): P
   return filesystemPath.sameExistingPathAsync(oldAbs, newAbs);
 }
 
-function caseOnlySameEntryRename(from: string, to: string): boolean {
-  return from !== to
-    && filesystemPath.sameExistingPath(from, to);
-}
-
-function uniqueRenameHop(target: string): string {
-  const dir = path.dirname(target);
-  const base = path.basename(target);
-  for (let i = 0; i < 100; i += 1) {
-    const candidate = path.join(dir, `.${base}.stashbase-rename-${process.pid}-${Date.now()}-${i}`);
-    if (!fs.existsSync(candidate)) return candidate;
-  }
-  throw new Error('could not reserve temporary rename path');
-}
-
 async function uniqueRenameHopAsync(target: string): Promise<string> {
   const dir = path.dirname(target);
   const base = path.basename(target);
@@ -95,21 +80,6 @@ async function uniqueRenameHopAsync(target: string): Promise<string> {
     }
   }
   throw new Error('could not reserve temporary rename path');
-}
-
-export function renameAbsPreservingCase(from: string, to: string): void {
-  if (!caseOnlySameEntryRename(from, to)) {
-    fs.renameSync(from, to);
-    return;
-  }
-  const hop = uniqueRenameHop(to);
-  fs.renameSync(from, hop);
-  try {
-    fs.renameSync(hop, to);
-  } catch (err) {
-    try { fs.renameSync(hop, from); } catch { /* preserve original error */ }
-    throw err;
-  }
 }
 
 export async function renameAbsPreservingCaseAsync(from: string, to: string): Promise<void> {
@@ -125,12 +95,4 @@ export async function renameAbsPreservingCaseAsync(from: string, to: string): Pr
     try { await fs.promises.rename(hop, from); } catch { /* preserve original error */ }
     throw err;
   }
-}
-
-export function isSameExistingPath(oldRel: string, newRel: string): boolean {
-  let oldAbs: string;
-  let newAbs: string;
-  try { oldAbs = resolveSafe(oldRel); newAbs = resolveSafe(newRel); }
-  catch { return false; }
-  return filesystemPath.sameExistingPath(oldAbs, newAbs);
 }

@@ -10,5 +10,4 @@
 export type {
   AgentSessionBlockWire as SessionBlock,
   AgentSessionInfoWire as SessionInfo,
-  AgentSessionReplayWire as SessionReplay,
 } from './protocols/http/agent-sessions.ts';

@@ -341,7 +341,7 @@ export async function runFolderSyncOperation(
   }
 }
 
-export function scheduleIndexerSync(folderRoot: string, reason: string, windowId = 'default'): void {
+function scheduleIndexerSync(folderRoot: string, reason: string, windowId = 'default'): void {
   const seq = (indexerSwitchSeq.get(windowId) ?? 0) + 1;
   indexerSwitchSeq.set(windowId, seq);
   const prev = indexerSwitchQueues.get(windowId) ?? Promise.resolve();

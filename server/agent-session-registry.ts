@@ -2,6 +2,9 @@
  * travels through the native process and MCP host; it selects the calling
  * conversation's project without granting additional file access. */
 
+import type { AgentSessionTermination } from './agent-contract.ts';
+import { filesystemPath } from './filesystem-path.ts';
+
 export const AGENT_SESSION_ID_HEADER = 'x-stashbase-agent-session-id';
 
 export type AttributedAgentId = 'stashbase' | 'claude' | 'codex';
@@ -39,7 +42,7 @@ export function attributedAgentSession(id: string | null | undefined): Attribute
  * active turn, so "the one session of this window currently running a
  * turn" identifies the caller precisely; any ambiguity (zero or several
  * candidates) attributes to nobody rather than guessing. */
-export function attributedSessionForWindow(
+function attributedSessionForWindow(
   windowId: string | null | undefined,
 ): AttributedAgentSession | null {
   if (typeof windowId !== 'string' || !windowId.trim()) return null;
@@ -61,4 +64,41 @@ export function attributedRequestSession(
   return sessionId != null
     ? attributedAgentSession(sessionId)
     : attributedSessionForWindow(windowId);
+}
+
+/** The live panel sessions of one runtime. Window retirement and app quit
+ * stop a window's (or every) session; project removal stops exactly the
+ * sessions bound to that folder (filesystem identity comparison), leaving
+ * sessions bound to other folders running. A folder switch stops nothing. */
+export function liveSessionSet<T extends {
+  readonly windowId: string;
+  boundFolder(): string | null;
+  dispose(termination?: AgentSessionTermination): void;
+}>() {
+  const sessions = new Set<T>();
+  return {
+    add: (session: T) => { sessions.add(session); },
+    delete: (session: T) => { sessions.delete(session); },
+    killWindow(windowId?: string): void {
+      for (const session of [...sessions]) {
+        if (windowId && session.windowId !== windowId) continue;
+        session.dispose();
+        sessions.delete(session);
+      }
+    },
+    killFolder(folderAbs: string): void {
+      for (const session of [...sessions]) {
+        const bound = session.boundFolder();
+        let matches = false;
+        try {
+          matches = bound != null && filesystemPath.equal(bound, folderAbs);
+        } catch {
+          matches = false;
+        }
+        if (!matches) continue;
+        session.dispose({ kind: 'scope-removed', folder: folderAbs });
+        sessions.delete(session);
+      }
+    },
+  };
 }

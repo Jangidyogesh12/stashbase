@@ -5,6 +5,7 @@ import type {
   FindMatchInfo,
   FindOptions,
 } from '@/features/documents/application/navigation-runtime';
+import { findTextMatches } from '@/features/documents/domain/find-text';
 import { clamp } from '@/shared/utils/clamp';
 
 export interface PdfFindMatch {
@@ -18,33 +19,6 @@ export function foldPdfText(value: string): string {
     .replace(/[‘’]/gu, "'")
     .replace(/[“”]/gu, '"')
     .replace(/[\u00a0\u200b]/gu, ' ');
-}
-
-function isBoundary(text: string, index: number): boolean {
-  const character = text[index];
-  return character === undefined || !/[\p{L}\p{N}_]/u.test(character);
-}
-
-export function textOffsets(text: string, query: string, options: FindOptions): number[] {
-  const foldedText = foldPdfText(text);
-  const foldedQuery = foldPdfText(query).trim();
-  if (!foldedQuery) return [];
-  const haystack = options.caseSensitive ? foldedText : foldedText.toLowerCase();
-  const needle = options.caseSensitive ? foldedQuery : foldedQuery.toLowerCase();
-  const matches: number[] = [];
-  for (
-    let offset = haystack.indexOf(needle);
-    offset >= 0;
-    offset = haystack.indexOf(needle, offset + Math.max(1, needle.length))
-  ) {
-    if (
-      !options.wholeWord ||
-      (isBoundary(foldedText, offset - 1) && isBoundary(foldedText, offset + needle.length))
-    ) {
-      matches.push(offset);
-    }
-  }
-  return matches;
 }
 
 async function scanDocument(
@@ -71,7 +45,8 @@ async function scanDocument(
         text += item.str.replace(/\s+/gu, ' ');
       }
       const viewport = page.getViewport({ scale: 1 });
-      for (const offset of textOffsets(text, query, options)) {
+      const matched = findTextMatches(foldPdfText(text), foldPdfText(query).trim(), options);
+      for (const { from: offset } of matched) {
         let item: (typeof starts)[number] | undefined;
         for (const candidate of starts) {
           if (candidate.offset > offset) break;

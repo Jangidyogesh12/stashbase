@@ -42,10 +42,6 @@ export function createAgentContextAdapter(
         error: AgentContextError,
         failure: resolveFailure,
         failureSchema: agentContextFileFailureSchema,
-        messages: {
-          'invalid-response': 'File resolution returned an invalid response.',
-          unavailable: 'StashBase could not resolve that file.',
-        },
         path: `/api/project/agent-context-file?${query}`,
         schema: agentContextFileResponseSchema,
         signal,

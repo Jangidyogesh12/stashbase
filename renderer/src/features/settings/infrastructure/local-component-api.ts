@@ -12,10 +12,8 @@ export function createLocalComponentAdapter(client: HttpClient): LocalComponentP
     const wire = await request(client, {
       ...settingsRequest({
         failureSchema: localComponentFailureSchema,
-        invalidResponse: 'Local component status returned an invalid response.',
         path: `/api/local-components/extractor${retry ? '/retry' : ''}`,
         signal,
-        unavailable: 'Local components are unavailable.',
       }),
       ...(retry ? { method: 'POST' as const, body: {} } : {}),
       schema: localComponentStatusSchema,

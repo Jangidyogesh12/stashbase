@@ -4,7 +4,7 @@
  * them via `/api/terminal/clis`.
  *
  * The CLIs themselves run through structured agent bridges (Claude Agent
- * SDK in server/agent.ts, Codex app-server in server/codex-agent.ts),
+ * SDK in server/agent.ts, Codex app-server in server/codex-session-runtime.ts),
  * not a PTY — this module no longer bridges a shell.
  */
 

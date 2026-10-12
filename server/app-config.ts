@@ -10,7 +10,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { logger, errorMessage } from './log.ts';
+import { logger } from './log.ts';
+import { writeFileAtomic } from './atomic-write.ts';
 import type {
   AppearancePreferences,
   UpdatePreferences,
@@ -41,11 +42,11 @@ export interface RecentFolder {
   favorite?: boolean;
 }
 
-export const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
+const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
   autoCheck: true,
 };
 
-export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
+const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
   showHiddenFiles: false,
 };
 
@@ -150,7 +151,7 @@ export function readAppConfigStrict(file = CONFIG_FILE): AppConfigFile {
   }
 }
 
-export async function readAppConfigStrictAsync(): Promise<AppConfigFile> {
+async function readAppConfigStrictAsync(): Promise<AppConfigFile> {
   try {
     const raw = await fs.promises.readFile(CONFIG_FILE, 'utf8');
     const parsed = JSON.parse(raw);
@@ -213,17 +214,10 @@ function configAccessError(cause: unknown): Error {
 }
 
 function writeSerializedConfig(serialized: string): void {
-  const tmp = `${CONFIG_FILE}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    // 0600 — config may carry API keys; keep it owner-only.
-    fs.writeFileSync(tmp, serialized, { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(tmp, CONFIG_FILE);
-    if (process.platform !== 'win32') {
-      try { fs.chmodSync(CONFIG_FILE, 0o600); } catch { /* best effort on special filesystems */ }
-    }
-  } catch (err) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
-    throw err;
+  // 0600 — config may carry API keys; keep it owner-only.
+  writeFileAtomic(CONFIG_FILE, serialized, { mode: 0o600 });
+  if (process.platform !== 'win32') {
+    try { fs.chmodSync(CONFIG_FILE, 0o600); } catch { /* best effort on special filesystems */ }
   }
 }
 

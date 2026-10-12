@@ -13,21 +13,13 @@
  * to plain PyMuPDF text extraction when the richer layout pass fails.
  */
 import { spawn } from 'node:child_process';
-import fs, { closeSync, existsSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
 import { derivedNoteFor, derivedBundleFor, derivedBatchesFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn, prepareExtractorRuntime } from './python-host.ts';
-import {
-  discoverCandidateSources,
-  discoverNewSources,
-  derivedIsFresh,
-  indexFreshDerived,
-  maybeConvert,
-  TransientConversionError,
-  type ConversionSpec,
-} from './conversion.ts';
-import { lowerExtractorPriority, spawnOptionsForPdfOcr, terminateExtractorTree, waitForExtractorTree } from './extractor-process.ts';
+import { TransientConversionError, type ConversionSpec } from './conversion.ts';
+import { lowerExtractorPriority, runExtractor, spawnOptionsForPdfOcr, terminateExtractorTree } from './extractor-process.ts';
 import type { ConversionProgress } from './conversion-status.ts';
 import { logger } from './log.ts';
 import {
@@ -36,8 +28,6 @@ import {
 } from '../shared/file-formats.ts';
 
 const log = logger('pdf');
-const STDERR_TAIL_BYTES = 64 * 1024;
-const PDF_COMPLETE_MARKER = '<!-- stashbase-pdf-conversion: complete -->';
 const PDF_TEXT_PROBE_TIMEOUT_MS = 5000;
 const PDF_TEXT_PROBE_REAP_TIMEOUT_MS = 2000;
 const PDF_COST_TEXT_LAYER = 0;
@@ -62,35 +52,6 @@ export function derivedPathsForPdf(pdfAbsPath: string): { notePath: string; bund
   };
 }
 
-export function currentDerivedTextPathForPdf(sourceAbs: string, known?: { sourceMtimeMs: number; derivedMtimeMs: number }): string | null {
-  return derivedIsFresh(PDF_SPEC, sourceAbs, known) ? derivedPathsForPdf(sourceAbs).notePath : null;
-}
-
-export async function currentDerivedTextPathForPdfAsync(
-  sourceAbs: string,
-  known: { sourceMtimeMs: number; derivedMtimeMs: number },
-): Promise<string | null> {
-  const notePath = derivedPathsForPdf(sourceAbs).notePath;
-  return known.derivedMtimeMs >= known.sourceMtimeMs
-    && await derivedTailContains(notePath, PDF_COMPLETE_MARKER, 4096) ? notePath : null;
-}
-
-async function derivedTailContains(file: string, marker: string, tailBytes: number): Promise<boolean> {
-  let handle: fs.promises.FileHandle | null = null;
-  try {
-    handle = await fs.promises.open(file, 'r');
-    const stat = await handle.stat();
-    const length = Math.min(stat.size, tailBytes);
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, Math.max(0, stat.size - length));
-    return buffer.toString('utf8').includes(marker);
-  } catch {
-    return false;
-  } finally {
-    await handle?.close().catch(() => undefined);
-  }
-}
-
 function cleanupDerivedPdf(pdfAbsPath: string): void {
   const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
   rmSync(notePath, { force: true });
@@ -102,25 +63,6 @@ function cleanupFinalPdfArtifacts(pdfAbsPath: string): void {
   const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
   rmSync(notePath, { force: true });
   rmSync(bundleDir, { recursive: true, force: true });
-}
-
-function derivedPdfIsComplete(_pdfAbsPath: string, notePath: string): boolean {
-  let fd: number | null = null;
-  try {
-    fd = openSync(notePath, 'r');
-    const tailBytes = 4096;
-    const size = statSync(notePath).size;
-    const start = Math.max(0, size - tailBytes);
-    const buf = Buffer.alloc(size - start);
-    readSync(fd, buf, 0, buf.length, start);
-    return buf.toString('utf8').includes(PDF_COMPLETE_MARKER);
-  } catch {
-    return false;
-  } finally {
-    if (fd != null) {
-      try { closeSync(fd); } catch { /* ignore */ }
-    }
-  }
 }
 
 async function pdfConversionPriority(pdfAbsPath: string, signal: AbortSignal): Promise<number> {
@@ -253,9 +195,8 @@ export function displayPathForHit(rel: string, baseAbs: string): string | null {
 }
 
 /** Run the extractor on a single PDF. Resolves with paths on success;
- *  rejects with the extractor's stderr tail on failure. Fire-and-
- *  forget at the call site if you don't want to block — `convertPdf`
- *  itself does not throw synchronously. */
+ *  rejects with the extractor's stderr tail on failure. A signal-terminated
+ *  extractor (exit code null) is transient rather than a durable failure. */
 async function convertPdf(
   pdfAbsPath: string,
   onProgress?: (progress: ConversionProgress) => void,
@@ -267,105 +208,42 @@ async function convertPdf(
   const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
   mkdirSync(derivedDir(), { recursive: true });
 
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new Error('pdf_extract cancelled'));
-      return;
+  const handleStderrLine = (line: string) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('[pdf_extract]')) {
+      const message = trimmed.replace(/^\[pdf_extract\]\s*/, '');
+      const started = message.match(/^batch \d+\/\d+ pages (\d+)-\d+ started$/);
+      const done = message.match(/^batch \d+\/\d+ pages \d+-(\d+) done$/);
+      if (started) onProgress?.({ phase: 'extracting', currentPage: Number(started[1]) });
+      if (done) onProgress?.({ phase: 'extracting', currentPage: Number(done[1]) });
+      log.info(`${path.basename(pdfAbsPath)}: ${message}`);
+    } else if (/^(Using RapidOCR|OCR on page\.number=)/.test(trimmed)) {
+      log.debug(`${path.basename(pdfAbsPath)}: ${trimmed}`);
     }
-    const { cmd, args } = extractorSpawn('pdf', 'pdf_extract.py', [
-      pdfAbsPath, notePath, bundleDir,
-    ]);
-    const proc = spawn(cmd, args, spawnOptionsForPdfOcr());
-    lowerExtractorPriority(proc);
-    let stderr = '';
-    let stderrLineBuffer = '';
-    let cancelled = false;
-    const onAbort = () => {
-      cancelled = true;
-      terminateExtractorTree(proc);
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-    const handleStderrLine = (line: string) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('[pdf_extract]')) {
-        const message = trimmed.replace(/^\[pdf_extract\]\s*/, '');
-        const started = message.match(/^batch \d+\/\d+ pages (\d+)-\d+ started$/);
-        const done = message.match(/^batch \d+\/\d+ pages \d+-(\d+) done$/);
-        if (started) onProgress?.({ phase: 'extracting', currentPage: Number(started[1]) });
-        if (done) onProgress?.({ phase: 'extracting', currentPage: Number(done[1]) });
-        log.info(`${path.basename(pdfAbsPath)}: ${message}`);
-      } else if (/^(Using RapidOCR|OCR on page\.number=)/.test(trimmed)) {
-        log.debug(`${path.basename(pdfAbsPath)}: ${trimmed}`);
-      }
-    };
-    proc.stderr.on('data', (b) => {
-      const text = String(b);
-      stderr = (stderr + text).slice(-STDERR_TAIL_BYTES);
-      const lines = (stderrLineBuffer + text).split(/\r?\n/);
-      stderrLineBuffer = lines.pop() ?? '';
-      for (const line of lines) handleStderrLine(line);
-    });
-    proc.on('error', (err) => {
-      signal?.removeEventListener('abort', onAbort);
-      reject(new Error(`spawn failed: ${err.message}`));
-    });
-    void waitForExtractorTree(proc).then((code) => {
-      signal?.removeEventListener('abort', onAbort);
-      if (stderrLineBuffer) {
-        handleStderrLine(stderrLineBuffer);
-        stderrLineBuffer = '';
-      }
-      if (cancelled) {
-        reject(new TransientConversionError('pdf_extract cancelled'));
-        return;
-      }
-      if (code === 0) {
-        resolve({ notePath, bundleDir });
-      } else {
-        const tail = stderr.trim().split('\n').slice(-3).join('\n');
-        const message = `pdf_extract exit ${code}: ${tail || '(no stderr)'}`;
-        reject(code === null ? new TransientConversionError(message) : new Error(message));
-      }
-    }, reject);
+  };
+  const { code, cancelled, stderrTail } = await runExtractor({
+    mode: 'pdf',
+    script: 'pdf_extract.py',
+    args: [pdfAbsPath, notePath, bundleDir],
+    signal,
+    onStderrLine: handleStderrLine,
   });
+  if (cancelled) throw new TransientConversionError('pdf_extract cancelled');
+  if (code === 0) return { notePath, bundleDir };
+  const message = `pdf_extract exit ${code}: ${stderrTail || '(no stderr)'}`;
+  throw code === null ? new TransientConversionError(message) : new Error(message);
 }
 
 /** Conversion spec wiring PDFs into the shared `conversion.ts` plumbing. */
-const PDF_SPEC: ConversionSpec = {
+export const PDF_SPEC: ConversionSpec = {
   kind: 'pdf_extract',
   lane: 'heavy',
   cost: PDF_COST_OCR_OR_UNKNOWN,
   matches: (name) => /\.pdf$/i.test(name),
   derivedNote: (abs) => derivedPathsForPdf(abs).notePath,
-  derivedReady: derivedPdfIsComplete,
+  completeMarker: { text: '<!-- stashbase-pdf-conversion: complete -->', tailBytes: 4096 },
   classifyCost: pdfConversionPriority,
   convert: convertPdf,
   cleanupBeforeConvert: cleanupFinalPdfArtifacts,
   cleanupDerived: cleanupDerivedPdf,
 };
-
-/** Fire-and-forget conversion entry. Skips fresh derived output; queued and
- *  running state lives in the scheduler, while failures persist in state.db. */
-export function maybeConvertPdf(
-  pdfAbsPath: string,
-  opts: { urgency?: 'interactive' } = {},
-): void {
-  maybeConvert(pdfAbsPath, PDF_SPEC, {
-    urgency: opts.urgency ?? 'background',
-    cost: PDF_COST_OCR_OR_UNKNOWN,
-  });
-}
-
-/** Reconcile hook: convert any untracked `.pdf` under the folder (dropped
- *  in via git checkout / external copy / `mv`). */
-export async function discoverNewPdfs(folderAbs: string, candidates?: readonly string[]): Promise<void> {
-  if (candidates) {
-    await discoverCandidateSources(candidates, PDF_SPEC, (abs) => maybeConvertPdf(abs));
-    return;
-  }
-  await discoverNewSources(folderAbs, PDF_SPEC, (abs) => maybeConvertPdf(abs));
-}
-
-export function indexFreshPdf(pdfAbsPath: string) {
-  return indexFreshDerived(pdfAbsPath, PDF_SPEC);
-}

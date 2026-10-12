@@ -8,13 +8,11 @@ import {
   appearancePreferencesSchema,
 } from '@/protocols/http/appearance';
 
-function preferences(signal: AbortSignal, unavailable: string) {
+function preferences(signal: AbortSignal) {
   return settingsRequest({
     failureSchema: appearanceFailureSchema,
-    invalidResponse: 'Appearance settings returned an invalid response.',
     path: '/api/appearance',
     signal,
-    unavailable,
   });
 }
 
@@ -22,13 +20,13 @@ export function createAppearanceAdapter(client: HttpClient): AppearancePort {
   return {
     async load(signal) {
       return request(client, {
-        ...preferences(signal, 'Appearance settings are unavailable.'),
+        ...preferences(signal),
         schema: appearancePreferencesSchema,
       });
     },
     async update(change, signal) {
       return request(client, {
-        ...preferences(signal, 'Appearance settings could not be saved.'),
+        ...preferences(signal),
         body: appearancePreferencesRequestSchema.parse(change),
         method: 'PUT',
         schema: appearancePreferencesSchema,

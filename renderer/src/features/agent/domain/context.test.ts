@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import {
   addContextItem,
-  applyMention,
   contextItemKey,
   contextItemName,
-  mentionQueryAt,
   PASSAGE_QUOTE_LIMIT,
   passageContextItem,
   rankMentionSuggestions,
@@ -133,40 +131,9 @@ describe('mention ranking', () => {
 });
 
 describe('mention text editing', () => {
-  it('finds an open query at the start or after whitespace only', () => {
-    expect(mentionQueryAt('@ag', 3)).toEqual({ from: 0, kind: 'mention', query: 'ag' });
-    expect(mentionQueryAt('read @docs/ag', 13)).toEqual({
-      from: 5,
-      kind: 'mention',
-      query: 'docs/ag',
-    });
-    expect(mentionQueryAt('read @', 6)).toEqual({ from: 5, kind: 'mention', query: '' });
-    expect(mentionQueryAt('mail@example', 12)).toBeNull();
-    expect(mentionQueryAt('read @docs/agent.md ', 20)).toBeNull();
-    expect(mentionQueryAt('read @docs/agent.md now', 12)).toEqual({
-      from: 5,
-      kind: 'mention',
-      query: 'docs/a',
-    });
-  });
-
-  it('applies and removes a mention run at the end and in the middle', () => {
-    const end = applyMention(
-      'read @ag',
-      { from: 5, kind: 'mention', query: 'ag' },
-      'docs/agent.md',
-    );
-    expect(end).toEqual({ caret: 20, text: 'read @docs/agent.md ' });
-    expect(removeMentionText(end.text, 'docs/agent.md')).toBe('read ');
-
-    const middle = applyMention(
-      'read @ag now',
-      { from: 5, kind: 'mention', query: 'ag' },
-      'docs/agent.md',
-    );
-    expect(middle).toEqual({ caret: 19, text: 'read @docs/agent.md now' });
-    expect(removeMentionText(middle.text, 'docs/agent.md')).toBe('read now');
-
+  it('removes a mention run at the end and in the middle', () => {
+    expect(removeMentionText('read @docs/agent.md ', 'docs/agent.md')).toBe('read ');
+    expect(removeMentionText('read @docs/agent.md now', 'docs/agent.md')).toBe('read now');
     expect(removeMentionText('@docs/agent.md first', 'docs/agent.md')).toBe('first');
     expect(removeMentionText('see @docs/agent.md', 'docs/agent.md')).toBe('see');
     expect(removeMentionText('see @docs/agent.md.bak', 'docs/agent.md')).toBe(

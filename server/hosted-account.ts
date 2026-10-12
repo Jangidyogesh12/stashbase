@@ -223,11 +223,6 @@ export function beginHostedOAuth(
   return { flowId, provider, purpose, url: authorize.toString() };
 }
 
-export function hostedOAuthPurpose(flowId: string): HostedOAuthPurpose | null {
-  pruneOAuthFlows();
-  return pendingOAuthFlows.get(flowId)?.purpose ?? null;
-}
-
 export async function exchangeHostedOAuthCode(flowId: string, authCode: string): Promise<HostedAccountSession> {
   pruneOAuthFlows();
   const flow = pendingOAuthFlows.get(flowId);
@@ -496,7 +491,7 @@ export async function fetchHostedAgentAllowance(
 // refused before it can reach the system browser.
 const STRIPE_BILLING_HOSTS = new Set(['checkout.stripe.com', 'billing.stripe.com']);
 
-export function stripeBillingUrl(value: unknown): string {
+function stripeBillingUrl(value: unknown): string {
   let url: URL;
   try { url = new URL(String(value)); } catch { throw new Error('Billing returned an unexpected page.'); }
   if (url.protocol !== 'https:' || !STRIPE_BILLING_HOSTS.has(url.hostname) || url.username || url.password) {

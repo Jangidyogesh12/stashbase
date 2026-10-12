@@ -1,94 +1,29 @@
 /** The composer's `/` panel: the advertised skills it lists, the one it arms
  *  and spends on a single turn, the plain text it leaves for a runtime that
  *  runs none, and the retry it offers when the read failed. */
-import { act, cleanup, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { describe, expect, it } from 'vite-plus/test';
 
-import type { AgentContextPort, AgentSessionPort } from '@/features/agent/application/ports';
-import {
-  createAgentWorkspaceRuntime,
-  type AgentWorkspaceRuntime,
-} from '@/features/agent/application/workspace-runtime';
-import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { draftOf, pressKey, typeInto } from '@/test/dom';
-import {
-  agentGateLifted,
-  agentCatalogPort,
-  agentContextPort,
-  agentSessionPort,
-  BUILT_IN_AGENT,
-  CLAUDE_AGENT,
-  CODEX_AGENT,
-  agentPersonaApi,
-} from '@/test/fakes/agent';
-import { createTestQueryClient, withQueryClient } from '@/test/query';
+import { agentGateLifted, agentContextPort, agentSessionPort } from '@/test/fakes/agent';
 
-import AgentChats from './chats/chats';
-import ManagedAgentWorkspace from './workspace';
+import { registerWorkspaceCleanup, renderWorkspace } from './workspace.harness';
 
-const RESEARCH_SCOPE = { kind: 'folder', path: '/Library/Research' } as const;
+registerWorkspaceCleanup();
 
-const runtimes: AgentWorkspaceRuntime[] = [];
-
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-  for (const runtime of runtimes.splice(0)) runtime.dispose();
-});
-
-function renderWorkspace(
-  session: AgentSessionPort,
-  agents: readonly Agent[] = [BUILT_IN_AGENT, CODEX_AGENT, CLAUDE_AGENT],
-  context?: AgentContextPort,
-  onReprocess?: (source: { folderPath: string; path: string }) => void,
-) {
-  let id = 0;
-  const runtime = createAgentWorkspaceRuntime({
-    autostart: false,
-    context,
-    createId: () => `chat-${++id}`,
-    folderPath: RESEARCH_SCOPE.path,
-    port: session,
-  });
-  runtimes.push(runtime);
-  const catalog = agentCatalogPort(agents);
-  const view = withQueryClient(
-    <div>
-      <AgentChats
-        catalog={catalog}
-        onOpenAgentSettings={vi.fn()}
-        runtime={runtime}
-        scope={RESEARCH_SCOPE}
-        workspaceName="Research"
-      />
-      <ManagedAgentWorkspace
-        catalog={catalog}
-        persona={agentPersonaApi()}
-        onOpenAgentSettings={vi.fn()}
-        onOpenExternal={vi.fn()}
-        onSignIn={vi.fn()}
-        onReprocess={onReprocess}
-        runtime={runtime}
-      />
-    </div>,
-    createTestQueryClient(),
-    { strict: true },
-  );
-  return { runtime, view };
+async function skillWorkspace() {
+  const test = agentSessionPort();
+  const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
+  await screen.findByText('What’s on your mind?');
+  await agentGateLifted();
+  await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
+  await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
+  act(() => runtime.activeSession().start());
+  return { ...test, runtime };
 }
-describe('AgentWorkspace composer skills', () => {
-  async function skillWorkspace() {
-    const test = agentSessionPort();
-    const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
-    await screen.findByText('What’s on your mind?');
-    await agentGateLifted();
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
-    act(() => runtime.activeSession().start());
-    return { ...test, runtime };
-  }
 
+describe('AgentWorkspace composer skills', () => {
   it('lists advertised skills for /, arms the picked one, and sends it alone', async () => {
     const test = await skillWorkspace();
     act(() => {

@@ -4,7 +4,7 @@ import { resolveAgentPersona } from './agent-persona.ts';
  * part of the user-chosen Persona: adapters compose it only when starting a
  * native session. How the Agent works otherwise is the reader's own
  * `AGENTS.md` / `CLAUDE.md`, which the runtimes read natively. */
-export const STASHBASE_AGENT_RUNTIME_POLICY = [
+const STASHBASE_AGENT_RUNTIME_POLICY = [
   '<stashbase_runtime_policy>',
   "Use StashBase MCP tools for the conversation's bound project.",
   '- Within the bound project, search and orient with the StashBase MCP `search_project` and `list_directory` tools before scanning files with native shell or filesystem tools.',

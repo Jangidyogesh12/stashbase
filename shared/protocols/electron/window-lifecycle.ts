@@ -8,7 +8,7 @@ export const WINDOW_CONTEXT_RELEASE_READY_CHANNEL = 'window:context-release-read
 export const WINDOW_FULLSCREEN_CHANNEL = 'window:fullscreen';
 export const WINDOW_APPEARANCE_CHANNEL = 'window:appearance';
 
-export const windowContextReleaseReasonSchema = z.enum([
+const windowContextReleaseReasonSchema = z.enum([
   'window-close',
   'update-install',
 ]);

@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { readAppConfigStrict, type AppConfigFile } from './app-config.ts';
 import { appDataRoot } from './local-data.ts';
+import { writeFileAtomic } from './atomic-write.ts';
 import { usageState, accountUsageId, QUEUE_TTL } from './telemetry-state.ts';
 import { diagnosticSchema, errorDiagnostic } from '../shared/protocols/diagnostics.ts';
 import { boundedDiagnosticContext, diagnosticContextSchema, type DiagnosticContext } from '../shared/protocols/http/telemetry.ts';
@@ -46,8 +47,7 @@ export function createNativeDiagnostics(options: {
           operation, diagnostic: errorDiagnostic(error), context: boundedDiagnosticContext(context) });
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
         const file = path.join(directory, `${record.uuid}.json`);
-        fs.writeFileSync(`${file}.tmp`, JSON.stringify(record), { mode: 0o600 });
-        fs.renameSync(`${file}.tmp`, file);
+        writeFileAtomic(file, JSON.stringify(record), { mode: 0o600 });
       } catch { /* A broken host must not make crash reporting fatal. */ }
     },
     drain(accept: (record: NativeDiagnostic) => boolean) {

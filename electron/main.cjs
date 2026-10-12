@@ -73,23 +73,6 @@ function parsePortArg(argv, fallback) {
 }
 const SERVER_PORT = parsePortArg(process.argv.slice(1), 8090);
 
-function pythonCandidates(root) {
-  return process.platform === 'win32'
-    ? [
-      path.join(root, 'Scripts', 'python.exe'),
-      path.join(root, 'bin', 'python'),
-    ]
-    : [
-      path.join(root, 'bin', 'python'),
-      path.join(root, 'Scripts', 'python.exe'),
-    ];
-}
-
-function sidecarExecutable(root, name, opts = {}) {
-  const exe = process.platform === 'win32' ? `${name}.exe` : name;
-  return opts.direct ? path.join(root, exe) : path.join(root, name, exe);
-}
-
 function statIsFile(file) {
   try { return fs.statSync(file).isFile(); } catch { return false; }
 }
@@ -501,43 +484,22 @@ function spawnServer(instanceId) {
     packaged: app.isPackaged,
     vite: process.env.STASHBASE_DEV_VITE === '1',
   });
-  // In packaged builds the Python sidecar lives under
-  // `process.resourcesPath` (electron-builder `extraResources`). In dev
-  // tsx finds python via the local venv, so we only override when
-  // packaged. Model weights are cached by huggingface_hub under
-  // `~/.cache/huggingface/` regardless of dev vs packaged.
-  const packagedPythonCandidates = [
-    ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')),
-    ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv')),
-  ];
-  const packagedPython = packagedPythonCandidates.find((candidate) => {
-    try { return require('node:fs').existsSync(candidate); } catch { return false; }
-  });
-  // PyInstaller --onedir lays out the bundle as
-  // `sidecar/stashbase-daemon/stashbase-daemon` (outer name = dir,
-  // inner name = executable). The --onefile layout used to put the
-  // executable directly at `sidecar/stashbase-daemon`, so check both
-  // for forward compat with anyone still on the old layout, and stat
-  // each candidate as a *file* — spawn-ing the outer directory by
-  // mistake yields EACCES with no useful hint.
-  const packagedDaemonCandidates = [
-    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon'),
-    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon', { direct: true }),
-  ];
-  const packagedDaemon = packagedDaemonCandidates.find((candidate) => {
-    return statIsFile(candidate);
-  });
-  const hasPackagedDaemon = Boolean(packagedDaemon);
-  const packagedDaemonScript = path.join(RESOURCES_ROOT, 'python', 'stashbase_daemon.py');
+  // Packaged builds ship the PyInstaller --onedir index daemon under
+  // `process.resourcesPath` (electron-builder `extraResources`) as
+  // `sidecar/stashbase-daemon/stashbase-daemon` (outer name = dir, inner
+  // name = executable), and no Python interpreter. Stat it as a *file*:
+  // spawning the outer directory by mistake yields EACCES with no useful
+  // hint. In dev the server runs the daemon script with the local venv.
+  const daemonExe = process.platform === 'win32' ? 'stashbase-daemon.exe' : 'stashbase-daemon';
+  const packagedDaemon = path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-daemon', daemonExe);
   if (app.isPackaged) {
     if (!statIsFile(SERVER_ENTRY)) {
       throw new Error(`Packaged server entry is missing: ${SERVER_ENTRY}`);
     }
-    if (!hasPackagedDaemon && !(packagedPython && statIsFile(packagedDaemonScript))) {
+    if (!statIsFile(packagedDaemon)) {
       throw new Error(
         'Packaged Python daemon is missing. Rebuild with `pnpm build:python-sidecar` and package again.\n' +
-        `Looked for: ${packagedDaemonCandidates.join(', ')}\n` +
-        `Fallback script: ${packagedDaemonScript}`,
+        `Looked for: ${packagedDaemon}`,
       );
     }
   }
@@ -547,8 +509,7 @@ function spawnServer(instanceId) {
       STASHBASE_APP_ROOT: PROJECT_ROOT,
       STASHBASE_PACKAGED: '1',
       STASHBASE_RESOURCES_PATH: RESOURCES_ROOT,
-      ...(hasPackagedDaemon ? { STASHBASE_DAEMON_BIN: packagedDaemon } : {}),
-      ...(packagedPython ? { STASHBASE_PYTHON: packagedPython } : {}),
+      STASHBASE_DAEMON_BIN: packagedDaemon,
     }
     : { STASHBASE_APP_ROOT: PROJECT_ROOT, STASHBASE_PACKAGED: '0' };
   // In packaged+asar mode PROJECT_ROOT is `.../Resources/app.asar` —
@@ -574,9 +535,8 @@ function spawnServer(instanceId) {
       fs.writeSync(logFd, `server cwd: ${serverCwd}\n`);
       if (app.isPackaged) {
         fs.writeSync(logFd, `resources: ${RESOURCES_ROOT}\n`);
-        fs.writeSync(logFd, `daemon: ${packagedDaemon || '(missing; using Python script fallback if available)'}\n`);
+        fs.writeSync(logFd, `daemon: ${packagedDaemon}\n`);
         fs.writeSync(logFd, 'PDF/OCR component: installed on demand by the server\n');
-        fs.writeSync(logFd, `python: ${packagedPython || '(missing)'}\n`);
       }
     } catch (err) {
       console.warn(`[electron] application log unavailable: ${err?.message ?? err}`);

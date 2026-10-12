@@ -1,80 +1,20 @@
 /** The conversation list beside the canvas: which saved chats belong to this
  *  workspace, how one is restored, and how a row is renamed in place or
  *  deleted. */
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { AgentContextPort, AgentSessionPort } from '@/features/agent/application/ports';
+import type { AgentSessionPort } from '@/features/agent/application/ports';
+import { registerWorkspaceCleanup, renderWorkspace } from '@/features/agent/ui/workspace.harness';
 import {
-  createAgentWorkspaceRuntime,
-  type AgentWorkspaceRuntime,
-} from '@/features/agent/application/workspace-runtime';
-import type { Agent } from '@/features/agent/domain/agent-catalog';
-import ManagedAgentWorkspace from '@/features/agent/ui/workspace';
-import {
-  agentCatalogPort,
   agentDefinition,
   BUILT_IN_AGENT,
-  CLAUDE_AGENT,
   CODEX_AGENT,
   idleAgentSessionPort,
-  agentPersonaApi,
 } from '@/test/fakes/agent';
-import { createTestQueryClient, withQueryClient } from '@/test/query';
 
-import AgentChats from './chats';
-
-const RESEARCH_SCOPE = { kind: 'folder', path: '/Library/Research' } as const;
-
-const runtimes: AgentWorkspaceRuntime[] = [];
-
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-  for (const runtime of runtimes.splice(0)) runtime.dispose();
-});
-
-function renderWorkspace(
-  session: AgentSessionPort,
-  agents: readonly Agent[] = [BUILT_IN_AGENT, CODEX_AGENT, CLAUDE_AGENT],
-  context?: AgentContextPort,
-  onReprocess?: (source: { folderPath: string; path: string }) => void,
-) {
-  let id = 0;
-  const runtime = createAgentWorkspaceRuntime({
-    autostart: false,
-    context,
-    createId: () => `chat-${++id}`,
-    folderPath: RESEARCH_SCOPE.path,
-    port: session,
-  });
-  runtimes.push(runtime);
-  const catalog = agentCatalogPort(agents);
-  const view = withQueryClient(
-    <div>
-      <AgentChats
-        catalog={catalog}
-        onOpenAgentSettings={vi.fn()}
-        runtime={runtime}
-        scope={RESEARCH_SCOPE}
-        workspaceName="Research"
-      />
-      <ManagedAgentWorkspace
-        catalog={catalog}
-        persona={agentPersonaApi()}
-        onOpenAgentSettings={vi.fn()}
-        onOpenExternal={vi.fn()}
-        onSignIn={vi.fn()}
-        onReprocess={onReprocess}
-        runtime={runtime}
-      />
-    </div>,
-    createTestQueryClient(),
-    { strict: true },
-  );
-  return { runtime, view };
-}
+registerWorkspaceCleanup();
 
 describe('AgentChats', () => {
   it('restores a scoped transcript before resuming its native session', async () => {

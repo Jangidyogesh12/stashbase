@@ -74,7 +74,7 @@ export function isCloudPlaceholderName(name: string): boolean {
   return name.toLowerCase().endsWith('.icloud');
 }
 
-export function pathHasCloudPlaceholder(relPath: string): boolean {
+function pathHasCloudPlaceholder(relPath: string): boolean {
   return relPath
     .replace(/\\/g, '/')
     .split('/')

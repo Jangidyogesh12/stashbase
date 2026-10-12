@@ -5,15 +5,10 @@
 import express from 'express';
 import fs from 'node:fs';
 import { logger } from '../log.ts';
-import {
-  getCurrentFolder,
-  exactRegisteredFolderRootAsync,
-  resolveFolderRootAsync,
-} from '../folder.ts';
+import { getCurrentFolder } from '../folder.ts';
 import {
   cancelConversionAndWait,
   isConversionPending,
-  isConversionTextUnavailable,
   promoteConversion,
 } from '../conversion.ts';
 import { detectFormat, isConvertibleSource } from '../format.ts';
@@ -35,7 +30,9 @@ import {
   SEARCH_TYPES_VALIDATION_ERROR,
 } from '../../shared/search-types.ts';
 import { buildIndexStatus } from '../index-status.ts';
+import { requireMemberFolderRoot, routeError } from '../project-file-access.ts';
 import { createRetrieval, keywordFilesFromEvidence, searchHitsFromEvidence } from '../retrieval/index.ts';
+import { EMBEDDER_KEY_REQUIRED_CODE } from '../../shared/protocols/http/semantic-search.ts';
 
 const log = logger('routes/indexing');
 const retrieval = createRetrieval();
@@ -44,31 +41,24 @@ function parseFolderParam(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-async function requireMemberFolderRoot(ref: string): Promise<string> {
-  const root = await resolveFolderRootAsync(ref);
-  const memberRoot = await exactRegisteredFolderRootAsync(root);
-  if (!memberRoot) {
-    const err = new Error('folder is not in your folders');
-    (err as any).status = 404;
-    (err as any).code = 'FOLDER_NOT_FOUND';
-    throw err;
-  }
-  return memberRoot;
-}
-
 async function requireRequestFolder(explicit?: string): Promise<{ folderRoot: string }> {
   if (explicit) {
     const root = await requireMemberFolderRoot(explicit);
     return { folderRoot: root };
   }
   const folderRoot = getCurrentFolder();
-  if (!folderRoot) {
-    const err = new Error('no folder open');
-    (err as any).status = 412;
-    (err as any).code = 'NO_FOLDER';
-    throw err;
-  }
+  if (!folderRoot) throw routeError('no folder open', 412, 'NO_FOLDER');
   return { folderRoot: filesystemPath.absolute(folderRoot) };
+}
+
+/** Preparation requests name one visible, retrieval-eligible file. */
+function requirePreparableRel(relPath: unknown): string {
+  const rel = typeof relPath === 'string' ? relPath : '';
+  if (!rel) throw routeError('path required', 400);
+  if (!isRetrievalEligiblePath(rel)) {
+    throw routeError('hidden and excluded paths are not eligible for Preparation', 400, 'PATH_NOT_PREPARABLE');
+  }
+  return rel;
 }
 
 function sourcePathForAbs(absPath: string): string {
@@ -84,32 +74,22 @@ async function requireExistingFileInFolderAsync(folderRoot: string, rel: string)
   let abs: string;
   try {
     abs = await filesystemPath.resolveUnderAsync(folderRoot, rel);
-  } catch (cause) {
-    const err = new Error('path escapes folder', { cause });
-    (err as any).status = 400;
-    throw err;
+  } catch {
+    throw routeError('path escapes folder', 400);
   }
   const exists = await fs.promises.access(abs).then(() => true, () => false);
   if (!exists) {
     clearRecord(sourcePathForAbs(abs));
-    const err = new Error('file not found');
-    (err as any).status = 404;
-    throw err;
+    throw routeError('file not found', 404);
   }
 
   try {
     abs = await filesystemPath.resolveUnderAsync(folderRoot, rel, { access: 'existing' });
-  } catch (cause) {
-    const err = new Error('path escapes folder through symlink', { cause });
-    (err as any).status = 400;
-    throw err;
+  } catch {
+    throw routeError('path escapes folder through symlink', 400);
   }
   const stat = await fs.promises.stat(abs);
-  if (!stat.isFile()) {
-    const err = new Error('file not found');
-    (err as any).status = 404;
-    throw err;
-  }
+  if (!stat.isFile()) throw routeError('file not found', 404);
   return abs;
 }
 
@@ -117,26 +97,12 @@ export async function reprocessFileInFolder(
   relPath: string,
   folderName?: string,
 ): Promise<'conversion' | 'index'> {
-  const rel = typeof relPath === 'string' ? relPath : '';
-  if (!rel) {
-    const err = new Error('path required');
-    (err as any).status = 400;
-    throw err;
-  }
-  if (!isRetrievalEligiblePath(rel)) {
-    const err = new Error('hidden and excluded paths are not eligible for Preparation');
-    (err as any).status = 400;
-    (err as any).code = 'PATH_NOT_PREPARABLE';
-    throw err;
-  }
-
+  const rel = requirePreparableRel(relPath);
   const { folderRoot } = await requireRequestFolder(folderName || undefined);
 
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   if (!isConvertibleSource(rel) && !detectFormat(rel)) {
-    const err = new Error('this file format cannot be prepared');
-    (err as any).status = 415;
-    throw err;
+    throw routeError('this file format cannot be prepared', 415);
   }
   const sourcePath = sourcePathForAbs(abs);
   if (isConversionPending(sourcePath)) {
@@ -163,11 +129,7 @@ export async function reprocessFileInFolder(
 
 async function cancelFilePreparationInFolder(relPath: string, folderName?: string): Promise<boolean> {
   const rel = typeof relPath === 'string' ? relPath : '';
-  if (!rel) {
-    const err = new Error('path required');
-    (err as any).status = 400;
-    throw err;
-  }
+  if (!rel) throw routeError('path required', 400);
   const { folderRoot } = await requireRequestFolder(folderName || undefined);
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   const sourcePath = sourcePathForAbs(abs);
@@ -177,24 +139,11 @@ async function cancelFilePreparationInFolder(relPath: string, folderName?: strin
 }
 
 async function prepareConvertibleInFolder(relPath: string, folderName?: string): Promise<void> {
-  const rel = typeof relPath === 'string' ? relPath : '';
-  if (!rel) {
-    const err = new Error('path required');
-    (err as any).status = 400;
-    throw err;
-  }
-  if (!isRetrievalEligiblePath(rel)) {
-    const err = new Error('hidden and excluded paths are not eligible for Preparation');
-    (err as any).status = 400;
-    (err as any).code = 'PATH_NOT_PREPARABLE';
-    throw err;
-  }
+  const rel = requirePreparableRel(relPath);
   const { folderRoot } = await requireRequestFolder(folderName || undefined);
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   if (!prepareConvertibleSource(abs, rel)) {
-    const err = new Error('only DOCX files require interactive preparation');
-    (err as any).status = 415;
-    throw err;
+    throw routeError('only DOCX files require interactive preparation', 415);
   }
 }
 
@@ -254,7 +203,7 @@ export function mount(app: express.Express): void {
       if (result.availability.state === 'unavailable') {
         return res.status(412).json({
           error: 'To search by meaning, set it up in StashBase Settings.',
-          code: 'EMBEDDER_KEY_REQUIRED',
+          code: EMBEDDER_KEY_REQUIRED_CODE,
         });
       }
       const out = (await Promise.all(searchHitsFromEvidence(result.evidence).map(async (hit) => {

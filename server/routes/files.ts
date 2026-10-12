@@ -4,16 +4,14 @@ import { telemetry } from '../telemetry.ts';
 import express from 'express';
 import {
   createTextExclusiveAsync,
-  detectFormat,
   fileVersionAsync,
   fileStatVersionAsync,
-  getCurrentFolderBasename,
-  listFilesAndFoldersAsync,
   pathExistsAsync,
   resolveExistingAsync,
-  sanitizeFilename,
-} from '../files.ts';
-import { detectViewerFormat, isNoteName } from '../format.ts';
+} from '../active-file-operations.ts';
+import { getCurrentFolderBasename, sanitizeFilename } from '../file-paths.ts';
+import { listFilesAndFoldersAsync } from '../file-listing.ts';
+import { detectFormat, detectViewerFormat, isNoteName } from '../format.ts';
 import { getWorkspacePreferences } from '../app-config.ts';
 import {
   exactRegisteredFolderRootAsync,
@@ -46,10 +44,8 @@ const defaultFileRouteAdapters: FileRouteAdapters = {
   revealInFileManager: revealInOsFileManager,
 };
 
-export { prepareFileOperation } from '../file-operation-guard.ts';
-export { saveFileContent, validateEditableFileWrite } from '../file-save.ts';
 
-export async function fileHeadStatusAsync(name: string): Promise<number> {
+async function fileHeadStatusAsync(name: string): Promise<number> {
   const format = detectViewerFormat(name);
   if (!format) return 415;
   return (await pathExistsAsync(name)) ? 204 : 404;
@@ -306,7 +302,7 @@ export function mount(
         // (the PNG / CSS / WOFF that live alongside an arxiv html in its
         // `_files/` folder) get saved to disk so the iframe can pull them
         // via `/asset/*`, but they're not viewable through this route —
-        // a `readText` of binary bytes would otherwise hand the editor
+        // a `readTextAsync` of binary bytes would otherwise hand the editor
         // garbled UTF-8 to render.
         const format = detectFormat(name);
         if (!format) return res.status(415).json({ error: 'unsupported format' });

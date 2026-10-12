@@ -17,6 +17,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { appDataRoot } from './local-data.ts';
+import { writeFileAtomic } from './atomic-write.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { isConvertibleSource } from './format.ts';
 import { isCloudPlaceholderName, isIndexExcludedDirName } from './indexable.ts';
@@ -57,17 +58,7 @@ function readManifest(): Record<string, string> {
 }
 
 function writeManifest(manifest: Record<string, string>): void {
-  const dir = derivedDir();
-  const target = manifestPath();
-  const tmp = path.join(dir, `.manifest.${process.pid}.${Date.now()}.tmp`);
-  fs.mkdirSync(dir, { recursive: true });
-  try {
-    fs.writeFileSync(tmp, JSON.stringify(manifest, null, 2), 'utf8');
-    fs.renameSync(tmp, target);
-  } catch (err) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort temp cleanup */ }
-    throw err;
-  }
+  writeFileAtomic(manifestPath(), JSON.stringify(manifest, null, 2));
 }
 
 export function registerDerivedSource(sourceAbs: string): void {

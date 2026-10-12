@@ -11,18 +11,18 @@
  * root and maps to one MFS Internal namespace. The Node side records each
  * binding here so a respawn can replay it.
  *
- * Python lives in `<project>/python/.venv.nosync/bin/python` after the user
- * runs `pnpm setup:python`. In packaged Electron a portable Python
- * runtime is bundled via `extraResources` and the path is overridden
- * via `STASHBASE_PYTHON` env var (see `electron/main.cjs`).
+ * Development runs the script with the interpreter `python-host.ts`
+ * resolves (`STASHBASE_PYTHON`, or the `pnpm setup:python` venv). Packaged
+ * Electron ships the PyInstaller daemon via `extraResources` instead and
+ * passes it as `STASHBASE_DAEMON_BIN` (see `electron/main.cjs`).
  */
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import { fileURLToPath } from 'node:url';
 import { logger } from './log.ts';
+import { isFile, PROJECT_ROOT, pythonBin, RESOURCES_ROOT, sidecarExecutable } from './python-host.ts';
 import { globalVectorStoreDir } from './local-data.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { isDevelopmentRuntime } from './development-runtime.ts';
@@ -31,13 +31,6 @@ import type { EmbedderProvider } from '../shared/embedding.ts';
 
 const log = logger('mfs');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = process.env.STASHBASE_APP_ROOT
-  ? path.resolve(process.env.STASHBASE_APP_ROOT)
-  : path.resolve(__dirname, '..');
-const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
-  ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
-  : PROJECT_ROOT;
 const DEVELOPMENT_RUNTIME = isDevelopmentRuntime();
 
 interface Pending {
@@ -45,7 +38,7 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
-export const MFS_DAEMON_RETIRING = 'MFS_DAEMON_RETIRING';
+const MFS_DAEMON_RETIRING = 'MFS_DAEMON_RETIRING';
 
 /** Typed interruption emitted only when Node deliberately retires the shared
  * daemon. Callers whose operation is safe to restart can distinguish this
@@ -410,35 +403,10 @@ export class MfsDaemon extends EventEmitter {
   }
 }
 
-/** Locate the Python binary. Precedence:
- *   1. ``STASHBASE_PYTHON`` env (used by packaged Electron to point at the
- *      bundled portable runtime under ``process.resourcesPath``).
- *   2. ``python/.venv.nosync/bin/python`` populated by ``pnpm setup:python``.
- *   3. system ``python3.13`` / ``python3`` — last resort, giving a clearer
- *      import error than a command-resolution failure. */
+/** The interpreter `pythonBin()` selects, once it can import the sidecar deps. */
 async function resolvePythonBin(): Promise<string> {
-  const bin = (() => {
-    if (process.env.STASHBASE_PYTHON) return process.env.STASHBASE_PYTHON;
-    // The packaged runtime / venv live under RESOURCES_ROOT; in dev
-    // RESOURCES_ROOT falls back to PROJECT_ROOT, so a stray `python/.venv`
-    // (e.g. copied in from another checkout) would shadow the dev
-    // `python/.venv.nosync`. Skip the packaged candidates in dev — same
-    // guard as resolveDaemonBinary. STASHBASE_PYTHON still wins.
-    if (!DEVELOPMENT_RUNTIME) {
-      for (const candidate of pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime'))) {
-        if (existsSync(candidate)) return candidate;
-      }
-      for (const candidate of pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv'))) {
-        if (existsSync(candidate)) return candidate;
-      }
-    }
-    for (const candidate of pythonCandidates(path.join(PROJECT_ROOT, 'python', '.venv.nosync'))) {
-      if (existsSync(candidate)) return candidate;
-    }
-    log.warn('python/.venv.nosync not found, falling back to system `python3`');
-    return 'python3';
-  })();
-
+  const bin = pythonBin();
+  if (bin === 'python3') log.warn('python/.venv.nosync not found, falling back to system `python3`');
   await probePythonDeps(bin);
   return bin;
 }
@@ -478,18 +446,6 @@ function probePythonDeps(bin: string): Promise<void> {
   });
 }
 
-function pythonCandidates(root: string): string[] {
-  return process.platform === 'win32'
-    ? [
-        path.join(root, 'Scripts', 'python.exe'),
-        path.join(root, 'bin', 'python'),
-      ]
-    : [
-        path.join(root, 'bin', 'python'),
-        path.join(root, 'Scripts', 'python.exe'),
-      ];
-}
-
 async function resolveDaemonCommand(): Promise<DaemonCommand> {
   const unavailable = nativeComponentUnavailable();
   if (!DEVELOPMENT_RUNTIME && unavailable) throw new Error(unavailable);
@@ -498,9 +454,9 @@ async function resolveDaemonCommand(): Promise<DaemonCommand> {
   if (binary) {
     return { command: binary, args: [...storeArgs], cwd: path.dirname(binary) };
   }
-  const pythonBin = await resolvePythonBin();
+  const python = await resolvePythonBin();
   const script = resolvePythonDaemonScript();
-  return { command: pythonBin, args: ['-u', script, ...storeArgs], cwd: PROJECT_ROOT };
+  return { command: python, args: ['-u', script, ...storeArgs], cwd: PROJECT_ROOT };
 }
 
 function bindFolderPayload(folder: string, cfg: BindFolderArgs): Record<string, unknown> {
@@ -532,31 +488,12 @@ function resolveDaemonBinary(): string | null {
   // when set explicitly.
   const candidates = [
     process.env.STASHBASE_DAEMON_BIN,
-    DEVELOPMENT_RUNTIME
-      ? undefined
-      : sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon'),
-    DEVELOPMENT_RUNTIME
-      ? undefined
-      : sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon', { direct: true }),
-    DEVELOPMENT_RUNTIME
-      ? undefined
-      : sidecarExecutable(path.join(PROJECT_ROOT, 'python', 'sidecar.nosync'), 'stashbase-daemon'),
-    DEVELOPMENT_RUNTIME
-      ? undefined
-      : sidecarExecutable(path.join(PROJECT_ROOT, 'python', 'sidecar.nosync'), 'stashbase-daemon', { direct: true }),
+    ...(DEVELOPMENT_RUNTIME ? [] : [
+      sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon'),
+      sidecarExecutable(path.join(PROJECT_ROOT, 'python', 'sidecar.nosync'), 'stashbase-daemon'),
+    ]),
   ].filter(Boolean) as string[];
   return candidates.find(isFile) ?? null;
-}
-
-function sidecarExecutable(root: string, name: string, opts: { direct?: boolean } = {}): string {
-  const exe = process.platform === 'win32' ? `${name}.exe` : name;
-  return opts.direct
-    ? path.join(root, exe)
-    : path.join(root, name, exe);
-}
-
-function isFile(candidate: string): boolean {
-  try { return statSync(candidate).isFile(); } catch { return false; }
 }
 
 function resolvePythonDaemonScript(): string {

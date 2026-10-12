@@ -29,7 +29,7 @@ export function decodeDirectTextPreview(sourceName: string, bytes: Uint8Array): 
   }
 }
 
-export function unsupportedEncodingError(sourceName: string): Error {
+function unsupportedEncodingError(sourceName: string): Error {
   const err = new Error(
     `${sourceName} is not valid UTF-8. StashBase will not display, index, or rewrite unsupported text encodings.`,
   ) as Error & { code: string; status: number };

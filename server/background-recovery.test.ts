@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { maybeConvert, cancelConversionAndWait, isConversionTextUnavailable, setDerivedNoteIndexer, getScheduledConversion } from './conversion.ts';
-import { maybeConvertImage } from './image.ts';
+import { queueConvertibleSource } from './conversion-dispatch.ts';
 import { MfsIndexer } from './indexer.mfs.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { closeStateDb } from './state-db.ts';
@@ -65,7 +65,7 @@ test('OCR cancellation returns only after a stubborn descendant releases the pro
   const source = path.join(root, 'image.png'); fs.writeFileSync(source, 'fixture image');
   let pid = 0;
   try {
-    maybeConvertImage(source);
+    queueConvertibleSource(source);
     await until(() => fs.existsSync(pidFile));
     pid = Number(fs.readFileSync(pidFile, 'utf8'));
     await cancelConversionAndWait(source, 'user-request');

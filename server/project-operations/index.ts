@@ -37,6 +37,7 @@ import type { SyncResult } from '../sync.ts';
 import { ProjectOperationError } from './errors.ts';
 import type { SearchTypeCategory } from '../../shared/search-types.ts';
 import type { ProjectKeywordFile } from '../../shared/search-results.ts';
+import { EMBEDDER_KEY_REQUIRED_CODE } from '../../shared/protocols/http/semantic-search.ts';
 
 export type { ProjectKeywordFile } from '../../shared/search-results.ts';
 
@@ -164,7 +165,7 @@ export function createProjectOperations(
         throw routeError(
           'To search by meaning, set it up in StashBase Settings.',
           412,
-          'EMBEDDER_KEY_REQUIRED',
+          EMBEDDER_KEY_REQUIRED_CODE,
         );
       }
       return {

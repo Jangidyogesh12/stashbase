@@ -1,61 +1,13 @@
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { DocumentSourcePort } from '@/features/documents/application/ports';
-import { createDocumentQueryScope } from '@/features/documents/application/queries';
-import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
-import { DocumentWorkspace } from '@/features/documents/ui/workspace/workspace';
 import { pressKey } from '@/test/dom';
-import {
-  assetApi,
-  docxPreviewApi,
-  genericPreviewApi,
-  sourceApi,
-  textSource,
-} from '@/test/fakes/documents';
-import { createTestQueryClient, withQueryClient } from '@/test/query';
+import { sourceApi, textSource } from '@/test/fakes/documents';
 
-const runtimes: ReturnType<typeof createDocumentTabsRuntime>[] = [];
+import { registerSourceCleanup, renderSource } from './document-source.harness';
 
-afterEach(() => {
-  vi.useRealTimers();
-  cleanup();
-  for (const runtime of runtimes.splice(0)) runtime.dispose();
-});
-
-/** A port call that never settles, for the viewers a JSON tab never opens. */
-function pending(): () => Promise<never> {
-  return () => new Promise<never>(() => undefined);
-}
-
-function renderSource(api: DocumentSourcePort, source: { folderPath: string; path: string }) {
-  const queryClient = createTestQueryClient();
-  const runtime = createDocumentTabsRuntime({
-    api,
-    createId: () => 'tab-1',
-    createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/project/notes',
-    generation: 1,
-    restored: {
-      activeTabId: 'tab-1',
-      tabs: [{ id: 'tab-1', source }],
-    },
-  });
-  runtimes.push(runtime);
-  withQueryClient(
-    <DocumentWorkspace
-      assetApi={assetApi({ load: vi.fn(pending()) })}
-      docxPreviewApi={docxPreviewApi({ load: vi.fn(pending()) })}
-      genericPreviewApi={genericPreviewApi({ load: vi.fn(pending()) })}
-      onReveal={vi.fn(async () => undefined)}
-      revealLabel="Show in file manager"
-      runtime={runtime}
-      sourceApi={api}
-    />,
-    queryClient,
-  );
-  return { runtime };
-}
+registerSourceCleanup();
 
 describe('document JSON source', () => {
   it('opens strict JSON as a source-preserving tree and saves a structural edit', async () => {
