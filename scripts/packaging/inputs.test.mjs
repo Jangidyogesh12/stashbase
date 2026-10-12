@@ -7,6 +7,8 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { extractorInputs, extractorVersion } from './extractor-release.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const packagedFiles = pkg.build?.files ?? [];
@@ -159,11 +161,13 @@ test('bundled OpenCode runtime and SDK are pinned with an explicit packaged exec
 });
 
 
-test('the packaging CLI validates component version and bytes before invoking the builder', (t) => {
+test('the packaging CLI validates component version and bytes before invoking the builder', async (t) => {
+  const componentVersion = await extractorVersion(root);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'package-input-validation-'));
   t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
   for (const relative of ['scripts/package-desktop.mjs', 'scripts/macos-release-contract.mjs',
-    'scripts/windows-release-contract.mjs', 'shared/extractor-runtime.ts', 'package.json']) {
+    'scripts/windows-release-contract.mjs', 'shared/extractor-runtime.ts', 'package.json',
+    'scripts/packaging/extractor-release.mjs', 'pnpm-lock.yaml', ...extractorInputs]) {
     fs.mkdirSync(path.dirname(path.join(tmp, relative)), { recursive: true });
     fs.copyFileSync(path.join(root, relative), path.join(tmp, relative));
   }
@@ -172,8 +176,8 @@ test('the packaging CLI validates component version and bytes before invoking th
   fs.mkdirSync(sidecar, { recursive: true });
   fs.writeFileSync(path.join(sidecar, 'stashbase-daemon'), Buffer.from('7f454c46', 'hex'));
   const bytes = Buffer.from('component archive fixture');
-  const manifest = { schema: 1, version: pkg.version, platform: 'linux', arch: 'x64',
-    asset: `stashbase-extract-${pkg.version}-linux-x64.tar.gz`,
+  const manifest = { schema: 1, version: componentVersion, platform: 'linux', arch: 'x64',
+    asset: `stashbase-extract-${componentVersion}-linux-x64.tar.gz`,
     sha256: crypto.createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
   fs.mkdirSync(path.join(tmp, 'release.nosync'));
   const archive = path.join(tmp, 'release.nosync', manifest.asset);
@@ -211,7 +215,7 @@ test('the packaging CLI validates component version and bytes before invoking th
   // Placing --x64 between --win and its target list makes yargs reject nsis/zip.
   fs.writeFileSync(path.join(sidecar, 'stashbase-daemon.exe'), Buffer.from('4d5a0000', 'hex'));
   const windowsManifest = { ...manifest, platform: 'win32',
-    asset: `stashbase-extract-${pkg.version}-win32-x64.tar.gz` };
+    asset: `stashbase-extract-${componentVersion}-win32-x64.tar.gz` };
   fs.writeFileSync(manifestPath, JSON.stringify(windowsManifest));
   fs.writeFileSync(path.join(tmp, 'release.nosync', windowsManifest.asset), bytes);
   const result = run('--win');

@@ -1,5 +1,4 @@
-import { extractorManifestSchema, extractorDownloadUrl } from '../shared/extractor-runtime.ts';
-import crypto from 'node:crypto';
+import { extractorVersion, verifyExtractorArchive } from './packaging/extractor-release.mjs';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -11,8 +10,7 @@ import { resolveWindowsSigningConfiguration } from './windows-release-contract.m
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const requireFromRoot = createRequire(path.join(root, 'package.json'));
-const pkg = requireFromRoot('./package.json');
+const componentVersion = await extractorVersion(root);
 const claudeAgentSdkDir = path.join(root, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
 const args = process.argv.slice(2);
 const platform = args.includes('--linux') ? 'linux' : args.includes('--win') ? 'win' : 'mac';
@@ -231,23 +229,18 @@ function sidecarIssue(file, label) {
   return `${path.relative(root, file)} (${label}) is ${formatLabel(actual)}, expected ${formatLabel(expected)}`;
 }
 
-function assertSidecarsForPlatform() {
+async function assertSidecarsForPlatform() {
   const daemon = sidecarCandidates('stashbase-daemon').find((candidate) => fs.existsSync(candidate));
   if (!daemon || sidecarIssue(daemon, 'daemon')) {
     throw new Error('A valid target-platform Python index daemon is required; run pnpm build:python-sidecar.');
   }
   const manifestPath = path.join(root, 'python', 'sidecar.nosync', 'extractor-runtime.json');
-  const manifest = extractorManifestSchema.parse(JSON.parse(fs.readFileSync(manifestPath, 'utf8')));
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const runtime = targetRuntime();
-  if (manifest.platform !== runtime.nodePlatform || manifest.arch !== runtime.arch || manifest.version !== pkg.version) {
+  if (manifest.version !== componentVersion || manifest.platform !== runtime.nodePlatform || manifest.arch !== runtime.arch) {
     throw new Error('Extractor component manifest does not match this app build');
   }
-  extractorDownloadUrl(manifest);
-  const archive = path.join(root, 'release.nosync', manifest.asset);
-  const bytes = fs.readFileSync(archive);
-  if (bytes.length !== manifest.sizeBytes || crypto.createHash('sha256').update(bytes).digest('hex') !== manifest.sha256) {
-    throw new Error('Extractor component archive does not match its embedded manifest');
-  }
+  await verifyExtractorArchive(path.join(root, 'release.nosync'), componentVersion, runtime.nodePlatform, runtime.arch, manifestPath);
 }
 
 function assertClaudeAgentSdkForPlatform() {
@@ -278,16 +271,16 @@ function prepareIntelOpenCode() {
 }
 
 if (!hostMatchesTarget()) {
-  assertSidecarsForPlatform();
+  await assertSidecarsForPlatform();
   assertClaudeAgentSdkForPlatform();
   runScript('build');
 } else {
   runScript('build');
   if (!skipSidecarBuild) {
-    runScript('build:python-extract-sidecar');
-    runScript('build:extractor-component');
+    runScript('build:python-sidecar');
+    run(process.execPath, [path.join(root, 'scripts/prepare-extractor-release.mjs'), 'download']);
   }
-  assertSidecarsForPlatform();
+  await assertSidecarsForPlatform();
   assertClaudeAgentSdkForPlatform();
 }
 clearQuarantine();

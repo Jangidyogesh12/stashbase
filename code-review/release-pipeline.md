@@ -6,26 +6,39 @@
 ## Pipeline Shape
 
 ```text
-source commit → CI push run succeeds
-→ matching vX.Y.Z tag
+version-bump commit on main → CI push run succeeds
+→ Release workflow creates the matching vX.Y.Z tag
 → empty draft GitHub Release
+→ independently versioned PDF/OCR component set is available
 → parallel macOS / Linux / Windows packages and smoke checks
 → complete immutable update set is verified
 → release becomes public → Homebrew cask points at the public DMG
 ```
 
 Source validation and platform packaging are separate workflows. Source CI runs
-for `main` and `release/**` pushes. A package may be built only from a tag whose
-exact commit has a successful `ci.yml` push run.
+for `main` pushes and pull requests. Release preparation does not create a second
+release branch or repeat source CI for a version-only commit. A package may be
+built only from a tag whose exact commit has a successful `ci.yml` push run.
 The reusable gate resolves lightweight or annotated tags, waits for an active
 matching run within its bound, and fails closed on missing, failed, cancelled,
 or timed-out CI.
+A successful `CI` completion on `main` starts the coordinator only when the
+exact checked-out commit changes the version and is named `chore: bump to <version>`.
+The tag is created through the GitHub API only after that CI succeeds. Other pushes,
+PR runs, failed runs and foreign repositories cannot trigger publication. Manual
+dispatch remains available for retrying an existing tag.
+
 The coordinator is the publication Interface. It creates or validates an empty
 draft, calls all platform Adapters, verifies the complete update set, and only
 then makes the release public. A client must never observe a new latest version
 before its metadata and payloads coexist.
 
 ## Source CI
+
+Source jobs are bounded to 30 minutes, renderer behavior to 10 minutes, and the
+native OpenCode smoke to five minutes. Release packaging jobs are bounded to
+60 minutes. Workflow concurrency serializes publication without cancelling signing
+or asset uploads; source runs on the same ref are also serialized.
 
 - The macOS, Windows, and Linux matrix retains renderer behavior tests,
   host/Python suites, native OpenCode verification, platform builds, and real
@@ -106,7 +119,7 @@ toolchain rather than the linter any gate runs.
   owned by both the entry process and frozen multiprocessing workers.
 - Base installers contain only the Python index daemon and an embedded
   extractor manifest. `scripts/build-extractor-component.mjs` publishes an
-  independent tar.gz and matching JSON manifest per app version/platform;
+  independent tar.gz and matching JSON manifest per component version/platform;
   packaging verifies their hash, size, and target before embedding the manifest.
   macOS signs every native component binary/framework with Developer ID and
   requires accepted notarization before hashing the archive. Its temporary
@@ -143,8 +156,9 @@ toolchain rather than the linter any gate runs.
 - Artifact upload gates fail closed unless macOS has DMG, ZIP, and metadata;
   Windows has NSIS EXE, blockmap, and metadata; and Linux has deb,
   AppImage, and latest metadata carrying its embedded blockmap size.
-  All four platform/architecture extractor archives and manifests must also exist before
-  the coordinator publishes the release.
+  All four platform/architecture extractor archives and manifests must exist on
+  their separate immutable component prerelease before application packaging starts.
+  Component prereleases never become the latest desktop release.
 - Versioned release assets are immutable. Platform Adapters upload only to a
   draft and never overwrite an existing name. If a coordinated run leaves an
   incomplete draft, delete that draft and rerun from the same tag rather than
@@ -176,12 +190,32 @@ toolchain rather than the linter any gate runs.
 
 ### Native Component Reuse
 
+`extractor-components.yml` is the single publication owner for PDF/OCR. The
+component version is `0.0.0-extractor.<input-sha256>`, independent of the app
+version. The digest covers extractor sources, Python constraints, build/signing
+recipes and their workflow, the manifest schema, and the resolved archive/schema
+Node dependencies. App version bumps and renderer-only lockfile changes do not
+invalidate it. Published components retain their original build environment;
+runner image rotation alone does not rebuild already published binaries. Change
+the component recipe when deliberately refreshing the interpreter/build image.
+
+On a miss, the component workflow builds four native targets, signs/notarizes
+macOS, uploads only to a draft, verifies every archive against its manifest and
+publishes a non-latest prerelease. On a hit, it requires a complete public set.
+Incomplete drafts fail closed and must be deleted before retrying. Platform app
+jobs download the selected component, verify its identity/size/hash, embed its
+manifest, and run the existing real PDF/OCR plus offline-reuse packaged smoke.
+They do not sign, rebuild or re-upload an unchanged extractor. The runtime keeps
+using the same installed component across app updates that pin the same manifest.
+
 `native-components.yml` prepares unsigned Python bundles on
 each push to `main`, independently of source CI. It produces no installer and
 uses no signing credentials. The shared `prepare-native-components` action is
 also used by all three release Adapters. GitHub release tags can restore the
 default branch's caches; a cache written only under one tag is not shared with
-the next tag. Only `main` saves these component caches.
+the next tag. Only complete daemon-plus-extractor builds on `main` save these
+component caches. App packaging restores the same complete cache when available,
+but a miss builds only the daemon and never saves an incomplete cache.
 
 Keys include OS, architecture, hosted image version, component inputs, and the
 shared build recipe; Python also includes the interpreter patch version and
@@ -207,11 +241,12 @@ Universal uv resolution and an existing environment can miss index-level Python
 compatibility restrictions. RapidOCR stays on 1.2.3 because later releases
 declare Python <3.13; the hosted cold component builds verify actual installation.
 
-Save Python bundles before macOS signing mutates the extractor. Every release
-still signs/notarizes its macOS components, creates its own versioned extractor
-archive and hash manifest, validates package inputs, and runs the packaged
-smoke. Cached binaries
-are build inputs, not evidence that the new assembled application passed.
+Save Python bundles before macOS signing mutates the extractor. Unsigned caches
+only accelerate a new component build. Every application release validates its
+selected published component and runs the packaged smoke. Reuse is not evidence
+that the newly assembled application passed. Hosted cold/warm component
+publication and measured end-to-end savings remain to be verified after this
+pipeline change is deployed.
 
 The compression policy remains electron-builder's default `normal`. Compare
 cold and warm release jobs and archive size/upload time before changing it;
@@ -324,9 +359,10 @@ Assertions live in `scripts/github-release-api.test.mjs` behind
 
 ## Maintainer Handoff
 
-Version choice, the standalone version-bump commit, tag creation, and dispatch
-of the coordinated Release workflow remain maintainer-controlled. Public
-publication is automated only after all platform jobs and asset checks pass.
+Version choice and pushing the explicit standalone version-bump commit remain
+maintainer-controlled. Successful exact-commit source CI automatically starts
+tagging and coordinated publication. Public application publication occurs only
+after all platform jobs and asset checks pass.
 Do not commit packaged artifacts; outputs belong under `release.nosync/`.
 
 After workflows finish, verify the release assets and tap update, then run the
@@ -354,7 +390,8 @@ credential-free and does not run this probabilistic check.
 | Frontend toolchain Interface | the pinned Vite+ version in `package.json`, `renderer/package.json`, and `pnpm-workspace.yaml`, against the resolved inventory in `toolchain/vite-plus.json` |
 | Toolchain verifier | `scripts/check-vite-plus-toolchain.mjs`, with the workflow contract in `scripts/vite-plus-ci.test.mjs` |
 | Tag gate Interface | `.github/workflows/release-ci-gate.yml` and `scripts/require-green-ci.mjs` |
-| Publication coordinator | `.github/workflows/release.yml` |
+| Publication coordinator | `.github/workflows/release.yml`, `scripts/select-release-tag.mjs` |
+| Independent PDF/OCR publication | `.github/workflows/extractor-components.yml`, `scripts/prepare-extractor-release.mjs`, `scripts/packaging/extractor-release.mjs` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Release asset upload Module | `scripts/upload-release-assets.mjs` over the draft lookup and upload rules in `scripts/github-release-api.mjs` |
 | Native build reuse | `.github/workflows/native-components.yml`, `.github/actions/prepare-native-components/action.yml`, `python/constraints.txt`, `scripts/lock-python.mjs`; contracts in `scripts/packaging/native-cache.test.mjs` |
@@ -368,32 +405,30 @@ credential-free and does not run this probabilistic check.
 When asked to release, run this sequence unattended after the one version
 choice:
 
-1. Inspect `git status` and `git log --oneline -10`; group a dirty tree into
-   focused commits. Push `main`, then create `release/v<version>` from that
-   ready commit.
+1. Inspect `git status` and `git log --oneline -10`; group pending work into
+   focused commits on `main`. Complete the applicable pre-commit gates.
 2. Ask whether the `package.json` version bump is patch, minor, or major.
-3. Commit only the bump as `chore: bump to <version>`.
-4. Push the release branch; wait for the `CI` workflow to succeed for that
-   exact commit. Then create and push `v<version>` from the release branch.
-5. If retrieval ranking, chunking, an embedding model, or provider integration
-   changed, run and retain the J05 semantic retrieval report for OpenAI and
-   OpenRouter as routed by the residual checklist. During calibration, collect
-   the dataset's minimum run count for each provider. Stop publication on an
-   `ACTIVE` threshold failure; label `CALIBRATION` results only as baseline
-   evidence.
-6. Dispatch `.github/workflows/release.yml` with the tag. It creates an empty
-   draft, runs all three platform workflows, verifies the complete update set,
-   publishes the release, and then updates Homebrew. Do not manually publish
-   the draft. `HOMEBREW_TAP_TOKEN` requires push access to
-   `liliu-z/homebrew-stashbase`.
-7. If a platform upload fails after writing assets, delete the incomplete draft
-   and dispatch the coordinator again. Never use clobber or replace a versioned
-   asset in place.
-8. After Actions finish, run `gh release view v<version>`. Verify macOS DMG/zip,
-   Linux deb/AppImage, Windows exe, all three latest YAML update metadata
-   files and generated sidecars, and the tap update, then perform the
-   residual packaged UI sanity checks, including a real N→N+1 update on every
-   platform before calling the update path verified.
+3. Commit only the bump as `chore: bump to <version>`, as the final commit in
+   the push. Do not create a release branch or push the same source first.
+4. If retrieval ranking, chunking, an embedding model, or provider integration
+   changed, collect the required J05 reports before pushing the release trigger.
+   `ACTIVE` threshold failures stop release; `CALIBRATION` reports are baseline
+   evidence only. The probabilistic gate remains maintainer-operated.
+5. Push `main` once. The `CI` workflow validates that exact final commit; on
+   success, the Release workflow creates its immutable tag, prepares the draft,
+   publishes or reuses the independent component set, packages all platforms,
+   verifies the update set, publishes the app, and updates Homebrew. Do not
+   manually publish a draft. `HOMEBREW_TAP_TOKEN` needs tap push access.
+6. If CI fails without requiring source changes, rerun the failed jobs. If fixes
+   must follow the bump, wait for their exact `main` commit to pass CI, create
+   the version tag at that successful commit, and manually dispatch `release.yml`.
+   For a packaging/upload failure, delete the incomplete application draft and dispatch `release.yml` with the
+   same tag. Delete an incomplete component draft as well if component publication
+   failed; retain already public components. Never clobber versioned assets.
+7. After Actions finish, verify the public app assets, all three update metadata
+   files and generated sidecars, the separate four-platform component set pinned
+   by the application, and the tap update. Perform residual packaged UI sanity,
+   including N→N+1 updates before calling the update path verified.
 
 Release notes identify separate arm64/x64 installers, the older Intel component
 limitations, Developer ID signing, and notarization. The macOS workflow requires the signing certificate secrets

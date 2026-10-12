@@ -1,5 +1,9 @@
 name: Prepare native components
 description: Restore exact unsigned component inputs or build them; never cache installers or signing output.
+inputs:
+  extractor:
+    description: Build the extractor on a cache miss; app packaging needs only the daemon.
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -31,12 +35,12 @@ runs:
     - name: Build unsigned Python components
       if: steps.python-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: node scripts/build-python-sidecar.mjs --with-extract
+      run: node scripts/build-python-sidecar.mjs ${{ inputs.extractor == 'true' && '--with-extract' || '' }}
 
     # Save before extractor signing mutates its input directory. Only main can
     # populate shared caches; release tags can read main's exact-key entries.
     - name: Save unsigned Python components
-      if: steps.python-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+      if: steps.python-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && inputs.extractor == 'true'
       uses: actions/cache/save@v5
       with:
         path: python/sidecar.nosync

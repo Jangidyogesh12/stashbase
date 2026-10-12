@@ -230,7 +230,10 @@ survive source cancellation. Shutdown retains unfinished demand.
 
 Only the app's embedded version/platform/asset/size/hash manifest authorizes
 bytes. Verify before confined, bounded extraction and atomic versioned publication;
-validate links and never execute partial staging. Installed versions work offline.
+validate links and never execute partial staging. Component identity is independent
+of the desktop version: an application update pinning the same component reuses
+the verified installation offline. A changed component still requires its exact
+embedded manifest; remote release metadata never authorizes runtime bytes.
 Signing and release publication belong to [Release Runbook](release-pipeline.md).
 Native component compatibility belongs to `server/native-component-support.ts`.
 An unsupported component rejects only its own operation; it must not block server
