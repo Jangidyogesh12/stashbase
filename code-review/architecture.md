@@ -214,6 +214,9 @@ source URL and installed package version.
   checks. Apply namespace/path/type narrowing before bounded results; report
   truncation and partial reads. Remap all evidence to visible sources. A legacy
   derived-path request must resolve through its live source before authorization.
+- Node/Python JSON-RPC is UTF-8 in both directions. The launcher pins the
+  process encoding; the daemon also configures its standard streams so direct
+  and frozen launches cannot inherit a Windows ANSI code page.
 - Resource ceilings must stay finite and aligned across Node/Python. No-op reconcile
   spends no embeddings but still transfers text for MFS revision classification.
   A rename is not a zero-reembedding guarantee. Ranking changes need J05 evaluation.
@@ -549,9 +552,12 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   not deleted by this switch.
 - `STASHBASE_TELEMETRY_DISABLED=1` suppresses collection and queue delivery before
   startup without changing saved preferences/identity. Electron passes it to Node;
-  Settings cannot override it. Unpackaged builds never collect. Automated and
-  manual packaged tests use the override; collection tests replace transport and
-  never send to production PostHog.
+  Settings cannot override it. Unpackaged builds never collect. The host, Electron
+  and MCP native entry points share `server/telemetry-environment.ts`: Node test
+  workers, `NODE_ENV=test`, Vitest and Jest markers suppress admission even with
+  an inherited packaged flag. The isolated host-test fixture also sets the override
+  for descendants. Manual packaged checks must still set it; collection tests
+  explicitly simulate production only with replaced transport.
 - Automatic diagnostics use this same owner, suppression and opt-out. Node emits
   bounded original messages, unknown as well as known codes, nested causes and
   actionable stacks through `shared/protocols/diagnostics.ts`. HTTP request IDs and
@@ -560,6 +566,14 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   and retry IDs. Background diagnostics retain the operation sentence. HTTP, Agent,
   background and renderer failures converge here without throwing into operations,
   recursively reporting analytics failures, or creating another privacy setting.
+  Renderer JSON-body failures retain the original cause, status (including 2xx),
+  content type and host-issued response request ID. Requested cancellation stays
+  cancellation; empty HEAD/204/205 responses are not decode failures. The Agent
+  broker observes bounded SSE framing metadata and explicit upstream errors,
+  never retains model text/tools, and supplies the current request trace to the
+  native adapter's error diagnostic before the turn retires. Unknown completion
+  includes the native message ID, finish reason and token counts; no new turn
+  inherits a prior request trace.
   Native startup, crash, MCP stdio and updater errors use the bounded private
   `server/native-diagnostics.ts` spool when the host is unavailable. Native code
   never creates analytics identity or sends network requests. The host drains it

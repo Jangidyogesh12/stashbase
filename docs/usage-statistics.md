@@ -84,6 +84,16 @@ credentials, credential assignments, common API keys, private keys, URL password
 and cookies are filtered at capture and again before sending. This is targeted
 filtering, not a promise to remove every personal detail from diagnostic prose.
 
+HTTP response diagnostics include the status even when a 2xx response cannot
+be decoded, its content type, the host-issued request ID, and the original
+parsing/read cause. Requested cancellation is excluded. Default Agent failures
+can include the native message ID, finish reason and token counts, plus the
+current gateway request ID, retry attempt, byte/frame counts, stream-end and
+DONE markers, finish reasons and explicit provider/transport errors. Stream
+observation retains protocol metadata only, not replies, tool arguments or
+prompts. Missing provider explanations remain missing; request IDs support
+follow-up investigation rather than implying a known root cause.
+
 An identical diagnostic is reported when first seen. Repeats within its window
 (one minute for errors, ten minutes for warnings) are counted locally and sent as
 one event when the window closes. `occurrences` is the number of times it happened
@@ -207,7 +217,14 @@ period independently from the seven-day local delivery limit.
 
 ### Testing packaged builds
 
-Set `STASHBASE_TELEMETRY_DISABLED=1` before starting an app/server test process.
+Node test workers, `NODE_ENV=test`, Vitest and Jest processes automatically disable
+production collection and native diagnostic spooling, even if they inherit
+`STASHBASE_PACKAGED=1`. The shared host-test fixture also passes
+`STASHBASE_TELEMETRY_DISABLED=1` to descendants. Collection unit tests use explicit
+fixtures with fake transport; production-admission tests replace transport before import.
+
+For manual packaged checks, set `STASHBASE_TELEMETRY_DISABLED=1` before starting an app/server test process.
+
 It suppresses all collection and queue delivery, including identity links,
 without changing saved preferences or analytics state. Settings cannot override
 it. Verify `/api/telemetry` reports `available: false` before exercising flows.

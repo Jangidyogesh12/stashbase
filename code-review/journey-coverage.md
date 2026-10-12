@@ -101,7 +101,11 @@ logout/direct account switching, delayed outcomes, offline queue replay, stable
 UUID/time/version, retryable/permanent refusals, capacity/expiry, corrupt config,
 opt-out cancellation, active days without restart, session expiry and subscription
 poll suppression. Its subprocess replaces outbound transport before importing the
-production owner and exercises Electron's packaged test-suppression environment.
+production owner and exercises Electron's packaged test-suppression environment,
+including inherited packaged flags in Node, Vitest, Jest and `NODE_ENV=test`
+processes, saved preferences, errors/warnings, and a normal packaged positive control.
+`server/telemetry-environment.ts` shares runtime admission with Electron/MCP native
+diagnostics; the isolated host-test fixture suppresses descendants as well.
 Renderer telemetry tests exercise trusted foreground input, quiet background days,
 listener disposal, bounded edit reporting and refusal of host-only facts.
 Document lifecycle tests distinguish editing from reconciliation/no-change callbacks;
@@ -135,6 +139,16 @@ account changes; renderer tests cover bounded delivery and component/resource
 context. Production PostHog receipt and every possible provider error shape are
 not established by these controlled tests. Native startup errors require a later
 healthy host; queue/rate/expiry limits still permit loss.
+
+**Response diagnosis (2026-10-13):** renderer HTTP regressions exercise an
+original JSON parse failure through the files adapter and distinguish requested
+body cancellation. Host tests join the returned request ID to its diagnostic.
+The broker's real loopback tests preserve response bytes while observing unknown
+finish, malformed framing, in-band provider errors and a reset after streaming;
+conversation content and credentials are excluded and traces reset on new turns.
+The panel regression carries native completion metadata and an upstream cause
+through turn-scoped telemetry. These controlled tests do not recover old events
+or establish production-provider root causes.
 
 The built-source macOS runtime was driven through Settings and an actual
 renderer error event with isolated configuration and collection disabled. Its
@@ -613,6 +627,13 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 ## J04: Preparation
 
+**Windows pipe encoding (2026-10-13):** the launcher and Python daemon explicitly
+own UTF-8 stdin/stdout. A real subprocess regression starts with CP1252 encoding,
+indexes emoji and multilingual text, retrieves it, and verifies UTF-8 output.
+This exercises the encoding failure independently of the host OS; packaged
+Windows execution remains a release verification requirement.
+
+
 **Independent component reuse (2026-10-12):** the release pipeline selects a
 component identity from its build inputs instead of the desktop version.
 `scripts/packaging/extractor-release.test.mjs` covers input invalidation,
@@ -656,6 +677,12 @@ Host/services: `server/conversion-dispatch.ts`, `server/conversion-scheduler.ts`
   `pnpm test:python`, and `pnpm test:package-inputs` cover format completion,
   freshness, checkpoints, cancellation including descendants,
   native worker wiring, and bounded component install/retry/offline reuse.
+- **Driven Runtime Pass (2026-10-13):** an isolated Node `MfsDaemon` launch
+  inherited a simulated ANSI encoding, bound a disposable Gallery-named folder
+  with emoji, indexed a Markdown filename with emoji and Chinese characters,
+  then retrieved its Chinese content through the real Python/MFS RPC channel.
+  This used source runtimes on macOS; the frozen Windows sidecar remains a
+  release check.
 - **Driven Runtime Pass:** PDF/OCR recovery (2026-09-15) covers
   failed first demand, no polling retries, one Settings retry, next-launch
   download/resume, and a later offline process with zero downloads. It uses a
@@ -730,6 +757,14 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
   [issue #176](https://github.com/liliu-z/stashbase/issues/176).
 
 ## J06: Agent
+
+**Model failure diagnostics (2026-10-13):** `hosted-agent-diagnostics.ts`
+observes bounded SSE metadata and original stream failures; the OpenCode
+translator joins gateway request identity, native message ID, finish reason and
+token counts to the turn's error diagnostic. Broker and panel tests cover unknown
+completion, malformed/error frames, broken streams and turn isolation without
+capturing prompt or generated text. These controlled streams do not establish a
+live provider's error shape or packaged delivery.
 
 - **Default model selection (2026-10-12):** Default reads approved hosted
   profiles from `/v1/agent/models` (`server/hosted-agent-models.ts`) and uses
