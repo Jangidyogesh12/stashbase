@@ -386,3 +386,20 @@ describe('Agent transcript context', () => {
     );
   });
 });
+
+it('folds a long prompt behind Show more and opens it again with Show less', async () => {
+  const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(900);
+  try {
+    renderTranscript([{ id: 'u1', kind: 'user', text: 'A long brief' }], false);
+    await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show less' }));
+    expect(screen.getByRole('button', { name: 'Show more' })).not.toBeNull();
+  } finally {
+    height.mockRestore();
+  }
+});
+
+it('leaves a short prompt open with no fold control', () => {
+  renderTranscript([{ id: 'u1', kind: 'user', text: 'Map the repo' }], false);
+  expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+});

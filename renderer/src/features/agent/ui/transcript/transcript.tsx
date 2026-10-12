@@ -22,6 +22,7 @@ import {
 } from '@/features/agent/domain/time';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
+import { CollapsibleUserText } from '@/features/agent/ui/transcript/collapsible-user-text';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
@@ -176,30 +177,32 @@ const TranscriptBlock = memo(function TranscriptBlock({
           from="user"
           time={block.at === undefined ? undefined : promptTimeLabel(block.at, now)}
         >
-          <span className="sr-only">You: </span>
-          {segments.map((segment) =>
-            segment.kind === 'text' ? (
-              segment.text
-            ) : (
-              <span
-                className={cn(
-                  'mx-px inline-flex max-w-full items-center gap-1 bg-foreground/8 px-1.5 py-px align-baseline font-medium',
-                  shape.chip,
-                )}
-                key={`${segment.start}:${segment.path}`}
-                title={segment.path}
-              >
-                <FileTypeIcon
-                  aria-hidden="true"
-                  className="shrink-0"
-                  path={segment.path}
-                  size={12}
-                />
-                <span className="truncate">{basePathName(segment.path)}</span>
-                <span className="sr-only"> (file mention: {segment.path})</span>
-              </span>
-            ),
-          )}
+          <CollapsibleUserText>
+            <span className="sr-only">You: </span>
+            {segments.map((segment) =>
+              segment.kind === 'text' ? (
+                segment.text
+              ) : (
+                <span
+                  className={cn(
+                    'mx-px inline-flex max-w-full items-center gap-1 bg-foreground/8 px-1.5 py-px align-baseline font-medium',
+                    shape.chip,
+                  )}
+                  key={`${segment.start}:${segment.path}`}
+                  title={segment.path}
+                >
+                  <FileTypeIcon
+                    aria-hidden="true"
+                    className="shrink-0"
+                    path={segment.path}
+                    size={12}
+                  />
+                  <span className="truncate">{basePathName(segment.path)}</span>
+                  <span className="sr-only"> (file mention: {segment.path})</span>
+                </span>
+              ),
+            )}
+          </CollapsibleUserText>
         </ChatMessage>
       </div>
     );
