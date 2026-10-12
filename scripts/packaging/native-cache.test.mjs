@@ -69,6 +69,7 @@ test('shared caches are populated on main before signing and reused by every rel
   for (const step of steps.filter((step) => step.uses?.startsWith('actions/cache/save@'))) {
     assert.match(step.if, /github.ref == 'refs\/heads\/main'/);
     assert.match(step.if, /cache-hit != 'true'/);
+    assert.match(step.if, /inputs.extractor == 'true'/, 'daemon-only misses cannot populate a complete-component cache');
   }
   assert.ok(steps.every((step) => !/sign-extractor|build:extractor-component|package-desktop/.test(step.run ?? '')));
   for (const [platform, job] of [['macos', 'macos-dmg'], ['linux', 'linux-packages'], ['windows', 'windows-installer']]) {
@@ -76,9 +77,10 @@ test('shared caches are populated on main before signing and reused by every rel
     const runners = release.strategy?.matrix?.include?.map((entry) => entry.os) ?? [release['runs-on']];
     for (const runner of runners) assert.ok(warm.jobs.prepare.strategy.matrix.os.includes(runner));
     const prepareIndex = release.steps.findIndex((step) => step.uses === './.github/actions/prepare-native-components');
-    const componentIndex = release.steps.findIndex((step) => step.run === 'pnpm build:extractor-component');
+    const componentIndex = release.steps.findIndex((step) => step.run === 'node scripts/prepare-extractor-release.mjs download');
     const packageIndex = release.steps.findIndex((step) => step.env?.STASHBASE_SKIP_SIDECAR_BUILD === '1');
     assert.ok(prepareIndex >= 0 && componentIndex > prepareIndex && packageIndex > componentIndex);
+    assert.equal(release.steps[prepareIndex].with.extractor, 'false');
     assert.equal(release.steps.some((step) => step.uses?.startsWith('msys2/')), false);
   }
 });

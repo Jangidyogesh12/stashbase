@@ -206,9 +206,10 @@ release.
 When the user asks to release or package a build, read and follow
 [`code-review/release-pipeline.md`](code-review/release-pipeline.md) in full.
 The only question is the patch/minor/major version choice; everything after it
-runs unattended. Tidy and push focused commits first, gate the tag on source CI
-for the exact version-bump commit, then hand off GitHub Release publication and
-verify all platform assets plus residual packaged UI sanity.
+runs unattended. Tidy focused commits, make the version bump the final commit,
+and push `main` once. Successful exact-commit source CI triggers tagging and publication; do not
+create a second release branch. Then verify all platform assets plus residual
+packaged UI sanity.
 
 Packaging is release-only. `pnpm dist:brew` is a local macOS fallback, not the
 default. Never commit packaged artifacts; outputs belong in `release.nosync/`.

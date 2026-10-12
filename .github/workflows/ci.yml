@@ -2,15 +2,20 @@ name: CI
 
 on:
   push:
-    branches: [main, 'release/**']
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: source-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 jobs:
   source-build:
     name: Source build (${{ matrix.os }})
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -52,6 +57,7 @@ jobs:
         run: pnpm check:web
 
       - name: Test renderer behavior
+        timeout-minutes: 10
         if: runner.os != 'Linux'
         # Leave room for lazy imports plus each assertion's own wait timeout.
         run: pnpm test:renderer --maxWorkers=2 --testTimeout=15000
@@ -121,6 +127,7 @@ jobs:
         run: pnpm test:agent
 
       - name: Test bundled OpenCode runtime
+        timeout-minutes: 5
         if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:opencode:native
 

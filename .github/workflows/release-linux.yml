@@ -7,27 +7,13 @@ on:
         description: Release tag to attach the Linux assets to, for example v0.9.0
         required: true
         type: string
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Release tag to attach the Debian package to, for example v0.9.0
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 jobs:
-  release-ci-gate:
-    permissions:
-      actions: read
-      contents: read
-    uses: ./.github/workflows/release-ci-gate.yml
-    with:
-      tag: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
-
   linux-packages:
-    needs: release-ci-gate
+    timeout-minutes: 60
     # This runner defines the oldest supported native ABI. The sidecar build
     # also rejects symbols newer than toolchain.json's declared baseline.
     runs-on: ubuntu-22.04
@@ -66,9 +52,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - uses: ./.github/actions/prepare-native-components
+        with:
+          extractor: 'false'
 
-      - name: Build PDF/OCR download component
-        run: pnpm build:extractor-component
+      - name: Download the verified PDF/OCR component
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/prepare-extractor-release.mjs download
 
       - name: Build Linux packages
         env:
@@ -87,6 +77,6 @@ jobs:
           grep -q 'blockMapSize:' release.nosync/latest-linux.yml || { echo "::error::latest-linux.yml is missing embedded AppImage blockmap metadata"; exit 1; }
           find release.nosync -maxdepth 1 -type f -name '*.deb' -size +0c -print -quit | grep -q . || { echo "::error::Missing Debian package"; exit 1; }
           find release.nosync -maxdepth 1 -type f -name '*.AppImage' -size +0c -print -quit | grep -q . || { echo "::error::Missing AppImage"; exit 1; }
-          mapfile -t artifacts < <(find release.nosync -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.blockmap' -o -name '*.zsync' -o -name 'stashbase-extract-*.tar.gz' -o -name 'stashbase-extract-*.json' -o -name 'latest*.yml' \) -size +0c)
+          mapfile -t artifacts < <(find release.nosync -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.blockmap' -o -name '*.zsync' -o -name 'latest*.yml' \) -size +0c)
           test "${#artifacts[@]}" -gt 0 || { echo "::error::No Linux release assets found"; exit 1; }
           node scripts/upload-release-assets.mjs "${artifacts[@]}"

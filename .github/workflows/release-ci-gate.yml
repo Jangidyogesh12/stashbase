@@ -15,6 +15,7 @@ permissions:
 jobs:
   require-green-ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       # The gate implementation comes from the default branch so manual backfills
       # can validate older release tags that predate this script.

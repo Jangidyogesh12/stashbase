@@ -3,7 +3,6 @@ import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { parse, stringify } from 'yaml';
-import { extractorManifestSchema, extractorDownloadUrl } from '../../shared/extractor-runtime.ts';
 
 async function digest(file, algorithm, encoding) {
   const hash = crypto.createHash(algorithm);
@@ -38,18 +37,6 @@ export async function mergeMacArtifacts({ directories, output, version, productN
       const blockmap = `${source}.blockmap`;
       if (await fs.stat(blockmap).then((stat) => stat.isFile(), () => false)) copies.push(blockmap);
     }
-    const component = `stashbase-extract-${version}-darwin-${arch}`;
-    const manifestPath = path.join(directory, `${component}.json`);
-    const manifest = extractorManifestSchema.parse(JSON.parse(await fs.readFile(manifestPath, 'utf8')));
-    extractorDownloadUrl(manifest);
-    const archive = path.join(directory, `${component}.tar.gz`);
-    if (manifest.version !== version || manifest.platform !== 'darwin' || manifest.arch !== arch
-      || manifest.asset !== `${component}.tar.gz`
-      || (await fs.stat(archive)).size !== manifest.sizeBytes
-      || await digest(archive, 'sha256', 'hex') !== manifest.sha256) {
-      throw new Error(`${arch} extractor verification failed`);
-    }
-    copies.push(manifestPath, archive);
     if (metadata.releaseDate) dates.push(metadata.releaseDate);
   }
   const fallback = files.find((file) => file.url.endsWith('-x64.zip'));

@@ -16,7 +16,7 @@ const requireDraft = args.has('--require-draft');
 const tag = `v${pkg.version}`;
 const repo = process.env.GITHUB_REPOSITORY || repositorySlug(pkg.repository?.url);
 
-// Release packaging creates the independent PDF/OCR component and embeds its
+// Release packaging downloads the independent PDF/OCR component and embeds its
 // exact manifest; the base installer never carries the extractor payload.
 if (process.platform === 'darwin') process.env.STASHBASE_RELEASE_BUILD = '1';
 

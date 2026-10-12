@@ -17,6 +17,7 @@ an empty project and a conversation without references are valid.
 - Preview, preparation, and semantic-index readiness are separate. Background work
   prioritizes interaction without blocking unrelated documents or conversation.
 - Local PDF/OCR components download on first demand and work offline thereafter.
+  Updating the app reuses an installed component when that component is unchanged.
   Failed setup offers retry beside a waiting document, or one retry on next launch.
   Cancelled source demand cannot silently resume; independently requested component
   installation may continue. Downloads do not send source bytes or steal focus.

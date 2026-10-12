@@ -26,6 +26,13 @@ test('the release component manifest drives the runtime through verified install
   assert.equal(await fs.readFile(bin, 'utf8'), 'executable fixture');
   assert.equal(requests, 1);
   assert.equal(await runtime.ensure(), bin);
+  // A new application process pins the same independent component and stays
+  // usable offline instead of downloading again after an application update.
+  const nextApp = createExtractorRuntime({
+    root: path.join(tmp, 'installed'), manifest: async () => built.manifest,
+    fetch: async () => { throw new Error('offline'); },
+  });
+  assert.equal(await nextApp.ensure(), bin);
 });
 
 test('base package excludes the extractor and development payload, retaining the pinned manifest', async () => {
@@ -36,20 +43,6 @@ test('base package excludes the extractor and development payload, retaining the
   for (const excluded of ['!**/*.map', '!node_modules/better-sqlite3/deps/**', '!node_modules/better-sqlite3/src/**']) {
     assert.ok(pkg.build.files.includes(excluded));
   }
-});
-
-test('every release platform publishes its immutable component before the coordinator publishes the app', async () => {
-  for (const platform of ['linux', 'windows']) {
-    const workflow = await fs.readFile(new URL(`.github/workflows/release-${platform}.yml`, root), 'utf8');
-    assert.match(workflow, /build:extractor-component/);
-    assert.match(workflow, /stashbase-extract-/);
-  }
-  const packaging = await fs.readFile(new URL('scripts/package-desktop.mjs', root), 'utf8');
-  assert.match(packaging, /runScript\('build:extractor-component'\)/);
-  assert.match(packaging, /manifest\.sha256/);
-  const coordinator = await fs.readFile(new URL('.github/workflows/release.yml', root), 'utf8');
-  assert.match(coordinator, /darwin-arm64 darwin-x64 win32-x64 linux-x64/);
-  assert.ok(coordinator.indexOf('PDF/OCR component manifest') < coordinator.indexOf('gh release edit'));
 });
 
 test('macOS component signing rejects unaccepted notarization and requires Developer ID', async (t) => {

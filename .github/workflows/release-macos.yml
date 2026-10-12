@@ -7,27 +7,13 @@ on:
         description: Release tag to attach the macOS assets to, for example v0.9.0
         required: true
         type: string
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Release tag to publish, for example v0.9.0
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 jobs:
-  release-ci-gate:
-    permissions:
-      actions: read
-      contents: read
-    uses: ./.github/workflows/release-ci-gate.yml
-    with:
-      tag: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
-
   macos-dmg:
-    needs: release-ci-gate
+    timeout-minutes: 60
     # Pinned, not macos-latest: the macOS 26.6 image refuses to unlock
     # electron-builder's temporary signing keychain in the runner's
     # pre-session context ("SecKeychainUnlock: The user name or passphrase
@@ -81,6 +67,8 @@ jobs:
         run: test "$(node -p process.arch)" = "${{ matrix.arch }}"
 
       - uses: ./.github/actions/prepare-native-components
+        with:
+          extractor: 'false'
 
       - name: Prepare Apple signing credentials
         env:
@@ -103,13 +91,10 @@ jobs:
           chmod 600 "$key_path"
           echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
 
-      - name: Build PDF/OCR download component
+      - name: Download the verified PDF/OCR component
         env:
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-        run: pnpm build:extractor-component
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/prepare-extractor-release.mjs download
 
       - name: Build and verify macOS assets
         env:
@@ -129,10 +114,10 @@ jobs:
           path: |
             release.nosync/StashBase-*
             release.nosync/latest-mac.yml
-            release.nosync/stashbase-extract-*
 
   publish-macos:
     needs: macos-dmg
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}

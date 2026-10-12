@@ -1,6 +1,10 @@
 name: Release
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
@@ -12,30 +16,58 @@ permissions:
   actions: read
   contents: write
 
-jobs:
-  release-ci-gate:
-    permissions:
-      actions: read
-      contents: read
-    uses: ./.github/workflows/release-ci-gate.yml
-    with:
-      tag: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
+# Serialize publication and retries; never cancel signing or asset publication.
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
 
-  prepare-draft:
-    needs: release-ci-gate
+jobs:
+  select-tag:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: node scripts/select-release-tag.mjs
+
+  release-ci-gate:
+    needs: select-tag
+    if: needs.select-tag.outputs.tag != ''
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/release-ci-gate.yml
+    with:
+      tag: ${{ needs.select-tag.outputs.tag }}
+
+  prepare-draft:
+    needs: [select-tag, release-ci-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-tag.outputs.tag }}
 
       - name: Create an empty draft release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_TAG: ${{ needs.select-tag.outputs.tag }}
         run: |
           release_tag="$INPUT_TAG"
           case "$release_tag" in
@@ -66,22 +98,29 @@ jobs:
 
           echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
 
-  macos:
+  extractor:
     needs: prepare-draft
+    uses: ./.github/workflows/extractor-components.yml
+    with:
+      tag: ${{ needs.prepare-draft.outputs.tag }}
+    secrets: inherit
+
+  macos:
+    needs: [prepare-draft, extractor]
     uses: ./.github/workflows/release-macos.yml
     with:
       tag: ${{ needs.prepare-draft.outputs.tag }}
     secrets: inherit
 
   windows:
-    needs: prepare-draft
+    needs: [prepare-draft, extractor]
     uses: ./.github/workflows/release-windows.yml
     with:
       tag: ${{ needs.prepare-draft.outputs.tag }}
     secrets: inherit
 
   linux:
-    needs: prepare-draft
+    needs: [prepare-draft, extractor]
     uses: ./.github/workflows/release-linux.yml
     with:
       tag: ${{ needs.prepare-draft.outputs.tag }}
@@ -90,6 +129,7 @@ jobs:
   publish-release:
     needs: [prepare-draft, macos, windows, linux]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Verify the complete update set and publish atomically
         env:
@@ -125,16 +165,12 @@ jobs:
           require_asset "StashBase-${release_version}-linux-*.AppImage" 'Linux AppImage'
           require_asset "StashBase-${release_version}-linux-*.deb" 'Linux Debian package'
 
-          for component_platform in darwin-arm64 darwin-x64 win32-x64 linux-x64; do
-            require_asset "stashbase-extract-${release_version}-${component_platform}.tar.gz" "PDF/OCR component ${component_platform}"
-            require_asset "stashbase-extract-${release_version}-${component_platform}.json" "PDF/OCR component manifest ${component_platform}"
-          done
-
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
 
   publish-homebrew:
     needs: [prepare-draft, publish-release]
     runs-on: macos-latest
+    timeout-minutes: 10
     env:
       RELEASE_TAG: ${{ needs.prepare-draft.outputs.tag }}
       GH_TOKEN: ${{ github.token }}

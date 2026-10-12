@@ -613,6 +613,15 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 ## J04: Preparation
 
+**Independent component reuse (2026-10-12):** the release pipeline selects a
+component identity from its build inputs instead of the desktop version.
+`scripts/packaging/extractor-release.test.mjs` covers input invalidation,
+release completeness and component hash/target rejection; the component runtime
+integration test opens a second offline owner against the same pinned installation.
+Platform packaging still exercises real PDF/OCR and offline reuse. The new
+independent prerelease publication and first cross-version hosted reuse are not
+yet established by a live release.
+
 **Intel compatibility (2026-09-17):** unsupported-system status bypasses download
 and retry, while supported Intel component installation still verifies the
 architecture-specific manifest and works offline. `extractor-runtime.test.ts`
