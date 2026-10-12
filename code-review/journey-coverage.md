@@ -764,7 +764,11 @@ the production environment builder and proves that ancestor skills are absent,
 all four project skill locations remain discoverable, project instructions reach
 the model, and a native skill invocation loads its body only when called. This
 controlled gateway test does not establish provider skill selection quality or a
-packaged desktop run.
+packaged desktop run. Windows source CI exposed a native skill call waiting for
+OpenCode's ripgrep lookup. The runtime now supplies the pinned Windows binary on
+PATH, and packaging stages it as an explicit resource. The source fixture checks
+native invocation; packaged smoke checks the binary and a fake-gateway turn.
+Packaged skill invocation and real-provider skill selection remain unproven.
 
 **Default short-term limit presentation (2026-10-13):** A local native log
 recorded repeated identical short-term limit errors during one model call;

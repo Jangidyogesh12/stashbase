@@ -145,7 +145,11 @@ toolchain rather than the linter any gate runs.
   binary. Source CI starts that exact target and completes an SDK turn against
   a fake local model gateway. Packaged smoke repeats both the version check and
   model turn against the final signed resource, asserting that the process
-  remains alive; no real account or model credential is used.
+  remains alive; no real account or model credential is used. Windows also stages
+  a pinned ripgrep executable beside OpenCode, puts its directory on the private
+  runtime PATH for native skill reads, and probes that executable in packaged
+  smoke. The binary must be present before packaging rather than downloaded by
+  OpenCode at runtime.
 - Electron packages use electron-builder's official zip download and extraction
   path. Do not point `electronDist` at the unpacked npm installation: that path
   can flatten macOS framework symlinks before Developer ID signing.

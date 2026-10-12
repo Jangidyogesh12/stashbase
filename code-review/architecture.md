@@ -432,7 +432,10 @@ stable status without download, retry, or a new durable demand latch.
   the project's first existing `AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md` path;
   OpenCode reads its contents. Project OpenCode configuration cannot add external
   skill sources. Native skill invocation and permission checks remain in OpenCode;
-  the Codex and Claude adapters keep their own discovery behavior.
+  the Codex and Claude adapters keep their own discovery behavior. On Windows,
+  the private OpenCode process receives the packaged ripgrep directory on PATH
+  because native skill reads use `rg.exe`; the app does not rely on a user
+  installation or an on-demand runtime download.
 - Turn failure settles once without destroying a live session. Advisory notices
   never become terminal errors. Recover by structured kind: authentication needs
   process/session refresh, credits/restrictions need account recovery, transient
