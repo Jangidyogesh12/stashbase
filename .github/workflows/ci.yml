@@ -101,39 +101,19 @@ jobs:
         if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:updates
 
-      - name: Test application config and hosted account
-        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
-        run: pnpm test:config
-
       - name: Test Electron window lifecycle
         id: electron
         if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: npm run test:electron
 
-      - name: Test conversion scheduler
+      - name: Test server and retrieval scripts
         if: ${{ !cancelled() && steps.python.outcome == 'success' }}
-        run: pnpm test:conversion-scheduler
-
-      - name: Test project file transactions
-        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
-        run: pnpm test:project-files
-
-      - name: Test retrieval
-        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
-        run: pnpm test:retrieval
-
-      - name: Test agent adapters
-        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
-        run: pnpm test:agent
+        run: pnpm test:server
 
       - name: Test bundled OpenCode runtime
         timeout-minutes: 5
         if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:opencode:native
-
-      - name: Test MCP transports
-        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
-        run: pnpm test:mcp
 
       - name: Typecheck server + mcp + Electron
         if: ${{ !cancelled() && steps.python.outcome == 'success' }}

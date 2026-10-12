@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { runWithFolderRoot } from '../folder.ts';
-import { listFilesAndFolders, listFilesAndFoldersAsync } from '../file-listing.ts';
+import { listFilesAndFoldersAsync } from '../file-listing.ts';
 import { shouldIndexFilePath } from '../indexable.ts';
 
 test('file-listing reports the truthful workbench tree without traversing excluded infrastructure', async () => {
@@ -70,19 +70,17 @@ test('file-listing reports the truthful workbench tree without traversing exclud
     fs.writeFileSync(path.join(tempDir, 'Icon\r'), '');
 
     // Run listing scan
-    const { result, asyncResult } = await runWithFolderRoot(tempDir, async () => {
-      const result = listFilesAndFolders();
+    const result = await runWithFolderRoot(tempDir, async () => {
       const originalReaddirSync = fs.readdirSync;
       fs.readdirSync = (() => {
         throw new Error('async HTTP listing used synchronous directory I/O');
       }) as typeof fs.readdirSync;
       try {
-        return { result, asyncResult: await listFilesAndFoldersAsync() };
+        return await listFilesAndFoldersAsync();
       } finally {
         fs.readdirSync = originalReaddirSync;
       }
     });
-    assert.deepEqual(asyncResult, result, 'async HTTP listing must preserve sidebar classification');
 
     // Every ordinary folder survives even when it contains only generic files.
     const folderPaths = result.folders.map((f) => f.path);
@@ -158,8 +156,7 @@ test('project configuration stays visible with hidden files off without becoming
 
     await runWithFolderRoot(tempDir, async () => {
       for (const opts of [{}, { showHidden: false }, { showHidden: true }]) {
-        const listing = listFilesAndFolders(opts);
-        assert.deepEqual(await listFilesAndFoldersAsync(opts), listing);
+        const listing = await listFilesAndFoldersAsync(opts);
         assert.deepEqual(listing.files.map((file) => file.name).sort(), [...visiblePaths, 'note.md'].sort());
         for (const name of projectFiles) {
           const directory = name.split('/')[0];
@@ -203,12 +200,10 @@ test('show-hidden listings surface eligible dot-directories while protecting VCS
     fs.mkdirSync(path.join(tempDir, '.cache'));
     fs.writeFileSync(path.join(tempDir, '.cache', 'blob.bin'), 'cache bytes');
 
-    const { hiddenOff, hiddenOn, hiddenOnAsync } = await runWithFolderRoot(tempDir, async () => ({
-      hiddenOff: listFilesAndFolders(),
-      hiddenOn: listFilesAndFolders({ showHidden: true }),
-      hiddenOnAsync: await listFilesAndFoldersAsync({ showHidden: true }),
+    const { hiddenOff, hiddenOn } = await runWithFolderRoot(tempDir, async () => ({
+      hiddenOff: await listFilesAndFoldersAsync(),
+      hiddenOn: await listFilesAndFoldersAsync({ showHidden: true }),
     }));
-    assert.deepEqual(hiddenOnAsync, hiddenOn, 'async HTTP listing must preserve hidden-visibility classification');
 
     // Other dot-directories still require opting in; ordinary dotfiles stay visible.
     const offFolders = hiddenOff.folders.map((f) => f.path);

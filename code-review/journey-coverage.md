@@ -209,9 +209,8 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
 - **Contract Test:** startup ownership/readiness, native activation and window
   isolation, empty-home startup/registry/restart, Settings persistence, account entry,
   Agent preparation, and update state/authorization. Entry points:
-  `pnpm test:renderer`, `pnpm test:config`, `pnpm test:project-files`,
-  `pnpm test:updates`, `pnpm test:electron`, `pnpm test:electron:smoke`,
-  and `pnpm test:agent`. Key persistence survives daemon reconfiguration
+  `pnpm test:renderer`, `pnpm test:server`,
+  `pnpm test:updates`, `pnpm test:electron`, and `pnpm test:electron:smoke`. Key persistence survives daemon reconfiguration
   failure; these tests do not prove rollback of saved configuration.
   `scripts/electron/dev.test.mjs` builds real boundary sources in an isolated
   fixture and loads them in a substitute desktop child, covering missing/stale
@@ -294,8 +293,7 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 
 **Status:** Partial and release-dependent.
 
-- **Contract Test:** `pnpm test:renderer`, `pnpm test:project-files`,
-  `pnpm test:conversion-scheduler`, and `pnpm test:electron` cover asynchronous
+- **Contract Test:** `pnpm test:renderer`, `pnpm test:server`, and `pnpm test:electron` cover asynchronous
   open/commit, cancellation, GitHub staging/publication rollback, project
   retirement, retained nested projects and preparation, and distinct path
   whitespace/case/Unicode identities. Scoped HTTP/Agent regressions now preserve
@@ -453,7 +451,7 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:renderer`, `pnpm test:project-files`,
+- **Contract Test:** `pnpm test:renderer`, `pnpm test:server`,
   `pnpm test:electron`, and `pnpm test:electron:smoke` cover format capabilities, source identity,
   hidden-file policy, tab/history behavior, save barriers, shared version
   authority, conflicts, and failure handling.
@@ -462,7 +460,7 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   listing parity, protected/derived exclusions, and unchanged index eligibility.
   `server/routes/files.test.ts` verifies preference changes through folder-explicit
   workspace requests, including project isolation and refusal of unregistered roots.
-  `pnpm test:config` covers strict durable preferences.
+  `pnpm test:server` covers strict durable preferences.
   `reading-text-menu.test.tsx`, the Appearance domain/infrastructure/surface
   suites, `shared/protocols/http/appearance.test.ts`, and
   `server/routes/appearance.test.ts` cover the reading menu's font/size writes,
@@ -673,7 +671,7 @@ Host/services: `server/conversion-dispatch.ts`, `server/conversion-scheduler.ts`
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:config`, `pnpm test:conversion-scheduler`,
+- **Contract Test:** `pnpm test:server`,
   `pnpm test:python`, and `pnpm test:package-inputs` cover format completion,
   freshness, checkpoints, cancellation including descendants,
   native worker wiring, and bounded component install/retry/offline reuse.
@@ -723,7 +721,7 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 **Status:** Partial.
 
-- **Contract Test:** `pnpm test:retrieval`, `pnpm test:python`, and the scoped
+- **Contract Test:** `pnpm test:server`, `pnpm test:python`, and the scoped
   project/config/renderer suites cover exact filtering, hybrid mechanics,
   current-source mapping, namespace isolation including nested projects,
   missing/blank/stale identity refusal, provider-independent keyword search,
@@ -1289,8 +1287,8 @@ an image preview, and a text-file card; history tests keep unknown-extension fil
 inside transient attachment storage as name-only cards while leaving arbitrary
 external paths in the transcript. Runtime interpretation of binary formats remains
 provider-dependent and is not established by local upload acceptance.
-Validation: `pnpm check:web` passed all 12 renderer gates; `pnpm test:agent`
-passed 204 tests; the attachment route test, host typecheck, and documentation
+Validation: `pnpm check:web` passed all 12 renderer gates; the Agent server
+tests (now in `pnpm test:server`) passed 204 tests; the attachment route test, host typecheck, and documentation
 checks passed.
 
 **Intent:** [J06](../design-docs/journeys/README.md#j06-start-and-continue-an-agent-chat).
@@ -1303,7 +1301,7 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:agent`, renderer, project-operation, MCP, and
+- **Contract Test:** `pnpm test:server`, renderer, project-operation, MCP, and
   config suites cover setup/consent, authentication, scope, permissions,
   queue/turn/history ownership, stop/retirement, failure classification,
   persona, and transcript/layout state. Automatic grep/hybrid selection
@@ -1444,8 +1442,7 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:agent`, `pnpm test:mcp`,
-  `pnpm test:project-files`, and `pnpm test:renderer` establish permission, version, and write boundaries, including literal
+- **Contract Test:** `pnpm test:server` and `pnpm test:renderer` establish permission, version, and write boundaries, including literal
   dollar-sequence replacement.
 - **Composition Test:** `agent-convergence.test.tsx` exercises both a Chat file
   result's Open action and a reply's local file link: each selects Documents,
@@ -1522,8 +1519,7 @@ Agent turn and is not promised for standalone external MCP clients.
 
 **Status:** Partial and release-dependent.
 
-- **Contract Test:** `pnpm test:mcp`, `pnpm test:project-files`, and
-  `pnpm test:retrieval` cover transport/operation parity, authorization, scoped
+- **Contract Test:** `pnpm test:server` covers transport/operation parity, authorization, scoped
   direct/prepared reads, bounded windows, format/encoding restrictions, mutations,
   and reconcile. Current/stale/cancelled/orphaned prepared evidence is covered.
 - **Driven Runtime Pass:** a 2026-09-16 isolated source HTTP client initializes
@@ -1640,7 +1636,7 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
 **Status:** Partial.
 
 - **Contract Test:** `pnpm test:protocols`, `pnpm test:renderer`, and
-  `pnpm test:project-files` cover bounded whole-index
+  `pnpm test:server` cover bounded whole-index
   parsing/fallback, image-host and redirect restrictions, cached browsing, copy
   serialization, and shared GitHub acquisition/publication rollback.
   `github-snapshot.test.ts` covers anonymous default-branch archive redirects,
@@ -1735,7 +1731,7 @@ not the truth of a test's claims or intent metadata.
   `forcefullyCrashRenderer` pass confirms Close destroys the crashed window.
   Text that had not reached its source file remains unrecoverable.
 - **Remaining-area follow-up (2026-09-16):** Agent preferences and embedder
-  route tests now belong to `test:config`; obsolete manual file-order storage,
+  route tests now run under `test:server`; obsolete manual file-order storage,
   synchronous upload naming, and unwired legacy smoke scripts were removed.
   Node owns atomic MCP launcher generation at startup and readiness/Settings.
   The root linter remains required by architecture fixtures and current lint

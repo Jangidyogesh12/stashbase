@@ -178,29 +178,6 @@ export interface MentionQuery {
   query: string;
 }
 
-const MENTION_QUERY_RE = /(^|\s)@([^\s@]*)$/u;
-
-export function mentionQueryAt(text: string, caret: number): MentionQuery | null {
-  const match = MENTION_QUERY_RE.exec(text.slice(0, caret));
-  if (!match) return null;
-  const query = match[2] ?? '';
-  return { from: caret - query.length - 1, kind: 'mention', query };
-}
-
-export function applyMention(
-  text: string,
-  query: MentionQuery,
-  path: string,
-): { text: string; caret: number } {
-  const end = query.from + 1 + query.query.length;
-  const next = text[end];
-  const run = `@${path}${next === undefined || !/\s/u.test(next) ? ' ' : ''}`;
-  return {
-    caret: query.from + run.length,
-    text: text.slice(0, query.from) + run + text.slice(end),
-  };
-}
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }

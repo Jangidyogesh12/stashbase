@@ -20,6 +20,7 @@ import {
 import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
 import type { DocumentSelection } from '@/features/documents/domain/selection';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
+import { DocumentBanner } from '@/features/documents/ui/banner';
 import { DocumentSource } from '@/features/documents/ui/source/document';
 import { documentViewerEntry } from '@/features/documents/ui/source/registry';
 import type {
@@ -174,7 +175,7 @@ export function DocumentWorkspace({
         source={closeDecision?.source ?? null}
       />
       {openFailure && (
-        <div className="flex items-center gap-3 border-b border-border px-4 py-2 text-caption">
+        <DocumentBanner className="flex items-center gap-3">
           <span role="alert">
             Could not open {openFailure.source.path}. {openFailure.message}
           </span>
@@ -184,10 +185,10 @@ export function DocumentWorkspace({
           <Button size="compact" variant="tertiary" onClick={runtime.dismissOpenFailure}>
             Dismiss
           </Button>
-        </div>
+        </DocumentBanner>
       )}
       {searchNotice && (
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
+        <DocumentBanner className="flex items-center justify-between gap-3">
           <span role="status">
             {activeFindable ? searchNotice : SEARCH_NOTICES[searchPurpose].unavailable}
           </span>
@@ -198,7 +199,7 @@ export function DocumentWorkspace({
           >
             Dismiss
           </Button>
-        </div>
+        </DocumentBanner>
       )}
       {retainedMarkdownIds.map((tabId) => renderDocument(tabId, tabId !== activeTabId))}
       {activeTab &&

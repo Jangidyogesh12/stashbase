@@ -55,15 +55,6 @@ function toSignInStatus(wire: HostedOAuthStatusWire): HostedSignInStatus {
   }
 }
 
-function call(path: string, signal: AbortSignal, unavailable: string) {
-  return settingsRequest({
-    invalidResponse: `${unavailable} The server answered unexpectedly.`,
-    path,
-    signal,
-    unavailable,
-  });
-}
-
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 /** The picture travels as bytes rather than as an image URL: the page may
@@ -89,7 +80,7 @@ export function createAccountAdapter(
     async load(signal) {
       return toAccount(
         await request(client, {
-          ...call('/api/account', signal, 'Account details are unavailable.'),
+          ...settingsRequest({ path: '/api/account', signal }),
           schema: hostedAccountStateSchema,
         }),
       );
@@ -97,11 +88,10 @@ export function createAccountAdapter(
     async markOfferSeen(offer, signal) {
       return toAccount(
         await request(client, {
-          ...call(
-            `/api/account/offers/${hostedAccountOfferSchema.parse(offer)}/seen`,
+          ...settingsRequest({
+            path: `/api/account/offers/${hostedAccountOfferSchema.parse(offer)}/seen`,
             signal,
-            'The banner could not be dismissed.',
-          ),
+          }),
           method: 'POST',
           schema: hostedAccountStateSchema,
         }),
@@ -110,7 +100,7 @@ export function createAccountAdapter(
     async resetOffers(signal) {
       return toAccount(
         await request(client, {
-          ...call('/api/account/offers', signal, 'Banners could not be reset.'),
+          ...settingsRequest({ path: '/api/account/offers', signal }),
           method: 'DELETE',
           schema: hostedAccountStateSchema,
         }),
@@ -120,7 +110,7 @@ export function createAccountAdapter(
       const query = new URLSearchParams({ flow: flowId });
       return toSignInStatus(
         await request(client, {
-          ...call(`/api/account/oauth/status?${query}`, signal, 'Sign-in status is unavailable.'),
+          ...settingsRequest({ path: `/api/account/oauth/status?${query}`, signal }),
           schema: hostedOAuthStatusSchema,
         }),
       );
@@ -128,7 +118,7 @@ export function createAccountAdapter(
     async signOut(signal) {
       return toAccount(
         await request(client, {
-          ...call('/api/account', signal, 'Sign-out failed.'),
+          ...settingsRequest({ path: '/api/account', signal }),
           method: 'DELETE',
           schema: hostedAccountStateSchema,
         }),
@@ -137,7 +127,7 @@ export function createAccountAdapter(
     async startSignIn(signal) {
       return toSignIn(
         await request(client, {
-          ...call('/api/account/oauth/start', signal, 'Sign-in could not start.'),
+          ...settingsRequest({ path: '/api/account/oauth/start', signal }),
           body: hostedOAuthStartRequestSchema.parse({ provider: 'google', purpose: 'account' }),
           method: 'POST',
           schema: hostedOAuthStartResponseSchema,

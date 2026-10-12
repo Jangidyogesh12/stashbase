@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { releaseRepository } from './github-release-api.mjs';
 import { macCaskContent } from './packaging/macos-cask.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,24 +12,10 @@ const releaseDir = path.join(root, 'release.nosync');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has('--dry-run');
-const repo = process.env.GITHUB_REPOSITORY || repositorySlug(pkg.repository?.url);
+const repo = releaseRepository(pkg);
 const tap = process.env.HOMEBREW_TAP || 'liliu-z/stashbase';
 const tapGitUrl = process.env.HOMEBREW_TAP_GIT_URL || 'git@github.com:liliu-z/homebrew-stashbase.git';
 const cask = process.env.HOMEBREW_CASK || 'stashbase';
-
-if (!repo) {
-  throw new Error('Unable to determine GitHub repository. Set GITHUB_REPOSITORY=owner/repo.');
-}
-
-function repositorySlug(value) {
-  if (!value) return null;
-  return String(value)
-    .replace(/^git\+/, '')
-    .replace(/^git@github\.com:/, 'https://github.com/')
-    .replace(/^https?:\/\/github\.com\//, '')
-    .replace(/\.git$/, '')
-    .replace(/\/$/, '');
-}
 
 function releaseFiles() {
   if (!fs.existsSync(releaseDir)) return [];

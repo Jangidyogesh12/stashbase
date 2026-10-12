@@ -23,7 +23,7 @@ const TURN_FAILURE_SIMULATIONS = new Set<AgentTurnFailureSimulation>([
 let nextFailure: AgentSetupFailureSimulation = 'none';
 let nextTurnFailure: AgentTurnFailureSimulation = 'none';
 
-export function agentRuntimeDebugEnabled(): boolean {
+function agentRuntimeDebugEnabled(): boolean {
   return isDevelopmentRuntime() || process.env.STASHBASE_AGENT_DEBUG === '1';
 }
 

@@ -34,15 +34,11 @@ export interface FilesystemPathModule {
   absolute(input: string, base?: string): string;
   /** Whether input is an absolute path under the selected platform rules. */
   isAbsolute(input: string): boolean;
-  /** Existing realpath, normalized back to source spelling. */
-  real(input: string): string;
   /** Stable comparison/map identity following Windows and mounted macOS volume rules. */
   identity(input: string): string;
   /** Async request-path equivalent of `identity()`. */
   identityAsync(input: string): Promise<string>;
   /** Whether two existing spellings resolve to one path, excluding distinct hard links. */
-  sameExistingPath(a: string, b: string): boolean;
-  /** Async request-path equivalent of `sameExistingPath()`. */
   sameExistingPathAsync(a: string, b: string): Promise<boolean>;
   equal(a: string, b: string): boolean;
   equalAsync(a: string, b: string): Promise<boolean>;
@@ -180,18 +176,6 @@ export function createFilesystemPath(
     // Empty/unreadable case-sensitive volumes must not collapse distinct names.
     volumeCaseInsensitive.set(device, false);
     return false;
-  }
-
-  function real(input: string): string {
-    const source = absolute(input);
-    return absolute(fs.realpathSync.native(toNative(source, platform)));
-  }
-
-  function sameExistingPath(a: string, b: string): boolean {
-    return sameFilesystemAlias(
-      toNative(absolute(a), platform),
-      toNative(absolute(b), platform),
-    );
   }
 
   function sameExistingPathAsync(a: string, b: string): Promise<boolean> {
@@ -509,10 +493,8 @@ export function createFilesystemPath(
     platform,
     absolute,
     isAbsolute,
-    real,
     identity,
     identityAsync,
-    sameExistingPath,
     sameExistingPathAsync,
     equal,
     equalAsync,

@@ -45,10 +45,6 @@ export function createProjectRegistryAdapter(client: HttpClient): ProjectRegistr
         error: ProjectError,
         failure: projectFailure,
         failureSchema: projectFailureSchema,
-        messages: {
-          'invalid-response': 'The project returned an invalid response.',
-          unavailable: 'The project is unavailable.',
-        },
         path,
         schema: projectRegistrySnapshotSchema,
         signal,

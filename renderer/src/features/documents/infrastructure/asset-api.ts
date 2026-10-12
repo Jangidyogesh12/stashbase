@@ -34,11 +34,6 @@ export function createDocumentAssetAdapter(
           refused.status === 404
             ? new DocumentAssetError('missing', 'The source file is missing.')
             : null,
-        messages: {
-          'scope-lost': 'The file folder is no longer available in this window.',
-          unauthorized: 'This window can no longer preview that file.',
-          unavailable: 'The file could not be loaded.',
-        },
         method: 'HEAD',
         path: `/api/files/${encodePathSegments(request.data.path)}?${query}`,
         signal,

@@ -15,7 +15,7 @@ test('POSIX paths preserve case and root joins', () => {
   assert.equal(paths.relative('/Data', '/Database/File.md'), null);
 });
 
-test('macOS identity follows the mounted volume case behaviour', (t) => {
+test('macOS identity follows the mounted volume case behaviour', async (t) => {
   if (process.platform !== 'darwin') {
     t.skip('requires a native macOS filesystem');
     return;
@@ -37,7 +37,7 @@ test('macOS identity follows the mounted volume case behaviour', (t) => {
 
   const paths = createFilesystemPath({ platform: 'darwin', cwd: temp });
   assert.equal(paths.equal(root, alias), sameEntry);
-  assert.equal(paths.sameExistingPath(root, alias), sameEntry);
+  assert.equal(await paths.sameExistingPathAsync(root, alias), sameEntry);
   assert.equal(
     paths.equal(path.join(root, 'Future.docx'), path.join(alias, 'future.docx')),
     sameEntry,
@@ -62,7 +62,7 @@ test('macOS identity follows the mounted volume case behaviour', (t) => {
   assert.equal(paths.equal(composed, decomposed), sameUnicodeEntry);
 });
 
-test('existing path aliases do not collapse distinct hard links', (t) => {
+test('existing path aliases do not collapse distinct hard links', async (t) => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-path-alias-'));
   const source = path.join(temp, 'source.md');
   const hardLink = path.join(temp, 'hard-link.md');
@@ -70,8 +70,8 @@ test('existing path aliases do not collapse distinct hard links', (t) => {
   fs.linkSync(source, hardLink);
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
 
-  assert.equal(filesystemPath.sameExistingPath(source, source), true);
-  assert.equal(filesystemPath.sameExistingPath(source, hardLink), false);
+  assert.equal(await filesystemPath.sameExistingPathAsync(source, source), true);
+  assert.equal(await filesystemPath.sameExistingPathAsync(source, hardLink), false);
 });
 
 test('Windows drive paths share one identity across separator and case variants', () => {
@@ -208,10 +208,6 @@ test('resolveUnder blocks existing and creatable symlink or junction escapes', (
   assert.equal(
     filesystemPath.resolveUnder(root, 'new/child.md', { access: 'creatable' }),
     filesystemPath.absolute(path.join(root, 'new', 'child.md')),
-  );
-  assert.equal(
-    filesystemPath.real(path.join(root, 'link')),
-    filesystemPath.absolute(fs.realpathSync.native(outside)),
   );
 });
 

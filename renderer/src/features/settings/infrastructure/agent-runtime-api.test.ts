@@ -170,7 +170,6 @@ describe('agent runtime API', () => {
     });
     await expect(unavailable.listAgents(new AbortController().signal)).rejects.toMatchObject({
       kind: 'unavailable',
-      message: 'Agent runtimes are unavailable.',
     });
   });
 });

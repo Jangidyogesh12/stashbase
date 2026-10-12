@@ -93,6 +93,6 @@ provider behavior changes and record the complete report with the release or
 review evidence. While the report says `CALIBRATION`, retain it as baseline
 evidence but do not claim a passing semantic-quality gate.
 
-`pnpm test:retrieval` covers the metrics, manifest, and runner deterministically
+`pnpm test:server` covers the metrics, manifest, and runner deterministically
 and parses the shipped `v1` manifest against its fixtures, so corpus drift is
 caught without credentials.

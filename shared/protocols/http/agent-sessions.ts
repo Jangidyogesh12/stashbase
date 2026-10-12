@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const boundedText = (maximum: number) => z.string().max(maximum);
 
-export const agentSessionIdSchema = z
+const agentSessionIdSchema = z
   .string()
   .trim()
   .min(1)
@@ -28,7 +28,7 @@ export const agentSessionInfoSchema = z
  *  every passage it sends replays, and a longer one stays in the prose. */
 export const AGENT_SESSION_QUOTE_MAX = 16_384;
 
-export const agentSessionAttachmentSchema = z
+const agentSessionAttachmentSchema = z
   .object({
     path: boundedText(16_384),
     name: boundedText(2_000),
@@ -77,7 +77,7 @@ const agentSessionToolBlockSchema = z
   })
   .strict();
 
-export const agentSessionBlockSchema = z.discriminatedUnion("kind", [
+const agentSessionBlockSchema = z.discriminatedUnion("kind", [
   agentSessionUserBlockSchema,
   agentSessionAssistantBlockSchema,
   agentSessionThinkingBlockSchema,
@@ -108,5 +108,3 @@ export const agentSessionFailureSchema = z
 
 export type AgentSessionInfoWire = z.infer<typeof agentSessionInfoSchema>;
 export type AgentSessionBlockWire = z.infer<typeof agentSessionBlockSchema>;
-export type AgentSessionReplayWire = z.infer<typeof agentSessionReplaySchema>;
-export type AgentSessionRenameRequestWire = z.infer<typeof agentSessionRenameRequestSchema>;

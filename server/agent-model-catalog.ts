@@ -16,15 +16,14 @@ import { retireAgentProcess } from './agent-process.ts';
  * it is kept in memory only and read again once it is a few minutes old. */
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import os from 'node:os';
-import readline from 'node:readline';
 import type { AgentId, AgentModel } from '../shared/agent-protocol.ts';
 import type { AgentModelCatalog } from '../shared/agent-runtime.ts';
 import { readAppConfig, readAppConfigStrict, writeAppConfigStrict } from './app-config.ts';
 import { readClaudeModelCatalog } from './claude-model-catalog.ts';
-import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
+import { spawnCodexAppServerProcess } from './codex-app-server-process.ts';
 import { loadCodexModelCatalog } from './codex-model-catalog.ts';
 import { fetchHostedAgentProfiles, hostedAgentCatalogModels } from './hosted-agent-models.ts';
-import { CodexRpcPeer } from './codex-rpc-transport.ts';
+import { connectCodexAppServer } from './codex-rpc-transport.ts';
 import { errorMessage, logger } from './log.ts';
 
 const log = logger('agent-model-catalog');
@@ -140,26 +139,12 @@ export async function readCodexModelCatalog(
   timeoutMs = 8_000,
 ): Promise<CatalogReading> {
   const proc = spawn(os.homedir());
-  const rpc = new CodexRpcPeer((line) => {
-    if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
-    proc.stdin.write(`${line}\n`);
-  }, { requestTimeoutMs: timeoutMs });
-  const stdout = readline.createInterface({ input: proc.stdout });
-  stdout.on('line', (line) => rpc.receiveLine(line));
-  proc.stderr.resume();
-  proc.once('error', (err) => rpc.close(err));
-  proc.once('close', (code, signal) => {
-    rpc.close(new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`));
-  });
+  const { rpc, initialize, close } = connectCodexAppServer(proc, { requestTimeoutMs: timeoutMs });
   try {
-    await rpc.request('initialize', {
-      clientInfo: { name: 'StashBase', title: null, version: appVersion() },
-      capabilities: { experimentalApi: true },
-    });
+    await initialize();
     return { models: await loadCodexModelCatalog((method, params) => rpc.request(method, params)) };
   } finally {
-    rpc.close();
-    stdout.close();
+    close();
     await retireAgentProcess(proc);
   }
 }

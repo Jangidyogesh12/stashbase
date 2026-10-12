@@ -56,15 +56,15 @@ describe('embedder API', () => {
     });
   });
 
-  it('surfaces a provider rejection with the server message', async () => {
+  it('carries a provider rejection with the server message as its cause', async () => {
     const client: HttpClient = {
       request: vi.fn(async () => ({ body: { error: 'Invalid API key.' }, status: 401 })),
     };
     await expect(
       createEmbedderAdapter(client).saveKey('openai', 'bad', signal),
     ).rejects.toMatchObject({
+      cause: new Error('Invalid API key.'),
       kind: 'rejected',
-      message: 'Invalid API key.',
     });
   });
 });

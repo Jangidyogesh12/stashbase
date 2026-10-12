@@ -46,6 +46,15 @@ DEFAULT_BATCH_TIMEOUT_S = 180.0
 PDF_COMPLETE_MARKER = "<!-- stashbase-pdf-conversion: complete -->"
 
 
+def _log(message: str) -> None:
+    """Emit one stderr line; `server/pdf.ts` parses the batch progress lines."""
+    print(f"[pdf_extract] {message}", file=sys.stderr, flush=True)
+
+
+def _page_span(page_batch: list[int]) -> str:
+    return f"{page_batch[0] + 1}-{page_batch[-1] + 1}"
+
+
 def parse_page_range(raw: str | None) -> list[int] | None:
     if raw is None or raw.strip() == "":
         return None
@@ -232,12 +241,7 @@ def _read_resume_batch(
         return None
     if meta.get("pages") != page_batch:
         return None
-    print(
-        f"[pdf_extract] batch {batch_index}/{batch_count} pages "
-        f"{page_batch[0] + 1}-{page_batch[-1] + 1} resumed",
-        file=sys.stderr,
-        flush=True,
-    )
+    _log(f"batch {batch_index}/{batch_count} pages {_page_span(page_batch)} resumed")
     return batch_index, str(batch_note), str(batch_bundle), bool(meta.get("has_text"))
 
 
@@ -407,141 +411,96 @@ def _rich_fallback_reason(err: object) -> str:
 def _convert_batch_worker(args: tuple[str, list[int], int, int, str, str, float]) -> tuple[int, str, str, bool]:
     pdf_path_raw, page_batch, batch_index, batch_count, bundle_name, tmp_parent_raw, ocr_max_mpix = args
     pdf_path = Path(pdf_path_raw)
-    tmp_parent = Path(tmp_parent_raw)
-    batch_bundle = Path(tempfile.mkdtemp(
-        prefix=f"{bundle_name}.batch-{batch_index:04d}-",
-        dir=str(tmp_parent),
-    ))
-    tmp_fd, batch_note_name = tempfile.mkstemp(
-        prefix=f"{bundle_name}.batch-{batch_index:04d}-",
-        suffix=".md",
-        dir=str(tmp_parent),
-        text=True,
-    )
-    os.close(tmp_fd)
-    batch_note = Path(batch_note_name)
-    print(
-        f"[pdf_extract] batch {batch_index}/{batch_count} pages "
-        f"{page_batch[0] + 1}-{page_batch[-1] + 1} started",
-        file=sys.stderr,
-        flush=True,
-    )
-    try:
-        import pymupdf4llm  # type: ignore[import-not-found]
+    _log(f"batch {batch_index}/{batch_count} pages {_page_span(page_batch)} started")
+    import pymupdf4llm  # type: ignore[import-not-found]
 
-        has_text = False
-        ocr_dpi = _ocr_dpi_for_pages(pdf_path, page_batch, max_mpix=ocr_max_mpix)
-        if ocr_dpi < DEFAULT_OCR_DPI:
-            print(
-                f"[pdf_extract] batch {batch_index}/{batch_count} pages "
-                f"{page_batch[0] + 1}-{page_batch[-1] + 1} using ocr_dpi={ocr_dpi} "
-                f"(cap {ocr_max_mpix:g}MP/page)",
-                file=sys.stderr,
-                flush=True,
-            )
-        try:
-            md = pymupdf4llm.to_markdown(
-                str(pdf_path),
-                write_images=True,
-                image_path=str(batch_bundle),
-                image_format="png",
-                ocr_dpi=ocr_dpi,
-                pages=page_batch,
-                page_chunks=True,
-            )
-            md_text, has_text = _markdown_from_page_chunks(md, page_batch)
-            batch_text = _rewrite_batch_assets(md_text, batch_bundle, bundle_name, batch_index)
-        except Exception as err:
-            shutil.rmtree(batch_bundle, ignore_errors=True)
-            batch_bundle = Path(tempfile.mkdtemp(
-                prefix=f"{bundle_name}.batch-{batch_index:04d}-",
-                dir=str(tmp_parent),
-            ))
-            print(
-                f"[pdf_extract] pymupdf4llm rich extraction unavailable for pages "
-                f"{page_batch[0] + 1}-{page_batch[-1] + 1}; using text-only fallback "
-                f"({_rich_fallback_reason(err)})",
-                file=sys.stderr,
-                flush=True,
-            )
-            batch_text, has_text = _plain_text_for_pages(
-                pdf_path,
-                page_batch,
-                include_title=False,
-                allow_empty_pages=True,
-            )
-            batch_text = batch_text.strip()
-        batch_note.write_text(batch_text + ("\n" if batch_text else ""), encoding="utf-8")
-        print(
-            f"[pdf_extract] batch {batch_index}/{batch_count} pages "
-            f"{page_batch[0] + 1}-{page_batch[-1] + 1} done",
-            file=sys.stderr,
-            flush=True,
+    ocr_dpi = _ocr_dpi_for_pages(pdf_path, page_batch, max_mpix=ocr_max_mpix)
+    if ocr_dpi < DEFAULT_OCR_DPI:
+        _log(
+            f"batch {batch_index}/{batch_count} pages {_page_span(page_batch)} using ocr_dpi={ocr_dpi} "
+            f"(cap {ocr_max_mpix:g}MP/page)"
         )
-        del batch_text
-        try:
-            del md
-        except UnboundLocalError:
-            pass
-        gc.collect()
-        return batch_index, str(batch_note), str(batch_bundle), has_text
-    except Exception:
-        try:
-            batch_note.unlink(missing_ok=True)
-        except OSError:
-            pass
+    batch_bundle = _new_batch_bundle(bundle_name, batch_index, tmp_parent_raw)
+    try:
+        md = pymupdf4llm.to_markdown(
+            str(pdf_path),
+            write_images=True,
+            image_path=str(batch_bundle),
+            image_format="png",
+            ocr_dpi=ocr_dpi,
+            pages=page_batch,
+            page_chunks=True,
+        )
+        md_text, has_text = _markdown_from_page_chunks(md, page_batch)
+        del md
+        batch_text = _rewrite_batch_assets(md_text, batch_bundle, bundle_name, batch_index)
+        del md_text
+    except Exception as err:
         shutil.rmtree(batch_bundle, ignore_errors=True)
-        raise
+        return _convert_batch_plain_text_worker(args, _rich_fallback_reason(err))
+    result = _store_batch(args, batch_bundle, batch_text, has_text)
+    del batch_text
+    gc.collect()
+    return result
 
 
 def _convert_batch_plain_text_worker(
     args: tuple[str, list[int], int, int, str, str, float],
     reason: str,
 ) -> tuple[int, str, str, bool]:
-    pdf_path_raw, page_batch, batch_index, batch_count, bundle_name, tmp_parent_raw, _ocr_max_mpix = args
-    pdf_path = Path(pdf_path_raw)
-    tmp_parent = Path(tmp_parent_raw)
-    batch_bundle = Path(tempfile.mkdtemp(
-        prefix=f"{bundle_name}.batch-{batch_index:04d}-",
-        dir=str(tmp_parent),
-    ))
-    tmp_fd, batch_note_name = tempfile.mkstemp(
-        prefix=f"{bundle_name}.batch-{batch_index:04d}-",
-        suffix=".md",
-        dir=str(tmp_parent),
-        text=True,
-    )
-    os.close(tmp_fd)
-    batch_note = Path(batch_note_name)
-    print(
-        f"[pdf_extract] pymupdf4llm rich extraction unavailable for pages "
-        f"{page_batch[0] + 1}-{page_batch[-1] + 1}; using text-only fallback ({reason})",
-        file=sys.stderr,
-        flush=True,
+    pdf_path_raw, page_batch, batch_index, _batch_count, bundle_name, tmp_parent_raw, _ocr_max_mpix = args
+    batch_bundle = _new_batch_bundle(bundle_name, batch_index, tmp_parent_raw)
+    _log(
+        f"pymupdf4llm rich extraction unavailable for pages "
+        f"{_page_span(page_batch)}; using text-only fallback ({reason})"
     )
     try:
         batch_text, has_text = _plain_text_for_pages(
-            pdf_path,
+            Path(pdf_path_raw),
             page_batch,
             include_title=False,
             allow_empty_pages=True,
         )
-        batch_text = batch_text.strip()
-        batch_note.write_text(batch_text + ("\n" if batch_text else ""), encoding="utf-8")
-        print(
-            f"[pdf_extract] batch {batch_index}/{batch_count} pages "
-            f"{page_batch[0] + 1}-{page_batch[-1] + 1} done",
-            file=sys.stderr,
-            flush=True,
-        )
-        return batch_index, str(batch_note), str(batch_bundle), has_text
     except Exception:
-        try:
-            batch_note.unlink(missing_ok=True)
-        except OSError:
-            pass
         shutil.rmtree(batch_bundle, ignore_errors=True)
         raise
+    return _store_batch(args, batch_bundle, batch_text.strip(), has_text)
+
+
+def _new_batch_bundle(bundle_name: str, batch_index: int, tmp_parent_raw: str) -> Path:
+    return Path(tempfile.mkdtemp(prefix=f"{bundle_name}.batch-{batch_index:04d}-", dir=tmp_parent_raw))
+
+
+def _store_batch(
+    args: tuple[str, list[int], int, int, str, str, float],
+    batch_bundle: Path,
+    batch_text: str,
+    has_text: bool,
+) -> tuple[int, str, str, bool]:
+    """Write one batch's Markdown to a scratch note beside its bundle and log
+    the `done` line that `server/pdf.ts` parses for progress."""
+    _pdf_path_raw, page_batch, batch_index, batch_count, bundle_name, tmp_parent_raw, _ocr_max_mpix = args
+    batch_note: Path | None = None
+    try:
+        tmp_fd, batch_note_name = tempfile.mkstemp(
+            prefix=f"{bundle_name}.batch-{batch_index:04d}-",
+            suffix=".md",
+            dir=tmp_parent_raw,
+            text=True,
+        )
+        batch_note = Path(batch_note_name)
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as out:
+            out.write(batch_text + ("\n" if batch_text else ""))
+    except Exception:
+        if batch_note is not None:
+            try:
+                batch_note.unlink(missing_ok=True)
+            except OSError:
+                pass
+        shutil.rmtree(batch_bundle, ignore_errors=True)
+        raise
+    _log(f"batch {batch_index}/{batch_count} pages {_page_span(page_batch)} done")
+    return batch_index, str(batch_note), str(batch_bundle), has_text
 
 
 def _batch_child_main(
@@ -765,22 +724,22 @@ def main() -> int:
 
     pdf_path = Path(args.pdf).resolve()
     if not pdf_path.is_file():
-        print(f"[pdf_extract] not a file: {pdf_path}", file=sys.stderr)
+        _log(f"not a file: {pdf_path}")
         return 2
 
     if args.probe_text_layer:
         try:
             if has_text_layer(pdf_path, max_pages=args.probe_pages):
-                print("[pdf_extract] text layer detected", file=sys.stderr)
+                _log("text layer detected")
                 return 0
-            print("[pdf_extract] no text layer detected", file=sys.stderr)
+            _log("no text layer detected")
             return 10
         except Exception as err:
-            print(f"[pdf_extract] text-layer probe failed: {err}", file=sys.stderr)
+            _log(f"text-layer probe failed: {err}")
             return 2
 
     if not args.out_path or not args.bundle_dir:
-        print("[pdf_extract] out_path and bundle_dir are required", file=sys.stderr)
+        _log("out_path and bundle_dir are required")
         return 2
     out_path = Path(args.out_path).resolve()
     bundle_dir = Path(args.bundle_dir).resolve()
@@ -796,7 +755,7 @@ def main() -> int:
             args.batch_timeout_s,
         )
     except Exception as err:
-        print(f"[pdf_extract] pymupdf failed: {err}", file=sys.stderr)
+        _log(f"pymupdf failed: {err}")
         return 1
     return 0
 

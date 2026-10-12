@@ -13,8 +13,6 @@ export function preserveTextSourceFormat(previous: string, next: string): string
   return (hasBom ? '\uFEFF' : '') + serialized;
 }
 
-export const preserveMarkdownSourceFormat = preserveTextSourceFormat;
-
 function dominantLineEnding(content: string): '\n' | '\r\n' | null {
   const crlf = (content.match(/\r\n/g) ?? []).length;
   const lf = (content.match(/(?<!\r)\n/g) ?? []).length;

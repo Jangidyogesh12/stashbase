@@ -37,7 +37,7 @@ export interface ClaudeCatalogReading {
   defaultModel?: string;
 }
 
-export function claudeSettingsPath(): string {
+function claudeSettingsPath(): string {
   return path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json');
 }
 

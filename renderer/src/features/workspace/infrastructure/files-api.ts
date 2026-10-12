@@ -96,7 +96,6 @@ function folderQuery(folderPath: string): string {
 function files(
   path: string,
   signal: AbortSignal,
-  messages: { invalid: string; unavailable: string },
   extra?: { body?: unknown; method?: TransportRequest['method'] },
 ): TransportRequest<'conflict' | 'rejected' | 'outcome-unknown'> {
   return {
@@ -104,7 +103,6 @@ function files(
     error: FilesError,
     failure: operationFailure,
     failureSchema: workspaceFailureSchema,
-    messages: { 'invalid-response': messages.invalid, unavailable: messages.unavailable },
     ...(extra?.method === undefined ? {} : { method: extra.method }),
     path,
     signal,
@@ -127,10 +125,7 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
     async load(folderPath, signal) {
       return mapListing(
         await request(client, {
-          ...files(`/api/files?${folderQuery(folderPath)}`, signal, {
-            invalid: 'The folder returned an invalid file listing.',
-            unavailable: 'The files are unavailable.',
-          }),
+          ...files(`/api/files?${folderQuery(folderPath)}`, signal),
           schema: workspaceFilesSchema,
         }),
       );
@@ -142,10 +137,6 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
         ...files(
           `/api/reveal/${encodePathSegments(reveal.data.path)}?${folderQuery(reveal.data.folderPath)}`,
           signal,
-          {
-            invalid: 'The reveal operation returned an invalid response.',
-            unavailable: 'The item could not be shown.',
-          },
           { method: 'POST' },
         ),
         schema: workspaceRevealResponseSchema,
@@ -166,10 +157,6 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
             ? `/api/files?${folderQuery(data.folderPath)}`
             : `/api/folders?${folderQuery(data.folderPath)}`,
           signal,
-          {
-            invalid: 'The create operation returned an invalid response.',
-            unavailable: `The ${data.kind} could not be created.`,
-          },
           {
             body:
               data.kind === 'file'
@@ -194,10 +181,6 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
         ...files(
           `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePathSegments(data.path)}?${folderQuery(data.folderPath)}`,
           signal,
-          {
-            invalid: 'The rename operation returned an invalid response.',
-            unavailable: `The ${data.kind} could not be renamed.`,
-          },
           { body: { new_name: data.name }, method: 'PATCH' },
         ),
         schema: entryPathSchema,
@@ -215,10 +198,6 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
         ...files(
           `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePathSegments(data.path)}?${folderQuery(data.folderPath)}`,
           signal,
-          {
-            invalid: 'The delete operation returned an invalid response.',
-            unavailable: `The ${data.kind} could not be deleted.`,
-          },
           { method: 'DELETE' },
         ),
         schema: workspaceDeleteEntryResponseSchema,

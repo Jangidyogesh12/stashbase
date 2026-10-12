@@ -5,10 +5,8 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { agentSessionPort } from '@/test/fakes/agent';
 
-import { type AgentReconnectScheduler, type AgentSessionPort } from './ports';
 import { createAgentSessionRuntime } from './session-runtime';
-
-type AgentConnectRequest = Parameters<AgentSessionPort['connect']>[0];
+import { harness } from './session-runtime.harness';
 
 /** A promise the test opens by hand, so the first replay is still in flight
  *  when the second one starts. */
@@ -32,32 +30,6 @@ const historyEntry = (id: string, title: string) => ({
   scope: { kind: 'folder' as const, path: '/project/Research' },
   title,
 });
-
-function harness() {
-  const waits: Array<() => void> = [];
-  const { listeners, port, sent } = agentSessionPort({
-    replay: vi.fn(async () => ({
-      effort: 'high',
-      transcript: [
-        { kind: 'user' as const, id: 'user-1', text: 'Keep this question.' },
-        { kind: 'assistant' as const, id: 'assistant-1', text: 'Keep this answer.' },
-      ],
-    })),
-  });
-  const scheduler: AgentReconnectScheduler = {
-    jitter: (value) => value,
-    wait: vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          waits.push(resolve);
-        }),
-    ),
-  };
-  /** Every connect request in order, read back off the port's own spy. */
-  const requests = (): AgentConnectRequest[] =>
-    vi.mocked(port.connect).mock.calls.map(([request]) => request);
-  return { listeners, port, requests, scheduler, sent, waits };
-}
 
 describe('AgentSessionRuntime', () => {
   it('keeps an explicit draft local until its first-use boundary starts transport', () => {

@@ -686,6 +686,5 @@ module.exports = {
   ARTIFACT_KIND,
   DRAFT_STATE,
   MAX_REPORT_FIELD_LENGTH,
-  MAX_REPORT_TEXT_LENGTH,
   createBugReportService,
 };

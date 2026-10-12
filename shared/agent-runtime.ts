@@ -132,8 +132,3 @@ export interface Agent {
   /** Present only while the runtime names a model it is too old to run. */
   upgrade?: AgentUpgradeOffer;
 }
-
-export interface AgentsResponse {
-  clis: Agent[];
-  debug?: AgentRuntimeDebugState;
-}

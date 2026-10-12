@@ -7,10 +7,8 @@ import { telemetryFailureSchema, telemetryPreferencesSchema } from '@/protocols/
 const options = (signal: AbortSignal) =>
   settingsRequest({
     failureSchema: telemetryFailureSchema,
-    invalidResponse: 'Usage statistics settings returned an invalid response.',
     path: '/api/telemetry',
     signal,
-    unavailable: 'Usage statistics settings could not be read or saved.',
   });
 
 export function createTelemetryAdapter(client: HttpClient): TelemetryPort {

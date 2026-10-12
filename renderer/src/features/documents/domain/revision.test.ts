@@ -10,7 +10,6 @@ import {
 } from './document';
 import {
   clearDocumentRevision,
-  documentRevisionActive,
   publishDocumentRevisionCount,
   startDocumentRevision,
   type RevisionReview,
@@ -52,7 +51,7 @@ describe('starting a revision review', () => {
     });
     if (started.kind !== 'started') return;
     expect(started.state.editor?.value).toBe('# Plan');
-    expect(documentRevisionActive(started.state)).toBe(true);
+    expect(started.state.revision.kind).not.toBe('idle');
   });
 
   it('refuses a document nothing can be written to', () => {
@@ -109,7 +108,6 @@ describe('the pending count the editor publishes', () => {
     const ended = publishDocumentRevisionCount(reviewing(1), review.id, 0);
 
     expect(ended.revision).toEqual({ kind: 'idle' });
-    expect(documentRevisionActive(ended)).toBe(false);
   });
 
   it('drops a count for a review that is no longer the open one', () => {

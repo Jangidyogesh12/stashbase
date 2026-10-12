@@ -361,7 +361,6 @@ function prepareBugReportText(input, {
 
 module.exports = {
   REDACTED,
-  isSensitiveFieldName,
   prepareBugReportText,
   redactBugReportText,
   scanBugReportText,

@@ -61,7 +61,7 @@ export interface AgentBootstrapDependencies {
 
 const IDLE_STATUS: AgentBootstrapStatus = { phase: 'idle' };
 
-export class AgentSetupBusyError extends Error { readonly status = 409; }
+class AgentSetupBusyError extends Error { readonly status = 409; }
 
 const INSTALLATION_TIMEOUT_MS = 8 * 60_000;
 const ACTION_LABELS = { bootstrap: 'Install / connect', login: 'Sign in', update: 'Update', connect: 'Check' } as const;

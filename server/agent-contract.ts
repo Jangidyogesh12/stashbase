@@ -177,33 +177,6 @@ export type AgentSessionTermination = {
   folder: string;
 };
 
-export interface FolderBoundAgentSession {
-  boundFolder(): string | null;
-  dispose(termination?: AgentSessionTermination): void;
-}
-
-/** Dispose exactly the sessions bound to `folderAbs` (filesystem identity
- * comparison), leaving sessions bound to other folders running. Shared by the
- * runtime registries so folder removal has one teardown semantic. */
-export function disposeSessionsBoundToFolder<T extends FolderBoundAgentSession>(
-  sessions: Set<T>,
-  folderAbs: string,
-): void {
-  for (const session of [...sessions]) {
-    const bound = session.boundFolder();
-    let matches = false;
-    try {
-      matches = bound != null && filesystemPath.equal(bound, folderAbs);
-    } catch {
-      matches = false;
-    }
-    if (matches) {
-      session.dispose({ kind: 'scope-removed', folder: folderAbs });
-      sessions.delete(session);
-    }
-  }
-}
-
 export interface AgentRuntimeDescriptor {
   id: AgentId;
   label: string;

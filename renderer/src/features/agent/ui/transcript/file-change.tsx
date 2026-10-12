@@ -12,16 +12,17 @@ import { EditorView, lineNumbers } from '@codemirror/view';
 import { useEffect, useMemo, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import {
   FILE_CHANGE_ACTION_LABEL,
-  fileBasename,
   type AgentFileChange,
 } from '@/features/agent/domain/file-change';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { codeSyntaxHighlighting } from '@/shared/styling/code-highlight';
+import { basePathName } from '@/shared/utils/file-path';
+
+import { ChangedFileLabel } from './changed-file-label';
 
 // A base theme, not a theme: only base themes may address the merge view's
 // own `&light`/`&dark` rules at equal specificity. Base themes mount in
@@ -149,7 +150,7 @@ function UnifiedDiff({
       }),
     });
     let destroyed = false;
-    const description = LanguageDescription.matchFilename(languages, fileBasename(path));
+    const description = LanguageDescription.matchFilename(languages, basePathName(path));
     if (description) {
       void description.load().then((support) => {
         if (destroyed) return;
@@ -227,8 +228,7 @@ export function Counts({ additions, deletions }: { additions: number; deletions:
 /** One change as evidence: the file strip, then its diff or patch. */
 export function AgentFileChangeView({ change }: { change: AgentFileChange }) {
   const shape = useShape();
-  const name = fileBasename(change.path);
-  const directory = change.path.slice(0, change.path.length - name.length).replace(/[\\/]$/u, '');
+  const name = basePathName(change.path);
   const counts = useMemo(
     () =>
       change.counts ??
@@ -242,20 +242,7 @@ export function AgentFileChangeView({ change }: { change: AgentFileChange }) {
       className={cn('overflow-hidden border border-border bg-surface-2', shape.panel)}
     >
       <header className="flex h-7 items-center gap-1.5 border-b border-border px-2.5 text-ui-12">
-        <FileTypeIcon
-          aria-hidden="true"
-          className="shrink-0 text-muted-foreground"
-          path={change.path}
-          size={12}
-        />
-        <span className="shrink-0 font-medium text-foreground" title={change.path}>
-          {name}
-        </span>
-        {directory && (
-          <span className="min-w-0 truncate text-muted-foreground" title={change.path}>
-            {directory}
-          </span>
-        )}
+        <ChangedFileLabel iconSize={12} path={change.path} />
         <span className="shrink-0 text-muted-foreground">
           {FILE_CHANGE_ACTION_LABEL[change.action]}
         </span>
@@ -294,30 +281,14 @@ export function AgentChangedFiles({
   return (
     <ul aria-label="Changed files" className="m-0 flex list-none flex-col gap-0.5 p-0">
       {changes.map((change) => {
-        const name = fileBasename(change.path);
-        const directory = change.path
-          .slice(0, change.path.length - name.length)
-          .replace(/[\\/]$/u, '');
+        const name = basePathName(change.path);
         const source = onOpenSource && sourceFor ? sourceFor(change.path) : null;
         return (
           <li
             className={cn('flex min-h-8 items-center gap-2 px-2 text-ui-12', shape.item)}
             key={change.path}
           >
-            <FileTypeIcon
-              aria-hidden="true"
-              className="shrink-0 text-muted-foreground"
-              path={change.path}
-              size={14}
-            />
-            <span className="shrink-0 font-medium text-foreground" title={change.path}>
-              {name}
-            </span>
-            {directory && (
-              <span className="min-w-0 truncate text-muted-foreground" title={change.path}>
-                {directory}
-              </span>
-            )}
+            <ChangedFileLabel iconSize={14} path={change.path} />
             <span className="ml-auto shrink-0 text-muted-foreground">
               {FILE_CHANGE_ACTION_LABEL[change.action]}
             </span>

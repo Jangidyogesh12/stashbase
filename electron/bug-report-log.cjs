@@ -69,8 +69,6 @@ function collectRedactedApplicationLog(options = {}) {
 }
 
 module.exports = {
-  MAX_LOG_TAIL_BYTES,
   collectRedactedApplicationLog,
-  omitInternalPathLogLines,
   readApplicationLogTail,
 };

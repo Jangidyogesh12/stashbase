@@ -1,8 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
+import { extractorSpawn } from './python-host.ts';
 
 const KILL_GRACE_MS = 1500;
 const EXTRACTOR_NICE_PRIORITY = 15;
+const STDERR_TAIL_BYTES = 64 * 1024;
 
 interface ExtractorSpawnOptions {
   detached: boolean;
@@ -48,6 +50,59 @@ export function lowerExtractorPriority(proc: ChildProcess): void {
     // Best effort only. Thread limits above are the primary guard; priority
     // lowering is an extra courtesy to keep the Electron UI responsive.
   }
+}
+
+export interface ExtractorRun {
+  mode: 'pdf' | 'ocr';
+  script: string;
+  args: string[];
+  signal?: AbortSignal;
+  /** Called for each complete stderr line, including a final unterminated one. */
+  onStderrLine?: (line: string) => void;
+}
+
+export interface ExtractorOutcome {
+  /** Exit code once the whole process tree is gone; null when signal-terminated. */
+  code: number | null;
+  /** True when `signal` aborted the run; the tree has been reaped. */
+  cancelled: boolean;
+  /** Last three trimmed stderr lines, for failure messages. */
+  stderrTail: string;
+}
+
+/** Spawn one PDF/OCR extractor at lowered priority and settle after its whole
+ * process tree has exited. Rejects only when the spawn itself fails; exit
+ * codes and cancellation are the caller's error policy. */
+export function runExtractor({ mode, script, args, signal, onStderrLine }: ExtractorRun): Promise<ExtractorOutcome> {
+  return new Promise((resolve, reject) => {
+    const spawnSpec = extractorSpawn(mode, script, args);
+    const proc = spawn(spawnSpec.cmd, spawnSpec.args, spawnOptionsForPdfOcr());
+    lowerExtractorPriority(proc);
+    let stderr = '';
+    let lineBuffer = '';
+    let cancelled = false;
+    const onAbort = () => {
+      cancelled = true;
+      terminateExtractorTree(proc);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    proc.stderr?.on('data', (chunk) => {
+      const text = String(chunk);
+      stderr = (stderr + text).slice(-STDERR_TAIL_BYTES);
+      const lines = (lineBuffer + text).split(/\r?\n/);
+      lineBuffer = lines.pop() ?? '';
+      for (const line of lines) onStderrLine?.(line);
+    });
+    proc.on('error', (err) => {
+      signal?.removeEventListener('abort', onAbort);
+      reject(new Error(`spawn failed: ${err.message}`));
+    });
+    void waitForExtractorTree(proc).then((code) => {
+      signal?.removeEventListener('abort', onAbort);
+      if (lineBuffer) onStderrLine?.(lineBuffer);
+      resolve({ code, cancelled, stderrTail: stderr.trim().split('\n').slice(-3).join('\n') });
+    }, reject);
+  });
 }
 
 /** Install immediately after spawn. Completion includes pipe release and descendants,

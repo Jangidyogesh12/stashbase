@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test, { after, before } from 'node:test';
-import { EditorState } from '@codemirror/state';
 import {
   AUDIO_SOURCE_EXTENSIONS,
   DOCX_EXTENSIONS,
@@ -17,28 +16,22 @@ import { getDaemon } from './mfs-daemon.ts';
 import { indexer } from './state.ts';
 import { getFsChangeCounter } from './watcher.ts';
 import {
-  createFolder,
+  createFolderAsync,
   createTextExclusiveAsync,
   deleteFileAsync,
-  deleteFile,
-  fileVersion,
   fileVersionAsync,
-  isSameExistingPath,
-  listFiles,
-  listFilesAndFoldersAsync,
-  listFolders,
-  listIndexableTextFilesUnder,
-  listIndexableTextFilesUnderAsync,
-  listImmediateDirectory,
   MAX_TEXT_READ_BYTES,
-  readText,
   readTextAsync,
-  renameFolder,
-  renameOnDisk,
+  renameFolderAsync,
   renameOnDiskAsync,
-  saveText,
-  sanitizeFilename,
-} from './files.ts';
+  saveTextAsync,
+} from './active-file-operations.ts';
+import { isSameExistingPathAsync, sanitizeFilename } from './file-paths.ts';
+import {
+  listFilesAndFoldersAsync,
+  listImmediateDirectoryAsync,
+  listIndexableTextFilesUnderAsync,
+} from './file-listing.ts';
 
 const originalUpsertFile = indexer.upsertFile.bind(indexer);
 const originalDeleteFile = indexer.deleteFile.bind(indexer);
@@ -176,9 +169,9 @@ test('text reads reject files above the bounded response limit', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-bounded-read-'));
   try {
     fs.writeFileSync(path.join(root, 'large.md'), Buffer.alloc(MAX_TEXT_READ_BYTES + 1, 0x61));
-    await runWithFolderRoot(root, () => {
-      assert.throws(
-        () => readText('large.md'),
+    await runWithFolderRoot(root, async () => {
+      await assert.rejects(
+        () => readTextAsync('large.md'),
         (err: Error & { code?: string; status?: number }) => err.code === 'FILE_TOO_LARGE' && err.status === 413,
       );
     });
@@ -192,8 +185,8 @@ test('immediate directory listing reports large files without reading their cont
   try {
     fs.mkdirSync(path.join(root, 'target'));
     fs.writeFileSync(path.join(root, 'target', 'large.md'), Buffer.alloc(MAX_TEXT_READ_BYTES + 1, 0x61));
-    await runWithFolderRoot(root, () => {
-      assert.deepEqual(listImmediateDirectory('target'), [{
+    await runWithFolderRoot(root, async () => {
+      assert.deepEqual(await listImmediateDirectoryAsync('target'), [{
         name: 'large.md',
         path: 'target/large.md',
         type: 'file',
@@ -206,7 +199,7 @@ test('immediate directory listing reports large files without reading their cont
   }
 });
 
-test('renameOnDisk supports case-only file renames', async () => {
+test('renameOnDiskAsync supports case-only file renames', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-case-rename-'));
   try {
     fs.writeFileSync(path.join(root, 'note.md'), 'hello');
@@ -214,10 +207,10 @@ test('renameOnDisk supports case-only file renames', async () => {
     await runWithFolderRoot(root, async () => {
       const targetExistsBeforeRename = fs.existsSync(path.join(root, 'Note.md'));
       if (targetExistsBeforeRename) {
-        assert.equal(isSameExistingPath('note.md', 'Note.md'), true);
+        assert.equal(await isSameExistingPathAsync('note.md', 'Note.md'), true);
       }
 
-      renameOnDisk('note.md', 'Note.md');
+      await renameOnDiskAsync('note.md', 'Note.md');
     });
 
     assert.deepEqual(fs.readdirSync(root), ['Note.md']);
@@ -227,13 +220,13 @@ test('renameOnDisk supports case-only file renames', async () => {
   }
 });
 
-test('renameFolder supports case-only folder renames', async () => {
+test('renameFolderAsync supports case-only folder renames', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-case-folder-'));
   try {
     fs.mkdirSync(path.join(root, 'folder'));
     fs.writeFileSync(path.join(root, 'folder', 'note.md'), 'hello');
 
-    await runWithFolderRoot(root, () => renameFolder('folder', 'Folder'));
+    await runWithFolderRoot(root, () => renameFolderAsync('folder', 'Folder'));
 
     assert.deepEqual(fs.readdirSync(root), ['Folder']);
     assert.equal(fs.readFileSync(path.join(root, 'Folder', 'note.md'), 'utf8'), 'hello');
@@ -248,12 +241,12 @@ test('quoted imported filenames remain readable, writable, and deletable', async
     const name = "John's Notes.md";
     fs.writeFileSync(path.join(root, name), 'hello');
 
-    await runWithFolderRoot(root, () => {
-      assert.equal(readText(name), 'hello');
-      saveText(name, 'updated');
-      assert.equal(readText(name), 'updated');
-      assert.equal(deleteFile(name), true);
-      assert.equal(readText(name), null);
+    await runWithFolderRoot(root, async () => {
+      assert.equal(await readTextAsync(name), 'hello');
+      await saveTextAsync(name, 'updated');
+      assert.equal(await readTextAsync(name), 'updated');
+      assert.equal(await deleteFileAsync(name), true);
+      assert.equal(await readTextAsync(name), null);
     });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -273,9 +266,9 @@ test('TXT save boundary preserves BOM and CRLF like other source text', async ()
   try {
     fs.writeFileSync(path.join(root, 'notes.txt'), '\uFEFFone\r\ntwo\r\n', 'utf8');
     await runWithFolderRoot(root, async () => {
-      const version = fileVersion('notes.txt')!;
+      const version = (await fileVersionAsync('notes.txt'))!;
       await saveFileContent('notes.txt', '\uFEFFone\nchanged\n', { baseVersion: version });
-      assert.equal(readText('notes.txt'), '\uFEFFone\r\nchanged\r\n');
+      assert.equal(await readTextAsync('notes.txt'), '\uFEFFone\r\nchanged\r\n');
     });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -288,16 +281,16 @@ test('JSON save boundary preserves BOM/CRLF and rejects a stale renderer version
     const source = '\uFEFF{\r\n  "value": 1\r\n}\r\n';
     fs.writeFileSync(path.join(root, 'data.json'), source, 'utf8');
     await runWithFolderRoot(root, async () => {
-      const version = fileVersion('data.json')!;
+      const version = (await fileVersionAsync('data.json'))!;
       await saveFileContent('data.json', '\uFEFF{\n  "value": 2\n}\n', { baseVersion: version });
-      assert.equal(readText('data.json'), '\uFEFF{\r\n  "value": 2\r\n}\r\n');
+      assert.equal(await readTextAsync('data.json'), '\uFEFF{\r\n  "value": 2\r\n}\r\n');
 
-      saveText('data.json', '\uFEFF{\r\n  "value": "external"\r\n}\r\n');
+      await saveTextAsync('data.json', '\uFEFF{\r\n  "value": "external"\r\n}\r\n');
       await assert.rejects(
         saveFileContent('data.json', '\uFEFF{\n  "value": 3\n}\n', { baseVersion: version }),
         (err: Error & { code?: string }) => err.code === 'FILE_CHANGED',
       );
-      assert.equal(readText('data.json'), '\uFEFF{\r\n  "value": "external"\r\n}\r\n');
+      assert.equal(await readTextAsync('data.json'), '\uFEFF{\r\n  "value": "external"\r\n}\r\n');
     });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -324,14 +317,14 @@ test('server convertible membership follows the shared extension catalog', () =>
   }
 });
 
-test('createFolder applies writable protected-segment policy', async () => {
+test('createFolderAsync applies writable protected-segment policy', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-create-folder-'));
   try {
-    await runWithFolderRoot(root, () => {
-      assert.equal(createFolder('Projects'), true);
+    await runWithFolderRoot(root, async () => {
+      assert.equal(await createFolderAsync('Projects'), true);
       assert.equal(fs.statSync(path.join(root, 'Projects')).isDirectory(), true);
-      assert.throws(() => createFolder('.stashbase/state'), /cannot write into \.stashbase/);
-      assert.throws(() => createFolder('node_modules/pkg'), /excluded directory "node_modules"/);
+      await assert.rejects(() => createFolderAsync('.stashbase/state'), /cannot write into \.stashbase/);
+      await assert.rejects(() => createFolderAsync('node_modules/pkg'), /excluded directory "node_modules"/);
     });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -353,9 +346,10 @@ test('folder listing hides note bundles and legacy derived artifacts', async () 
     fs.writeFileSync(path.join(root, '.paper.pdf.md'), 'legacy basename text');
     fs.mkdirSync(path.join(root, '.stashbase'));
 
-    await runWithFolderRoot(root, () => {
-      assert.deepEqual(listFiles().map((entry) => entry.name), ['note.md', 'paper.pdf']);
-      assert.deepEqual(listFolders().map((entry) => entry.path), []);
+    await runWithFolderRoot(root, async () => {
+      const listing = await listFilesAndFoldersAsync();
+      assert.deepEqual(listing.files.map((entry) => entry.name), ['note.md', 'paper.pdf']);
+      assert.deepEqual(listing.folders.map((entry) => entry.path), []);
     });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -369,8 +363,8 @@ test('audio same-stem dot Markdown stays user-owned while hidden from listing', 
     fs.writeFileSync(path.join(root, '.meeting.md'), '# Private meeting note');
     fs.writeFileSync(path.join(root, '.meeting.mp3.md'), '# Explicitly named note');
 
-    await runWithFolderRoot(root, () => {
-      assert.deepEqual(listFiles().map((entry) => entry.name), ['meeting.mp3']);
+    await runWithFolderRoot(root, async () => {
+      assert.deepEqual((await listFilesAndFoldersAsync()).files.map((entry) => entry.name), ['meeting.mp3']);
       assert.doesNotThrow(() => validateEditableFileWrite('.meeting.mp3.md'));
     });
   } finally {
@@ -390,10 +384,6 @@ test('folder rename scan includes legacy derived notes for stale index cleanup',
 
     await runWithFolderRoot(root, async () => {
       assert.deepEqual(
-        listIndexableTextFilesUnder('Research').map((entry) => entry.name),
-        ['Research/.paper.md', 'Research/.paper.pdf.md', 'Research/plain.TXT'],
-      );
-      assert.deepEqual(
         (await listIndexableTextFilesUnderAsync('Research')).map((entry) => entry.name),
         ['Research/.paper.md', 'Research/.paper.pdf.md', 'Research/plain.TXT'],
       );
@@ -406,20 +396,18 @@ test('folder rename scan includes legacy derived notes for stale index cleanup',
 test('PDF rename and delete preserve neighboring files that match retired extraction names', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-source-neighbors-'));
   try {
-    for (const asyncMode of [false, true]) {
-      const source = asyncMode ? 'async.pdf' : 'sync.pdf';
-      const target = asyncMode ? 'async-new.pdf' : 'sync-new.pdf';
-      fs.writeFileSync(path.join(root, source), 'source');
-      const siblings = ['.' + source + '.md', '.' + source.replace('.pdf', '') + '.md', '.' + target + '.md'];
-      for (const sibling of siblings) fs.writeFileSync(path.join(root, sibling), 'user note');
-      const bundle = path.join(root, '.' + source + '_files.tmp-user');
-      fs.mkdirSync(bundle); fs.writeFileSync(path.join(bundle, 'keep.txt'), 'user asset');
-      await runWithFolderRoot(root, async () => {
-        if (asyncMode) { await renameOnDiskAsync(source, target); await deleteFileAsync(target); }
-        else { renameOnDisk(source, target); deleteFile(target); }
-      });
-      for (const sibling of siblings) assert.equal(fs.readFileSync(path.join(root, sibling), 'utf8'), 'user note');
-      assert.equal(fs.readFileSync(path.join(bundle, 'keep.txt'), 'utf8'), 'user asset');
-    }
+    const source = 'source.pdf';
+    const target = 'source-new.pdf';
+    fs.writeFileSync(path.join(root, source), 'source');
+    const siblings = ['.' + source + '.md', '.' + source.replace('.pdf', '') + '.md', '.' + target + '.md'];
+    for (const sibling of siblings) fs.writeFileSync(path.join(root, sibling), 'user note');
+    const bundle = path.join(root, '.' + source + '_files.tmp-user');
+    fs.mkdirSync(bundle); fs.writeFileSync(path.join(bundle, 'keep.txt'), 'user asset');
+    await runWithFolderRoot(root, async () => {
+      await renameOnDiskAsync(source, target);
+      await deleteFileAsync(target);
+    });
+    for (const sibling of siblings) assert.equal(fs.readFileSync(path.join(root, sibling), 'utf8'), 'user note');
+    assert.equal(fs.readFileSync(path.join(bundle, 'keep.txt'), 'utf8'), 'user asset');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

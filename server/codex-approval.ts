@@ -1,10 +1,10 @@
-export type CodexJsonObject = Record<string, unknown>;
+import { objectValue, stringValue, type JsonObject } from './codex-protocol.ts';
 
 export interface CodexMcpToolApproval {
   toolUseId: string;
   name: string;
   title: string;
-  input: CodexJsonObject;
+  input: JsonObject;
 }
 export function approvalTitle(reason: unknown, detail: unknown, fallback: string): string {
   const normalizedReason = stringValue(reason);
@@ -13,7 +13,7 @@ export function approvalTitle(reason: unknown, detail: unknown, fallback: string
   return normalizedDetail ? `${fallback} ${normalizedDetail}` : fallback;
 }
 
-export function commandApprovalInput(params: CodexJsonObject): CodexJsonObject {
+export function commandApprovalInput(params: JsonObject): JsonObject {
   return {
     command: stringValue(params.command),
     cwd: stringValue(params.cwd),
@@ -22,7 +22,7 @@ export function commandApprovalInput(params: CodexJsonObject): CodexJsonObject {
   };
 }
 
-export function fileChangeApprovalInput(params: CodexJsonObject): CodexJsonObject {
+export function fileChangeApprovalInput(params: JsonObject): JsonObject {
   return {
     itemId: stringValue(params.itemId),
     reason: stringValue(params.reason),
@@ -31,7 +31,7 @@ export function fileChangeApprovalInput(params: CodexJsonObject): CodexJsonObjec
 }
 
 export function mcpToolApprovalFromElicitation(
-  params: CodexJsonObject,
+  params: JsonObject,
 ): CodexMcpToolApproval | null {
   const meta = objectValue(params._meta);
   const kind = stringValue(meta.codex_approval_kind) || stringValue(meta.approval_kind);
@@ -74,9 +74,9 @@ export function mcpToolApprovalFromElicitation(
   };
 }
 
-export function requestedPermissions(params: CodexJsonObject | undefined): CodexJsonObject {
+export function requestedPermissions(params: JsonObject | undefined): JsonObject {
   const permissions = objectValue(params?.permissions);
-  const granted: CodexJsonObject = {};
+  const granted: JsonObject = {};
   if (permissions.network) granted.network = permissions.network;
   if (permissions.fileSystem) granted.fileSystem = permissions.fileSystem;
   return granted;
@@ -102,25 +102,26 @@ export function codexAccessOptions(mode: string | undefined): {
   }
 }
 
-function protocolNoticeFromParams(params: CodexJsonObject): string {
+/** A displayable notice from a native prompt or notification: its message,
+ * error message, or summary/details, then any prompt text. */
+export function protocolNoticeFromParams(params: JsonObject): string {
   return notificationMessage(params)
     || stringValue(params.prompt)
     || stringValue(params.message);
 }
 
-function notificationMessage(params: CodexJsonObject): string {
-  const direct = stringValue(params.message);
+export function notificationMessage(params: JsonObject): string {
+  const direct = usefulMessage(params.message);
   if (direct) return direct;
-  const error = objectValue(params.error);
-  return stringValue(error.message);
+  const fromError = usefulMessage(objectValue(params.error).message);
+  if (fromError) return fromError;
+  const summary = usefulMessage(params.summary);
+  const details = usefulMessage(params.details);
+  if (summary && details && details !== summary) return `${summary}\n\n${details}`;
+  return summary || details;
 }
 
-function objectValue(value: unknown): CodexJsonObject {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as CodexJsonObject
-    : {};
-}
-
-function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+export function usefulMessage(value: unknown): string {
+  const message = stringValue(value);
+  return message.trim() ? message : '';
 }

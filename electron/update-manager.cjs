@@ -320,8 +320,5 @@ function createUpdateManager(options) {
 }
 
 module.exports = {
-  DEFAULT_CHECK_INTERVAL_MS,
-  DEFAULT_RELEASE_URL,
-  DEFAULT_STARTUP_DELAY_MS,
   createUpdateManager,
 };

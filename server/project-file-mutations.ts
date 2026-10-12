@@ -7,13 +7,12 @@ import { prepareFileOperation } from './file-operation-guard.ts';
 import { saveFileContent } from './file-save.ts';
 import {
   deleteFileAsync,
-  isSameExistingPathAsync,
   pathExistsAsync,
   readTextAsync,
   renameOnDiskAsync,
-} from './files.ts';
+} from './active-file-operations.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { resolveSafe } from './file-paths.ts';
+import { isSameExistingPathAsync, resolveSafe } from './file-paths.ts';
 import { runWithFolderRoot } from './folder.ts';
 import { detectFormat, detectViewerFormat, isConvertibleSource } from './format.ts';
 import { contentSizeError, isRetrievalEligiblePath, shouldIndexFilePath } from './indexable.ts';

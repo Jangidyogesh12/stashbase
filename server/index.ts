@@ -84,6 +84,7 @@ import {
 import { createClientErrorHandler } from './client-error.ts';
 import { stopOpenCodeRuntime } from './opencode-runtime.ts';
 import { cancelAllGitHubImports } from './github-import.ts';
+import { parsePortArg } from '../shared/port-arg.ts';
 
 const log = logger('server');
 installHostErrorReporting();
@@ -111,14 +112,6 @@ setDerivedNoteIndexer(async (sourceAbs, derivedAbs) => {
   return result;
 });
 
-function parsePortArg(argv: string[], fallback: number): number {
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith('--port=')) return Number(a.slice(7)) || fallback;
-    if (a === '--port') return Number(argv[i + 1]) || fallback;
-  }
-  return fallback;
-}
 const PORT = parsePortArg(process.argv.slice(2), 8090);
 const SERVER_PROTOCOL_VERSION = 1;
 const VITE_PORT = Number(process.env.VITE_PORT ?? 5173);

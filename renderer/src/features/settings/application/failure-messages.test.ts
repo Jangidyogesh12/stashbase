@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import { EmbedderError } from './embedder-port';
-import { failureMessage, firstFailure, settingsFailure } from './failure-messages';
+import { failureMessage, settingsFailure } from './failure-messages';
 import { AgentRuntimeError, SettingsError } from './ports';
 
 describe('settings failures', () => {
@@ -56,16 +56,5 @@ describe('settings failures', () => {
       message: failureMessage('unavailable'),
       tone: 'capability',
     });
-  });
-
-  it('reports the first failure among commands that share one notice', () => {
-    expect(
-      firstFailure(
-        { isError: false, error: null },
-        { isError: true, error: new EmbedderError('rejected', 'Second.') },
-        { isError: true, error: new Error('Third.') },
-      ),
-    ).toEqual({ message: failureMessage('rejected'), tone: 'input' });
-    expect(firstFailure({ isError: false, error: null })).toBeNull();
   });
 });

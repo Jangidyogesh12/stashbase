@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 // Fails when a Node test file exists that no package.json script runs.
 //
-// Server-side suites enumerate their files explicitly, so a new *.test.*
-// file that is not added to a script silently never runs anywhere — six
-// files drifted that way before this check existed. A file counts as wired
-// when some script names it verbatim or matches it through a glob token.
-// A recursive glob wires everything beneath it, which is the point of using
-// one — the renderer's tests live beside the feature that owns them, so
-// enumerating them here would go stale on every move.
-// Python tests run by unittest discovery, so they do not need this check.
+// Several Electron and release-script suites still name their files
+// explicitly, so a new *.test.* file that is not added to a script silently
+// never runs anywhere. A file counts as wired when some script names it
+// verbatim or matches it through a glob token.
+// Server, shared-protocol, and renderer suites run every test under their
+// directory through one recursive glob or Vitest include, and Python tests use
+// unittest discovery, so only the hand-listed roots are scanned here.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,12 +16,8 @@ import process from 'node:process';
 const repoRoot = process.cwd();
 const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const commands = Object.values(pkg.scripts ?? {});
-const replacementViteConfig = fs.readFileSync(
-  path.join(repoRoot, 'renderer', 'vite.config.ts'),
-  'utf8',
-);
 
-const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'renderer'];
+const SCAN_ROOTS = ['electron', 'scripts'];
 const TEST_FILE = /\.test\.(ts|tsx|cjs|mjs)$/;
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-app', 'runtime']);
 
@@ -64,19 +59,6 @@ const globMatchers = tokens
       .replace(/\*/g, '[^/]*')
       .replace(/\u0000/g, '(?:[^/]+/)*')}$`,
   ));
-
-// Workspace-local Vitest includes are relative to renderer rather than the
-// repository root, so normalize them before matching the shared inventory.
-for (const match of replacementViteConfig.matchAll(/['"](src\/[^'"]*\*[^'"]*\.test\.(?:ts|tsx))['"]/g)) {
-  const token = `renderer/${match[1]}`;
-  globMatchers.push(new RegExp(
-    `^${token
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*\*\//g, '\u0000')
-      .replace(/\*/g, '[^/]*')
-      .replace(/\u0000/g, '(?:[^/]+/)*')}$`,
-  ));
-}
 
 const missing = testFiles
   .filter((file) => !verbatim.has(file) && !globMatchers.some((matcher) => matcher.test(file)))

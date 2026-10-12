@@ -16,18 +16,19 @@ import type {
 import type { WebSocket, RawData } from 'ws';
 import { errorMessage, logger } from './log.ts';
 import {
-  disposeSessionsBoundToFolder,
   resolveSessionBinding,
   type AgentClientEvent,
+  type AgentConnectionOptions,
   type AgentHistoryActions,
   type AgentServerEvent,
   type AgentSessionTermination,
 } from './agent-contract.ts';
 import {
+  liveSessionSet,
   registerAttributedAgentSession,
   unregisterAttributedAgentSession,
 } from './agent-session-registry.ts';
-import { getCurrentFolder, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, normalizeWindowId, runWithWindowId } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { isTransientAttachmentPath } from './routes/attach.ts';
@@ -68,7 +69,7 @@ export function storedOpenCodeModel(messages: ReadonlyArray<{ info: Message }>):
 /** Keep OpenCode's provider-specific tool vocabulary behind the adapter.
  * The renderer, history replay, and permission cards all consume the same
  * stable names already used by the Shared Agent Contract. */
-export function normalizeOpenCodeToolName(name: string): string {
+function normalizeOpenCodeToolName(name: string): string {
   switch (name.toLowerCase()) {
     case 'bash': return 'Bash';
     case 'read': return 'Read';
@@ -347,7 +348,7 @@ export class OpenCodePanelSession {
 
   constructor(
     private readonly ws: WebSocket,
-    private readonly options: import('./agent-contract.ts').AgentConnectionOptions,
+    private readonly options: AgentConnectionOptions,
     runtime?: OpenCodeSessionRuntime,
   ) {
     const binding = runWithWindowId(options.windowId, () => resolveSessionBinding({
@@ -359,7 +360,7 @@ export class OpenCodePanelSession {
     // settles, and Edit is where it settles.
     this.access = options.access === 'auto' ? 'acceptEdits'
       : options.access === 'acceptEdits' || options.access === 'plan' ? options.access : 'default';
-    this.windowId = options.windowId;
+    this.windowId = normalizeWindowId(options.windowId);
     this.requestedModel = options.model ?? undefined;
     this.runtime = runtime ?? createOpenCodeSessionRuntime({
       windowId: this.windowId,
@@ -377,7 +378,6 @@ export class OpenCodePanelSession {
 
   boundFolder(): string | null { return this.cwd; }
   turnInFlight(): boolean { return this.translator.isTurnActive(); }
-  ownedByWindow(windowId: string): boolean { return this.options.windowId === windowId; }
 
   dispose(termination?: AgentSessionTermination): void {
     if (this.disposed) return;
@@ -687,26 +687,15 @@ export class OpenCodePanelSession {
   }
 }
 
-const sessions = new Set<OpenCodePanelSession>();
+const sessions = liveSessionSet<OpenCodePanelSession>();
 
-export function attachOpenCodeWebSocket(
-  ws: WebSocket,
-  options: import('./agent-contract.ts').AgentConnectionOptions,
-): void {
-  const session = new OpenCodePanelSession(ws, options);
-  sessions.add(session);
+export function attachOpenCodeWebSocket(ws: WebSocket, options: AgentConnectionOptions): void {
+  sessions.add(new OpenCodePanelSession(ws, options));
 }
 
-export function killActiveOpenCode(windowId?: string): void {
-  for (const session of [...sessions]) {
-    if (windowId && !session.ownedByWindow(windowId)) continue;
-    session.dispose();
-  }
-}
+export const killActiveOpenCode = sessions.killWindow;
 
-export function killOpenCodeSessionsForFolder(folderAbs: string): void {
-  disposeSessionsBoundToFolder(sessions, folderAbs);
-}
+export const killOpenCodeSessionsForFolder = sessions.killFolder;
 
 export function openCodeSessionHasContent(
   session: Pick<Session, 'title'>,

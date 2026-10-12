@@ -12,7 +12,7 @@ import {
 } from './classify';
 import type { HttpClient, HttpResponse } from './client';
 
-const NoteError = featureErrorClass<'conflict'>('NoteError');
+const NoteError = featureErrorClass<'conflict' | 'invalid-request'>('NoteError');
 
 function text(input: unknown, key: string): string | null {
   if (input === null || typeof input !== 'object') return null;
@@ -46,18 +46,10 @@ function client(...responses: HttpResponse[]): HttpClient {
   };
 }
 
-const messages = {
-  'invalid-response': 'The note returned an invalid response.',
-  'scope-lost': 'That note folder is gone.',
-  unauthorized: 'This window can no longer read notes.',
-  unavailable: 'Notes are unavailable.',
-} as const;
-
 function noteRequest(signal?: AbortSignal) {
   return {
     error: NoteError,
     failureSchema,
-    messages,
     path: '/api/notes',
     schema: noteSchema,
     ...(signal === undefined ? {} : { signal }),
@@ -75,7 +67,7 @@ describe('response classification', () => {
     expect(classifyResponse({ body: null, status: 500 })).toBe('unavailable');
   });
 
-  it('falls back to one sentence per kind when the call names none', () => {
+  it('gives each kind one diagnostic sentence', () => {
     const error = transportError({ body: null, status: 500 }, { error: NoteError });
 
     expect(error.kind).toBe('unavailable');
@@ -105,50 +97,38 @@ describe('the shared HTTP envelope', () => {
     });
   });
 
-  it('reports a body the schema rejects on the call own sentence', async () => {
+  it('reports a body the schema rejects on the owning ladder', async () => {
     await expect(
       request(client({ body: { wrong: true }, status: 200 }), noteRequest()),
-    ).rejects.toMatchObject({
-      kind: 'invalid-response',
-      message: 'The note returned an invalid response.',
-      name: 'NoteError',
-    });
+    ).rejects.toMatchObject({ kind: 'invalid-response', name: 'NoteError' });
   });
 
-  it('maps each refused status onto the call own sentence', async () => {
+  it('maps each refused status onto the shared ladder', async () => {
     await expect(request(client({ body: null, status: 403 }), noteRequest())).rejects.toMatchObject(
-      {
-        kind: 'unauthorized',
-        message: 'This window can no longer read notes.',
-      },
+      { kind: 'unauthorized' },
     );
     await expect(request(client({ body: null, status: 410 }), noteRequest())).rejects.toMatchObject(
-      { kind: 'scope-lost', message: 'That note folder is gone.' },
+      { kind: 'scope-lost' },
     );
     await expect(request(client({ body: null, status: 500 }), noteRequest())).rejects.toMatchObject(
-      { kind: 'unavailable', message: 'Notes are unavailable.' },
+      { kind: 'unavailable' },
     );
   });
 
-  it('keeps the server sentence as a cause rather than showing it to the reader', async () => {
-    const rejection = request(
-      client({ body: { error: '/private/notes is gone' }, status: 410 }),
-      noteRequest(),
-    );
-
-    await expect(rejection).rejects.toMatchObject({ message: 'That note folder is gone.' });
-    await expect(rejection).rejects.toMatchObject({
-      cause: new Error('/private/notes is gone'),
-    });
-  });
-
-  it('surfaces the server sentence when the route writes it for the reader', async () => {
+  it('carries the server sentence as the cause', async () => {
     await expect(
-      request(client({ body: { error: 'Invalid API key.' }, status: 500 }), {
-        ...noteRequest(),
-        serverMessage: true,
-      }),
-    ).rejects.toMatchObject({ kind: 'unavailable', message: 'Invalid API key.' });
+      request(client({ body: { error: '/private/notes is gone' }, status: 410 }), noteRequest()),
+    ).rejects.toMatchObject({ cause: new Error('/private/notes is gone') });
+  });
+
+  it('reads a 400 as the reader own request when the call names that kind', async () => {
+    const rejected = { body: { error: 'Name is required.' }, status: 400 };
+    await expect(
+      request(client(rejected), { ...noteRequest(), invalidRequest: 'invalid-request' as const }),
+    ).rejects.toMatchObject({ cause: new Error('Name is required.'), kind: 'invalid-request' });
+    await expect(request(client(rejected), noteRequest())).rejects.toMatchObject({
+      kind: 'unavailable',
+    });
   });
 
   it('gives the owning adapter first refusal, and classifies what it declines', async () => {
@@ -174,11 +154,7 @@ describe('the shared HTTP envelope', () => {
     };
 
     const rejection = request(transport, noteRequest());
-    await expect(rejection).rejects.toMatchObject({
-      kind: 'unavailable',
-      message: 'Notes are unavailable.',
-      name: 'NoteError',
-    });
+    await expect(rejection).rejects.toMatchObject({ kind: 'unavailable', name: 'NoteError' });
     await expect(rejection).rejects.toMatchObject({ cause: offline });
   });
 

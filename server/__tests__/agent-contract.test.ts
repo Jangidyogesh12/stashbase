@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BUILT_IN_AGENT_ADAPTERS } from '../agent-adapters.ts';
+import { liveSessionSet } from '../agent-session-registry.ts';
 import {
   attachAgentRuntime,
   discoverAgentRuntimes,
-  disposeSessionsBoundToFolder,
   parseAgentEffort,
   registerAgentAdapter,
   resolveAgentSessionFolder,
@@ -155,6 +155,7 @@ test('an explicit session folder is accepted only when it is a registered projec
 test('folder-bound teardown ends only the sessions bound to the removed folder', () => {
   const makeSession = (bound: string | null) => {
     const session = {
+      windowId: 'test-window',
       disposed: false,
       termination: null as null | { kind: 'scope-removed'; folder: string },
       boundFolder: () => bound,
@@ -170,9 +171,10 @@ test('folder-bound teardown ends only the sessions bound to the removed folder',
   const removedB = makeSession('/Users/me/Projects/Research/');
   const otherFolder = makeSession('/Users/me/Documents/StashBase/Notes');
   const unstarted = makeSession(null);
-  const sessions = new Set([removedA, removedB, otherFolder, unstarted]);
+  const sessions = liveSessionSet<ReturnType<typeof makeSession>>();
+  for (const session of [removedA, removedB, otherFolder, unstarted]) sessions.add(session);
 
-  disposeSessionsBoundToFolder(sessions, '/Users/me/Projects/Research');
+  sessions.killFolder('/Users/me/Projects/Research');
 
   assert.equal(removedA.disposed, true);
   assert.equal(removedB.disposed, true);
@@ -184,7 +186,13 @@ test('folder-bound teardown ends only the sessions bound to the removed folder',
   assert.equal(otherFolder.disposed, false);
   assert.equal(otherFolder.termination, null);
   assert.equal(unstarted.disposed, false);
-  assert.deepEqual([...sessions], [otherFolder, unstarted]);
+
+  // Removed sessions left the set; the survivors are still tracked.
+  removedA.disposed = false;
+  sessions.killWindow();
+  assert.equal(removedA.disposed, false);
+  assert.equal(otherFolder.disposed, true);
+  assert.equal(unstarted.disposed, true);
 });
 
 test('unsupported runtime connections return a contract error and close cleanly', () => {

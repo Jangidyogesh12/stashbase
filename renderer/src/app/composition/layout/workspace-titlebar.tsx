@@ -18,6 +18,14 @@ import { SizeProvider } from '@/lib/size-context';
 import { collapseTween, spring } from '@/lib/springs';
 import { cn } from '@/lib/utils';
 
+/** How the corner controls and the Welcome title enter and leave. */
+const FADE = {
+  animate: { opacity: 1 },
+  exit: { opacity: 0, transition: spring.fast.exit },
+  initial: { opacity: 0 },
+  transition: spring.fast,
+} as const;
+
 /** The window's title row. Its shared slot shows the open documents' tabs,
  *  ending in the plus that opens the New tab, and otherwise stays empty: the
  *  Chat pane names its own conversation in its header, so the row never has
@@ -79,14 +87,7 @@ export function WorkspaceTitlebar({
       <div className="workspace-titlebar-controls flex items-center">
         <AnimatePresence initial={false}>
           {showsTrigger && (
-            <motion.div
-              animate={{ opacity: 1 }}
-              className="flex items-center"
-              exit={{ opacity: 0, transition: spring.fast.exit }}
-              initial={{ opacity: 0 }}
-              key="sidebar-controls"
-              transition={spring.fast}
-            >
+            <motion.div {...FADE} className="flex items-center" key="sidebar-controls">
               <SizeProvider size="compact">
                 <SidebarTrigger aria-label="Show files sidebar" />
                 {hasActiveFolder &&
@@ -142,12 +143,9 @@ export function WorkspaceTitlebar({
         <AnimatePresence initial={false}>
           {!hasActiveFolder ? (
             <motion.div
-              animate={{ opacity: 1 }}
+              {...FADE}
               className="absolute inset-0 flex items-center justify-center bg-background"
-              exit={{ opacity: 0, transition: spring.fast.exit }}
-              initial={{ opacity: 0 }}
               key="welcome"
-              transition={spring.fast}
             >
               <span className="truncate text-caption font-medium text-foreground">Welcome</span>
             </motion.div>

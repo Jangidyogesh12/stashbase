@@ -223,17 +223,19 @@ function ChatWorkspace({
         </div>
       </div>
 
-      <AgentWorkStatus session={active} onOpenSettings={onOpenAgentSettings} />
       {!scroll.atBottom && !empty && (
-        <Button
-          className="mx-auto mb-2"
-          size="compact"
-          variant="secondary"
-          onClick={scroll.scrollToBottom}
-        >
-          Back to latest
-        </Button>
+        <div className="relative z-10 h-0">
+          <Button
+            className="absolute bottom-2 left-1/2 -translate-x-1/2"
+            size="compact"
+            variant="secondary"
+            onClick={scroll.scrollToBottom}
+          >
+            Back to latest
+          </Button>
+        </div>
       )}
+      <AgentWorkStatus session={active} onOpenSettings={onOpenAgentSettings} />
       {notice && state.delivery !== 'unknown' && (
         <AgentConnectionNotice connection={state.connection} onReconnect={active.reconnect} />
       )}

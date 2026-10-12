@@ -15,7 +15,7 @@ import { galleryIndexSchema, type GalleryIndexWire } from '../../shared/protocol
 /** The gallery's own CDN: an R2 bucket behind Cloudflare on our domain,
  *  published by the gallery repository's Action. Index short-cached,
  *  screenshots content-hash-named and immutable. */
-export const GALLERY_INDEX_UPSTREAM = 'https://assets.stashbase.ai/gallery.json';
+const GALLERY_INDEX_UPSTREAM = 'https://assets.stashbase.ai/gallery.json';
 
 /** The still-published secondary mirror, retained for index compatibility. */
 const GALLERY_INDEX_LEGACY =
