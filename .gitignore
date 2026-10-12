@@ -49,3 +49,6 @@ __pycache__/
 python/.venv.nosync/
 python/.venv/
 python/pyinstaller-cache.nosync/
+
+# Profiling runs (scripts/profiling)
+profiling.nosync/

@@ -71,6 +71,8 @@
     "test:toolchain": "node --test scripts/check-vite-plus-toolchain.test.mjs scripts/vite-plus-ci.test.mjs && node scripts/check-vite-plus-toolchain.mjs",
     "eval:semantic-retrieval": "node --import tsx scripts/run-semantic-retrieval-eval.ts",
     "test:agent": "node --import tsx --test server/__tests__/agent.test.ts server/__tests__/agent-contract.test.ts server/turn-changes.test.ts server/__tests__/agent-history-routes.test.ts server/__tests__/agent-projects.test.ts server/__tests__/agent-runtime-installer.test.ts server/__tests__/agent-runtime-recovery.test.ts server/__tests__/agent-turn-failure.test.ts server/__tests__/codex-agent.test.ts server/__tests__/agent-model-catalog.test.ts server/__tests__/claude-model-catalog.test.ts server/__tests__/agent-cli.test.ts server/__tests__/opencode-agent.test.ts server/__tests__/hosted-agent-broker.test.ts server/__tests__/hosted-agent-models.test.ts server/codex-history.test.ts",
+    "profile:editing": "node scripts/profiling/editing.mjs",
+    "profile:compare": "node scripts/profiling/compare.mjs",
     "test:agent:native": "node --import tsx --test server/__tests__/agent-native-smoke.test.ts",
     "test:opencode:native": "node --import tsx --test server/__tests__/opencode-native-smoke.test.ts",
     "test:mcp": "node --import tsx --test server/__tests__/mcp-http-settings.test.ts server/__tests__/mcp-http-service.test.ts server/__tests__/mcp-http-transport.test.ts server/__tests__/shutdown-cleanup.test.ts",
