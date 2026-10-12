@@ -67,7 +67,7 @@ describe('MCP access API', () => {
     );
   });
 
-  it('surfaces the server reason for a refused port', async () => {
+  it('carries the server reason for a refused port as the cause', async () => {
     const client: HttpClient = {
       request: vi.fn(async () => ({
         body: { error: '`port` must be an integer from 1024 to 65535' },
@@ -75,8 +75,8 @@ describe('MCP access API', () => {
       })),
     };
     await expect(createMcpAccessAdapter(client).setDockerPort(9000, signal)).rejects.toMatchObject({
+      cause: new Error('`port` must be an integer from 1024 to 65535'),
       kind: 'invalid-request',
-      message: '`port` must be an integer from 1024 to 65535',
     });
   });
 });

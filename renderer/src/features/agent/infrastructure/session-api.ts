@@ -211,13 +211,11 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
   }
 }
 
-function history(path: string, signal: AbortSignal, invalid: string): TransportRequest {
+function history(path: string, signal: AbortSignal): TransportRequest {
   return {
     error: AgentSessionError,
     failureSchema: agentSessionFailureSchema,
-    messages: { 'invalid-response': invalid, unavailable: 'Agent session service is unavailable.' },
     path,
-    serverMessage: true,
     signal,
   };
 }
@@ -304,11 +302,7 @@ export function createAgentSessionAdapter(
     },
     async list(agent, scope, signal) {
       const rows = await httpRequest(client, {
-        ...history(
-          scopedPath(`/api/agents/${agent}/sessions`, scope),
-          signal,
-          'Agent history returned an invalid response.',
-        ),
+        ...history(scopedPath(`/api/agents/${agent}/sessions`, scope), signal),
         schema: agentSessionListResponseSchema,
       });
       return rows.map((row) => historyEntry(row, agent, scope));
@@ -321,7 +315,6 @@ export function createAgentSessionAdapter(
             entry.scope,
           ),
           signal,
-          'Agent replay returned an invalid response.',
         ),
         schema: agentSessionReplaySchema,
       });
@@ -338,7 +331,6 @@ export function createAgentSessionAdapter(
             entry.scope,
           ),
           signal,
-          'Agent rename returned an invalid response.',
         ),
         body: agentSessionRenameRequestSchema.parse({ title }),
         method: 'PATCH',
@@ -354,7 +346,6 @@ export function createAgentSessionAdapter(
             entry.scope,
           ),
           signal,
-          'Agent delete returned an invalid response.',
         ),
         method: 'DELETE',
         schema: agentSessionEmptyResponseSchema,

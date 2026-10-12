@@ -9,10 +9,6 @@ import {
 
 const options = (signal: AbortSignal) => ({
   error: AgentSessionError,
-  messages: {
-    unavailable: 'Could not read or save your project’s Agent choice.',
-    'invalid-response': 'The Agent preference response was invalid.',
-  },
   path: '/api/agent-preferences',
   signal,
 });

@@ -8,20 +8,11 @@ import {
 
 /** Every decision route is a folder-explicit POST that reports its own
  *  sentence when the daemon refuses it. */
-function decision(
-  path: string,
-  body: unknown,
-  signal: AbortSignal,
-  fallback: string,
-): TransportRequest {
+function decision(path: string, body: unknown, signal: AbortSignal): TransportRequest {
   return {
     ...(body === undefined ? {} : { body }),
     error: IndexDecisionError,
     failureSchema: indexStatusFailureSchema,
-    messages: {
-      'invalid-response': `${fallback} The server answered unexpectedly.`,
-      unavailable: fallback,
-    },
     method: 'POST',
     path,
     signal,
@@ -32,21 +23,13 @@ export function createIndexDecisionAdapter(client: HttpClient): IndexDecisionPor
   return {
     async dismissWarning(folderPath, signal) {
       await request(client, {
-        ...decision(
-          '/api/index-warning/dismiss',
-          { folder: folderPath },
-          signal,
-          'The warning could not be dismissed.',
-        ),
+        ...decision('/api/index-warning/dismiss', { folder: folderPath }, signal),
         schema: indexStatusAcknowledgementSchema,
       });
     },
     async resync(folderPath, signal) {
       const query = new URLSearchParams({ folder: folderPath });
-      await send(
-        client,
-        decision(`/api/sync?${query}`, undefined, signal, 'Sync could not start.'),
-      );
+      await send(client, decision(`/api/sync?${query}`, undefined, signal));
     },
   };
 }

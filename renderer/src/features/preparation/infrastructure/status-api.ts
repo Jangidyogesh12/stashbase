@@ -99,11 +99,6 @@ export function createPreparationStatusAdapter(client: HttpClient): PreparationS
           error: PreparationError,
           failure: scopeFailure,
           failureSchema: indexStatusFailureSchema,
-          messages: {
-            'invalid-response': 'Preparation status returned an invalid response.',
-            'scope-lost': SCOPE_LOST,
-            unavailable: 'Preparation status is unavailable.',
-          },
           path: `/api/index-status?${query}`,
           schema: indexStatusResponseSchema,
           signal,

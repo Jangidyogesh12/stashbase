@@ -47,10 +47,6 @@ export function createExactSearchAdapter(client: HttpClient): ExactSearchPort {
           body,
           error: ExactSearchError,
           failureSchema: exactSearchFailureSchema,
-          messages: {
-            'invalid-response': 'Search returned an invalid response.',
-            unavailable: 'Search is unavailable.',
-          },
           method: 'POST',
           path: '/api/project/keyword-search',
           schema: exactSearchResponseSchema,

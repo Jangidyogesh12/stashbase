@@ -76,12 +76,6 @@ export function createGenericFilePreviewAdapter(client: HttpClient): GenericFile
           error: GenericFilePreviewError,
           failure: previewFailure,
           failureSchema: documentTextSourceFailureSchema,
-          messages: {
-            'invalid-response': 'The file preview returned an invalid response.',
-            'scope-lost': SCOPE_LOST,
-            unauthorized: 'This window can no longer inspect that file.',
-            unavailable: 'The file could not be inspected. It has not been changed.',
-          },
           path: `/api/file-preview/${encodePathSegments(identity.data.path)}?${query}`,
           schema: genericFilePreviewResponseSchema,
           signal,
