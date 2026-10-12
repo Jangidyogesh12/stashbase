@@ -559,10 +559,13 @@ async function readTextPrefixAsync(full: string, size: number, format: FileForma
   }
 }
 
-/** Junk dot-FILES hidden from the workspace. Workspace directory visibility
- *  belongs to `workspaceDirectoryEntries`; retrieval walks skip dot-directories. */
+/** Junk OS files hidden from the workspace, matching Finder. `Icon\r` stores a
+ *  macOS custom folder icon (Google Drive sets one on every synced folder).
+ *  Workspace directory visibility belongs to `workspaceDirectoryEntries`;
+ *  retrieval walks skip dot-directories. */
 export const HIDDEN_DOT_FILES = new Set<string>([
   '.DS_Store',
+  'Icon\r',
 ]);
 
 function walk(

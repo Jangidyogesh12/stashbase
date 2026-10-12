@@ -67,6 +67,7 @@ test('file-listing reports the truthful workbench tree without traversing exclud
     const folderDotOnly = path.join(tempDir, 'dot-only');
     fs.mkdirSync(folderDotOnly);
     fs.writeFileSync(path.join(folderDotOnly, '.DS_Store'), '');
+    fs.writeFileSync(path.join(tempDir, 'Icon\r'), '');
 
     // Run listing scan
     const { result, asyncResult } = await runWithFolderRoot(tempDir, async () => {
@@ -125,6 +126,7 @@ test('file-listing reports the truthful workbench tree without traversing exclud
     assert.ok(fileNames.includes('mixed/config.json_files/asset.md'), 'JSON must not claim a note bundle');
     assert.ok(fileNames.includes('.env'), 'ordinary user dot-files stay visible');
     assert.ok(!fileNames.includes('.DS_Store'), 'junk dot-files stay hidden');
+    assert.ok(!fileNames.includes('Icon\r'), 'macOS custom folder icon files stay hidden');
     assert.ok(!fileNames.includes('.private.md'), 'the established hidden dot-note namespace stays hidden');
     assert.ok(!fileNames.includes('.note.pdf.md'), 'hidden derived notes never surface');
     assert.ok(!fileNames.includes('node_modules/index.js'), 'excluded directory contents are never traversed');
