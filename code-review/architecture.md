@@ -617,7 +617,7 @@ registered host boundaries; renderer shared types are a different layer.
   source text of every top-level block the reader did not edit, and the reference
   definitions the editor resolves away; only edited blocks are serialized, so a
   save neither rewrites unrelated formatting nor costs the document's length.
-  Find/outline use
+  Off-screen prose blocks use `content-visibility`. Find/outline use
   the live document without mutating editor DOM. The outline adapter owns heading
   anchors through ProseMirror decorations, replacing Milkdown's heading-id state
   synchronizer; anchor updates must not reparse prose or interrupt IME composition.

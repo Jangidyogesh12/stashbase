@@ -162,9 +162,11 @@ const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
     const strip = useTabsStrip('[role="tab"]', ref);
     const { hoveredIndex, registerItem, measureItems } = strip;
 
+    // Registration and the proximity hook's resize observer keep the rects
+    // current; a measure per render would force layout on every parent update.
     useEffect(() => {
       measureItems();
-    }, [measureItems, children]);
+    }, [measureItems]);
 
     useEffect(() => {
       setOptimisticIdx(selectedIdx >= 0 ? selectedIdx : null);
