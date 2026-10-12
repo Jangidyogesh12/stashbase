@@ -30,15 +30,8 @@ import { createNativeDiagnostics } from '../server/native-diagnostics.ts';
 import packageInfo from '../package.json' with { type: 'json' };
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createProjectMcpServer } from './project-server.ts';
+import { parsePortArg } from '../shared/port-arg.ts';
 
-function parsePortArg(argv: string[], fallback: number): number {
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith('--port=')) return Number(a.slice(7)) || fallback;
-    if (a === '--port') return Number(argv[i + 1]) || fallback;
-  }
-  return fallback;
-}
 // Use 127.0.0.1 explicitly — the server binds to the IPv4 loopback and
 // `localhost` resolves to ::1 first on dual-stack hosts, which would
 // make every web call fail with ECONNREFUSED.

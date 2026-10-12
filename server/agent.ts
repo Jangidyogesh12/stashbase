@@ -54,15 +54,16 @@ import {
   type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk';
 import { logger, errorMessage } from './log.ts';
-import { getCurrentFolder, registeredRootForAbs, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, normalizeWindowId, registeredRootForAbs, runWithWindowId } from './folder.ts';
 import { resolveAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeFolderTrust } from './agent-rules.ts';
-import { disposeSessionsBoundToFolder, isAgentAccessMode, resolveSessionBinding, type AgentAccessMode, type AgentSessionTermination } from './agent-contract.ts';
+import { isAgentAccessMode, resolveSessionBinding, type AgentAccessMode, type AgentSessionTermination } from './agent-contract.ts';
 import { rememberAgentDefaultModel, rememberAgentModels } from './agent-model-catalog.ts';
 import { claudeCatalog, readClaudeUserSettings } from './claude-model-catalog.ts';
-import type { AgentClientEvent, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
+import type { AgentClientEvent, AgentConnectionOptions, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
 import {
+  liveSessionSet,
   registerAttributedAgentSession,
   unregisterAttributedAgentSession,
   type AttributedAgentSession,
@@ -74,6 +75,7 @@ import {
 } from './agent-runtime-paths.ts';
 import { agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { detectViewerFormat } from './format.ts';
+import { stringifyToolResult } from './claude-history.ts';
 import { currentPreparedTextPathAsync } from './conversion-dispatch.ts';
 
 type ClaudeSkillCommand = { name: string; description: string; argumentHint: string };
@@ -335,7 +337,7 @@ export class AgentSession implements AttributedAgentSession {
      *  follows the window folder before startup. */
     private folder?: string,
   ) {
-    this.windowId = normalizeAgentWindowId(windowId);
+    this.windowId = normalizeWindowId(windowId);
     registerAttributedAgentSession(this.attributionId, this);
     ws.on('message', (raw) => this.onMessage(String(raw)));
     ws.on('close', () => this.dispose());
@@ -970,25 +972,9 @@ export function sessionInfoMatchesCwd(info: { cwd?: unknown } | null | undefined
     && filesystemPath.equal(info.cwd, cwd));
 }
 
-/** Stringify a tool_result `content` (string, or an array of text/other
- *  blocks) into something renderable. */
-function stringifyToolResult(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((b) => {
-        const block = b as Record<string, unknown>;
-        if (block.type === 'text' && typeof block.text === 'string') return block.text;
-        return JSON.stringify(block);
-      })
-      .join('\n');
-  }
-  return content == null ? '' : JSON.stringify(content);
-}
-
 /** Live agent sessions — one per structured chat tab. Each is pinned to a
  *  member folder; a window-folder switch leaves them running. */
-const sessions = new Set<AgentSession>();
+const sessions = liveSessionSet<AgentSession>();
 
 /** Serializes ownership of one persisted Claude transcript. After folder
  * validation, active ownership is registered before a resumed query starts so
@@ -1051,23 +1037,15 @@ export class ClaudeNativeSessionOwnership {
 
 const nativeOwnership = new ClaudeNativeSessionOwnership();
 
-export function attachAgentWebSocket(
-  ws: WebSocket,
-  windowId = 'default',
-  effort?: string,
-  resume?: string,
-  access?: AgentAccessMode,
-  model?: string,
-  folder?: string,
-  persona?: string,
-): void {
+export function attachAgentWebSocket(ws: WebSocket, options: AgentConnectionOptions): void {
+  const { windowId, resume } = options;
   const session = new AgentSession(
     ws,
     windowId,
-    effort as EffortLevel | undefined,
+    options.effort as EffortLevel | undefined,
     resume,
-    claudePermissionMode(access),
-    model,
+    claudePermissionMode(options.access),
+    options.model,
     (s, retirement) => {
       sessions.delete(s);
       void retirement.finally(() => nativeOwnership.release(s));
@@ -1075,34 +1053,18 @@ export function attachAgentWebSocket(
     undefined,
     undefined,
     undefined,
-    folder,
+    options.folder,
   );
-  session.persona = persona;
+  session.persona = options.persona;
   sessions.add(session);
   if (resume) session.begin(() => nativeOwnership.acquire(resume, session));
   else session.begin();
 }
 
 /** Kill every live agent session (optionally for one window). Called on
- *  window close / retire and app shutdown — never on a folder switch;
- *  sessions are folder-bound and survive the window moving elsewhere. */
-export function killActiveAgent(windowId?: string): void {
-  for (const session of [...sessions]) {
-    if (!windowId || session.windowId === windowId) {
-      session.dispose();
-      sessions.delete(session);
-    }
-  }
-}
+ *  window close / retire and app shutdown. */
+export const killActiveAgent = sessions.killWindow;
 
 /** Kill the live agent sessions bound to one member folder, across all
- *  windows. Project removal calls this so a removed folder cannot
- *  keep running sessions. */
-export function killAgentSessionsForFolder(folderAbs: string): void {
-  disposeSessionsBoundToFolder(sessions, folderAbs);
-}
-
-function normalizeAgentWindowId(windowId: string | null | undefined): string {
-  const raw = typeof windowId === 'string' ? windowId.trim() : '';
-  return raw ? raw.slice(0, 128) : 'default';
-}
+ *  windows, so a removed folder cannot keep running sessions. */
+export const killAgentSessionsForFolder = sessions.killFolder;

@@ -15,7 +15,7 @@ function stringValue(value: unknown): string | undefined {
  * Codex returns effort entries as objects, unlike the Claude SDK. The
  * runtime's own default model and each model's default effort travel with
  * the entry, so the composer can name what an unchosen turn runs on. */
-export function codexCatalogModel(entry: unknown): AgentModel | null {
+function codexCatalogModel(entry: unknown): AgentModel | null {
   if (!entry || typeof entry !== 'object') return null;
   const value = entry as JsonObject;
   if (value.hidden === true) return null;

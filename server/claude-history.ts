@@ -122,7 +122,7 @@ export function claudeTranscriptEffort(
 /** Read the native session JSONL without trusting the renderer-supplied id as
  * a path. Claude may use a hashed project-directory name, so search only the
  * immediate SDK projects directories for the exact UUID filename. */
-export async function readClaudeNativeTranscript(sessionId: string): Promise<NativeTranscriptEntry[]> {
+async function readClaudeNativeTranscript(sessionId: string): Promise<NativeTranscriptEntry[]> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) return [];
   const configDir = process.env.CLAUDE_CONFIG_DIR?.trim() || path.join(os.homedir(), '.claude');
   const projectsDir = path.join(configDir, 'projects');
@@ -261,9 +261,9 @@ export function nativeTimesByUuid(native: NativeTranscriptEntry[]): Map<string, 
   return times;
 }
 
-/** Stringify a tool_result `content` (string, or text/other blocks) — the
- *  same shape `server/agent.ts` renders for live tool results. */
-function stringifyToolResult(content: unknown): string {
+/** Stringify a tool_result `content` (string, or text/other blocks) into
+ *  renderable text, for live tool results and replayed history alike. */
+export function stringifyToolResult(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content

@@ -3,10 +3,9 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline';
-import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
+import { spawnCodexAppServerProcess } from './codex-app-server-process.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { errorMessage, logger } from './log.ts';
+import { errorMessage } from './log.ts';
 import {
   httpError,
   objectValue,
@@ -16,10 +15,8 @@ import {
   toolStartFromItem,
   type JsonObject,
 } from './codex-protocol.ts';
-import { CodexRpcPeer, CODEX_RPC_REQUEST_TIMEOUT_MS } from './codex-rpc-transport.ts';
+import { connectCodexAppServer, CODEX_RPC_REQUEST_TIMEOUT_MS, type CodexAppServerConnection } from './codex-rpc-transport.ts';
 import { historyImageAttachment, restoreHistoryAttachments, type RestoredAttachment } from './agent-history-attachments.ts';
-
-const log = logger('codex-history');
 
 export interface CodexSessionRow {
   id: string;
@@ -118,52 +115,26 @@ async function withTemporaryCodexAppServer<T>(
 class CodexHistoryAppServer {
   readonly ready: Promise<void>;
   private proc: ChildProcessWithoutNullStreams;
-  private stdout: readline.Interface;
-  private stderr: readline.Interface;
-  private rpc: CodexRpcPeer;
+  private appServer: CodexAppServerConnection;
   private closed = false;
-  private cleaned = false;
 
   constructor(readonly cwd: string, private onClose: () => void) {
     this.proc = spawnCodexAppServerProcess(cwd);
-    this.rpc = new CodexRpcPeer((line) => {
-      if (!this.proc.stdin.writable) throw new Error('Codex app-server is not running.');
-      this.proc.stdin.write(`${line}\n`);
-    }, {
+    this.appServer = connectCodexAppServer(this.proc, {
       requestTimeoutMs: CODEX_RPC_REQUEST_TIMEOUT_MS,
       onRequest: ({ id, method }) => {
         try {
-          this.rpc.reject(id, `Unsupported Codex history request: ${method}`, -32601);
+          this.appServer.rpc.reject(id, `Unsupported Codex history request: ${method}`, -32601);
         } catch {
           // The process may close between receiving and answering the request.
         }
       },
+      onExit: () => {
+        this.closed = true;
+        this.onClose();
+      },
     });
-    this.stdout = readline.createInterface({ input: this.proc.stdout });
-    this.stderr = readline.createInterface({ input: this.proc.stderr });
-
-    this.stdout.on('line', (line) => this.rpc.receiveLine(line));
-    this.stderr.on('line', (line) => {
-      const clean = line.trim();
-      if (clean) log.debug(clean);
-    });
-    this.proc.once('close', (code, signal) => {
-      this.closed = true;
-      this.rpc.close(new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`));
-      this.cleanup();
-      this.onClose();
-    });
-    this.proc.once('error', (err) => {
-      this.closed = true;
-      this.rpc.close(err);
-      this.cleanup();
-      this.onClose();
-    });
-
-    this.ready = this.request('initialize', {
-      clientInfo: { name: 'StashBase', title: null, version: appVersion() },
-      capabilities: { experimentalApi: true, requestAttestation: false, optOutNotificationMethods: null },
-    }).then(() => undefined);
+    this.ready = this.appServer.initialize().then(() => undefined);
   }
 
   isClosed(): boolean {
@@ -172,22 +143,14 @@ class CodexHistoryAppServer {
 
   request(method: string, params: unknown): Promise<unknown> {
     if (this.closed) return Promise.reject(new Error('Codex app-server is not running.'));
-    return this.rpc.request(method, params);
+    return this.appServer.rpc.request(method, params);
   }
 
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
-    this.rpc.close(new Error('Codex app-server history client closed.'));
-    this.cleanup();
+    this.appServer.close(new Error('Codex app-server history client closed.'));
     void retireAgentProcess(this.proc);
-  }
-
-  private cleanup(): void {
-    if (this.cleaned) return;
-    this.cleaned = true;
-    this.stdout.close();
-    this.stderr.close();
   }
 }
 
