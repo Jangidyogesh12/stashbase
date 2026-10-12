@@ -116,7 +116,10 @@ toolchain rather than the linter any gate runs.
   installation is owned by [Data Lifecycle](architecture.md#optional-local-components).
 - Python packaging rejects inference/OCR modules in the index daemon. App
   packaging excludes source maps and SQLite development sources while retaining
-  its native binary and runtime loaders. PyArrow/OpenCV and the independent
+  its native binary and runtime loaders. Duplicate PDF.js JS builds and bundled
+  OpenCode SDK/TOML parser copies are excluded; PDF CMaps/fonts/WASM and DOCX
+  worker dependencies remain available. The packaged smoke fetches each kind of
+  PDF runtime resource and performs DOCX conversion. PyArrow/OpenCV and the independent
   Python environments are preserved.
 - Packaging validates Python daemon and extractor inputs before assembling the app.
 - Every unbundled local dependency loaded by the Electron main process must be
@@ -216,12 +219,20 @@ lower compression can trade build time for larger downloads. Actual Windows
 and Linux cache restoration, frozen Python execution, macOS signing after
 restoration, and end-to-end time savings require hosted release evidence.
 
+Local validation of the packaging filters against the extracted 2.15.10 arm64
+payload removed 13,181,805 bytes. Current built services over that filtered
+resource tree passed Electron main-dependency loading, PDF resource requests,
+DOCX worker loading/conversion and project file flows. The source-built real
+Electron lifecycle smoke also passed. This was an isolated resource harness,
+not a newly signed installer; compressed download size and all-platform hosted
+publication remain unmeasured for this change.
+
 ## macOS Developer ID Distribution
 
 The macOS Adapter builds arm64 on `macos-15` and x64 on `macos-15-intel`.
 Each runner verifies its native daemon, signed application, and independent
 extractor. Artifacts are staged separately, then `scripts/merge-macos-artifacts.mjs`
-checks both versions, architectures, payload hashes, and component manifests
+checks both application versions, architectures, and payload hashes
 before creating one latest-mac.yml containing both ZIP/DMG pairs. Only the
 combined set is uploaded to the draft; parallel jobs must never upload competing
 metadata under the same name. Homebrew selects the DMG and checksum by CPU.

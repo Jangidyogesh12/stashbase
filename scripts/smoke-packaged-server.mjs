@@ -238,6 +238,22 @@ function findPackagedOpenCode(resourcesPath) {
   return path.join(resourcesPath, 'opencode', 'opencode.exe');
 }
 
+async function checkPdfResources(port) {
+  // PDF JavaScript is already bundled into the renderer. These resources are
+  // fetched at runtime and must survive removal of pdfjs-dist's duplicate builds.
+  for (const [directory, file] of [
+    ['cmaps', 'Adobe-Japan1-UCS2.bcmap'],
+    ['standard_fonts', 'LiberationSans-Regular.ttf'],
+    ['wasm', 'openjpeg.wasm'],
+  ]) {
+    const response = await requestBytes(port, `/pdfjs-assets/${directory}/${file}`, 5_000);
+    if (!response.ok || response.statusCode !== 200 || response.body.length === 0) {
+      throw new Error(`Packaged PDF resource unavailable: ${directory}/${file}`);
+    }
+  }
+  console.log('[smoke] packaged PDF fonts, CMaps and WASM are available');
+}
+
 async function waitForServer(port, child, output) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -785,6 +801,7 @@ try {
     resourcesPath,
   });
   console.log('[smoke] packaged server responded');
+  await checkPdfResources(port);
   const telemetry = await requestApi(port, 'GET', '/api/telemetry');
   if (telemetry.available !== false) throw new Error('Packaged smoke must disable telemetry before exercising user flows');
   await assertPackagedRendererWorkers(port);

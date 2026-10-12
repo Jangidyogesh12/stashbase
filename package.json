@@ -151,7 +151,13 @@
       "!**/*.map",
       "!node_modules/better-sqlite3/deps/**",
       "!node_modules/better-sqlite3/src/**",
-      "!node_modules/better-sqlite3/build/Release/obj/**"
+      "!node_modules/better-sqlite3/build/Release/obj/**",
+      "!electron/**/*.test.cjs",
+      "!electron/**/*smoke*.cjs",
+      "!shared/**/*.test.ts",
+      "!node_modules/pdfjs-dist/{build,legacy,web,types,image_decoders}/**",
+      "!node_modules/@opencode-ai/sdk/**",
+      "!node_modules/toml-eslint-parser/**"
     ],
     "extraResources": [
       {
