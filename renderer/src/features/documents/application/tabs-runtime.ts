@@ -181,6 +181,7 @@ export function createDocumentTabsRuntime({
     }
 
     const standing = preview ? previewDocumentTab(store.getState()) : null;
+    if (standing) documents.get(standing.id)?.settleEdits();
     const standingEditor = standing ? documents.get(standing.id)?.store.getState().editor : null;
     if (standing && standingEditor && isDocumentDirty(standingEditor)) keep(standing.id);
     const replaced = preview ? previewDocumentTab(store.getState()) : null;

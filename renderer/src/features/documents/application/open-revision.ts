@@ -83,6 +83,7 @@ async function openDocumentRevision(
       result = 'stale-version';
       return;
     }
+    runtime.settleEdits();
     const current = splitLeadingYamlFrontmatter(
       runtime.store.getState().editor?.value ?? editor.value,
     );

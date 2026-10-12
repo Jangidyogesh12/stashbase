@@ -15,6 +15,7 @@ import { detectViewerFormat, isConvertibleSource } from './format.ts';
 import { runWithFolderRoot } from './folder.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { indexer } from './state.ts';
+import { getFsChangeCounter } from './watcher.ts';
 import {
   createFolder,
   createTextExclusiveAsync,
@@ -150,6 +151,21 @@ test('byte-identical and already-reconciled saves retain the authoritative versi
       assert.equal(reconciled.version, externalVersion);
       assert.equal(reconciled.changed, false);
       assert.equal(await readTextAsync('notes.txt'), 'external\r\n');
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('only a save that creates a file changes the visible tree version', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-save-tree-'));
+  try {
+    await runWithFolderRoot(root, async () => {
+      const initial = getFsChangeCounter();
+      await saveFileContent('draft.md', '# Draft\n');
+      assert.equal(getFsChangeCounter(), initial + 1);
+      await saveFileContent('draft.md', '# Draft\n\nMore words.\n');
+      assert.equal(getFsChangeCounter(), initial + 1);
     });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

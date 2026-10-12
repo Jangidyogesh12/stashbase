@@ -14,8 +14,6 @@
 
 import { Tabs } from '@base-ui/react/tabs';
 import {
-  useRef,
-  useCallback,
   useEffect,
   useMemo,
   createContext,
@@ -107,32 +105,15 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
     const { hoveredIndex, registerItem, measureItems: measureTabs } = strip;
     const registry = useDomOrderRegistry();
 
-    // Track tab elements locally so we can observe their individual resizes
-    const tabElementsRef = useRef(new Map<number, HTMLElement>());
-    const registerTab = useCallback(
-      (index: number, element: HTMLElement | null) => {
-        registerItem(index, element);
-        if (element) {
-          tabElementsRef.current.set(index, element);
-        } else {
-          tabElementsRef.current.delete(index);
-        }
-      },
-      [registerItem],
-    );
+    const registerTab = registerItem;
 
+    // Registration remeasures a changed tab set and the proximity hook observes
+    // each tab's size, so only the first layout is measured here. Measuring on
+    // every render forced a synchronous layout of whatever changed around the
+    // strip, which beside a long document was the whole document.
     useEffect(() => {
       measureTabs();
-    }, [measureTabs, children]);
-
-    // Observe individual tab buttons for resize when labels expand or collapse.
-    useEffect(() => {
-      const elements = tabElementsRef.current;
-      if (elements.size === 0) return;
-      const ro = new ResizeObserver(() => measureTabs());
-      elements.forEach((el) => ro.observe(el));
-      return () => ro.disconnect();
-    }, [measureTabs, children]);
+    }, [measureTabs]);
 
     const tabsCtx = useMemo(
       () => ({

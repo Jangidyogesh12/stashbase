@@ -14,7 +14,12 @@ import { segmentFileMentions, type AgentContextItem } from '@/features/agent/dom
 import { agentQuestions } from '@/features/agent/domain/question';
 import { latestUserBlock, type AgentTranscriptBlock } from '@/features/agent/domain/session';
 import type { AgentPermissionDecision } from '@/features/agent/domain/session-command';
-import { promptTimeLabel, replyTimeLabel, transcriptDayBreaks } from '@/features/agent/domain/time';
+import {
+  promptTimeLabel,
+  replyTimeLabel,
+  startOfLocalDay,
+  transcriptDayBreaks,
+} from '@/features/agent/domain/time';
 import type { AgentModelRefreshView } from '@/features/agent/hooks/use-agent-model-refresh';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
@@ -320,8 +325,13 @@ export const AgentTranscript = memo(function AgentTranscript({
   // an earlier one would resend into a conversation that has moved on.
   const editableId = onEditPrompt && !activeTurn ? latestUserBlock(blocks)?.id : undefined;
   // Time labels refresh with the transcript, not with every render above it.
+  // They only compare local days, so the start of today keeps every settled
+  // block's props equal while a reply streams in.
   const { dayBreaks, now } = useMemo(
-    () => ({ dayBreaks: transcriptDayBreaks(visibleBlocks), now: Date.now() }),
+    () => ({
+      dayBreaks: transcriptDayBreaks(visibleBlocks),
+      now: startOfLocalDay(Date.now()).getTime(),
+    }),
     [visibleBlocks],
   );
   // While a turn runs, the group that closes the transcript narrates it in its

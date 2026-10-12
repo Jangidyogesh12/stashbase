@@ -28,6 +28,13 @@ export interface DocumentRuntime {
   accept(captured: DocumentOperationScope, completion: () => void): boolean;
   capture(): DocumentOperationScope;
   change(value: string): void;
+  /** Lets an editor surface hold an edit until typing pauses: serializing a
+   *  long document on every keystroke is what made typing lag. `flush` must
+   *  publish the held edit through `change` synchronously. Answers a release. */
+  holdEdits(flush: () => void): () => void;
+  /** Publishes an edit a surface is still holding. Everything that reads the
+   *  editor text calls this first, so held work is never missed. */
+  settleEdits(): void;
   dispose(): void;
   finishMerge(api: DocumentSourcePort): Promise<boolean>;
   publishRevisionCount(reviewId: string, pending: number): void;

@@ -82,7 +82,9 @@ export async function saveFileContent(
       throw fileChanged(previous?.version ?? null);
     }
     const saved = await replaceTextSnapshotAsync(name, savedContent, previous?.version ?? null);
-    noteTreeChanged();
+    // Rewriting an existing file leaves the visible tree unchanged; bumping it
+    // here made every autosave refetch and rebuild the whole project listing.
+    if (!previous) noteTreeChanged();
     const indexWarning = await upsertSavedFile(name, saved.content);
     return { ...saved, changed: true, indexWarning };
   });

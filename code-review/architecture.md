@@ -618,7 +618,14 @@ registered host boundaries; renderer shared types are a different layer.
   are checked using window/project-scoped server receipts, never replayed from
   a lost HTTP response. Receipts are bounded process-lifetime records; missing
   receipts after eviction/restart do not establish failure or permission to retry.
-- Milkdown serialization preserves frontmatter outside the body. Find/outline use
+- Milkdown serialization preserves frontmatter outside the body. The surface
+  holds an edit until typing pauses instead of serializing per keystroke; the
+  document runtime settles a held edit before every save, reconcile, conflict
+  resolution, and review start, and view disposal flushes it. A write keeps the
+  source text of every top-level block the reader did not edit, and the reference
+  definitions the editor resolves away; only edited blocks are serialized, so a
+  save neither rewrites unrelated formatting nor costs the document's length.
+  Off-screen prose blocks use `content-visibility`. Find/outline use
   the live document without mutating editor DOM. The outline adapter owns heading
   anchors through ProseMirror decorations, replacing Milkdown's heading-id state
   synchronizer; anchor updates must not reparse prose or interrupt IME composition.

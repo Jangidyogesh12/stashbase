@@ -37,6 +37,7 @@ export default function MarkdownViewer({
           active={active}
           canChangeMode={access === 'editable' && editor !== null}
           dirty={editor !== null && editor.value !== editor.baseline}
+          holdEdits={runtime.holdEdits}
           mode={markdownMode}
           name={name}
           navigation={navigation}
