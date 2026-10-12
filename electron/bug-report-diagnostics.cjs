@@ -47,5 +47,4 @@ function collectBugReportDiagnostics({
 
 module.exports = {
   collectBugReportDiagnostics,
-  freezeDiagnostics,
 };
