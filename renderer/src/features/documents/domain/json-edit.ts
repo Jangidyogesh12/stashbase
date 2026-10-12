@@ -142,54 +142,6 @@ export function addJsonChild(
   return splice(source, last.offset + located.bom + last.length, 0, insertion);
 }
 
-export function reorderJsonArrayItem(
-  source: string,
-  arrayPath: JsonPath,
-  fromIndex: number,
-  toIndex: number,
-): string {
-  const located = locate(source, arrayPath);
-  const array = located.node;
-  const children = array.children ?? [];
-  const fromChild = children[fromIndex];
-  const toChild = children[toIndex];
-  if (array.type !== 'array' || !fromChild || !toChild) {
-    refuse('Array item no longer exists.');
-  }
-  if (fromIndex === toIndex) return source;
-  const forward = fromIndex < toIndex;
-  const lowChild = forward ? fromChild : toChild;
-  const highChild = forward ? toChild : fromChild;
-  const movedWindow = children.slice(
-    Math.min(fromIndex, toIndex),
-    Math.max(fromIndex, toIndex) + 1,
-  );
-
-  const raws: string[] = [];
-  const separators: string[] = [];
-  let previous: Node | undefined;
-  for (const child of movedWindow) {
-    const childStart = child.offset + located.bom;
-    if (previous) {
-      separators.push(source.slice(previous.offset + located.bom + previous.length, childStart));
-    }
-    raws.push(source.slice(childStart, childStart + child.length));
-    previous = child;
-  }
-
-  // Moving one item across a contiguous window is a rotation of that window.
-  const reordered = forward
-    ? [...raws.slice(1), ...raws.slice(0, 1)]
-    : [...raws.slice(-1), ...raws.slice(0, -1)];
-  const replacement = reordered.reduce(
-    (text, raw, index) => (index === 0 ? raw : text + (separators[index - 1] ?? '') + raw),
-    '',
-  );
-  const start = lowChild.offset + located.bom;
-  const end = highChild.offset + located.bom + highChild.length;
-  return splice(source, start, end - start, replacement);
-}
-
 function locate(source: string, path: JsonPath): { bom: number; node: Node } {
   const bom = source.startsWith('\uFEFF') ? 1 : 0;
   const errors: ParseError[] = [];

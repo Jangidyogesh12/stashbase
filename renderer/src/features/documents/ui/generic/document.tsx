@@ -19,6 +19,7 @@ import {
   type GenericFilePreviewPort,
 } from '@/features/documents/application/ports';
 import { genericFilePreviewQuery } from '@/features/documents/application/queries';
+import { RefreshFailedBanner } from '@/features/documents/ui/banner';
 import { CodeEditorDocument } from '@/features/documents/ui/code-editor/document';
 import type { DocumentViewerStatus } from '@/features/documents/ui/source/viewer';
 import type { SourceReference } from '@/shared/domain/source-reference';
@@ -74,58 +75,46 @@ export function GenericFileDocument({
     const formatSpecific =
       preview.error instanceof GenericFilePreviewError && preview.error.kind === 'not-generic';
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
-        <div className="max-w-md">
-          <FileQuestion
-            aria-hidden="true"
-            className="mx-auto size-4 text-muted-foreground"
-            strokeWidth={1.5}
-          />
-          <h2 className="mt-3 text-body font-medium">
-            {formatSpecific ? name : `Could not inspect ${name}`}
-          </h2>
-          <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="alert">
-            {formatSpecific
-              ? GENERIC_PREVIEW_MESSAGES['not-generic']
-              : documentFailure<'not-generic' | 'missing'>(
-                  preview.error,
-                  'GenericFilePreviewError',
-                  GENERIC_PREVIEW_MESSAGES,
-                ).message}
-          </p>
-          {!formatSpecific && (
-            <div className="mt-4 flex justify-center gap-2">
-              <Button
-                leadingIcon={RefreshCw}
-                onClick={() => void preview.refetch()}
-                size="compact"
-                variant="tertiary"
-              >
-                Retry
-              </Button>
-              <Button
-                loading={revealState === 'pending'}
-                onClick={() => void reveal()}
-                size="compact"
-                variant="tertiary"
-              >
-                {revealLabel}
-              </Button>
-            </div>
-          )}
-          {revealError}
-        </div>
-      </div>
+      <FilePlaceholder
+        description={
+          formatSpecific
+            ? GENERIC_PREVIEW_MESSAGES['not-generic']
+            : documentFailure<'not-generic' | 'missing'>(
+                preview.error,
+                'GenericFilePreviewError',
+                GENERIC_PREVIEW_MESSAGES,
+              ).message
+        }
+        role="alert"
+        title={formatSpecific ? name : `Could not inspect ${name}`}
+      >
+        {!formatSpecific && (
+          <div className="mt-4 flex justify-center gap-2">
+            <Button
+              leadingIcon={RefreshCw}
+              onClick={() => void preview.refetch()}
+              size="compact"
+              variant="tertiary"
+            >
+              Retry
+            </Button>
+            <Button
+              loading={revealState === 'pending'}
+              onClick={() => void reveal()}
+              size="compact"
+              variant="tertiary"
+            >
+              {revealLabel}
+            </Button>
+          </div>
+        )}
+        {revealError}
+      </FilePlaceholder>
     );
   }
 
   const refreshFailure = preview.isError && (
-    <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
-      <span role="status">Refresh failed. Showing the last loaded preview.</span>
-      <Button onClick={() => void preview.refetch()} size="compact" variant="tertiary">
-        Retry
-      </Button>
-    </div>
+    <RefreshFailedBanner onRetry={() => void preview.refetch()} />
   );
 
   if (preview.data.kind === 'text') {
@@ -150,33 +139,53 @@ export function GenericFileDocument({
   return (
     <>
       {refreshFailure}
-      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
-        <div className="max-w-md">
-          <FileQuestion
-            aria-hidden="true"
-            className="mx-auto size-4 text-muted-foreground"
-            strokeWidth={1.5}
-          />
-          <h2 className="mt-3 text-body font-medium">{copy.title}</h2>
-          <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="status">
-            {copy.description}
-          </p>
-          <p className="mt-3 font-mono text-caption break-all text-muted-foreground">
-            {preview.data.name}
-            {preview.data.size === undefined ? '' : ` · ${formatFileSize(preview.data.size)}`}
-          </p>
-          <Button
-            className="mt-4"
-            loading={revealState === 'pending'}
-            onClick={() => void reveal()}
-            size="compact"
-            variant="tertiary"
-          >
-            {revealLabel}
-          </Button>
-          {revealError}
-        </div>
-      </div>
+      <FilePlaceholder description={copy.description} role="status" title={copy.title}>
+        <p className="mt-3 font-mono text-caption break-all text-muted-foreground">
+          {preview.data.name}
+          {preview.data.size === undefined ? '' : ` · ${formatFileSize(preview.data.size)}`}
+        </p>
+        <Button
+          className="mt-4"
+          loading={revealState === 'pending'}
+          onClick={() => void reveal()}
+          size="compact"
+          variant="tertiary"
+        >
+          {revealLabel}
+        </Button>
+        {revealError}
+      </FilePlaceholder>
     </>
+  );
+}
+
+/** What stands in for a file this viewer cannot show: its glyph, a title, the
+ *  sentence that explains it, and whatever the reader can do next. */
+function FilePlaceholder({
+  children,
+  description,
+  role,
+  title,
+}: {
+  children: ReactNode;
+  description: string;
+  role: 'alert' | 'status';
+  title: string;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
+      <div className="max-w-md">
+        <FileQuestion
+          aria-hidden="true"
+          className="mx-auto size-4 text-muted-foreground"
+          strokeWidth={1.5}
+        />
+        <h2 className="mt-3 text-body font-medium">{title}</h2>
+        <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role={role}>
+          {description}
+        </p>
+        {children}
+      </div>
+    </div>
   );
 }

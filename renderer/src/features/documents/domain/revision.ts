@@ -33,10 +33,6 @@ export type RevisionStart =
   | { kind: 'started'; state: DocumentState }
   | { kind: 'refused'; reason: RevisionRefusal };
 
-export function documentRevisionActive(state: DocumentState): boolean {
-  return state.revision.kind !== 'idle';
-}
-
 /**
  * Opens `review` against the document's current body.
  *

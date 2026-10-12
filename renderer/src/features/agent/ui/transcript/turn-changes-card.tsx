@@ -6,13 +6,13 @@ import { FileDiff } from 'lucide-react';
 import { useId } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { FileTypeIcon } from '@/components/ui/file-type-icon';
-import { fileBasename } from '@/features/agent/domain/file-change';
 import type { AgentTurnChangedFile } from '@/features/agent/domain/session';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { basePathName } from '@/shared/utils/file-path';
 
+import { ChangedFileLabel } from './changed-file-label';
 import { Counts } from './file-change';
 
 /** The reader asking to review one file a turn changed. */
@@ -101,29 +101,14 @@ export function AgentTurnChangesCard({
       </h3>
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {files.map((file) => {
-          const name = fileBasename(file.path);
+          const name = basePathName(file.path);
           const source = sourceFor?.(file.path) ?? null;
-          const shown = source?.path ?? file.path;
-          const directory = shown.slice(0, shown.length - name.length).replace(/[\\/]$/u, '');
           return (
             <li
               className={cn('flex min-h-7 items-center gap-2 text-ui-12', shape.item)}
               key={file.path}
             >
-              <FileTypeIcon
-                aria-hidden="true"
-                className="shrink-0 text-muted-foreground"
-                path={file.path}
-                size={14}
-              />
-              <span className="shrink-0 font-medium text-foreground" title={file.path}>
-                {name}
-              </span>
-              {directory && (
-                <span className="min-w-0 truncate text-muted-foreground" title={file.path}>
-                  {directory}
-                </span>
-              )}
+              <ChangedFileLabel iconSize={14} path={file.path} shownPath={source?.path} />
               <Counts additions={file.additions} deletions={file.deletions} />
               <span
                 className={cn(

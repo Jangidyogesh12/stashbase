@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import {
   changedSource,
-  fileBasename,
   fileChangesForTool,
   settledFileChanges,
   turnMayHaveChangedFilesUnseen,
@@ -197,11 +196,5 @@ describe('Agent file changes', () => {
       ]),
     ).toBe(false);
     expect(turnMayHaveChangedFilesUnseen([prompt, ...readOnly])).toBe(false);
-  });
-
-  it('names a file by its last segment on either separator', () => {
-    expect(fileBasename('/project/Research/notes/a.md')).toBe('a.md');
-    expect(fileBasename('C:\\Library\\a.md')).toBe('a.md');
-    expect(fileBasename('a.md')).toBe('a.md');
   });
 });

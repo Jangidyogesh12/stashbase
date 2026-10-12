@@ -49,14 +49,6 @@ export function settingsFailure(error: unknown): FailureView {
   });
 }
 
-/** The first failure among several commands that share one notice. */
-export function firstFailure(
-  ...errors: ReadonlyArray<{ readonly isError: boolean; readonly error: unknown }>
-): FailureView | null {
-  const failed = errors.find((candidate) => candidate.isError);
-  return failed ? settingsFailure(failed.error) : null;
-}
-
 const COMPONENT_FAILURES = {
   network: 'The download could not finish. Check your connection and retry.',
   verification: 'The download could not be verified. Retry to download a fresh copy.',
