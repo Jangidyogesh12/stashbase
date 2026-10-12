@@ -115,8 +115,9 @@ cost; otherwise the user can wait for refill or manage their plan.
   and on foreground return or system wake, with a shared five-minute activity
   throttle. Disabling automatic checks still permits a manual check at any time.
   Update installation is explicit and waits for affected document saves. Failure
-  leaves the current application and downloaded update recoverable. Development
-  notification previews have no authority to invoke the updater.
+  leaves the current application and downloaded update recoverable. Relaunch waits
+  for the previous local service to release its port before opening the replacement.
+  Development notification previews have no authority to invoke the updater.
 - Official desktop builds disclose default-on usage statistics and redacted error
   diagnostics under one opt-out. Signing in associates the preceding anonymous
   activity with the stable StashBase account, across installations. Installation

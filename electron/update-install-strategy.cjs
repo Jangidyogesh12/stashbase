@@ -12,7 +12,27 @@ function createUpdateInstaller(options) {
     platform,
     appImagePath,
     fileExists,
+    onInstalledWithoutRelaunch = () => {},
   } = options;
+
+  if (platform === 'linux' && !appImagePath) {
+    return () => {
+      // DebUpdater normally calls app.relaunch() inside doInstall, before
+      // Electron's will-quit handler has waited for our server to exit. Keep
+      // that relaunch under main's shutdown owner instead.
+      let installError = null;
+      const onError = (error) => { installError = error; };
+      updater.on('error', onError);
+      updater.autoRunAppAfterInstall = false;
+      try {
+        updater.quitAndInstall(false, false);
+        if (installError) throw installError;
+        onInstalledWithoutRelaunch();
+      } finally {
+        updater.removeListener('error', onError);
+      }
+    };
+  }
 
   if (platform !== 'linux' || !appImagePath) {
     return () => {

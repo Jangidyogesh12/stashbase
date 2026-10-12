@@ -665,6 +665,11 @@ Readiness must match the spawned instance, not merely a listener or PID.
 Single-instance and startup arbitration prevent duplicate initial windows.
 Packaged launches own their server; bounded POSIX orphan reclaim verifies sibling
 identity and a dead parent before killing. Foreign/live-parented listeners remain untouched.
+During a packaged relaunch, a compatible server owned by the previous instance
+gets a bounded shutdown window before the replacement starts its own server.
+If it stays live, startup reports the occupied port instead of racing a second bind.
+The Linux deb updater defers relaunch scheduling until the owned server has
+exited during main's quit sequence.
 
 - Close asks the owning loaded renderer and stays open on failure/timeout.
   Confirmed renderer termination releases the barrier because its buffers are

@@ -48,13 +48,24 @@ function startupFixture({ existing, afterSpawn, packaged = true } = {}) {
   return { options, child, spawnedId: () => spawnedId, elapsed: () => now, probes: () => probesAfterSpawn };
 }
 
-test('packaged startup waits for its own instance while an old compatible server still responds', async () => {
+test('packaged relaunch waits for the previous server to release the port before spawning', async () => {
   const fixture = startupFixture({
     existing: { compatible: true, occupied: true },
-    afterSpawn: ({ instanceId, probe }) => health(probe === 1 ? 'old-instance' : instanceId),
+    afterSpawn: ({ instanceId }) => health(instanceId),
   });
+  let oldProbes = 0;
+  fixture.options.probe = async (instanceId) => {
+    if (instanceId === undefined) {
+      oldProbes += 1;
+      return oldProbes < 3
+        ? { compatible: true, occupied: true }
+        : { compatible: false, occupied: false };
+    }
+    assert.equal(oldProbes, 3, 'new server must not bind while the old one owns the port');
+    return { compatible: isCompatibleServerHealth(health(instanceId), { ...identity, instanceId }) };
+  };
   assert.equal(await startServer(fixture.options), fixture.child);
-  assert.equal(fixture.probes(), 2);
+  assert.equal(oldProbes, 3);
   assert.ok(fixture.spawnedId());
 });
 
@@ -90,12 +101,12 @@ test('source readiness follows the instance ID even when a watch wrapper has a d
   assert.equal(await startServer(fixture.options), fixture.child);
 });
 
-test('an old compatible listener cannot hide the owned child failing to bind', async () => {
+test('a previous live StashBase server cannot trigger a competing packaged bind', async () => {
   const fixture = startupFixture({
     existing: { compatible: true, occupied: true },
-    afterSpawn: ({ child }) => { child.exitCode = 1; return health('old-instance'); },
   });
-  await assert.rejects(startServer(fixture.options), /exited with code 1 before reporting healthy/);
+  await assert.rejects(startServer({ ...fixture.options, handoffTimeoutMs: 300 }), /previous StashBase instance/);
+  assert.equal(fixture.spawnedId(), undefined);
 });
 
 test('a child that exits during a health request never becomes ready', async () => {

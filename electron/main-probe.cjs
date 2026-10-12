@@ -50,11 +50,29 @@ async function startServer({
   spawn,
   probeOptions,
   timeoutMs = serverStartupTimeoutMs({ packaged }),
+  handoffTimeoutMs = 12_000,
   now = Date.now,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
-  const existing = await waitForStableServerProbe(probe, probeOptions);
+  let existing = await waitForStableServerProbe(probe, probeOptions);
   if (existing.compatible && !packaged) return null;
+  if (packaged && existing.compatible) {
+    // A replacement launch can begin while the prior Electron instance is
+    // still waiting for its owned server to finish shutdown. Binding now
+    // would fail with EADDRINUSE: the old server has a live parent and must
+    // not be reclaimed as an orphan. Wait for the owner to release the port.
+    const deadline = now() + handoffTimeoutMs;
+    while (existing.occupied && now() < deadline) {
+      await sleep(Math.min(150, Math.max(0, deadline - now())));
+      existing = await probe();
+    }
+    if (existing.occupied) {
+      throw new Error(
+        `Port ${port} is still held by a previous StashBase instance. `
+        + 'Quit that instance and reopen StashBase.',
+      );
+    }
+  }
   if (existing.occupied && !existing.compatible && !existing.transient) {
     const what = existing.legacyStashBase ? 'an older StashBase server' : 'another local service';
     throw new Error(

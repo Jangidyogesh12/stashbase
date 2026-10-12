@@ -417,12 +417,14 @@ async function writeAutoUpdatePreference(enabled) {
   if (!response.ok) throw new Error(`Update preferences returned HTTP ${response.status}`);
 }
 
+let relaunchAfterServerExit = false;
 const installDesktopUpdate = createUpdateInstaller({
   updater: autoUpdater,
   app,
   platform: process.platform,
   appImagePath: process.env.APPIMAGE || null,
   fileExists: fs.existsSync,
+  onInstalledWithoutRelaunch: () => { relaunchAfterServerExit = true; },
 });
 
 const desktopUpdateWindows = createWindowLifecycleUpdateBarrier({
@@ -1172,7 +1174,10 @@ app.on('will-quit', (event) => {
   // path's SIGTERM) — the child may still be alive, and skipping the ladder
   // here would orphan it because the timeout path's SIGKILL timer is unref'd
   // and dies with us. Only a child that actually exited skips the ladder.
-  if (!serverProc || serverProc.exitCode != null || serverProc.signalCode != null) return;
+  if (!serverProc || serverProc.exitCode != null || serverProc.signalCode != null) {
+    if (relaunchAfterServerExit) app.relaunch();
+    return;
+  }
   event.preventDefault();
   quitting = true;
   void requestJson(SERVER_PORT, '/api/internal/shutdown', 1500, {
@@ -1191,6 +1196,7 @@ app.on('will-quit', (event) => {
   }, 8000);
   serverProc.once('exit', () => {
     clearTimeout(fallback);
+    if (relaunchAfterServerExit) app.relaunch();
     app.exit(process.exitCode || 0);
   });
 });

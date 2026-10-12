@@ -142,6 +142,15 @@ release without restarting, concurrent windows, in-flight announcements, opt-out
 manual override, disposal and explicit-only downloads. Real N→N+1 package updates
 remain the release checklist's platform-specific evidence.
 
+The Linux deb install path defers relaunch until the owned server exits;
+packaged startup also waits for a compatible previous server to release its port
+before spawning the replacement. `electron/update-install-strategy.test.cjs`
+checks the install/quit order and `electron/main-probe.test.cjs` checks the port
+handoff and bounded failure when the previous instance stays live. These
+controlled ownership tests do not establish an actual Linux package replacement.
+The 2026-10-12 built Electron smoke passed the real two-window save barrier,
+delayed native updater handoff, and rollback; it did not replace a Linux package.
+
 A later 2026-09-15 source-desktop startup pass used an empty temporary HOME and
 isolated profile, with any application access to Electron safeStorage made fatal.
 It reached the real welcome screen, showed no statistics banner, and exited
