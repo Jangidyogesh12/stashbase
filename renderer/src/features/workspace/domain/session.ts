@@ -216,6 +216,9 @@ export function recordFolderSession(
   folder.activeTabId = folder.tabs.some((tab) => tab.id === documentSession.activeTabId)
     ? documentSession.activeTabId
     : null;
+  // Tree and tab stores change far more often than this projection; an equal
+  // projection keeps the snapshot so the session neither re-renders nor saves.
+  if (previous && sameFolderSession(previous, folder)) return snapshot;
   const index = snapshot.folders.findIndex((candidate) => candidate.folderPath === folderPath);
   const folders = [...snapshot.folders];
   if (index === -1) {
@@ -223,6 +226,17 @@ export function recordFolderSession(
     folders.push(folder);
   } else folders[index] = folder;
   return { ...snapshot, folders };
+}
+
+function sameFolderSession(a: FolderSessionState, b: FolderSessionState): boolean {
+  return (
+    a.activeTabId === b.activeTabId &&
+    a.selectedPath === b.selectedPath &&
+    a.expandedPaths.length === b.expandedPaths.length &&
+    a.expandedPaths.every((path, index) => path === b.expandedPaths[index]) &&
+    a.tabs.length === b.tabs.length &&
+    a.tabs.every((tab, index) => tab.id === b.tabs[index]?.id && tab.path === b.tabs[index]?.path)
+  );
 }
 
 export function setSessionSidebarOpen(
