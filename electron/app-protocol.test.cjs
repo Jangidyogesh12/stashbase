@@ -81,7 +81,7 @@ test('app protocol attaches restrictive CSP to packaged asset responses', async 
   );
   assert.equal(
     csp.split('; ').find((directive) => directive.startsWith('img-src ')),
-    "img-src 'self' data: blob: http://127.0.0.1:8090/api/gallery/image",
+    "img-src 'self' data: blob: http://127.0.0.1:8090/asset/ http://127.0.0.1:8090/api/gallery/image http://127.0.0.1:8090/api/agent/attachment-preview",
   );
   assert.equal(result.headers.get('x-content-type-options'), 'nosniff');
 

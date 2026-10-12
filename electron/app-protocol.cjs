@@ -30,7 +30,7 @@ function productionContentSecurityPolicy(serverOrigin) {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    `img-src 'self' data: blob: ${serverOrigin}/api/gallery/image`,
+    `img-src 'self' data: blob: ${serverOrigin}/asset/ ${serverOrigin}/api/gallery/image ${serverOrigin}/api/agent/attachment-preview`,
     `media-src 'self' blob: ${serverOrigin}`,
     `connect-src 'self' ${serverOrigin} ${websocketOrigin}`,
     "worker-src 'self' blob:",

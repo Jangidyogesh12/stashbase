@@ -20,6 +20,7 @@ const {
 } = require('../window-security.cjs');
 const { installRequestAuthorization } = require('./requests.cjs');
 const { serveGalleryFixture, checkGalleryImages } = require('./gallery-smoke.cjs');
+const { serveDocumentImageFixture, checkDocumentImage } = require('./document-image-smoke.cjs');
 
 const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-boundary-'));
 app.setPath('userData', path.join(smokeRoot, 'profile'));
@@ -48,6 +49,7 @@ app
         return;
       }
       if (serveGalleryFixture(request, response)) return;
+      if (serveDocumentImageFixture(request, response)) return;
       response.setHeader('Content-Type', 'application/json');
       receivedProjectRequest = {
         method: request.method,
@@ -360,6 +362,9 @@ app
 
     phase = 'Gallery image loading';
     await checkGalleryImages(window, serverOrigin);
+
+    phase = 'project image loading';
+    await checkDocumentImage(window, serverOrigin);
 
     projectMembers = [
       {
