@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import type { WebSocket } from 'ws';
 import { createOpencodeClient, type Event as LegacyEvent } from '@opencode-ai/sdk';
 import type { EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
-import { blocksForMessage, OpenCodeEventTranslator, OpenCodePanelSession } from '../opencode-agent.ts';
+import { blocksForMessage, OpenCodeEventTranslator, OpenCodePanelSession, storedOpenCodeModel } from '../opencode-agent.ts';
 import { ensureMcpLauncher } from '../agent-mcp.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { HostedAgentBroker } from '../hosted-agent-broker.ts';
@@ -24,6 +24,12 @@ import {
 } from '../opencode-runtime.ts';
 
 type Event = LegacyEvent | EventPermissionAsked;
+
+/** Two hosted profiles, one under the id the rest of this smoke sends. */
+const SMOKE_PROFILES = [
+  { id: 'stashbase-agent-default', version: 4, displayName: 'Writer Fast', contextTokenLimit: 1_000_000, outputTokenLimit: 65_536, isDefault: true },
+  { id: 'writer-pro', version: 9, displayName: 'Writer Pro', contextTokenLimit: 200_000, outputTokenLimit: 16_000, isDefault: false },
+];
 
 class PanelSocket extends EventEmitter {
   OPEN = 1;
@@ -111,6 +117,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   fs.writeFileSync(externalFile, 'EXPLICIT_EXTERNAL_READ_OK');
   t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
   const gatewayRequests: Array<Record<string, unknown>> = [];
+  const gatewayModels: Array<{ profile: string | undefined; version: string | undefined }> = [];
   let nextTool: { name: string; arguments: string } | undefined;
   let emptyResponses = 0;
   let emptyAfterTool = false;
@@ -118,6 +125,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     gatewayRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>);
+    gatewayModels.push({
+      profile: request.headers['x-stashbase-agent-profile'] as string | undefined,
+      version: request.headers['x-stashbase-agent-profile-version'] as string | undefined,
+    });
     const tool = nextTool ?? (gatewayRequests.length === 1
       ? { name: 'read', arguments: JSON.stringify({ filePath: externalFile }) }
       : gatewayRequests.length === 3
@@ -185,7 +196,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const serverPort = await unusedPort();
   const username = 'stashbase';
   const password = 'native-smoke-secret';
-  const config = buildOpenCodeConfig(model, '/unused/stashbase-mcp');
+  const config = buildOpenCodeConfig(model, '/unused/stashbase-mcp', {}, undefined, SMOKE_PROFILES);
   config.mcp = {
     stashbase: {
       type: 'local',
@@ -377,8 +388,9 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   panel = new OpenCodePanelSession(socket as unknown as WebSocket, {
     windowId: 'native-modes', folder: temporaryRoot, access: 'acceptEdits',
   }, {
+    models: async () => SMOKE_PROFILES,
     client: async () => client,
-    beginTurn: turnId => broker.beginTurn('native-smoke', turnId),
+    beginTurn: (turnId, selected) => broker.beginTurn('native-smoke', turnId, selected),
     endTurn: () => broker.endTurn('native-smoke'),
     onExit: () => () => {}, close: async () => {},
   });
@@ -397,6 +409,23 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   nextTool = { name: 'stashbase_write_file', arguments: JSON.stringify({ path: modeFile, content: 'Plan must not overwrite' }) };
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Edit allowed', 'Plan must reject a provider that attempts a write');
+
+  // A model chosen between turns reaches the provider body and the hosted
+  // headers together, and the stored prompt names it for a later resume.
+  stage = 'panel model choice';
+  const firstPanelCall = gatewayModels.findIndex((entry) => entry.version !== undefined);
+  assert.deepEqual(gatewayModels[firstPanelCall], { profile: 'stashbase-agent-default', version: '4' });
+  socket.request({ t: 'set-model', model: 'writer-pro' });
+  const beforeChoice = gatewayRequests.length;
+  await runPanelTurn();
+  assert.ok(gatewayRequests.length > beforeChoice);
+  for (let index = beforeChoice; index < gatewayRequests.length; index++) {
+    assert.equal(gatewayRequests[index]!.model, 'writer-pro');
+    assert.deepEqual(gatewayModels[index], { profile: 'writer-pro', version: '9' });
+  }
+  const panelSession = socket.events.find((event) => event.t === 'session-id')!.id!;
+  const panelHistory = (await client.session.messages({ throwOnError: true, path: { id: panelSession } })).data;
+  assert.equal(storedOpenCodeModel(panelHistory), 'writer-pro');
   nextTool = { name: 'bash', arguments: JSON.stringify({ command: `echo changed > '${modeFile}'`, description: 'Attempt a command in Plan' }) };
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Edit allowed', 'Plan must reject shell writes');
@@ -490,6 +519,13 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.match(followUp, /ATTACHMENT_TEXT_OK/);
   assert.ok(followUp.includes(imageBytes.toString('base64')), 'the next model request retains image content');
   assert.ok(followUp.includes(pdfBytes.toString('base64')), 'the next model request retains PDF content');
+
+  // Hosted Claude models refuse a forced tool choice, so every model call the
+  // pinned runtime makes, tool continuations included, must leave it open.
+  const forced = gatewayRequests.map((body) => body.tool_choice)
+    .filter((choice) => choice !== undefined && choice !== 'auto' && choice !== 'none');
+  assert.deepEqual(forced, [], `OpenCode forced a tool choice: ${JSON.stringify(forced)}`);
+  assert.ok(gatewayRequests.some((body) => Array.isArray(body.tools) && body.tools.length > 0));
 
   // A hardened-runtime signing mismatch can let Bun finish the request and
   // then have AMFI kill it while it returns to executable memory. Do not let
