@@ -317,6 +317,10 @@ stable status without download, retry, or a new durable demand latch.
 - OpenQuill retains native finish reasons; an unknown final completion is a
   failed turn. Native errors during execution wait for idle, and message events
   retain their originating turn so trailing error updates cannot fail a new turn.
+  Its translator coalesces identical retry status messages within a turn while
+  preserving native retries and distinct causes; the final short-term usage
+  refusal classifies as a rate limit. The hosted broker forwards the gateway's
+  `Retry-After` on 429/503 responses to the native runtime.
 - Project Agent preferences are explicit choices in Node-owned app config, keyed
   by registered project scope. Readiness and history restore never write them.
   Thinking effort is stored separately per Agent in that project. Composer choices
@@ -420,6 +424,15 @@ stable status without download, retry, or a new durable demand latch.
   using `agentCliPath` to restore CLI directories omitted by desktop launchers.
   Its private home does not provide the user's interactive shell setup;
   commands still require their dependencies to be installed and discoverable.
+- `server/opencode-runtime.ts` owns Default's project-only skill discovery.
+  Its private home/config and disabled native external/upward config discovery
+  prevent importing user-global and ancestor skills from non-Git writing folders.
+  Native skill paths are explicitly relative to the bound project. Because the
+  upward config flag also suppresses instruction discovery, the runtime supplies
+  the project's first existing `AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md` path;
+  OpenCode reads its contents. Project OpenCode configuration cannot add external
+  skill sources. Native skill invocation and permission checks remain in OpenCode;
+  the Codex and Claude adapters keep their own discovery behavior.
 - Turn failure settles once without destroying a live session. Advisory notices
   never become terminal errors. Recover by structured kind: authentication needs
   process/session refresh, credits/restrictions need account recovery, transient
@@ -489,7 +502,12 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   shown; the broker pins both to the turn, tool continuations included. Changed
   or withdrawn profiles leave the broker as 422, outside native retries, and
   classify as `model-changed`. Versions, limits, and upstream identity stay in
-  the host; the listing keeps the hosted catalog in memory only.
+  the host; the listing keeps the hosted catalog in memory only. The service's
+  `relativeCost` (price against its default, which dollar amounts never leave)
+  is the one profile field forwarded to the picker, which locks rows at 1.5× or
+  more. The lock is renderer-only: the host still runs any approved profile a
+  chat already names. Until the service reports `relativeCost`, the host fills
+  it for the known premium profile ids (Opus, Sonnet, Sol).
   Hosted quota/accounting and Stripe billing stay external; the desktop exposes
   bounded usage, plans, and subscription status. The host requests Checkout and
   Portal pages with the account session and hands the renderer only a verified

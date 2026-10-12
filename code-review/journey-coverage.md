@@ -756,6 +756,26 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Default skill scope (2026-10-13):** `server/opencode-runtime.ts` disables native
+external/upward config discovery and supplies project-relative skill paths plus
+the project's instruction-file path. The pinned OpenCode smoke first reproduced
+ancestor skill metadata entering a non-Git project's model request. It now uses
+the production environment builder and proves that ancestor skills are absent,
+all four project skill locations remain discoverable, project instructions reach
+the model, and a native skill invocation loads its body only when called. This
+controlled gateway test does not establish provider skill selection quality or a
+packaged desktop run.
+
+**Default short-term limit presentation (2026-10-13):** A local native log
+recorded repeated identical short-term limit errors during one model call;
+the retained assistant reply later completed. The OpenCode translator now shows
+an identical retry reason once per turn while preserving native retries, and
+the final refusal classifies as a rate limit. The hosted broker now forwards the
+gateway's `Retry-After` header on 429/503; a broker test first reproduced its
+loss. Targeted translator and classifier tests reproduce the original repetition
+and missing classification. The live gateway status/code and an end-to-end
+packaged retry were not captured.
+
 **Model failure diagnostics (2026-10-13):** `hosted-agent-diagnostics.ts`
 observes bounded SSE metadata and original stream failures; the OpenCode
 translator joins gateway request identity, native message ID, finish reason and
@@ -777,7 +797,9 @@ live provider's error shape or packaged delivery.
   also asserts that no model call forces a tool choice, which the hosted Claude
   profiles refuse. Renderer
   tests cover **Refresh models**: it reconnects, keeps the draft, sends nothing,
-  and enables a manual retry only after the refresh. Not yet proven: a built-app
+  and enables a manual retry only after the refresh. `hosted-agent-models.test.ts`
+  carries `relativeCost` through and tolerates an unreadable one;
+  `thinking.test.tsx` tags and disables rows priced 1.5× or more. Not yet proven: a built-app
   pass against the production model list, or compaction at a real profile's
   context limit.
 

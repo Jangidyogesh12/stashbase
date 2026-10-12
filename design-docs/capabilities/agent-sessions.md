@@ -78,7 +78,15 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   did not choose. A model named by an alias shows the release that alias
   resolves to, in the runtime's own words, so the reader can tell which model
   the choice actually runs. A model chosen while a session is still starting applies
-  before its first turn.
+  before its first turn. Default keeps readers on its default model: a
+  hosted model priced well above it is listed with its cost multiple (for
+  example "5× cost") and a lock, and cannot be chosen.
+- Default discovers user skills only in the bound project's `.agents/skills`,
+  `.claude/skills`, `.opencode/skills`, and `.opencode/skill` directories. It does
+  not import global or ancestor skills. This is its default behavior, without a
+  setting. Skill bodies load on native invocation. Project instruction files
+  remain available, preferring `AGENTS.md`, then `CLAUDE.md`, then `CONTEXT.md`.
+  Codex and Claude retain their own native discovery rules.
 - Default offers the models the StashBase service approves for the account,
   named and sized (context and output) as the service lists them; the service
   owns each model's provider, price, and reasoning level, so Default has no
@@ -131,6 +139,9 @@ repair, an outdated runtime, provider limits, transport loss, and turn failure s
 recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
+Repeated identical native retry errors appear once per turn while retries continue;
+a final short-term request limit remains a rate-limit failure with manual recovery.
+Hosted retry responses carry the service's suggested delay to the native runtime.
 When the service changes the configuration of the Default model a reader
 chose, or withdraws it, the refused turn offers **Refresh models**. Refreshing
 reconnects the same conversation to read the list again and keeps the
