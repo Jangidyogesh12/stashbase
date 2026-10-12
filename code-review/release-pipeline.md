@@ -52,6 +52,10 @@ before its metadata and payloads coexist.
   those outputs for `test:electron:smoke:built`. Host type checks and service
   builds do not repeat renderer work. Local `pnpm check` follows the same
   build-once rule; standalone smoke builds its own prerequisites.
+- The native OpenCode smoke reports the active operation when interrupted.
+  Its fixture aborts SSE readers and disposes the panel before stopping the
+  broker/process, bounds graceful process termination, and closes gateway
+  connections so a failed assertion cannot leave source CI waiting indefinitely.
 - Source CI does not build installers or frozen sidecars. Windows package
   verification remains mandatory in `release-windows.yml` before
   upload. Packaging failures are therefore detected at the release stage;

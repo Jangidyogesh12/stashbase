@@ -90,6 +90,15 @@ test('packaged OpenCode resolves from the explicit resources path before depende
 test('pinned bundled OpenCode completes one SDK session against a fake compatible model gateway', {
   timeout: 30_000,
 }, async (t) => {
+  let stage = 'startup';
+  let completed = false;
+  const subscriptions = new AbortController();
+  let panel: OpenCodePanelSession | undefined;
+  let ownedBroker: HostedAgentBroker | undefined;
+  let ownedChild: ReturnType<typeof spawn> | undefined;
+  t.signal.addEventListener('abort', () => {
+    if (!completed) console.error(`Native OpenCode smoke stopped during: ${stage}`);
+  });
   const executable = bundledOpenCodeExecutable();
   assert.ok(executable, 'bundled OpenCode postinstall target is missing');
   assert.equal(execFileSync(executable, ['--version'], { encoding: 'utf8' }).trim(), BUNDLED_OPENCODE_VERSION);
@@ -143,13 +152,34 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     })}\n\n`);
     response.end('data: [DONE]\n\n');
   });
+  t.after(async () => {
+    subscriptions.abort();
+    panel?.dispose();
+    try {
+      await ownedBroker?.close();
+    } finally {
+      try {
+        const child = ownedChild;
+        if (child?.pid && child.exitCode == null && child.signalCode == null) {
+          const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+          child.kill('SIGTERM');
+          const force = setTimeout(() => child.kill('SIGKILL'), 1_500);
+          try { await exited; } finally { clearTimeout(force); }
+        }
+      } finally {
+        gateway.closeAllConnections();
+        await new Promise<void>((resolve) => gateway.close(() => resolve()));
+        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    }
+  });
   const gatewayPort = await listen(gateway);
   const broker = new HostedAgentBroker({
     accessToken: async () => 'fixture-account-token', fetch: globalThis.fetch,
     upstreamUrl: `http://127.0.0.1:${gatewayPort}/v1/chat/completions`, clientVersion: () => 'native-smoke',
   });
+  ownedBroker = broker;
   await broker.start();
-  t.after(() => broker.close());
   const model = broker.runtime('native-smoke')!;
   broker.beginTurn('native-smoke', '00000000-0000-4000-8000-000000000001');
   const serverPort = await unusedPort();
@@ -188,15 +218,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-
-  t.after(async () => {
-    if (child.exitCode == null && child.signalCode == null) child.kill('SIGTERM');
-    if (child.exitCode == null && child.signalCode == null) {
-      await new Promise<void>((resolve) => child.once('exit', () => resolve()));
-    }
-    await new Promise<void>((resolve) => gateway.close(() => resolve()));
-    fs.rmSync(temporaryRoot, { recursive: true, force: true });
-  });
+  ownedChild = child;
 
   let startupOutput = '';
   await new Promise<void>((resolve, reject) => {
@@ -247,7 +269,8 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     assert.equal(actionFor('stashbase-plan', permission), 'deny', `Plan allowed ${permission}`);
   }
   assert.equal(actionFor('stashbase-plan', 'stashbase_read_file'), 'allow');
-  const subscription = await client.event.subscribe({ sseMaxRetryAttempts: 1 });
+  stage = 'external read';
+  const subscription = await client.event.subscribe({ signal: subscriptions.signal, sseMaxRetryAttempts: 1 });
   const events: Event[] = [];
   const translator = new OpenCodeEventTranslator();
   const session = (await client.session.create({ throwOnError: true, body: { title: 'Native Smoke' } })).data;
@@ -289,7 +312,8 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.ok(events.some((event) => event.type === 'session.diff'));
   assert.ok(events.some((event) => event.type === 'session.idle'));
 
-  const commandSubscription = await client.event.subscribe({ sseMaxRetryAttempts: 1 });
+  stage = 'shell command';
+  const commandSubscription = await client.event.subscribe({ signal: subscriptions.signal, sseMaxRetryAttempts: 1 });
   const commandEvents: Event[] = [];
   const commandConsumed = (async () => {
     for await (const event of commandSubscription.stream) {
@@ -349,7 +373,8 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     name: 'stashbase', config: { type: 'local', command: [process.execPath, fixture], enabled: true },
   } });
   const socket = new PanelSocket();
-  const panel = new OpenCodePanelSession(socket as unknown as WebSocket, {
+  stage = 'panel permission modes';
+  panel = new OpenCodePanelSession(socket as unknown as WebSocket, {
     windowId: 'native-modes', folder: temporaryRoot, access: 'acceptEdits',
   }, {
     client: async () => client,
@@ -357,7 +382,6 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     endTurn: () => broker.endTurn('native-smoke'),
     onExit: () => () => {}, close: async () => {},
   });
-  t.after(() => panel.dispose());
   await socket.waitFor('ready');
   const modeFile = path.join(temporaryRoot, 'mode-result.md');
   const runPanelTurn = async (allowError = false) => {
@@ -386,6 +410,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.equal(socket.events.filter(event => event.t === 'permission').length, 1);
 
   socket.request({ t: 'set-mode', mode: 'acceptEdits' });
+  stage = 'empty response recovery';
   const recoveryStart = socket.events.length;
   const callsBeforeRecovery = gatewayRequests.length;
   nextTool = { name: 'stashbase_write_file', arguments: JSON.stringify({ path: modeFile, content: 'Saved before empty response' }) };
@@ -398,6 +423,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.deepEqual(recoveryEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: false }]);
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Saved before empty response');
 
+  stage = 'two empty responses';
   const failureStart = socket.events.length;
   const callsBeforeFailure = gatewayRequests.length;
   emptyResponses = 2;
@@ -406,6 +432,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const failureEvents = socket.events.slice(failureStart) as Array<{ t: string; message?: string; isError?: boolean }>;
   assert.ok(failureEvents.some(event => event.t === 'error' && event.message?.includes('empty response twice')));
   assert.deepEqual(failureEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
+  stage = 'follow-up after failure';
   await runPanelTurn(); // The same native session remains usable after the failure.
   panel.dispose();
 
@@ -426,6 +453,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   }
 
   // Exercise the pinned binary and its provider serializer, not an SDK mock.
+  stage = 'native attachments';
   broker.beginTurn('native-smoke', '00000000-0000-4000-8000-000000000002');
   const attachmentsSession = (await client.session.create({ body: { title: 'Attachment probe' }, throwOnError: true })).data;
   const imageBytes = fs.readFileSync('build/icons/16x16.png');
@@ -453,6 +481,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.equal(replay[0]?.kind, 'user');
   assert.equal(replay[0]?.kind === 'user' && replay[0].text, 'Describe the attachments.');
   assert.equal(replay[0]?.kind === 'user' && replay[0].attachments?.[0]?.path, attachmentPath);
+  stage = 'native attachment follow-up';
   await client.session.prompt({
     throwOnError: true, path: { id: attachmentsSession.id },
     body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder', parts: [{ type: 'text', text: 'Discuss the same attachments again.' }] },
@@ -468,4 +497,5 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   await new Promise<void>((resolve) => setTimeout(resolve, 250));
   assert.equal(child.exitCode, null, `OpenCode exited unexpectedly (${child.exitCode ?? child.signalCode})`);
   assert.equal(child.signalCode, null, `OpenCode exited unexpectedly (${child.signalCode})`);
+  completed = true;
 });
