@@ -299,8 +299,11 @@ Artifact tests exercise checksum rejection and the installed electron-updater's
 architecture selection; the generated Homebrew cask passes Ruby syntax validation.
 
 Published macOS apps use a Developer ID Application identity, Hardened Runtime,
-secure timestamps, Apple notarization, and a stapled ticket. Release packaging
-fails closed when signing or notarization credentials are missing, incomplete,
+secure timestamps, Apple notarization, and a stapled ticket. The after-sign
+notarization hook retries only CloudKit ticket connection losses after an
+accepted submission; the mounted-DMG verifier applies the same bounded retry
+to ticket validation. Other signing and notarization failures stop the release.
+Release packaging fails closed when signing or notarization credentials are missing, incomplete,
 or ambiguous. The `afterPack` adapter validates versioned framework symlinks
 before signing. It preserves the original bundle in clean CI workspaces and
 uses a metadata-free clone only for local File Provider workspaces; no package,
@@ -504,6 +507,11 @@ Known macOS failures:
   request from the runner; nothing in the bundle or the identity is wrong.
   Delete the incomplete draft and dispatch the coordinator again from the same
   tag rather than signing without a timestamp, which notarization would reject.
+- `NSURLErrorDomain Code=-1005` from `api.apple-cloudkit.com` during stapling or
+  ticket validation is a lost connection to Apple's ticket service. The macOS
+  hook and mounted-DMG verifier retry only that error with bounded delays; if
+  it persists, keep the release draft unpublished and retry the coordinated
+  release after removing the incomplete application draft.
 - A rejected notarization must stop publication. Retrieve the notary log,
   repair every unsigned nested Mach-O or invalid entitlement, and rebuild from
   source; never patch an already signed bundle.

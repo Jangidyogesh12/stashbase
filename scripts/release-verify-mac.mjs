@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertMacosArchitecture } from './macos-release-contract.mjs';
+import appleTicket from './apple-ticket.cjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -75,7 +76,7 @@ function verifyOpenCodeEntitlements(appPath) {
   }
 }
 
-function verifyMountedDmg(dmg) {
+async function verifyMountedDmg(dmg) {
   const mountPoint = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-dmg-verify-'));
   let attached = false;
   try {
@@ -94,7 +95,7 @@ function verifyMountedDmg(dmg) {
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath]);
     verifyOpenCodeEntitlements(appPath);
     run('/usr/sbin/spctl', ['--assess', '--type', 'execute', '--verbose=2', appPath]);
-    run('/usr/bin/xcrun', ['stapler', 'validate', appPath]);
+    await appleTicket.stapler('validate', appPath);
     console.log(`[release:verify:mac] verified signed and notarized app in ${path.basename(dmg)}`);
   } finally {
     if (attached) {
@@ -106,5 +107,5 @@ function verifyMountedDmg(dmg) {
 
 if (!skipBuild) run(process.execPath, ['scripts/package-desktop.mjs']);
 if (!skipSmoke) run(process.execPath, ['scripts/smoke-packaged-server.mjs']);
-verifyMountedDmg(findDmg());
+await verifyMountedDmg(findDmg());
 console.log('[release:verify:mac] ok');
