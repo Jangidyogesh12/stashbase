@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { AppDependencies } from '@/app/dependencies';
 import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
+import { reportComponentError } from '@/platform/error-reporting';
 import { applyAppearanceSurface } from '@/shared/runtime/appearance-surface';
 
 import { StartupFailure } from './startup-failure';
@@ -14,8 +15,8 @@ export function mountApplication(
   createDependencies: DependencyFactory,
 ): Root {
   let dependencies: AppDependencies | undefined;
-  const report = (error: unknown) => {
-    dependencies?.reportError?.(error, 'render');
+  const report = (error: unknown, info: { componentStack?: string | null | undefined }) => {
+    reportComponentError(dependencies?.reportError, error, info.componentStack);
     console.error(error);
   };
   const root = createRoot(rootElement, {

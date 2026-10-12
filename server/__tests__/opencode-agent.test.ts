@@ -85,6 +85,21 @@ test('Stop retires attachment preparation before another turn and does not repor
   assert.equal(harness.prompts.length, 1);
 });
 
+test('a failed Stop reports its cause and releases the Default turn for retry', async (t) => {
+  const harness = modeHarness('default', '/workspace', false, true);
+  t.after(() => harness.session.dispose());
+  await settle();
+  harness.send({ t: 'prompt', text: 'Start work' });
+  await settle();
+  harness.send({ t: 'interrupt' });
+  await settle();
+  assert.equal(harness.session.turnInFlight(), false);
+  assert.ok(harness.events().some(event => event.t === 'error' && /Abort transport failed/.test(event.message)));
+  harness.send({ t: 'prompt', text: 'Try another task' });
+  await settle();
+  assert.equal(harness.prompts.length, 2);
+});
+
 test('attachment preparation refusal is visible and never submits a partial prompt', async (t) => {
   const harness = modeHarness('acceptEdits');
   t.after(() => harness.session.dispose());
@@ -607,17 +622,30 @@ test('OpenCode forwards current external-directory permission requests to the re
   }), []);
 });
 
-test('a failed Stop reports its cause and releases the Default turn for retry', async (t) => {
-  const harness = modeHarness('default', '/workspace', false, true);
-  t.after(() => harness.session.dispose());
-  await settle();
-  harness.send({ t: 'prompt', text: 'Start work' });
-  await settle();
-  harness.send({ t: 'interrupt' });
-  await settle();
-  assert.equal(harness.session.turnInFlight(), false);
-  assert.ok(harness.events().some(event => event.t === 'error' && /Abort transport failed/.test(event.message)));
-  harness.send({ t: 'prompt', text: 'Try another task' });
-  await settle();
-  assert.equal(harness.prompts.length, 2);
+test('Default streamed provider errors retain status, request ID and bounded response details on their turn', async (t) => {
+  const { telemetry } = await import('../telemetry.ts');
+  const captured: any[] = [];
+  t.mock.method(telemetry, 'scoped', () => (event: unknown) => captured.push(event));
+  for (const type of ['session.error', 'message.updated']) {
+    const h = modeHarness('default');
+    t.after(() => h.session.dispose());
+    await settle();
+    const turnId = '3b909c21-964f-4b12-a8f3-0d53131263ac';
+    h.send({ t: 'prompt', text: 'Fixture', telemetryTurnId: turnId });
+    await settle();
+    const error = { name: 'APIError', data: { message: 'Daily limit reached', statusCode: 429,
+      responseHeaders: { 'x-request-id': 'provider-42', authorization: 'must-not-serialize' }, responseBody: 'retry tomorrow token=secret-token' } };
+    h.feed.emit('event', { type, properties: type === 'session.error' ? { sessionID: 'mode-session', error }
+      : { info: { id: 'message-42', sessionID: 'mode-session', role: 'assistant', error } } });
+    await settle();
+    const failure = captured.pop();
+    assert.equal(failure.turn_id, turnId);
+    assert.equal(failure.diagnostic.causes[0].http_status, 429);
+    assert.equal(failure.diagnostic.causes[0].request_id, 'provider-42');
+    assert.match(failure.diagnostic.causes[0].response_body, /retry tomorrow/);
+    assert.ok(!JSON.stringify(failure).includes('secret-token'));
+    assert.ok(!JSON.stringify(failure).includes('must-not-serialize'));
+    h.session.dispose();
+  }
+  assert.equal(safeOpenCodeInheritedEnvironment({ STASHBASE_TELEMETRY_DISABLED: '1' }).STASHBASE_TELEMETRY_DISABLED, '1');
 });

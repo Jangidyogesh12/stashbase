@@ -118,13 +118,15 @@ cost; otherwise the user can wait for refill or manage their plan.
   leaves the current application and downloaded update recoverable. Relaunch waits
   for the previous local service to release its port before opening the replacement.
   Development notification previews have no authority to invoke the updater.
-- Official desktop builds disclose default-on usage statistics and redacted error
+- Official desktop builds disclose default-on usage statistics and detailed error
   diagnostics under one opt-out. Signing in associates the preceding anonymous
   activity with the stable StashBase account, across installations. Installation
   and person identities remain separate; signing out or switching accounts retires
   the prior anonymous identity. No hardware fingerprint or document/chat content
   participates. Local activity remains usable without signing in.
-  Collection excludes private content, paths, email, credentials and raw logs.
+  Diagnostic explanations, paths, stack traces, nested causes and bounded process
+  output are retained to support debugging. Known credential patterns are filtered;
+  documents, chats, arbitrary provider payloads and whole logs are not collected.
   Bounded offline delivery preserves occurrence time and identity. Opt-out stops
   pending delivery and erases queued work; re-enabling never backfills disabled
   activity. A signed-in account can be associated again after re-enabling.

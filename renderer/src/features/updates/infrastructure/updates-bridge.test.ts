@@ -138,7 +138,7 @@ describe('updates adapter', () => {
   });
 });
 
-it('reports caught update failures and pushed errors without changing recovery state', async () => {
+it('preserves update recovery while native owns the original error diagnostic', async () => {
   const report = vi.fn();
   const onSnapshot = vi.fn<UpdatesBridge['onSnapshot']>(() => STOP);
   const updates = createUpdatesAdapter(
@@ -146,15 +146,15 @@ it('reports caught update failures and pushed errors without changing recovery s
     report,
   );
   expect(await updates.check()).toEqual(UNAVAILABLE);
-  expect(report).toHaveBeenCalledTimes(1);
+  expect(report).toHaveBeenCalledTimes(0);
   const onState = vi.fn();
   updates.subscribe(onState);
   onSnapshot.mock.calls[0]?.[0]({ ...BUILD, phase: 'error' });
   expect(onState).toHaveBeenCalledWith(state({ phase: 'error' }));
-  expect(report).toHaveBeenCalledTimes(2);
+  expect(report).toHaveBeenCalledTimes(0);
 });
 
-it('reports a standing update error once until the updater leaves it', async () => {
+it('does not manufacture errors when several windows observe the same native update failure', async () => {
   const report = vi.fn();
   const onSnapshot = vi.fn<UpdatesBridge['onSnapshot']>(() => STOP);
   const updates = createUpdatesAdapter(
@@ -166,8 +166,8 @@ it('reports a standing update error once until the updater leaves it', async () 
   await updates.read();
   await updates.read();
   push?.({ ...BUILD, phase: 'error' });
-  expect(report).toHaveBeenCalledTimes(1);
+  expect(report).toHaveBeenCalledTimes(0);
   push?.({ ...BUILD, phase: 'checking' });
   push?.({ ...BUILD, phase: 'error' });
-  expect(report).toHaveBeenCalledTimes(2);
+  expect(report).toHaveBeenCalledTimes(0);
 });

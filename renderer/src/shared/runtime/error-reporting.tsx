@@ -1,6 +1,10 @@
 import { createContext, useContext, type PropsWithChildren } from 'react';
 
-export type ErrorReporter = (error: unknown, operation: string) => void;
+export type ErrorReporter = (
+  error: unknown,
+  operation: string,
+  context?: { action?: string; method?: string; route?: string; reason?: string },
+) => void;
 const ErrorReportingContext = createContext<ErrorReporter | undefined>(undefined);
 
 /** The app supplies delivery; viewers can report a caught failure without

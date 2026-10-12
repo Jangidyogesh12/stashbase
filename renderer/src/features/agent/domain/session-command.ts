@@ -16,6 +16,7 @@ export type AgentSessionCommand =
   /** Sends one user turn, optionally under the skill armed for it. */
   | {
       kind: 'prompt';
+      telemetryTurnId?: string;
       text: string;
       skill: string | null;
       titleHint?: string;

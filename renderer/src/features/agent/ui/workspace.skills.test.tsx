@@ -119,6 +119,7 @@ describe('AgentWorkspace composer skills', () => {
     await waitFor(() =>
       expect(test.sent).toContainEqual({
         kind: 'prompt',
+        telemetryTurnId: expect.any(String),
         skill: 'review',
         text: '',
         titleHint: '/review',

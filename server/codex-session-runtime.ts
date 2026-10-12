@@ -1,4 +1,4 @@
-import { reportAgentRuntimeError } from './error-reporting.ts';
+import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 import { isStashbaseWorkspaceEdit, isWorkspaceFileChange } from './agent-file-permissions.ts';
 import { retireAgentProcess } from './agent-process.ts';
 /**
@@ -168,7 +168,7 @@ export class CodexSession implements AttributedAgentSession {
     if (this.closed) return;
     let cwd: string;
     try { cwd = resolveSessionBinding({ folder: this.folder, currentFolder: getCurrentFolder() }).cwd; }
-    catch (error) { this.finish(errorMessage(error)); return; }
+    catch (error) { this.finish(errorMessage(error), error); return; }
     this.cwd = cwd;
     // Model choice belongs to the first turn, so publish the native catalog
     // before the renderer enables its composer. Otherwise a fresh Codex chat
@@ -183,7 +183,7 @@ export class CodexSession implements AttributedAgentSession {
       this.ready = true;
       this.send({ t: 'ready' });
     } catch (err: unknown) {
-      this.finish(errorMessage(err));
+      this.finish(errorMessage(err), err);
     }
   }
 
@@ -284,6 +284,7 @@ export class CodexSession implements AttributedAgentSession {
         const titleHint = typeof msg.titleHint === 'string' ? msg.titleHint : '';
         const skill = typeof msg.skill === 'string' ? msg.skill : undefined;
         if (!body.trim() && !skill) return;
+        if (!this.busy) beginAgentDiagnosticTurn(this.ws, msg.telemetryTurnId, { ...(this.activeModel ? { model: this.activeModel } : {}), ...(this.threadId ? { native_session_id: this.threadId } : {}) });
         void this.runTurn(body, titleHint, skill);
         break;
       }
@@ -402,7 +403,7 @@ export class CodexSession implements AttributedAgentSession {
       this.pendingTerminalError = null;
       if (!this.closed) {
         if (!(err instanceof CodexTurnCancelledError)) {
-          this.sendTurnError(errorMessage(err));
+          this.sendTurnError(errorMessage(err), err);
         }
         this.send({ t: 'turn-end', isError: !(err instanceof CodexTurnCancelledError) });
       }
@@ -411,13 +412,13 @@ export class CodexSession implements AttributedAgentSession {
 
   /** Turn-scoped runtime errors carry their classified failure kind so the
    * renderer can offer the matching recovery without parsing the message. */
-  private sendTurnError(message: string): void {
+  private sendTurnError(message: string, cause?: unknown): void {
     const event = agentTurnErrorEvent(message);
     if (event.failure?.kind === 'auth-expired') agentBootstrapCoordinator.requireSignIn('codex', message);
     if (!event.failure && this.isModelCompatibilityFailure(message)) {
       event.failure = { kind: 'runtime-outdated' };
     }
-    this.send(event);
+    this.send(event, cause);
   }
 
   private isModelCompatibilityFailure(message: string): boolean {
@@ -545,7 +546,7 @@ export class CodexSession implements AttributedAgentSession {
         skills.push({ id, label: stringValue(value.displayName) || name, ...(stringValue(value.shortDescription) || stringValue(value.description) ? { description: stringValue(value.shortDescription) || stringValue(value.description) } : {}) });
       }
       this.send({ t: 'skills', skills, state: skills.length ? 'available' : 'empty' });
-    } catch (err) { this.skills.clear(); this.send({ t: 'skills', skills: [], state: 'failed', error: 'Could not load skills. Try again.' }); log.debug(errorMessage(err)); }
+    } catch (err) { this.skills.clear(); this.send({ t: 'skills', skills: [], state: 'failed', error: errorMessage(err) }); log.warn('load Codex skills failed:', err); }
   }
 
   private async ensureThread(titleHint = ''): Promise<string> {
@@ -893,7 +894,7 @@ export class CodexSession implements AttributedAgentSession {
       message = 'Codex failed before completing the turn.';
     }
 
-    if (message) this.sendTurnError(message);
+    if (message) this.sendTurnError(message, error);
     this.settleActiveTurn(id, status === 'failed' || !!message);
   }
 
@@ -917,7 +918,7 @@ export class CodexSession implements AttributedAgentSession {
     }
 
     const message = notificationMessage(params) || 'Codex reported an error.';
-    this.sendTurnError(message);
+    this.sendTurnError(message, params.error);
     this.settleActiveTurn(turnId, true);
   }
 
@@ -955,15 +956,15 @@ export class CodexSession implements AttributedAgentSession {
     if (typeof delta === 'string' && delta) this.send({ t: 'thinking', delta });
   }
 
-  private send(obj: AgentServerEvent): void {
-    reportAgentRuntimeError('codex', obj);
+  private send(obj: AgentServerEvent, cause?: unknown): void {
+    reportAgentRuntimeError('codex', obj, this.ws, cause);
     if (this.ws.readyState !== 1 /* OPEN */) return;
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
 
-  private finish(message?: string): void {
+  private finish(message?: string, cause?: unknown): void {
     if (this.closed) return;
-    this.send({ t: 'exit', ...(message ? { message } : {}) });
+    this.send({ t: 'exit', ...(message ? { message } : {}) }, cause);
     this.dispose();
   }
 

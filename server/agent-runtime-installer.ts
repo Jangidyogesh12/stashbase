@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { telemetry } from './telemetry.ts';
 import { errorDiagnostic } from './error-diagnostics.ts';
 import type { ErrorDiagnostic } from '../shared/protocols/http/telemetry.ts';
@@ -71,6 +72,7 @@ export class AgentBootstrapCoordinator {
   private readonly controllers = new Map<NativeAgentId, AbortController>();
   private readonly runs = new Map<NativeAgentId, Promise<void>>();
   private readonly actions = new Map<NativeAgentId, AgentBootstrapAction | 'connect'>();
+  private readonly attempts = new Map<NativeAgentId, string>();
   private readonly diagnostics = new Map<NativeAgentId, ErrorDiagnostic>();
 
   constructor(
@@ -122,6 +124,15 @@ export class AgentBootstrapCoordinator {
     // A failed first install can leave an executable behind. Retry must rerun
     // the installer and its verification instead of accepting that partial copy.
     const retryInstallation = action === 'bootstrap' && this.status(id).failure?.stage === 'installation';
+    const retryOf = this.status(id).phase === 'failed' ? this.attempts.get(id) : undefined;
+    const attemptId = randomUUID();
+    this.attempts.set(id, attemptId);
+    const startedAt = Date.now();
+    const capture = telemetry.scoped();
+    const context = { attempt_id: attemptId, ...(retryOf ? { retry_of: retryOf } : {}), action };
+    const reportStage = (stage: AgentBootstrapFailureStage, outcome: 'started' | 'success') => {
+      if (action !== 'connect') capture({ event: 'agent_setup_stage', runtime: id, attempt_id: attemptId, stage, outcome, context });
+    };
     const controller = new AbortController();
     const { signal } = controller;
     this.controllers.set(id, controller);
@@ -135,10 +146,12 @@ export class AgentBootstrapCoordinator {
     // authentication, installation and login share cancellation and deduplication.
     const run = Promise.resolve().then(async () => {
       let stage: AgentBootstrapFailureStage = 'discovery';
+      reportStage(stage, 'started');
       try {
         signal.throwIfAborted();
         let executable = await this.dependencies.resolveExecutable(id, { ...options, signal });
         signal.throwIfAborted();
+        reportStage(stage, 'success');
         if (!executable || action === 'update' || retryInstallation) {
           if (action === 'connect') {
             this.statuses.set(id, IDLE_STATUS);
@@ -149,6 +162,7 @@ export class AgentBootstrapCoordinator {
             return;
           }
           stage = 'installation';
+          reportStage(stage, 'started');
           if (this.dependencies.consumeFailure('installation')) {
             this.fail(id, action, stage, 'simulated', new Error('Simulated Agent installation failure.'));
             return;
@@ -176,7 +190,9 @@ export class AgentBootstrapCoordinator {
             throw new Error(`${agentLabel(id)} native installation is not the selected executable. Check your executable override, then retry.`);
           }
         }
+        if (stage === 'installation') reportStage(stage, 'success');
         stage = 'authentication';
+        reportStage(stage, 'started');
         if (action === 'login') {
           this.statuses.set(id, { phase: 'authenticating', message: `Finish signing in to ${agentLabel(id)} in your browser…` });
           await this.dependencies.login(id, executable, signal);
@@ -184,14 +200,19 @@ export class AgentBootstrapCoordinator {
         }
         if (!await this.checkAuthentication(id, executable, action, signal)) return;
         signal.throwIfAborted();
+        reportStage(stage, 'success');
+        stage = 'mcp';
+        reportStage(stage, 'started');
         this.statuses.set(id, { phase: 'configuring', progress: 1, message: 'Connecting StashBase MCP…' });
         this.configure(id, action);
+        if (this.status(id).phase === 'ready') reportStage(stage, 'success');
       } catch (error) {
         this.fail(id, action, stage, 'operation-failed', signal.aborted ? signal.reason : error, stage === 'installation' ? 'install-command' : undefined);
       }
     }).finally(() => {
       const status = this.status(id);
-      if (action !== 'connect' || status.phase === 'failed') telemetry.capture({ event: 'agent_setup_result', runtime: id,
+      if (action !== 'connect' || status.phase === 'failed') capture({ event: 'agent_setup_result', runtime: id,
+        context: { ...context, elapsed_ms: Date.now() - startedAt },
         stage: action === 'login' ? 'login' : action === 'update' ? 'update' : action === 'connect' ? 'connect' : 'prepare',
         outcome: signal.aborted && signal.reason?.name === 'AbortError' ? 'cancelled' : status.phase === 'ready' ? 'success' : 'failed',
         ...(status.failure ? { failure_stage: status.failure.stage, diagnostic: this.diagnostics.get(id) } : {}),
@@ -356,7 +377,7 @@ export async function loginToAgent(
       if (signal.aborted) finish(new Error(`${label} sign-in was cancelled.`));
       else if (code === 0) finish();
       else if (timedOut) finish(new Error(`${label} sign-in timed out after 10 minutes. Retry to open sign-in again.`));
-      else finish(Object.assign(new Error(detail || `${label} sign-in exited with code ${code ?? 'unknown'}.`), { exitCode: code }));
+      else finish(Object.assign(new Error(detail || `${label} sign-in exited with code ${code ?? 'unknown'}.`), { exitCode: code, stderr: output }));
     }, (error) => finish(error));
   });
 }
@@ -727,7 +748,7 @@ async function fetchBoundedText(url: string, signal: AbortSignal, maxBytes: numb
       reader.releaseLock();
     }
   } catch (error) {
-    throw new Error(`Download failed from ${new URL(url).host}: ${agentSetupDiagnostic(bounded.aborted ? bounded.reason : error)}`);
+    throw new Error(`Download failed from ${new URL(url).host}: ${agentSetupDiagnostic(bounded.aborted ? bounded.reason : error)}`, { cause: bounded.aborted ? bounded.reason : error });
   }
 }
 
@@ -743,10 +764,10 @@ export async function verifyAgentExecutable(
       env, timeoutMs, signal, shell: agentCliNeedsShell(executable),
     });
     if (result.status !== 0) {
-      throw new Error(`exited with code ${result.status ?? 'unknown'}: ${[result.stderr, result.stdout].filter(Boolean).join('\n').trim()}`);
+      throw Object.assign(new Error(`exited with code ${result.status ?? 'unknown'}: ${[result.stderr, result.stdout].filter(Boolean).join('\n').trim()}`), { exitCode: result.status, stdout: result.stdout, stderr: result.stderr });
     }
   } catch (error) {
-    throw new Error(`${label} was downloaded but did not pass its executable check at ${executable}: ${agentSetupDiagnostic(error)}`);
+    throw new Error(`${label} was downloaded but did not pass its executable check at ${executable}: ${agentSetupDiagnostic(error)}`, { cause: error });
   }
 }
 
@@ -799,7 +820,7 @@ async function runInstallerScript(
         if (buffered.trim()) onLine(agentSetupDiagnostic(buffered));
         if (signal.aborted) reject(new Error('Agent installation was cancelled.'));
         else if (code === 0) resolve();
-        else reject(Object.assign(new Error(`Official Agent installer exited with code ${code ?? 'unknown'}.\n${output.trim()}`), { exitCode: code }));
+        else reject(Object.assign(new Error(`Official Agent installer exited with code ${code ?? 'unknown'}.\n${output.trim()}`), { exitCode: code, stderr: output }));
       }, (error) => {
         signal.removeEventListener('abort', abort);
         reject(error);

@@ -60,7 +60,6 @@ function toState(snapshot: UpdatesSnapshot): UpdateState {
  *  in which channel they ask. */
 async function command(
   invoke: () => Promise<unknown>,
-  observe: (snapshot: UpdatesSnapshot) => void,
   reportError?: ErrorReporter,
 ): Promise<UpdateResult> {
   try {
@@ -70,10 +69,8 @@ async function command(
       return UNAVAILABLE;
     }
     if (result.data.ok) {
-      observe(result.data.snapshot);
       return { ok: true, state: toState(result.data.snapshot) };
     }
-    reportError?.(new Error(`Update failed: ${result.data.failure.kind}`), 'app-update');
     return result.data.failure.kind === 'unauthorized'
       ? { kind: 'unauthorized', ok: false }
       : UNAVAILABLE;
@@ -87,20 +84,12 @@ export function createUpdatesAdapter(
   bridge: UpdatesBridge,
   reportError?: ErrorReporter,
 ): UpdatesPort {
-  // The error phase persists until main moves on, and every read and push
-  // repeats it. Report entering it once, not each time a window looks.
-  let inError = false;
-  const observe = (snapshot: UpdatesSnapshot) => {
-    if (snapshot.phase === 'error' && !inError)
-      reportError?.(new Error('Update failed'), 'app-update');
-    inError = snapshot.phase === 'error';
-  };
   return {
-    check: () => command(() => bridge.check(), observe, reportError),
-    openReleasePage: () => command(() => bridge.openReleasePage(), observe, reportError),
-    read: () => command(() => bridge.read(), observe, reportError),
-    runPrimaryAction: () => command(() => bridge.primaryAction(), observe, reportError),
-    setAutoCheck: (enabled) => command(() => bridge.setAutoCheck(enabled), observe, reportError),
+    check: () => command(() => bridge.check(), reportError),
+    openReleasePage: () => command(() => bridge.openReleasePage(), reportError),
+    read: () => command(() => bridge.read(), reportError),
+    runPrimaryAction: () => command(() => bridge.primaryAction(), reportError),
+    setAutoCheck: (enabled) => command(() => bridge.setAutoCheck(enabled), reportError),
     subscribe: (onState) =>
       bridge.onSnapshot((snapshot) => {
         const parsed = updatesSnapshotSchema.safeParse(snapshot);
@@ -108,7 +97,6 @@ export function createUpdatesAdapter(
           reportError?.(new Error('Invalid update response'), 'app-update');
           return;
         }
-        observe(parsed.data);
         onState(toState(parsed.data));
       }),
   };

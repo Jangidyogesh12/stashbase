@@ -1,4 +1,21 @@
 const { randomUUID } = require('node:crypto');
+const fs = require('node:fs');
+
+/** Capture only the tail of Electron's own host log after a startup/crash
+ * failure, including failures that happened before the host collector loaded. */
+function readServerLogTail(filePath) {
+  if (!filePath) return undefined;
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const size = fs.fstatSync(fd).size;
+    const bytes = Buffer.alloc(Math.min(size, 8000));
+    const read = fs.readSync(fd, bytes, 0, bytes.length, Math.max(0, size - bytes.length));
+    return bytes.subarray(0, read).toString('utf8');
+  } catch { return undefined; }
+  finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* no impact on launch */ } }
+}
+
 
 function isCompatibleServerHealth(body, expected) {
   if (!body || typeof body !== 'object') return false;
@@ -145,6 +162,7 @@ async function waitForStableServerProbe(probe, options = {}) {
 }
 
 module.exports = {
+  readServerLogTail,
   createServerArguments,
   createServerChildEnvironment,
   isCompatibleServerHealth,

@@ -18,6 +18,7 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const {
+  readServerLogTail,
   createServerArguments,
   createServerChildEnvironment,
   isCompatibleServerHealth,
@@ -145,6 +146,12 @@ const SERVER_ENTRY = app.isPackaged
   : path.join(PROJECT_ROOT, 'server', 'index.ts');
 const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
+const { createNativeDiagnostics } = require('../dist/electron/diagnostics/native.cjs');
+const nativeDiagnostics = createNativeDiagnostics({ available: app.isPackaged && process.env.STASHBASE_TELEMETRY_DISABLED !== '1', version: app.getVersion() });
+process.on('uncaughtExceptionMonitor', (error) => nativeDiagnostics.record(error, 'uncaught', { process: 'electron-main' }));
+app.on('child-process-gone', (_event, details) => {
+  if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Child process exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: details.type, reason: details.reason });
+});
 let serverProc = null;
 let serverStartPromise = null;
 const mainWindows = new Set();
@@ -391,6 +398,7 @@ function installReplacementBoundary() {
     // no handler for it to reach at all.
     debugEnabled: !app.isPackaged,
     manager: desktopUpdates,
+    onDiagnostic: (error, action) => nativeDiagnostics.record(error, 'app-update', { action, process: 'electron-main' }),
     windows: () => mainWindows,
     setAutoCheck: writeAutoUpdatePreference,
   });
@@ -446,6 +454,7 @@ const desktopUpdates = createUpdateManager({
   installUpdate: installDesktopUpdate,
   openReleasePage: (url) => openHttpExternal(url, 'update release URL'),
   onStateChange: (state) => replacementUpdates?.publish(state),
+  onDiagnostic: (error, context) => nativeDiagnostics.record(error, 'app-update', { ...context, process: 'electron-main' }),
   debugEnabled: !app.isPackaged,
 });
 const bugReports = createBugReportService({
@@ -611,6 +620,7 @@ function spawnServer(instanceId) {
   // the 'error' event as fatal and the whole Electron process crashes
   // with an unhelpful stack — surface a useful message instead.
   serverProc.on('error', (err) => {
+    nativeDiagnostics.record(err, 'startup', { process: 'host', stage: 'spawn' });
     console.warn(`[electron] server spawn failed: ${err.message}`);
     if (err.code === 'ENOENT') {
       console.warn(`[electron]   couldn't find ${serverBin}. ` +
@@ -618,7 +628,8 @@ function spawnServer(instanceId) {
     }
   });
   const child = serverProc;
-  child.on('exit', (code) => {
+  child.on('exit', (code, signal) => {
+    if (!quitRequested && (code !== 0 || signal)) nativeDiagnostics.record({ message: 'Host process exited unexpectedly', exitCode: code, signal, stderr: readServerLogTail(getServerLogPath()) }, 'native', { process: 'host', stage: 'exit' });
     if (serverProc === child) serverStartPromise = null;
     if (code != null && code !== 0) {
       console.warn(`[electron] server exited with code ${code}`);
@@ -872,6 +883,7 @@ async function createWindow() {
   try {
     await ensureServer();
   } catch (err) {
+    nativeDiagnostics.record({ message: err?.message ?? String(err), cause: err, stderr: readServerLogTail(getServerLogPath()) }, 'startup', { process: 'host', stage: 'ready' });
     const message = String(err?.message ?? err);
     // Native error boxes are not BrowserWindows and can block unattended
     // launch diagnostics. Preserve the same failure in stdout before opening
@@ -909,6 +921,9 @@ async function createWindow() {
   });
   const webContentsId = win.webContents.id;
   if (!workspaceSessionRestoreWindow) workspaceSessionRestoreWindow = win;
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Renderer exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: 'renderer', reason: details.reason });
+  });
   mainWindows.add(win);
   windowRegistry.add(windowId, win);
   if (

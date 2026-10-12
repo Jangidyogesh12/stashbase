@@ -134,19 +134,19 @@ export interface AppConfigFile {
   agentModelCatalogs?: Partial<Record<'claude' | 'codex', AgentModelCatalog>>;
 }
 
-export function readAppConfigStrict(): AppConfigFile {
+export function readAppConfigStrict(file = CONFIG_FILE): AppConfigFile {
   try {
-    const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
+    const raw = fs.readFileSync(file, 'utf8');
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(`${CONFIG_FILE} must contain a JSON object`);
+      throw new Error(`${file} must contain a JSON object`);
     }
     return parsed as AppConfigFile;
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return {};
     const detail = err instanceof SyntaxError ? `invalid JSON: ${err.message}`
       : err instanceof Error ? err.message : String(err);
-    throw new Error(`Could not read ${CONFIG_FILE}: ${detail}`, { cause: err });
+    throw new Error(`Could not read ${file}: ${detail}`, { cause: err });
   }
 }
 

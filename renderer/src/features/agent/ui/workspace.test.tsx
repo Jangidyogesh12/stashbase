@@ -321,6 +321,7 @@ describe('Agent workspace', () => {
     expect(sent).toEqual([
       {
         kind: 'prompt',
+        telemetryTurnId: expect.any(String),
         skill: null,
         text: 'Inspect the workspace',
         titleHint: 'Inspect the workspace',

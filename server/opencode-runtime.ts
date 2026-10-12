@@ -103,7 +103,7 @@ async function availablePort(): Promise<number> {
 export function safeOpenCodeInheritedEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const environment = Object.fromEntries(Object.entries(source).filter(([name]) => {
     const upper = name.toUpperCase();
-    return OPEN_CODE_RUNTIME_ENV_KEYS.has(upper) || upper.startsWith('LC_');
+    return upper === 'STASHBASE_TELEMETRY_DISABLED' || OPEN_CODE_RUNTIME_ENV_KEYS.has(upper) || upper.startsWith('LC_');
   }));
   // Desktop launches omit common CLI directories. Keep the credential filter,
   // but give native shell tools the same executable search path as our other Agents.

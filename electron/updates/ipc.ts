@@ -50,6 +50,7 @@ export interface UpdatesDependencies extends SenderAuthorization {
   /** False in a packaged build, where the simulation channel is never
    *  registered and so has no handler to reach. */
   debugEnabled: boolean;
+  onDiagnostic?(error: unknown, operation: string): void;
   ipcMain: Pick<IpcMain, 'handle'>;
   manager: UpdateManagerSurface;
   setAutoCheck(enabled: boolean): Promise<void>;
@@ -138,7 +139,8 @@ export function registerUpdatesIpc(dependencies: UpdatesDependencies): UpdatesIp
           if ('kind' in outcome) return refusal(outcome.kind);
           const snapshot = projectSnapshot(outcome.state);
           return snapshot ? { ok: true, snapshot } : refusal('failed');
-        } catch {
+        } catch (error) {
+          try { dependencies.onDiagnostic?.(error, channel); } catch { /* Preserve IPC result. */ }
           return refusal('failed');
         }
       },

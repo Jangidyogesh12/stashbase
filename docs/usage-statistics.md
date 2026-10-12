@@ -1,6 +1,6 @@
 # Usage statistics
 
-Official desktop builds send product activity and redacted error diagnostics to
+Official desktop builds send product activity and detailed error diagnostics to
 PostHog by default. **Settings → General → Privacy → Share usage statistics**
 controls both. All features remain available when collection is off. Development
 builds and builds without a destination do not send. Website activity is outside
@@ -12,8 +12,9 @@ The desktop creates a random installation ID and a separate anonymous ID. Neithe
 comes from hardware. Both survive launches. When you sign in, the host links the
 current anonymous history to your stable StashBase account ID. Signing in to that
 account on another installation links its activity to the same person, while the
-installation property keeps their origins distinguishable. Your email, name,
-avatar, tokens and provider account identities are not sent.
+installation property keeps their origins distinguishable. Identity linking uses the account ID, not profile email, name or avatar.
+Diagnostic prose can include names or paths mentioned by a failing operation;
+known credential patterns are filtered.
 
 Signing out or changing accounts creates a new anonymous identity. An installation
 is a property, never an alias used to merge all accounts on that computer.
@@ -25,7 +26,7 @@ installation identity.
 
 ## Events and interpretation
 
-Schema version 3 carries an event UUID, occurrence time, app version, OS,
+Schema version 4 carries an event UUID, occurrence time, app version, OS,
 installation ID, anonymous ID, installation first-observed time, and, when signed
 in, the account ID. Active work also establishes a session ID shared across
 windows; 30 minutes without reported activity starts another session. The first
@@ -49,7 +50,8 @@ date. Older builds do not supply the same activity or identity evidence.
 | `billing_portal_result` | Host obtains a verified management page or fails | `outcome` |
 | `subscription_observed` | Hosted API confirms subscription rights; unchanged polling is suppressed | bounded `plan`, `paid`, `cancel_at_period_end` |
 | `agent_setup_result` | Agent setup settles or connection fails | `runtime`, `stage`, `outcome`, optional failure stage and diagnostic |
-| `application_error` | Host, renderer or Agent failure | `source`, controlled `operation`, optional `runtime`, redacted `diagnostic`, `occurrences` |
+| `agent_setup_stage` | Discovery, installation, authentication or MCP stage starts or succeeds | `runtime`, `attempt_id`, `stage`, `outcome` |
+| `application_error` | Host, renderer, Agent or native failure | `source`, `operation`, optional `runtime`, detailed `diagnostic`, `occurrences` |
 | `application_warning` | Operation degraded but continued, such as a saved file that could not be indexed, a refused (4xx) request, or an Agent that is not ready | Same as `application_error` |
 
 `app_active` and each document activity/format category are limited to once per UTC
@@ -65,11 +67,22 @@ that never reach the open operation.
 
 Runtime values are stashbase, claude and codex. Outcomes are success, failed,
 cancelled or blocked; saves use conflict. Durations are under 10 seconds,
-10–60 seconds, 1–5 minutes, or over 5 minutes. No model names or exact request
-durations are sent. Diagnostics contain controlled summaries, known error codes,
-HTTP/exit status and bounded stack line/column locations. Raw messages are
-classified locally. When a logged sentence carries the caught error, only that
-error is classified, never the sentence around it.
+10–60 seconds, 1–5 minutes, or over 5 minutes. Diagnostic context can include
+model/runtime version, native session/connection ID, method and route, target
+update version, setup stage, exact elapsed milliseconds and request/turn IDs.
+Setup attempts have unique IDs and retries point to the preceding failed attempt.
+An installation success followed by authentication failure means the executable
+was installed and verified but is not signed in.
+
+Diagnostics preserve original messages, error names and codes, HTTP/exit status,
+provider request IDs, causes, stack traces, React component stacks and bounded
+process stdout/stderr and error response bodies. They preserve paths and explanations instead of replacing
+them with generic summaries. Messages/output are bounded to 8,000 characters,
+stacks to 16,000, and causes to four; truncation preserves the beginning and end
+and is marked. Each serialized diagnostic also has a 128 KB byte ceiling. Arbitrary provider objects are never serialized. Bearer/basic
+credentials, credential assignments, common API keys, private keys, URL passwords
+and cookies are filtered at capture and again before sending. This is targeted
+filtering, not a promise to remove every personal detail from diagnostic prose.
 
 An identical diagnostic is reported when first seen. Repeats within its window
 (one minute for errors, ten minutes for warnings) are counted locally and sent as
@@ -84,7 +97,8 @@ Save, project-open and billing operations retain their initiating identity acros
 an asynchronous account switch. A turn's random correlation ID retains its
 initiating identity and session until its one terminal result in the same host
 process. A terminal result with no retained start is not inferred after a host
-restart or opt-out. There is no conversation ID or source identity in these events.
+restart or opt-out. Error context may include the native session ID and file paths
+needed for diagnosis; turn events themselves contain no conversation content.
 
 Checkout success means a page was obtained, not that payment succeeded.
 `subscription_observed` means confirmed rights, not a new charge: the same account
@@ -106,12 +120,19 @@ identity link and silently accepting its dependent events.
 Collection never waits on network delivery to complete a writing operation or
 shutdown. The host re-reads current configuration after each outbound request so
 an acknowledgement cannot overwrite newer preferences or newly queued work.
+Renderer delivery queues up to 100 errors and retries each up to three times.
+Native processes spool up to 50 bounded errors for seven days, including startup,
+renderer/child-process crashes, MCP startup and actual updater failures. The host
+imports them every five seconds or on shutdown, retaining occurrence time and
+source version. A crash before any host can run is recoverable only after a later
+healthy launch; a full spool can lose further errors.
+
 Queue expiry, saturation, unavailable local storage, ingestion rejection and
 uninstall can still lose events. HTTP acceptance alone does not establish that a
 provider's identity merge or dashboard query has completed.
 
 Turning collection off cancels pending requests and removes the queue, all local
-analytics identities and suppression markers. There is no final opt-out network
+analytics identities, native diagnostic files and suppression markers. There is no final opt-out network
 notification. A persistence failure still stops this process and shows failure;
 relaunch suppression is guaranteed only once the choice is saved successfully.
 Already transmitted events cannot be recalled or deleted by this switch.
@@ -121,9 +142,12 @@ existing PostHog person history.
 
 ## What is never sent
 
-Document/chat contents, prompts, replies, search terms, file/project names or
-paths, repository URLs, email addresses, credentials, hardware fingerprints,
-screenshots, clipboard contents, raw logs or hashes of private content. There is
+Documents, chat transcripts, prompt/reply payloads, search queries, hardware
+fingerprints, screenshots, clipboard contents, full raw logs or content hashes are
+not collected as analytics fields. Known credentials are filtered from diagnostic
+text. File/project paths, URLs and personal details can occur inside an error
+message, stack or bounded process output; these diagnostic details are retained.
+There is
 no DOM click payload capture, session replay, pageview tracking or AI tracing.
 Authenticated activity creates person profiles using the stable account ID;
 unidentified events request no profile. IP and GeoIP enrichment are disabled in

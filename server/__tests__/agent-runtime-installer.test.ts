@@ -1174,16 +1174,40 @@ test('a failing updater surfaces as an installation failure with the manual inst
 test('failed setup reports native error causes once with its action and failing phase', async (t) => {
   const { telemetry } = await import('../telemetry.ts');
   const events: any[] = [];
-  t.mock.method(telemetry, 'capture', (event: unknown) => events.push(event));
+  t.mock.method(telemetry, 'scoped', () => (event: unknown) => events.push(event));
   const error = new TypeError('fetch failed', { cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) });
   const coordinator = new AgentBootstrapCoordinator(fakeDependencies({ installRuntime: async () => { throw error; } }).dependencies);
   coordinator.begin('codex');
   coordinator.begin('codex');
   await coordinator.wait('codex');
-  assert.equal(events.length, 1);
-  assert.equal(events[0].stage, 'prepare');
-  assert.equal(events[0].failure_stage, 'installation');
-  assert.equal(events[0].outcome, 'failed');
-  assert.equal(events[0].diagnostic.code, 'ECONNREFUSED');
-  assert.match(events[0].diagnostic.message, /Network request failed/);
+  const stages = events.filter((event) => event.event === 'agent_setup_stage');
+  assert.deepEqual(stages.map((event) => [event.stage, event.outcome]), [['discovery', 'started'], ['discovery', 'success'], ['installation', 'started']]);
+  const results = events.filter((event) => event.event === 'agent_setup_result');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].stage, 'prepare');
+  assert.equal(results[0].failure_stage, 'installation');
+  assert.equal(results[0].outcome, 'failed');
+  assert.equal(results[0].diagnostic.causes[0].code, 'ECONNREFUSED');
+  assert.match(results[0].diagnostic.message, /fetch failed/);
+  coordinator.begin('codex');
+  await coordinator.wait('codex');
+  const retried = events.filter((event) => event.event === 'agent_setup_result')[1];
+  assert.equal(retried.context.retry_of, results[0].context.attempt_id);
+  assert.notEqual(retried.context.attempt_id, results[0].context.attempt_id);
+});
+
+test('successful installation is recorded separately from the following sign-in failure', async (t) => {
+  const { telemetry } = await import('../telemetry.ts');
+  const events: any[] = [];
+  t.mock.method(telemetry, 'scoped', () => (event: unknown) => events.push(event));
+  const fake = fakeDependencies({ isAuthenticated: () => false });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+  coordinator.begin('claude');
+  await coordinator.wait('claude');
+  const installed = events.find((event) => event.event === 'agent_setup_stage' && event.stage === 'installation' && event.outcome === 'success');
+  const result = events.find((event) => event.event === 'agent_setup_result');
+  assert.ok(installed);
+  assert.equal(result.context.attempt_id, installed.attempt_id);
+  assert.equal(result.failure_stage, 'authentication');
+  assert.match(result.diagnostic.message, /installed.*not signed in/);
 });

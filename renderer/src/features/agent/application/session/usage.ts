@@ -41,6 +41,7 @@ export function createAgentUsage(
     });
   };
   return {
+    correlation: () => (turnId ? { telemetryTurnId: turnId } : {}),
     start() {
       if (startedAt !== null) return;
       interrupted = false;

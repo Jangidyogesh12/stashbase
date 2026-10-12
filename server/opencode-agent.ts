@@ -1,4 +1,4 @@
-import { reportAgentRuntimeError } from './error-reporting.ts';
+import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 /** OpenCode implementation of StashBase's Shared Agent Contract. */
 import { prepareAgentAttachments } from './agent-attachments.ts';
 import { agentClientEventSchema } from '../shared/protocols/websocket/agent-session.ts';
@@ -64,9 +64,20 @@ export function normalizeOpenCodeToolName(name: string): string {
   }
 }
 
-function send(ws: WebSocket, event: AgentServerEvent): void {
-  reportAgentRuntimeError('stashbase', event);
+function send(ws: WebSocket, event: AgentServerEvent, cause?: unknown): void {
+  reportAgentRuntimeError('stashbase', event, ws, cause);
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(event));
+}
+
+/** SDK error envelopes are authored explicitly; never include request bodies. */
+function providerErrorDiagnostic(error: unknown): unknown {
+  if (!error || typeof error !== 'object') return error;
+  const record = error as { name?: unknown; data?: Record<string, unknown> };
+  const data = record.data ?? {};
+  const headers = data.responseHeaders as Record<string, unknown> | undefined;
+  return { name: record.name, code: record.name, message: data.message,
+    status: data.statusCode, response_body: data.responseBody,
+    request_id: headers?.['x-request-id'] ?? headers?.['request-id'] ?? headers?.['x-amzn-requestid'] };
 }
 
 function eventErrorMessage(event: Extract<Event, { type: 'session.error' }>): string {
@@ -392,7 +403,9 @@ export class OpenCodePanelSession {
             await this.handlePermission(item);
             continue;
           }
-          send(this.ws, item);
+          const nativeError = event.type === 'session.error' ? event.properties.error
+            : event.type === 'message.updated' && event.properties.info.role === 'assistant' ? event.properties.info.error : undefined;
+          send(this.ws, item, item.t === 'error' ? providerErrorDiagnostic(nativeError) : undefined);
           if (item.t === 'tool') {
             for (const permission of this.waitingToolPermissions.values()) {
               if (permission.toolUseId !== item.id) continue;
@@ -437,7 +450,8 @@ export class OpenCodePanelSession {
         case 'prompt': {
           if (this.turnInFlight()) return;
           this.interrupted = false;
-          this.runtime.beginTurn(randomUUID());
+          beginAgentDiagnosticTurn(this.ws, event.telemetryTurnId, { model: 'stashbase-agent-default', native_session_id: this.sessionId });
+          this.runtime.beginTurn(event.telemetryTurnId ?? randomUUID());
           for (const translated of this.translator.beginTurn()) send(this.ws, translated);
           if (event.titleHint) {
             void this.client.session.update({
@@ -536,7 +550,8 @@ export class OpenCodePanelSession {
     this.seenPermissions.clear();
     this.waitingToolPermissions.clear();
     const message = errorMessage(error);
-    send(this.ws, agentTurnErrorEvent(message));
+    reportAgentRuntimeError('stashbase', agentTurnErrorEvent(message), this.ws, error);
+    if (this.ws.readyState === this.ws.OPEN) this.ws.send(JSON.stringify(agentTurnErrorEvent(message)));
     this.runtime.endTurn();
     if (terminal) {
       send(this.ws, { t: 'exit', message });

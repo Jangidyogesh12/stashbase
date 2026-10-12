@@ -14,8 +14,13 @@ describe('Agent session API', () => {
     });
     const socket = {
       readyState: 1,
-      addEventListener(type: string, listener: typeof receive) {
-        if (type === 'message') receive = listener;
+      addEventListener(
+        type: string,
+        listener:
+          | typeof receive
+          | ((event?: Pick<CloseEvent, 'code' | 'reason' | 'wasClean'>) => void),
+      ) {
+        if (type === 'message') receive = listener as typeof receive;
       },
       removeEventListener: vi.fn(),
       close: vi.fn(),

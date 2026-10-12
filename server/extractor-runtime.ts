@@ -113,7 +113,7 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
       try {
         ready = await installed(await readManifest());
         if (ready) status = { status: 'installed', error: null };
-      } catch { status = { status: 'failed', error: 'manifest' }; }
+      } catch (error) { status = { status: 'failed', error: 'manifest' }; options.onFailure?.(new Error('Extractor manifest initialization failed', { cause: error })); }
     })();
   }
 

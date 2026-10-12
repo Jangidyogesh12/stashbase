@@ -106,7 +106,7 @@ test('default-on manual collection has only allowed fields and no source or acco
   f.service.capture({ event: 'project_entry_result', outcome: 'success', path: '/private' } as any);
   await tick();
   assert.equal(f.sent.length, 1);
-  assert.equal(f.sent[0].body.properties.schema_version, 3);
+  assert.equal(f.sent[0].body.properties.schema_version, 4);
   assert.equal(f.sent[0].body.properties.$process_person_profile, false);
   assert.equal(f.sent[0].body.properties.$geoip_disable, true);
   assert.equal(f.sent[0].body.properties.$ip, null);
@@ -194,12 +194,12 @@ test('error diagnostics share opt-out, redact causes, and suppress repeated fail
   await tick();
   assert.equal(f.sent.length, 1);
   const diagnostic = f.sent[0].body.properties.diagnostic;
-  assert.equal(diagnostic.code, 'ECONNREFUSED');
+  assert.equal(diagnostic.causes[0].code, 'ECONNREFUSED');
   assert.equal(diagnostic.exit_code, 13);
   assert.match(diagnostic.message, /Installer failed/);
-  assert.match(diagnostic.stack, /\[frame\]:10:4/);
+  assert.match(diagnostic.stack, /installer\.ts:10:4/);
   const payload = JSON.stringify(f.sent[0].body);
-  for (const value of ['Jane Doe', 'secret.txt', 'private project', 'private.example', 'hidden-token', 'secret-token-value', 'user@example.com']) assert.equal(payload.includes(value), false, value);
+  for (const value of ['hidden-token', 'secret-token-value']) assert.equal(payload.includes(value), false, value);
   f.service.update({ enabled: false });
   f.service.captureError(new Error('another failure'), { source: 'server', operation: 'sync' });
   await tick();
@@ -274,11 +274,11 @@ test('setup diagnostics are redacted at collection even when the caller supplies
   assert.equal(f.sent[0].body.properties.failure_stage, 'installation');
   assert.equal(f.sent[0].body.properties.diagnostic.exit_code, 7);
   assert.equal(JSON.stringify(f.sent).includes('must-not-leak'), false);
-  assert.equal(JSON.stringify(f.sent).includes('/Users/private'), false);
+  assert.equal(JSON.stringify(f.sent).includes('/Users/private'), true);
   f.service.close();
 });
 
-test('HTTP failures report their operation without request bodies, paths, or a second event', async () => {
+test('HTTP failures retain route, method, request ID and original cause without request bodies or duplicate events', async () => {
   const { httpErrorReporting } = await import('./error-reporting.ts');
   const { sendError } = await import('./http.ts');
   const f = fixture();
@@ -297,7 +297,10 @@ test('HTTP failures report their operation without request bodies, paths, or a s
     assert.equal(f.sent[0].body.properties.operation, 'http.files');
     assert.equal(f.sent[0].body.properties.diagnostic.http_status, 500);
     assert.equal(f.sent[0].body.properties.diagnostic.code, 'EACCES');
-    for (const value of ['customer.md', 'private-project', 'private document content']) assert.equal(JSON.stringify(f.sent).includes(value), false);
+    assert.deepEqual(f.sent[0].body.properties.context, { method: 'POST', route: '/api/files/*' });
+    assert.match(f.sent[0].body.properties.request_id, /^[0-9a-f-]{36}$/);
+    assert.match(f.sent[0].body.properties.diagnostic.causes[0].stack, /telemetry.test.ts/);
+    for (const value of ['private-project', 'private document content']) assert.equal(JSON.stringify(f.sent).includes(value), false);
   } finally { f.service.close(); server.closeAllConnections(); server.close(); }
 });
 
@@ -315,8 +318,8 @@ test('host logs report warnings and errors apart, classified by the caught error
     assert.deepEqual(f.sent.map((entry) => [entry.body.event, entry.body.properties.operation, entry.body.properties.diagnostic.code]),
       [['application_warning', 'background.file-save', 'ENOSPC'], ['application_error', 'background.file-save', 'EROFS']]);
     // The template's "update" must not decide the cause.
-    assert.equal(f.sent[0].body.properties.diagnostic.message, 'Disk space exhausted');
-    assert.equal(JSON.stringify(f.sent).includes('Acme'), false);
+    assert.equal(f.sent[0].body.properties.diagnostic.message, 'disk is full');
+    assert.match(f.sent[0].body.properties.context.action, /Acme Plan.md/);
   } finally { setLogErrorReporter(() => {}); f.service.close(); }
 });
 
@@ -337,7 +340,7 @@ test('refused HTTP requests are warnings while server failures are errors', asyn
   } finally { f.service.close(); server.closeAllConnections(); server.close(); }
 });
 
-test('automatic diagnostics never retain unquoted names or relative paths', async () => {
+test('distinct error explanations, unknown codes and paths survive without being merged', async () => {
   const f = fixture();
   for (const message of [
     'rename_folder: conversion rediscovery failed for Acquisition Target Orion: database is locked',
@@ -347,10 +350,10 @@ test('automatic diagnostics never retain unquoted names or relative paths', asyn
     'SecretProject/subdir',
   ]) f.service.captureError({ message, code: 'CustomerSecret', name: 'CustomerSecret' }, { source: 'server', operation: 'AcquisitionSecret' });
   await tick();
-  assert.ok(f.sent.length > 0);
+  assert.equal(f.sent.length, 5);
   const payload = JSON.stringify(f.sent);
-  for (const value of ['Acquisition', 'Orion', 'Acme', 'Merger', 'Private', 'SecretProject', 'CustomerSecret']) assert.equal(payload.includes(value), false, value);
-  assert.match(payload, /Database is locked/);
+  for (const value of ['Acquisition', 'Orion', 'Acme', 'Merger', 'Private', 'SecretProject', 'CustomerSecret']) assert.equal(payload.includes(value), true, value);
+  assert.match(payload, /database is locked/);
   assert.match(payload, /EACCES/);
   f.service.close();
 });
@@ -568,5 +571,41 @@ test('a long Agent turn retains its initiating identity and session across accou
   assert.equal(events[0].distinct_id, 'user:A');
   assert.equal(events[1].distinct_id, 'user:A');
   assert.equal(events[0].properties.$session_id, events[1].properties.$session_id);
+  f.service.close();
+});
+
+test('Agent diagnostics join the initiating turn and account with the original provider cause', async (t) => {
+  const { telemetry } = await import('./telemetry.ts');
+  const { beginAgentDiagnosticTurn, reportAgentRuntimeError } = await import('./error-reporting.ts');
+  const f = fixture();
+  t.mock.method(telemetry, 'scoped', () => f.service.scoped());
+  const connection = {};
+  const turnId = 'd40d1b38-b5d1-4cf1-b82c-19370bbdbfa5';
+  account(f, 'A');
+  beginAgentDiagnosticTurn(connection, turnId, { model: 'fixture-model', native_session_id: 'native-session' });
+  account(f, 'B');
+  reportAgentRuntimeError('claude', { t: 'error', message: 'Usage limit reached', failure: { kind: 'allowance-exhausted' } }, connection,
+    Object.assign(new Error('Provider daily limit resets tomorrow'), { status: 429, requestId: 'provider-request-42' }));
+  await tick();
+  const failure = f.sent.find((item) => item.body.event === 'application_error')!.body;
+  assert.equal(failure.distinct_id, 'user:A');
+  assert.equal(failure.properties.turn_id, turnId);
+  assert.equal(failure.properties.context.native_session_id, 'native-session');
+  assert.equal(failure.properties.diagnostic.code, 'allowance-exhausted');
+  assert.equal(failure.properties.diagnostic.causes[0].request_id, 'provider-request-42');
+  assert.equal(failure.properties.diagnostic.causes[0].http_status, 429);
+  f.service.close();
+});
+
+test('oversized operation context cannot discard an otherwise actionable diagnostic', async () => {
+  const f = fixture();
+  f.service.captureError(Object.assign(new Error('Asset read denied'), { code: 'EACCES' }), {
+    source: 'server', operation: 'http.asset', context: { method: 'GET', route: `/asset/${'nested/'.repeat(200)}image.png` },
+  });
+  await tick();
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.sent[0].body.properties.diagnostic.code, 'EACCES');
+  assert.ok(f.sent[0].body.properties.context.route.length <= 500);
+  assert.match(f.sent[0].body.properties.context.route, /image.png$/);
   f.service.close();
 });

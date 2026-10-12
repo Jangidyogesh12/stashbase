@@ -94,7 +94,10 @@ it('reports transport failures without capturing the request and ignores request
   await expect(
     client.request({ path: '/api/files/private.md?folder=private', body: { content: 'private' } }),
   ).rejects.toBe(error);
-  expect(report).toHaveBeenCalledExactlyOnceWith(error, 'http-transport');
+  expect(report).toHaveBeenCalledExactlyOnceWith(error, 'http-transport', {
+    method: 'GET',
+    route: '/api/files/private.md',
+  });
   const signal = AbortSignal.abort();
   await expect(client.request({ path: '/api/files/private.md', signal })).rejects.toBe(error);
   expect(report).toHaveBeenCalledTimes(1);

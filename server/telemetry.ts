@@ -1,10 +1,13 @@
 /** One Node owner for identity, opt-out and durable delivery across windows.
  * Only allowlisted facts enter the queue; account credentials never do. */
+import { createNativeDiagnostics, type NativeDiagnostic } from './native-diagnostics.ts';
 import { randomUUID } from 'node:crypto';
 import type { AppConfigFile } from './app-config.ts';
 import { readAppConfigStrict, writeAppConfigStrict } from './app-config.ts';
-import { telemetryEventSchema, type TelemetryEvent, type ErrorContext } from '../shared/protocols/http/telemetry.ts';
+import { boundedDiagnosticContext, telemetryEventSchema, type TelemetryEvent, type ErrorContext } from '../shared/protocols/http/telemetry.ts';
 import { diagnosticOperation, errorDiagnostic } from './error-diagnostics.ts';
+import { diagnosticText } from '../shared/protocols/diagnostics.ts';
+import { diagnosticScope, type DiagnosticScope } from './diagnostic-context.ts';
 import { accountUsageId, usageState, usageIdentity, usagePayload, QUEUE_LIMIT,
   type QueuedUsage, type UsageIdentity, type TelemetryState } from './telemetry-state.ts';
 import destination from './telemetry-destination.json' with { type: 'json' };
@@ -23,6 +26,7 @@ export function createTelemetry(options: {
   host: string;
   version: string;
   os: string;
+  native?: ReturnType<typeof createNativeDiagnostics>;
   read(): AppConfigFile;
   write(config: AppConfigFile): void;
   fetch?: typeof fetch;
@@ -64,6 +68,7 @@ export function createTelemetry(options: {
     occurrenceTimer = undefined;
     turns.clear();
   };
+  const sanitizeContext = (context: Record<string, unknown>) => Object.fromEntries(Object.entries(context).map(([key, value]) => [key, typeof value === 'string' ? diagnosticText(value, 500) : value]));
   const send = async (queued: QueuedUsage, controller: AbortController) => {
     const timeout = setTimeout(() => controller.abort(), 2000);
     timeout.unref();
@@ -73,6 +78,7 @@ export function createTelemetry(options: {
       if ('diagnostic' in payload.properties && payload.properties.diagnostic) {
         payload.properties.diagnostic = errorDiagnostic(payload.properties.diagnostic);
       }
+      if ('context' in payload.properties && payload.properties.context) payload.properties.context = sanitizeContext(payload.properties.context);
       if ('operation' in payload.properties) payload.properties.operation = diagnosticOperation(payload.properties.operation);
       const response = await sendFetch(`${options.host.replace(/\/$/, '')}/i/v0/e/`, {
         method: 'POST', redirect: 'error', signal: controller.signal,
@@ -161,10 +167,15 @@ export function createTelemetry(options: {
     }
     if (!occurrences.size) { clearInterval(occurrenceTimer); occurrenceTimer = undefined; }
   };
-  const capture = (input: TelemetryEvent, captured?: UsageIdentity, capturedGeneration = generation, rollup = false) => {
+  const withScope = (input: TelemetryEvent, scope: DiagnosticScope = diagnosticScope.getStore() ?? {}): TelemetryEvent => {
+    if (!['application_error', 'application_warning', 'account_login_result', 'billing_checkout_result', 'billing_portal_result', 'project_entry_result', 'document_write_result', 'agent_setup_result', 'agent_setup_stage'].includes(input.event)) return input;
+    return { ...scope, ...input, ...('context' in input || scope.context ? { context: { ...scope.context, ...('context' in input ? input.context : {}) } } : {}) } as TelemetryEvent;
+  };
+  const capture = (input: TelemetryEvent, captured?: UsageIdentity, capturedGeneration = generation, rollup = false, native?: NativeDiagnostic): boolean | undefined => {
     if (!allowed() || capturedGeneration !== generation) return;
     try {
-      const parsed = telemetryEventSchema.safeParse(input);
+      const scoped = withScope(input);
+      const parsed = telemetryEventSchema.safeParse('context' in scoped ? { ...scoped, context: boundedDiagnosticContext(scoped.context) } : scoped);
       if (!parsed.success) return;
       const config = options.read();
       const state = usageState(config, now());
@@ -181,17 +192,19 @@ export function createTelemetry(options: {
       if (captured && captured.installationId !== identity.installationId) return;
       const event = parsed.data;
       if ('diagnostic' in event && event.diagnostic) event.diagnostic = errorDiagnostic(event.diagnostic);
+      if ('context' in event && event.context) event.context = sanitizeContext(event.context);
       if (event.event === 'application_error' || event.event === 'application_warning') {
         event.operation = diagnosticOperation(event.operation);
-        if (!rollup) {
+        if (!rollup && !native) {
+          const repetitions = event.occurrences ?? 1;
           delete event.occurrences;
           // The key is the redacted event, so every counted repeat carries
           // exactly the diagnostic that was reported for its window.
           const diagnosticIdentity = captured ?? identity;
           const key = JSON.stringify([diagnosticIdentity.anonymousId, diagnosticIdentity.userId, event]);
           const bucket = occurrences.get(key);
-          if (bucket && windowOpen(bucket)) { bucket.repeated++; return; }
-          event.occurrences = (bucket?.repeated ?? 0) + 1;
+          if (bucket && windowOpen(bucket)) { bucket.repeated += repetitions; return; }
+          event.occurrences = (bucket?.repeated ?? 0) + repetitions;
           occurrences.delete(key);
           if (occurrences.size >= 100) {
             const [oldestKey, oldest] = occurrences.entries().next().value!;
@@ -227,7 +240,9 @@ export function createTelemetry(options: {
         if (!currentIdentity || state.subscription === status) return;
         state.subscription = status;
       }
-      (state.queue ??= []).push(entry(captured ?? identity, event, turn?.sessionId ?? (currentIdentity ? state.sessionId : undefined)));
+      const queued = entry(captured ?? identity, event, turn?.sessionId ?? (currentIdentity ? state.sessionId : undefined));
+      if (native) Object.assign(queued, { uuid: native.uuid, timestamp: native.timestamp, version: native.version, os: native.os });
+      if (!state.queue?.some((item) => item.uuid === queued.uuid)) (state.queue ??= []).push(queued);
       save(config, state);
       if (event.event === 'agent_turn_started' && event.turn_id) {
         if (turns.size >= 100) turns.delete(turns.keys().next().value!);
@@ -237,8 +252,16 @@ export function createTelemetry(options: {
       if (event.event === 'app_opened') opened = true;
       count++;
       kick();
+      return true;
     } catch { /* Unavailable persistence fails closed without affecting work. */ }
   };
+  const drainNative = () => {
+    if (collectionStopped) { options.native?.clear(); return; }
+    options.native?.drain((record) => capture({ event: 'application_error', source: 'native',
+    operation: record.operation, diagnostic: record.diagnostic, context: record.context }, record.identity, generation, false, record) === true);
+  };
+  const nativeTimer = options.native && options.available ? setInterval(drainNative, 5000) : undefined;
+  nativeTimer?.unref();
   return {
     preferences,
     capture(input: TelemetryEvent) { capture(input); },
@@ -246,6 +269,7 @@ export function createTelemetry(options: {
      * the initiating account even if another window signs out or switches. */
     scoped() {
       const capturedGeneration = generation;
+      const scope = structuredClone(diagnosticScope.getStore() ?? {});
       try {
         if (!allowed()) return (_event: TelemetryEvent) => {};
         const config = options.read();
@@ -254,7 +278,7 @@ export function createTelemetry(options: {
         const identity = synchronize(config, state);
         save(config, state);
         kick();
-        return (event: TelemetryEvent) => capture(event, identity, capturedGeneration);
+        return (event: TelemetryEvent) => capture(withScope(event, scope), identity, capturedGeneration);
       } catch { return (_event: TelemetryEvent) => {}; }
     },
     identityChanged() {
@@ -280,7 +304,7 @@ export function createTelemetry(options: {
       catch { /* Never replace the original condition. */ }
     },
     update(next: { enabled: boolean }) {
-      if (!next.enabled) { collectionStopped = true; cancel(); }
+      if (!next.enabled) { collectionStopped = true; cancel(); options.native?.clear(); }
       const config = options.read();
       const state = usageState(config, now());
       // Disabling erases the queue and all local analytics identity. No final
@@ -294,15 +318,19 @@ export function createTelemetry(options: {
     /** Counted repeats are queued durably and delivered after the next launch. */
     close() {
       try { releaseOccurrences(true); } catch { /* Shutdown never depends on analytics. */ }
+      drainNative();
+      clearInterval(nativeTimer);
       stopped = true; cancel();
     },
   };
 }
 
+const available = process.env.STASHBASE_TELEMETRY_DISABLED !== '1'
+  && process.env.STASHBASE_PACKAGED === '1'
+  && destination.projectToken.startsWith('phc_') && destination.host.startsWith('https://');
 export const telemetry = createTelemetry({
-  available: process.env.STASHBASE_TELEMETRY_DISABLED !== '1'
-    && process.env.STASHBASE_PACKAGED === '1'
-    && destination.projectToken.startsWith('phc_') && destination.host.startsWith('https://'),
+  available,
+  native: createNativeDiagnostics({ available, version: packageInfo.version }),
   projectToken: destination.projectToken, host: destination.host,
   version: packageInfo.version, os: process.platform,
   read: readAppConfigStrict, write: writeAppConfigStrict,

@@ -30,7 +30,7 @@ const DEVELOPMENT_RUNTIME = isDevelopmentRuntime();
 const extractorRuntime = createExtractorRuntime({
   manifest: async () => JSON.parse(await fs.readFile(path.join(RESOURCES_ROOT, 'python', 'extractor-runtime.json'), 'utf8')),
   root: path.join(appDataRoot(), 'components', 'extractor'),
-  onFailure: (error) => logger('extractor-runtime').warn(`component download paused: ${String(error)}`),
+  onFailure: (error) => logger('extractor-runtime').warn('component download paused:', error),
 });
 
 function usesManagedExtractor(): boolean {

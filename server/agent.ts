@@ -1,4 +1,4 @@
-import { reportAgentRuntimeError } from './error-reporting.ts';
+import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 /**
  * Structured-agent sidecar. Where `terminal.ts` bridges a raw PTY to an
  * xterm, this bridges the **Claude Agent SDK** to a WebSocket as a
@@ -371,7 +371,7 @@ export class AgentSession implements AttributedAgentSession {
     if (this.closed) return;
     let cwd: string;
     try { cwd = resolveSessionBinding({ folder: this.folder, currentFolder: getCurrentFolder() }).cwd; }
-    catch (error) { this.finish(errorMessage(error)); return; }
+    catch (error) { this.finish(errorMessage(error), error); return; }
     this.cwd = cwd;
     if (this.closed) return;
     if (this.resume && !(await this.resumeBelongsToFolder(this.resume, cwd))) {
@@ -384,7 +384,7 @@ export class AgentSession implements AttributedAgentSession {
       let mayStart = false;
       try { mayStart = await beforeNativeStart(); }
       catch (err: unknown) {
-        this.finish(errorMessage(err));
+        this.finish(errorMessage(err), err);
         return;
       }
       if (!mayStart || this.closed) return;
@@ -413,7 +413,7 @@ export class AgentSession implements AttributedAgentSession {
       this.q = this.createNativeQuery(cwd, this.resume, claudeCodeExecutable);
     } catch (err: unknown) {
 
-      this.finish(errorMessage(err));
+      this.finish(errorMessage(err), err);
       return;
     }
     if (this.closed) {
@@ -520,7 +520,7 @@ export class AgentSession implements AttributedAgentSession {
   private async publishSkills(): Promise<void> {
     if (!this.q) return;
     try { this.publishSkillCommands(await this.q.supportedCommands()); }
-    catch { this.skills.clear(); this.send({ t: 'skills', skills: [], state: 'failed', error: 'Could not load skills. Try again.' }); }
+    catch (error) { this.skills.clear(); log.warn('load Claude skills failed:', error); this.send({ t: 'skills', skills: [], state: 'failed', error: errorMessage(error) }); }
   }
   private publishSkillCommands(commands: Array<{ name: string; description: string; argumentHint: string }>): void {
     this.skills = new Set(commands.map((command) => command.name).filter(Boolean));
@@ -530,17 +530,19 @@ export class AgentSession implements AttributedAgentSession {
   /** Drain the SDK message stream until it ends or errors. */
   private async pump(query: Query): Promise<void> {
     let failure: string | undefined;
+    let cause: unknown;
     try {
       for await (const msg of query) this.onSdkMessage(msg);
       if (!this.closed) failure = 'Claude session ended unexpectedly.';
     } catch (err: unknown) {
       if (!this.closed && query === this.q) {
 
+        cause = err;
         failure = errorMessage(err);
       }
     }
     if (query !== this.q) return;
-    this.finish(failure);
+    this.finish(failure, cause);
   }
 
   private onSdkMessage(msg: SDKMessage): void {
@@ -768,6 +770,7 @@ export class AgentSession implements AttributedAgentSession {
         // terminal event. Refuse an out-of-contract concurrent prompt rather
         // than letting one SDK result settle the wrong turn.
         if (this.turnActive) return;
+        beginAgentDiagnosticTurn(this.ws, msg.telemetryTurnId, { ...(this.model ? { model: this.model } : {}), ...(this.sessionId ? { native_session_id: this.sessionId } : {}) });
         {
           const simulated = consumeAgentTurnFailure();
           if (simulated) { this.playSimulatedTurnFailure(simulated); break; }
@@ -877,18 +880,18 @@ export class AgentSession implements AttributedAgentSession {
     }
   }
 
-  private send(obj: AgentServerEvent): void {
-    reportAgentRuntimeError('claude', obj);
+  private send(obj: AgentServerEvent, cause?: unknown): void {
+    reportAgentRuntimeError('claude', obj, this.ws, cause);
     if (this.ws.readyState !== 1 /* OPEN */) return;
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
 
   /** Turn-scoped runtime errors carry their classified failure kind so the
    * renderer can offer the matching recovery without parsing the message. */
-  private sendTurnError(message: string): void {
+  private sendTurnError(message: string, cause?: unknown): void {
     const event = agentTurnErrorEvent(message);
     if (event.failure?.kind === 'auth-expired') agentBootstrapCoordinator.requireSignIn('claude', message);
-    this.send(event);
+    this.send(event, cause);
   }
 
   /** Development-only: play the armed turn-failure script through the normal
@@ -909,9 +912,9 @@ export class AgentSession implements AttributedAgentSession {
     this.send({ t: 'turn-end', isError: true });
   }
 
-  private finish(message?: string): void {
+  private finish(message?: string, cause?: unknown): void {
     if (this.closed) return;
-    this.send({ t: 'exit', ...(message ? { message } : {}) });
+    this.send({ t: 'exit', ...(message ? { message } : {}) }, cause);
     this.dispose();
   }
 

@@ -255,6 +255,7 @@ export function mount(app: express.Express): void {
 }
 
 function sendFolderOperationError(res: express.Response, err: unknown): void {
+  res.locals.diagnosticError = err;
   const status = (err as { status?: unknown })?.status;
   const code = (err as { code?: unknown })?.code;
   if (typeof status === 'number' && status >= 400 && status <= 599) {

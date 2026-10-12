@@ -16,7 +16,14 @@ import type {
 /** The `safeParse` surface every reviewed protocol schema exposes. Kept
  *  structural so the transport never depends on the validation project. */
 export interface ResponseSchema<T> {
-  safeParse(input: unknown): { success: true; data: T } | { success: false };
+  safeParse(input: unknown):
+    | { success: true; data: T }
+    | {
+        success: false;
+        error?: {
+          issues: readonly { code: string; path: readonly (string | number)[]; message: string }[];
+        };
+      };
 }
 
 /** StashBase failure bodies all carry one sentence written for the reader. */
@@ -173,9 +180,21 @@ export async function request<T, Extra extends string = never>(
     const error = new options.error(
       'invalid-response',
       messageFor(options.messages, 'invalid-response'),
-      undefined,
+      parsed.error
+        ? {
+            cause: new Error(
+              parsed.error.issues
+                .slice(0, 12)
+                .map((issue) => `${issue.path.join('.')}: ${issue.code}: ${issue.message}`)
+                .join('; '),
+            ),
+          }
+        : undefined,
     );
-    client.reportError?.(error, 'http-response');
+    client.reportError?.(error, 'http-response', {
+      method: options.method ?? 'GET',
+      route: options.path.split('?')[0] ?? options.path,
+    });
     throw error;
   }
   return parsed.data;

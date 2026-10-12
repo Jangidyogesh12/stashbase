@@ -1,3 +1,4 @@
+import type { ErrorReporter } from '@/shared/runtime/error-reporting';
 export interface HttpRequest {
   body?: unknown;
   method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -13,7 +14,7 @@ export interface HttpResponse {
 
 export interface HttpClient {
   request(request: HttpRequest): Promise<HttpResponse>;
-  reportError?: ((error: unknown, operation: string) => void) | undefined;
+  reportError?: ErrorReporter | undefined;
 }
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -21,7 +22,7 @@ type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 export function createHttpClient(
   serverOrigin: string,
   fetchRequest: Fetch = fetch,
-  reportError?: (error: unknown, operation: string) => void,
+  reportError?: ErrorReporter,
 ): HttpClient {
   const baseUrl = new URL(serverOrigin);
   return {
@@ -38,7 +39,7 @@ export function createHttpClient(
         response = await fetchRequest(new URL(path, baseUrl), init);
       } catch (error) {
         if (!signal?.aborted || signal.reason?.name === 'TimeoutError')
-          reportError?.(error, 'http-transport');
+          reportError?.(error, 'http-transport', { method, route: path.split('?')[0] ?? path });
         throw error;
       }
       let responseBody: unknown = null;

@@ -70,6 +70,7 @@ describe('AgentSessionRuntime turns', () => {
     expect(test.sent).toEqual([
       {
         kind: 'prompt',
+        telemetryTurnId: expect.any(String),
         skill: null,
         text: 'Inspect the project',
         titleHint: 'Inspect the project',
@@ -258,6 +259,11 @@ describe('AgentSessionRuntime turns', () => {
       runtime.store.getState().transcript.filter((block) => block.kind === 'user'),
     ).toHaveLength(1);
     expect(agentTurnIsActive(runtime.store.getState().connection)).toBe(true);
-    expect(test.sent.at(-1)).toEqual({ kind: 'prompt', skill: null, text: 'Keep one prompt' });
+    expect(test.sent.at(-1)).toEqual({
+      kind: 'prompt',
+      telemetryTurnId: expect.any(String),
+      skill: null,
+      text: 'Keep one prompt',
+    });
   });
 });

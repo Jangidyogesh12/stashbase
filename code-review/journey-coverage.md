@@ -108,12 +108,12 @@ Document lifecycle tests distinguish editing from reconciliation/no-change callb
 Agent usage tests cover correlation and terminal coalescing. All collection tests
 use isolated configuration and fake/local transport, never production PostHog.
 
-Error classification remains in `server/error-diagnostics.ts`; host/renderer error
+Diagnostic serialization is shared in `shared/protocols/diagnostics.ts`; host/renderer error
 adapters feed the same collector. Tests cover bounded causes/codes, unquoted private
 names, stack paths, non-JSON asset failures and HTTP response failures without
 request payloads. Diagnostic tests also cover separate warning/error severity,
 counted repeats, shutdown queueing, and account identity across a switch; the
-update bridge test covers one report per persistent error phase. Known gaps:
+updater test covers one original report across an emitted and rejected error. Known gaps:
 real PostHog person-merge/deduplication behavior has
 not been exercised with this schema, signed multi-window account changes remain a
 packaged check, and bounded delivery cannot prove all real-user activity. Silent
@@ -124,6 +124,33 @@ On 2026-10-12, `pnpm check` passed the complete source gate, including the built
 Electron smoke that drove a two-window update save, delayed install and rollback.
 That run disabled telemetry before launch and establishes updater recovery, not
 production diagnostic delivery or a packaged N→N+1 update.
+
+**Detailed diagnostics (2026-10-12):** schema 4 preserves bounded original errors,
+unknown codes, cause chains, stack frames and process output with targeted
+credential filtering. HTTP request IDs, Agent turn IDs and setup attempt/retry
+IDs connect outcomes with their failure details. Native updater, startup and
+process failures spool for later host delivery. Collector and spool tests cover
+retry/restart, original occurrence/version, opt-out, credential filtering and
+account changes; renderer tests cover bounded delivery and component/resource
+context. Production PostHog receipt and every possible provider error shape are
+not established by these controlled tests. Native startup errors require a later
+healthy host; queue/rate/expiry limits still permit loss.
+
+The built-source macOS runtime was driven through Settings and an actual
+renderer error event with isolated configuration and collection disabled. Its
+local HTTP diagnostic retained the original code, nested provider status/request
+ID and stack while filtering a fixture credential. The settled Settings surface
+was reviewed by eye. The generated MCP launcher was also run as a real subprocess
+against the built entry with host-pinned consent/spool locations: malformed JSON
+produced a protocol diagnostic and initialization still succeeded; opt-out,
+startup suppression and malformed configuration each produced no diagnostic.
+These fixtures establish the local paths, not production ingestion. The complete
+renderer gate, affected host suites, native OpenCode fixture, Electron boundaries
+and built cross-process smoke passed. Host startup/crash diagnostics additionally
+retain the final bounded 8 KB of the Electron-managed service log when the host
+collector cannot initialize.
+
+
 
 A 2026-10-09 built-source desktop pass used an isolated application/profile,
 temporary project and intercepted outbound transport. Native document editing

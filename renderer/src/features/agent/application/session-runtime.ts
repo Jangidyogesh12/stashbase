@@ -123,6 +123,7 @@ export function createAgentSessionRuntime({
     const titleHint = promptTitleHint(current, prompt);
     const sent = transport.send({
       kind: 'prompt',
+      ...usage.correlation(),
       ...attachmentFields(current.agent, prompt.context),
       skill: prompt.skill?.id ?? null,
       text: prompt.wire,
@@ -262,6 +263,7 @@ export function createAgentSessionRuntime({
       const skill = turn?.skill ?? null;
       const sent = transport.send({
         kind: 'prompt',
+        ...usage.correlation(),
         skill,
         ...attachmentFields(current.agent, turn?.context),
         text: failure.retryablePrompt,

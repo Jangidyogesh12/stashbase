@@ -5,9 +5,12 @@ import { httpClient } from '@/test/fakes/http';
 import { createErrorReporter, listenForRendererErrors } from './error-reporting';
 
 describe('renderer error reporting', () => {
-  it('reports only diagnostic fields to the local host, coalesces repeats, and contains delivery failure', async () => {
+  it('retries delivery and preserves repeated failures for host occurrence counting', async () => {
+    vi.useFakeTimers();
     const client = httpClient();
-    const request = vi.spyOn(client, 'request').mockRejectedValue(new Error('host unavailable'));
+    const request = vi
+      .spyOn(client, 'request')
+      .mockRejectedValueOnce(new Error('host unavailable'));
     const report = createErrorReporter(client);
     const error = new Error('Renderer failed');
     report(error, 'render');
@@ -22,9 +25,12 @@ describe('renderer error reporting', () => {
     });
     report(new DOMException('cancelled', 'AbortError'), 'render');
     expect(request).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(request).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
   });
 
-  it('does not stringify unknown objects and bounds large diagnostics', () => {
+  it('does not stringify unknown objects and bounds large diagnostics', async () => {
     const client = httpClient();
     const request = vi.spyOn(client, 'request');
     const report = createErrorReporter(client);
@@ -32,7 +38,11 @@ describe('renderer error reporting', () => {
     report(new Error('x'.repeat(40_000)), 'render');
     expect(JSON.stringify(request.mock.calls)).not.toContain('private input');
     expect(JSON.stringify(request.mock.calls)).not.toContain('private token');
-    expect(JSON.stringify(request.mock.calls)).not.toContain('x'.repeat(100));
+    await Promise.resolve();
+    const body = request.mock.calls[1]?.[0].body as { message: string; truncated: boolean };
+    expect(body.message).toContain('x'.repeat(100));
+    expect(body.message.length).toBeLessThanOrEqual(8000);
+    expect(body.truncated).toBe(true);
   });
 
   it('owns global error listeners and removes them on disposal', () => {
@@ -53,14 +63,17 @@ describe('renderer error reporting', () => {
   });
 });
 
-it('captures non-bubbling media errors without collecting the resource URL', () => {
+it('captures non-bubbling media errors with the failed resource location', () => {
   const report = vi.fn();
   const dispose = listenForRendererErrors(report);
   const image = document.createElement('img');
   image.src = 'file:///private/Acquisition.png';
   document.body.append(image);
   image.dispatchEvent(new Event('error', { bubbles: false }));
-  expect(report).toHaveBeenCalledWith(expect.any(Error), 'resource');
+  expect(report).toHaveBeenCalledWith(expect.any(Error), 'resource', {
+    action: 'IMG',
+    route: 'file:///private/Acquisition.png',
+  });
   expect(report.mock.calls[0]?.[0].message).not.toContain('Acquisition');
   dispose();
   image.dispatchEvent(new Event('error'));

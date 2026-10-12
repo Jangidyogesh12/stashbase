@@ -13,6 +13,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { parseTOML, getStaticTOMLValue } from 'toml-eslint-parser';
 import os from 'node:os';
 import path from 'node:path';
+import { appDataRoot } from './local-data.ts';
 import { claudeConfigPath, codexConfigPath } from './agent-config-paths.ts';
 
 const APP_ROOT = process.env.STASHBASE_APP_ROOT
@@ -90,9 +91,15 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
   const wrapper = currentMcpWrapper(homeDir);
   const resourcesPath = process.env.STASHBASE_RESOURCES_PATH || APP_ROOT;
   const isBuilt = MCP_ENTRY.endsWith(path.join('dist', 'mcp', 'server.mjs'));
+  const diagnosticEnv = {
+    STASHBASE_PACKAGED: process.env.STASHBASE_PACKAGED === '1' ? '1' : '0',
+    STASHBASE_DIAGNOSTICS_CONFIG: path.join(os.homedir(), '.stashbase', 'config.json'),
+    STASHBASE_DIAGNOSTICS_ROOT: path.join(appDataRoot(), 'native-diagnostics'),
+  };
   const content = process.platform === 'win32'
     ? [
         '@echo off',
+        ...Object.entries(diagnosticEnv).map(([key, value]) => `set "${key}=${cmdValue(value)}"`),
         `set "STASHBASE_APP_ROOT=${cmdValue(APP_ROOT)}"`,
         `set "STASHBASE_RESOURCES_PATH=${cmdValue(resourcesPath)}"`,
         ...(isBuilt
@@ -108,6 +115,7 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
     : [
         '#!/bin/sh',
         'set -eu',
+        ...Object.entries(diagnosticEnv).map(([key, value]) => `export ${key}=${shellQuote(value)}`),
         `export STASHBASE_APP_ROOT=${shellQuote(APP_ROOT)}`,
         `export STASHBASE_RESOURCES_PATH=${shellQuote(resourcesPath)}`,
         ...(isBuilt

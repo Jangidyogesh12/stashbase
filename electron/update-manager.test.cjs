@@ -314,3 +314,15 @@ test('an explicit Update click waits for a foreground check before deciding what
   assert.equal(manager.getState().phase, 'current');
   manager.dispose();
 });
+
+
+test('updater reports the original error and stage once across emit and rejection', async () => {
+  const reported = [];
+  const { manager, updater } = harness({ onDiagnostic: (error, context) => reported.push({ error, context }) });
+  const failure = Object.assign(new Error('Checksum mismatch for downloaded update'), { code: 'ERR_SHA512' });
+  updater.checkForUpdates = async () => { updater.emit('error', failure); throw failure; };
+  await manager.check();
+  assert.deepEqual(reported, [{ error: failure, context: { stage: 'checking', target_version: undefined } }]);
+  assert.equal(manager.getState().phase, 'error');
+  manager.dispose();
+});

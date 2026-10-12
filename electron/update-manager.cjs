@@ -29,6 +29,7 @@ function createUpdateManager(options) {
     afterInstallFailure = () => {},
     openReleasePage,
     onStateChange = () => {},
+    onDiagnostic = () => {},
     setTimer = setTimeout,
     clearTimer = clearTimeout,
     startupDelayMs = DEFAULT_STARTUP_DELAY_MS,
@@ -136,7 +137,12 @@ function createUpdateManager(options) {
     });
   }
 
+  const reportedErrors = new WeakSet();
   function onError(error) {
+    if (!error || typeof error !== 'object' || !reportedErrors.has(error)) {
+      if (error && typeof error === 'object') reportedErrors.add(error);
+      try { onDiagnostic(error, { stage: state.phase, target_version: state.availableVersion }); } catch { /* reporting is optional */ }
+    }
     if (state.phase === 'installing') {
       installAttempt = null;
       afterInstallFailure();

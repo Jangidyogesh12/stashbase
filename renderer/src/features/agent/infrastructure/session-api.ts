@@ -10,13 +10,12 @@ import {
   type AgentSessionPort,
 } from '@/features/agent/application/ports';
 import type { AgentAccessMode } from '@/features/agent/domain/access';
-import { passageContextItem, type AgentContextItem } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import type { AgentSkill } from '@/features/agent/domain/runtime-catalog';
 import type { AgentId, AgentScope, AgentSessionEvent } from '@/features/agent/domain/session';
 import type { AgentSessionCommand } from '@/features/agent/domain/session-command';
-import type { AgentTranscriptBlock } from '@/features/agent/domain/session-transcript';
 import { toModel } from '@/features/agent/infrastructure/model-wire';
+import { replayedBlock } from '@/features/agent/infrastructure/session-replay';
 import { request as httpRequest, type TransportRequest } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
@@ -27,7 +26,6 @@ import {
   agentSessionRenameRequestSchema,
   agentSessionReplaySchema,
   type AgentSessionInfoWire,
-  type AgentSessionBlockWire,
 } from '@/protocols/http/agent-sessions';
 import {
   agentClientEventSchema,
@@ -41,9 +39,15 @@ import {
 
 interface SocketLike {
   readonly readyState: number;
-  addEventListener(type: 'close', listener: () => void): void;
+  addEventListener(
+    type: 'close',
+    listener: (event?: Pick<CloseEvent, 'code' | 'reason' | 'wasClean'>) => void,
+  ): void;
   addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
-  removeEventListener(type: 'close', listener: () => void): void;
+  removeEventListener(
+    type: 'close',
+    listener: (event?: Pick<CloseEvent, 'code' | 'reason' | 'wasClean'>) => void,
+  ): void;
   removeEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
   close(): void;
   send(data: string): void;
@@ -108,6 +112,7 @@ function clientEvent(command: AgentSessionCommand): AgentClientEvent {
       return {
         ...(command.attachments?.length ? { attachments: command.attachments } : {}),
         t: 'prompt',
+        ...(command.telemetryTurnId ? { telemetryTurnId: command.telemetryTurnId } : {}),
         text: command.text,
         ...(command.titleHint ? { titleHint: command.titleHint } : {}),
         ...(command.skill === null ? {} : { skill: command.skill }),
@@ -206,49 +211,6 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
   }
 }
 
-/** One session-history call. The service names its own refusal, so that
- *  sentence is what the reader sees. */
-/** One replayed block in the feature's terms. Image previews are server
- *  routes, absolutized here where the origin is known. A turn that carried a
- *  selected passage replays as bound context, so its passage reads as the
- *  chip it was sent as; a quote outside the chat's folder stays an upload. */
-function replayedBlock(
-  block: AgentSessionBlockWire,
-  scope: AgentScope,
-  serverOrigin: string,
-): AgentTranscriptBlock {
-  if (block.kind !== 'user' || !block.attachments) return block;
-  const attachments = block.attachments.map(({ quote, ...attachment }) => ({
-    attachment: attachment.previewUrl
-      ? { ...attachment, previewUrl: new URL(attachment.previewUrl, serverOrigin).href }
-      : attachment,
-    quote,
-  }));
-  if (!attachments.some(({ quote }) => quote !== undefined))
-    return { ...block, attachments: attachments.map(({ attachment }) => attachment) };
-  const folder = `${scope.path}/`;
-  const context = attachments.map(({ attachment, quote }): AgentContextItem => {
-    const passage =
-      quote !== undefined && attachment.path.startsWith(folder)
-        ? passageContextItem(
-            { folderPath: scope.path, path: attachment.path.slice(folder.length) },
-            quote,
-          )
-        : null;
-    return (
-      passage ?? {
-        dims: attachment.dims,
-        kind: 'transient',
-        name: attachment.name,
-        path: attachment.path,
-        previewUrl: attachment.previewUrl,
-      }
-    );
-  });
-  const { attachments: _replayed, ...rest } = block;
-  return { ...rest, context };
-}
-
 function history(path: string, signal: AbortSignal, invalid: string): TransportRequest {
   return {
     error: AgentSessionError,
@@ -309,8 +271,11 @@ export function createAgentSessionAdapter(
         // error surface without closing a valid native stream as a wire failure.
         if (event) listener.onEvent(event);
       };
-      const onClose = () => {
-        if (!settledByServer) connectionError('Agent connection closed unexpectedly.');
+      const onClose = (event?: Pick<CloseEvent, 'code' | 'reason' | 'wasClean'>) => {
+        if (!settledByServer)
+          connectionError(
+            `Agent connection closed unexpectedly (code ${event?.code ?? 'unknown'}, clean ${event?.wasClean ?? false}): ${event?.reason ?? ''}`,
+          );
         listener.onClose();
       };
       socket.addEventListener('message', onMessage);

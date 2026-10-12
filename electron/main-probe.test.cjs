@@ -280,3 +280,21 @@ test('Electron does not delay a responsive incompatible service', async () => {
   assert.equal(probes, 1);
   assert.equal(waits, 0);
 });
+
+
+test('host startup diagnostics retain a bounded log tail and tolerate unavailable logs', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { readServerLogTail } = require('./main-probe.cjs');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-host-log-'));
+  const file = path.join(directory, 'server.log');
+  try {
+    fs.writeFileSync(file, 'x'.repeat(20000) + '\nError: missing startup module\n at bootstrap:10:4');
+    const tail = readServerLogTail(file);
+    assert.ok(Buffer.byteLength(tail) <= 8000);
+    assert.match(tail, /missing startup module/);
+    assert.match(tail, /bootstrap:10:4$/);
+    assert.equal(readServerLogTail(path.join(directory, 'absent')), undefined);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});

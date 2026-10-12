@@ -515,8 +515,9 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   authority to choose an identity or report authentication/billing outcomes.
 - The fixed event schema and persisted-envelope validator are the outbound
   boundary. Only versioned typed facts are queued; transport constructs metadata
-  explicitly and re-redacts diagnostics. No source identities, input contents,
-  arbitrary event properties, credentials, raw logs or replay enter the queue.
+  explicitly and filters credential patterns in diagnostics again before sending.
+  Diagnostic messages, paths, causes, stacks and bounded process output are retained;
+  arbitrary request/provider objects, documents, prompts and whole logs are excluded.
   The public ingestion token is build configuration, not a user credential.
 - Queue envelopes preserve UUID, occurrence time, installation, anonymous/account
   identity and source version through retry/restart. Identity links share durable
@@ -541,15 +542,25 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   manual packaged tests use the override; collection tests replace transport and
   never send to production PostHog.
 - Automatic diagnostics use this same owner, suppression and opt-out. Node emits
-  controlled summaries, known codes and stack line/column locations. HTTP, Agent,
+  bounded original messages, unknown as well as known codes, nested causes and
+  actionable stacks through `shared/protocols/diagnostics.ts`. HTTP request IDs and
+  method/route context connect failed results with their diagnostic. Agent turns
+  carry the renderer turn ID and initiating identity; setup stages share attempt
+  and retry IDs. Background diagnostics retain the operation sentence. HTTP, Agent,
   background and renderer failures converge here without throwing into operations,
   recursively reporting analytics failures, or creating another privacy setting.
+  Native startup, crash, MCP stdio and updater errors use the bounded private
+  `server/native-diagnostics.ts` spool when the host is unavailable. Native code
+  never creates analytics identity or sends network requests. The host drains it
+  with original UUID/time/version and captured identity, and opt-out clears it.
+  An unowned first-launch failure cannot transfer to a later account. The updater
+  records the original error in main before projecting its renderer snapshot.
 - Host log level is the reported severity. `log.error` means an operation failed
   for the user or data may be inconsistent; `log.warn` means it degraded and
   continued; an expected state (no embedding key, a size limit the UI states,
   cancellation, intentional daemon retirement) is `log.info` and is not reported.
   Pass the caught error as its own argument rather than interpolating its message,
-  so the reported cause is the error, not the log sentence. HTTP 4xx responses are
+  so the original cause and the surrounding operation both survive. HTTP 4xx responses are
   warnings and 5xx are errors.
 - [Usage statistics](../docs/usage-statistics.md) owns event interpretation,
   retention definitions, IP-retention setup and delivery limits. An absent event
