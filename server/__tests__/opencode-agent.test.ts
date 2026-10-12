@@ -20,7 +20,7 @@ import type { HostedAgentTurnModel } from '../hosted-agent-broker.ts';
 import type { HostedAgentProfile } from '../hosted-agent-models.ts';
 import type { AgentAccessMode } from '../../shared/agent-runtime.ts';
 
-function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart = true, abortFailure = false) {
+function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart = true, abortFailure = false, diagnostic?: () => unknown) {
   const ws = new FakeWebSocket();
   const feed = new EventEmitter();
   const prompts: Array<{ agent: string }> = [];
@@ -48,6 +48,7 @@ function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart
       } as never;
     },
     models: async () => [],
+    ...(diagnostic ? { diagnostic } : {}),
     beginTurn: () => {}, endTurn: () => {}, onExit: () => () => {}, close: async () => {},
   });
   return { ws, feed, session, prompts, replies,
@@ -803,4 +804,33 @@ test('OpenCode config lists one model per hosted profile with its own limits', (
   const legacy = buildOpenCodeConfig({ apiKey: 'k', baseUrl: 'http://127.0.0.1:1/v1', model: 'stashbase-agent-default' }, '/mcp');
   assert.equal(legacy.model, 'stashbase/stashbase-agent-default');
   assert.deepEqual(Object.keys(legacy.provider!.stashbase!.models!), ['stashbase-agent-default']);
+});
+
+
+test('unknown model completion retains native finish evidence and the upstream stream failure on its turn', async (t) => {
+  const { telemetry } = await import('../telemetry.ts');
+  const captured: any[] = [];
+  t.mock.method(telemetry, 'scoped', () => (event: unknown) => captured.push(event));
+  const h = modeHarness('default', '/workspace', true, false, () => ({
+    message: 'Model stream: done=false, finish_reason=missing', request_id: 'gateway-request-42',
+    cause: Object.assign(new Error('terminated'), { code: 'UND_ERR_SOCKET' }),
+  }));
+  t.after(() => h.session.dispose());
+  await settle();
+  const turnId = '3b909c21-964f-4b12-a8f3-0d53131263ac';
+  h.send({ t: 'prompt', text: 'PRIVATE PROMPT', telemetryTurnId: turnId });
+  await settle();
+  h.feed.emit('event', { type: 'message.part.updated', properties: { part: {
+    id: 'finish-42', sessionID: 'mode-session', messageID: 'message-42', type: 'step-finish',
+    reason: 'unknown', tokens: { input: 12, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, cost: 0,
+  } } });
+  h.feed.emit('event', { type: 'session.idle', properties: { sessionID: 'mode-session' } });
+  await settle();
+  const failure = captured.find(event => event.event === 'application_error');
+  assert.equal(failure.turn_id, turnId);
+  assert.match(JSON.stringify(failure.diagnostic), /message-42/);
+  assert.match(JSON.stringify(failure.diagnostic), /unknown/);
+  assert.match(JSON.stringify(failure.diagnostic), /gateway-request-42/);
+  assert.match(JSON.stringify(failure.diagnostic), /UND_ERR_SOCKET/);
+  assert.doesNotMatch(JSON.stringify(failure.diagnostic), /PRIVATE PROMPT/);
 });

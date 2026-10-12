@@ -8,6 +8,7 @@ export interface HttpRequest {
 
 export interface HttpResponse {
   body: unknown;
+  bodyError?: unknown;
   headers?: Readonly<Record<string, string>>;
   status: number;
 }
@@ -43,18 +44,32 @@ export function createHttpClient(
         throw error;
       }
       let responseBody: unknown = null;
-      try {
-        responseBody = await response.json();
-      } catch {
-        // The protocol adapter classifies an absent or malformed JSON body.
+      let bodyError: unknown;
+      if (method !== 'HEAD' && response.status !== 204 && response.status !== 205) {
+        try {
+          responseBody = await response.json();
+        } catch (error) {
+          if (signal?.aborted && signal.reason?.name !== 'TimeoutError') throw signal.reason;
+          bodyError = error;
+          reportError?.(
+            Object.assign(new Error('Could not read the HTTP response as JSON', { cause: error }), {
+              code: 'HTTP_RESPONSE_BODY_FAILED',
+              status: response.status,
+              request_id: response.headers.get('x-request-id') ?? undefined,
+              content_type: response.headers.get('content-type') ?? undefined,
+            }),
+            'http-response',
+            { method, route: path.split('?')[0] ?? path },
+          );
+          if (signal?.aborted) throw signal.reason;
+        }
       }
-      return method === 'HEAD'
-        ? {
-            body: responseBody,
-            headers: Object.fromEntries(response.headers.entries()),
-            status: response.status,
-          }
-        : { body: responseBody, status: response.status };
+      return {
+        body: responseBody,
+        ...(bodyError === undefined ? {} : { bodyError }),
+        headers: Object.fromEntries(response.headers.entries()),
+        status: response.status,
+      };
     },
   };
 }

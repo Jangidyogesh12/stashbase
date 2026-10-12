@@ -180,21 +180,32 @@ export async function request<T, Extra extends string = never>(
     const error = new options.error(
       'invalid-response',
       messageFor(options.messages, 'invalid-response'),
-      parsed.error
-        ? {
-            cause: new Error(
-              parsed.error.issues
-                .slice(0, 12)
-                .map((issue) => `${issue.path.join('.')}: ${issue.code}: ${issue.message}`)
-                .join('; '),
-            ),
-          }
-        : undefined,
+      response.bodyError !== undefined
+        ? { cause: response.bodyError }
+        : parsed.error
+          ? {
+              cause: new Error(
+                parsed.error.issues
+                  .slice(0, 12)
+                  .map((issue) => `${issue.path.join('.')}: ${issue.code}: ${issue.message}`)
+                  .join('; '),
+              ),
+            }
+          : undefined,
     );
-    client.reportError?.(error, 'http-response', {
-      method: options.method ?? 'GET',
-      route: options.path.split('?')[0] ?? options.path,
-    });
+    if (response.bodyError === undefined)
+      client.reportError?.(
+        Object.assign(error, {
+          status: response.status,
+          request_id: response.headers?.['x-request-id'],
+          content_type: response.headers?.['content-type'],
+        }),
+        'http-response',
+        {
+          method: options.method ?? 'GET',
+          route: options.path.split('?')[0] ?? options.path,
+        },
+      );
     throw error;
   }
   return parsed.data;

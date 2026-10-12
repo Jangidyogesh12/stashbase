@@ -27,6 +27,7 @@ import { appDataRoot } from './local-data.ts';
 import { logger } from './log.ts';
 import {
   hostedAgentRuntime,
+  hostedAgentDiagnostic,
   beginHostedAgentTurn,
   endHostedAgentTurn,
   releaseHostedAgentChannel,
@@ -460,6 +461,7 @@ export interface OpenCodeSessionRuntime {
   client(directory: string): Promise<OpencodeClient>;
   beginTurn(turnId: string, model?: HostedAgentTurnModel): void;
   endTurn(): void;
+  diagnostic?(): unknown;
   onExit(listener: (error: Error) => void): () => void;
   close(): Promise<void>;
 }
@@ -486,6 +488,7 @@ export function createOpenCodeSessionRuntime(
     client: (directory) => sessionRuntime.client(directory),
     beginTurn: (turnId, model) => beginHostedAgentTurn(context.agentSessionId, turnId, model),
     endTurn: () => endHostedAgentTurn(context.agentSessionId),
+    diagnostic: () => hostedAgentDiagnostic(context.agentSessionId),
     onExit: (listener) => sessionRuntime.onExit(listener),
     close: () => sessionRuntime.close(),
   };

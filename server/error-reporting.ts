@@ -25,6 +25,7 @@ export function httpErrorReporting(service = telemetry): RequestHandler {
     const feature = asset ?? req.path.split('/')[2] ?? '';
     if ((!asset && !req.path.startsWith('/api/')) || feature === 'telemetry' || feature === 'log') { next(); return; }
     const scope = { request_id: randomUUID(), context: { method: req.method, route: req.path } };
+    res.setHeader('x-request-id', scope.request_id);
     // Asset/HEAD/stream handlers can finish without JSON; preserve their body
     // and status while recording the same bounded operation/status once.
     res.once('finish', () => {

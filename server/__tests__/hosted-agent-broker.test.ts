@@ -408,3 +408,66 @@ test('hosted broker adapts inline PDFs without changing image bytes, text, tools
   await response.text();
   assert.deepEqual(forwarded, { messages: [{ role: 'user', content: [text, image, file, { type: 'image_url', image_url: { url: pdf } }] }, tool], stream: true });
 });
+
+
+for (const [label, suffix, expected] of [
+  ['unknown finish', 'data: {"choices":[{"delta":{},"finish_reason":"unknown"}]}\n\ndata: [DONE]\n\n', /"finish_reasons":\["unknown"\]/],
+  ['stream error', 'data: {"error":{"code":"provider_overloaded","message":"Upstream overloaded token=fixture-secret"}}\n\n', /provider_overloaded/],
+  ['malformed frame', 'data: {broken\n\n', /"malformed_frames":1/],
+] as const) {
+  test(`broker retains ${label} evidence and request identity without capturing conversation content`, async (t) => {
+    const wire = 'data: {"choices":[{"delta":{"content":"PRIVATE MODEL OUTPUT"}}]}\n\n' + suffix;
+    const broker = new HostedAgentBroker({
+      accessToken: async () => 'private-account-token',
+      fetch: async () => new Response(wire, { headers: {
+        'content-type': 'text/event-stream', 'x-request-id': 'provider-request-42',
+      } }),
+      upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+    });
+    await broker.start();
+    t.after(() => broker.close());
+    const runtime = broker.runtime('diagnostic-session')!;
+    broker.beginTurn('diagnostic-session', '00000000-0000-4000-8000-000000000011');
+    const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+      method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'PRIVATE PROMPT' }], stream: true }),
+    });
+    assert.equal(await response.text(), wire, 'observation must not change model output');
+    const diagnostic = broker.diagnostic('diagnostic-session')!;
+    assert.equal(diagnostic.http_status, 200);
+    assert.equal(diagnostic.request_id, 'provider-request-42');
+    assert.match(diagnostic.message + JSON.stringify(diagnostic.causes), expected);
+    assert.doesNotMatch(JSON.stringify(diagnostic), /PRIVATE|fixture-secret|private-account-token/);
+    assert.equal(broker.diagnostic('other-session'), undefined);
+    broker.beginTurn('diagnostic-session', '00000000-0000-4000-8000-000000000012');
+    assert.equal(broker.diagnostic('diagnostic-session'), undefined, 'new turns cannot inherit an earlier failure');
+  });
+}
+
+test('broker retains the original socket cause when an already-streaming model response fails', async (t) => {
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture',
+    fetch: async () => new Response(new ReadableStream<Uint8Array>({ start(value) { controller = value; } }), {
+      headers: { 'content-type': 'text/event-stream', 'x-request-id': 'broken-stream-42' },
+    }),
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const runtime = broker.runtime('broken-stream')!;
+  broker.beginTurn('broken-stream', '00000000-0000-4000-8000-000000000011');
+  const pending = fetch(`${runtime.baseUrl}/chat/completions`, {
+    method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` }, body: '{}',
+  });
+  while (!controller!) await new Promise(resolve => setImmediate(resolve));
+  controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'));
+  const response = await pending;
+  const reading = assert.rejects(response.text());
+  controller.error(Object.assign(new Error('upstream socket reset'), { code: 'ECONNRESET' }));
+  await reading;
+  const diagnostic = broker.diagnostic('broken-stream')!;
+  assert.equal(diagnostic.request_id, 'broken-stream-42');
+  assert.match(JSON.stringify(diagnostic.causes), /ECONNRESET/);
+  assert.match(diagnostic.message, /"stream_ended":false/);
+});

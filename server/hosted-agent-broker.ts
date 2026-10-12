@@ -18,6 +18,7 @@ import {
 } from './hosted-account.ts';
 import { DEFAULT_HOSTED_AGENT_PROFILE } from './hosted-agent-models.ts';
 import { logger } from './log.ts';
+import { HostedAgentRequestDiagnostic } from './hosted-agent-diagnostics.ts';
 
 const log = logger('hosted-agent-broker');
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
@@ -192,6 +193,7 @@ export class HostedAgentBroker {
     turnId: string | null;
     turnAbort: AbortController;
     model: HostedAgentTurnModel;
+    diagnostic?: HostedAgentRequestDiagnostic;
   }>();
   private readonly channelBySession = new Map<string, string>();
 
@@ -281,7 +283,13 @@ export class HostedAgentBroker {
     channel.turnAbort.abort();
     channel.turnAbort = new AbortController();
     channel.turnId = turnId;
+    delete channel.diagnostic;
     channel.model = { ...model };
+  }
+
+  diagnostic(agentSessionId: string) {
+    const key = this.channelBySession.get(agentSessionId);
+    return key ? this.channels.get(key)?.diagnostic?.snapshot() : undefined;
   }
 
   endTurn(agentSessionId: string): void {
@@ -341,6 +349,8 @@ export class HostedAgentBroker {
     const turnId = channel.turnId;
     const model = channel.model;
 
+    let diagnostic: HostedAgentRequestDiagnostic | undefined;
+    let attempt = 0;
     const abort = new AbortController();
     const signal = AbortSignal.any([abort.signal, channel.turnAbort.signal]);
     const retire = () => response.destroy();
@@ -356,9 +366,11 @@ export class HostedAgentBroker {
 
       const call = async (forceRefresh: boolean) => {
         signal.throwIfAborted();
+        diagnostic = new HostedAgentRequestDiagnostic(idempotencyKey, ++attempt);
+        channel.diagnostic = diagnostic;
         const token = await this.dependencies.accessToken({ forceRefresh });
         signal.throwIfAborted();
-        return this.dependencies.fetch(this.dependencies.upstreamUrl, {
+        const upstream = await this.dependencies.fetch(this.dependencies.upstreamUrl, {
           method: 'POST',
           headers: {
             authorization: `Bearer ${token}`,
@@ -373,6 +385,7 @@ export class HostedAgentBroker {
           body,
           signal,
         });
+        return diagnostic.response(upstream);
       };
 
       const authenticatedCall = async () => {
@@ -401,6 +414,7 @@ export class HostedAgentBroker {
         const nested = payload?.error;
         const upstreamMessage = nested?.message ?? payload?.message ?? `The Agent gateway failed (HTTP ${upstream.status}).`;
         const upstreamCode = nested?.code ?? payload?.code;
+        diagnostic?.fail({ message: upstreamMessage, code: upstreamCode, status: upstream.status });
         const modelRefusal = upstreamCode ? MODEL_REFUSALS[upstreamCode] : undefined;
         if (modelRefusal) {
           writeJson(response, 422, { error: { message: modelRefusal, type: 'stashbase_hosted_error', code: upstreamCode } });
@@ -437,6 +451,11 @@ export class HostedAgentBroker {
         'cache-control': 'no-store',
       });
       await pipeline(stream, response, { signal });
+    } catch (error) {
+      // Keep the original socket/decoder cause before the native SDK reduces it
+      // to an unknown finish. The request owns this trace across turn changes.
+      if (!signal.aborted) diagnostic?.fail(error);
+      throw error;
     } finally {
       signal.removeEventListener('abort', retire);
     }
@@ -450,5 +469,6 @@ export const stopHostedAgentBroker = (): Promise<void> => broker.close();
 export const hostedAgentRuntime = (agentSessionId?: string) => broker.runtime(agentSessionId);
 export const beginHostedAgentTurn = (agentSessionId: string, turnId: string, model?: HostedAgentTurnModel) =>
   broker.beginTurn(agentSessionId, turnId, model);
+export const hostedAgentDiagnostic = (agentSessionId: string) => broker.diagnostic(agentSessionId);
 export const endHostedAgentTurn = (agentSessionId: string) => broker.endTurn(agentSessionId);
 export const releaseHostedAgentChannel = (agentSessionId: string) => broker.releaseChannel(agentSessionId);

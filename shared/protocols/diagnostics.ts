@@ -5,9 +5,10 @@ const fields = {
   name: z.string().max(120).optional(),
   code: z.string().max(160).optional(),
   stack: z.string().max(16_000).optional(),
-  http_status: z.number().int().min(400).max(599).optional(),
+  http_status: z.number().int().min(100).max(599).optional(),
   exit_code: z.number().int().optional(),
   request_id: z.string().max(200).optional(),
+  content_type: z.string().max(200).optional(),
   signal: z.string().max(80).optional(),
   stdout: z.string().max(8_000).optional(),
   stderr: z.string().max(8_000).optional(),
@@ -58,7 +59,7 @@ export function errorDiagnostic(error: unknown): ErrorDiagnostic {
       const result: Omit<ErrorDiagnostic, 'causes' | 'truncated'> = { message };
       for (const [key, limit, raw] of [
         ['name', 120, record.name], ['code', 160, record.code], ['stack', 16_000, record.stack],
-        ['request_id', 200, record.request_id ?? record.requestId], ['signal', 80, record.signal],
+        ['content_type', 200, record.content_type], ['request_id', 200, record.request_id ?? record.requestId], ['signal', 80, record.signal],
         ['stdout', 8_000, record.stdout], ['stderr', 8_000, record.stderr], ['response_body', 8_000, record.response_body],
         ['component_stack', 8_000, record.component_stack ?? record.componentStack],
       ] as const) {
@@ -66,7 +67,7 @@ export function errorDiagnostic(error: unknown): ErrorDiagnostic {
         if (captured !== undefined) result[key] = captured;
       }
       const status = integer(record.http_status ?? record.status ?? record.statusCode);
-      if (status !== undefined && status >= 400 && status <= 599) result.http_status = status;
+      if (status !== undefined && status >= 100 && status <= 599) result.http_status = status;
       const exit = integer(record.exit_code ?? record.exitCode);
       if (exit !== undefined) result.exit_code = exit;
       return result;

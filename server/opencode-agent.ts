@@ -120,6 +120,7 @@ export class OpenCodeEventTranslator {
   private turnActive = false;
   private nativeTurnStarted = false;
   private lastFinishReason: string | undefined;
+  private completion: Record<string, string | number> = {};
   private turnNumber = 0;
   private readonly messageTurns = new Map<string, number>();
   private readonly content = new Map<string, string>();
@@ -140,10 +141,20 @@ export class OpenCodeEventTranslator {
     this.turnNumber++;
     this.nativeTurnStarted = false;
     this.lastFinishReason = undefined;
+    this.completion = {};
     this.diffs.clear();
     return [{ t: 'turn-start' }];
   }
   isTurnActive(): boolean { return this.turnActive; }
+  diagnostic(cause?: unknown): unknown {
+    return { name: 'OpenCodeTurn', code: 'OPENCODE_TURN_FAILURE',
+      message: `Native model completion: ${JSON.stringify(this.completion)}`, cause };
+  }
+  private recordCompletion(messageId: string, finish: string, tokens: { input: number; output: number; reasoning: number }): void {
+    this.lastFinishReason = finish;
+    this.completion = { message_id: messageId, finish_reason: finish,
+      input_tokens: tokens.input, output_tokens: tokens.output, reasoning_tokens: tokens.reasoning };
+  }
   endTurnWithError(): AgentServerEvent[] { return this.finishTurn(true); }
   endTurnAfterInterrupt(): AgentServerEvent[] { return this.finishTurn(false, true); }
 
@@ -189,7 +200,7 @@ export class OpenCodeEventTranslator {
         if (!this.messageTurns.has(info.id)) this.messageTurns.set(info.id, this.turnNumber);
         if (info.role === 'user') this.userMessages.add(info.id);
         if (info.role !== 'assistant' || !this.turnActive || this.messageTurns.get(info.id) !== this.turnNumber) return [];
-        if (this.turnActive && info.finish) this.lastFinishReason = info.finish;
+        if (info.finish) this.recordCompletion(info.id, info.finish, info.tokens);
         if (!info.error) return [];
         const message = 'data' in info.error && typeof info.error.data?.message === 'string'
           ? info.error.data.message
@@ -245,7 +256,7 @@ export class OpenCodeEventTranslator {
     if (!this.matches(part.sessionID) || this.userMessages.has(part.messageID)) return [];
     if (!this.messageTurns.has(part.messageID)) this.messageTurns.set(part.messageID, this.turnNumber);
     if (this.messageTurns.get(part.messageID) !== this.turnNumber) return [];
-    if (part.type === 'step-finish' && this.turnActive) this.lastFinishReason = part.reason;
+    if (part.type === 'step-finish' && this.turnActive) this.recordCompletion(part.messageID, part.reason, part.tokens);
     if (part.type === 'text' || part.type === 'reasoning') {
       const previous = this.content.get(part.id) ?? '';
       const next = part.text;
@@ -501,7 +512,10 @@ export class OpenCodePanelSession {
           }
           const nativeError = event.type === 'session.error' ? event.properties.error
             : event.type === 'message.updated' && event.properties.info.role === 'assistant' ? event.properties.info.error : undefined;
-          send(this.ws, item, item.t === 'error' ? providerErrorDiagnostic(nativeError) : undefined);
+          const cause = item.t === 'error' ? this.translator.diagnostic(this.runtime.diagnostic?.()) : undefined;
+          send(this.ws, item, nativeError
+            ? { ...providerErrorDiagnostic(nativeError) as object, cause }
+            : cause);
           if (item.t === 'tool') {
             for (const permission of this.waitingToolPermissions.values()) {
               if (permission.toolUseId !== item.id) continue;
