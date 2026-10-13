@@ -101,6 +101,7 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
     const renderMenuItem = useCallback(
       ({
         radio,
+        toggle,
         value,
         disabled,
         closeOnClick,
@@ -108,7 +109,17 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
         element,
         children: itemChildren,
       }: MenuItemRenderOptions) =>
-        radio ? (
+        toggle ? (
+          <Menu.CheckboxItem
+            checked={toggle.on}
+            closeOnClick={closeOnClick}
+            disabled={disabled}
+            label={label}
+            render={element}
+          >
+            {itemChildren}
+          </Menu.CheckboxItem>
+        ) : radio ? (
           <Menu.RadioItem
             closeOnClick={closeOnClick}
             disabled={disabled}

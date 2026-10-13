@@ -26,6 +26,9 @@ import type { DomOrderRegistry } from '@/lib/use-dom-order-registry';
 export interface MenuItemRenderOptions {
   /** Radio-style option (boolean `checked` on MenuItem) vs plain action item. */
   radio: boolean;
+  /** A toggle row (boolean `switched` on MenuItem), and whether it is on. A
+   *  row is a radio or a toggle, never both. */
+  toggle?: { readonly on: boolean } | undefined;
   /** The item's index — doubles as the radio value. */
   value: number;
   disabled?: boolean | undefined;
