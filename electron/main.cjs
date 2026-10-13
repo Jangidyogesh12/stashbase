@@ -870,7 +870,7 @@ async function createWindow() {
     // place the folder identity is spelled out.
     title: 'StashBase',
     backgroundColor: windowBackgroundColor(),
-    ...applicationWindowChromeOptions(process.platform),
+    ...applicationWindowChromeOptions(),
     webPreferences: applicationWindowWebPreferences({
       preloadPath: path.join(PROJECT_ROOT, 'dist', 'electron', 'renderer', 'preload.cjs'),
       additionalArguments: [

@@ -293,6 +293,10 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 
 **Status:** Partial and release-dependent.
 
+- **Linux project entry (2026-10-13):** Main windows now keep the native menu
+  visible on Linux, exposing File → New Window from an occupied project. The
+  Electron menu contract covers this chrome option and the New Window action;
+  a packaged Linux desktop check remains needed to confirm the painted menu.
 - **Contract Test:** `pnpm test:renderer`, `pnpm test:server`, and `pnpm test:electron` cover asynchronous
   open/commit, cancellation, GitHub staging/publication rollback, project
   retirement, retained nested projects and preparation, and distinct path

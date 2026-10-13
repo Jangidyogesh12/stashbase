@@ -30,10 +30,8 @@ const { registerWindowLifecycle } = require('../dist/electron/window/lifecycle.c
 const { createWindowLifecycleUpdateBarrier } = require('./update-window-barrier.cjs');
 const { createUpdateManager } = require('./update-manager.cjs');
 
-test('Linux main windows auto-hide the native application menu bar', () => {
-  assert.equal(applicationWindowChromeOptions('linux').autoHideMenuBar, true);
-  assert.equal(applicationWindowChromeOptions('win32').autoHideMenuBar, false);
-  assert.equal(applicationWindowChromeOptions('darwin').autoHideMenuBar, false);
+test('main windows keep the native File menu visible on Linux', () => {
+  assert.equal(applicationWindowChromeOptions().autoHideMenuBar, false);
 });
 
 test('smoke runner terminates and rejects a hung Electron child', async () => {
