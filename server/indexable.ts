@@ -127,10 +127,6 @@ export function isRetrievalEligiblePath(relPath: string): boolean {
   return !dipsIntoIndexExcludedDir(relPath);
 }
 
-export function shouldIndexSourcePath(sourcePath: string): boolean {
-  return shouldIndexFilePath(sourcePath);
-}
-
 export function indexableFileSizeError(absPath: string): string | null {
   let st: fs.Stats;
   try { st = fs.statSync(absPath); } catch { return 'file is not readable'; }

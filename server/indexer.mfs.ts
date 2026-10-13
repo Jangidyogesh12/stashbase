@@ -16,7 +16,7 @@
  */
 import { analyzeHtml } from './html.ts';
 import { detectFormat } from './format.ts';
-import { contentSizeError, shouldIndexSourcePath } from './indexable.ts';
+import { contentSizeError, shouldIndexFilePath } from './indexable.ts';
 import { logger } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { filesystemPath } from './filesystem-path.ts';
@@ -110,6 +110,22 @@ function grepSnippet(match: DaemonGrepMatch): DaemonGrepMatch {
 
 export class MfsIndexer implements Indexer {
   private loggedBindings = new Map<string, string>();
+  /** Apply source exclusions inside the owning Folder, never to its absolute
+   * path: cloud providers may place a project beneath a dot-directory. */
+  private sourceRelativePath(sourcePath: string): string {
+    let owner: string | null = null;
+    let relative: string | null = null;
+    for (const folder of getDaemon().knownBindings().keys()) {
+      const candidate = filesystemPath.relative(folder, sourcePath);
+      if (candidate === null) continue;
+      if (owner === null || filesystemPath.identity(folder).length > filesystemPath.identity(owner).length) {
+        owner = folder;
+        relative = candidate;
+      }
+    }
+    if (relative === null) throw new Error(`path is not under a bound Folder: ${sourcePath}`);
+    return relative;
+  }
   /** Cleanup for a Folder that was never bound cannot have an MFS row to
    * remove. Avoid spawning the daemon only to turn that idempotent case into
    * a binding error. */
@@ -149,7 +165,7 @@ export class MfsIndexer implements Indexer {
   }
 
   async upsertFile(filePath: string, content: string, options?: { waitForIndex?: boolean }): Promise<IndexUpsertResult> {
-    if (!shouldIndexSourcePath(filePath)) {
+    if (!shouldIndexFilePath(this.sourceRelativePath(filePath))) {
       await getDaemon().call('delete', {
         path: normalizeDaemonPath(filePath),
         path_identity: filesystemPath.identity(filePath),

@@ -721,6 +721,15 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 **Status:** Partial.
 
+- **Cloud parent path fix (2026-10-14):** `MfsIndexer` now checks direct-text
+  eligibility against the owning bound folder instead of the absolute source
+  path. `semantic-index-inputs.test.ts` covers a project beneath Google Drive's
+  `.shortcut-targets-by-id` pattern, project-internal hidden exclusions, and
+  a separately bound nested project. An isolated real-daemon reconcile admitted
+  the visible Markdown, reported an index total of one, and found its `ReplaySSM`
+  keyword. An isolated built-service HTTP pass opened the project, synced it,
+  reported a total of one, and returned one keyword match. The affected user's
+  90-file project and packaged UI remain unverified.
 - **Contract Test:** `pnpm test:server`, `pnpm test:python`, and the scoped
   project/config/renderer suites cover exact filtering, hybrid mechanics,
   current-source mapping, namespace isolation including nested projects,

@@ -10,6 +10,9 @@ an empty project and a conversation without references are valid.
 
 - Keep original sources authoritative. Extracted text and indexes stay hidden;
   Agent-written documents remain ordinary project files.
+- Apply search and preparation exclusions within the selected project. A project
+  remains searchable when its parent path is hidden, including a cloud drive's
+  internal mount path; hidden directories inside the project stay excluded.
 - Publish only complete, current preparation output. Partial, stale, cancelled,
   or orphaned output cannot serve as evidence. Empty OCR output is a valid
   non-searchable result. The [format matrix](project-files.md#format-capability-matrix)

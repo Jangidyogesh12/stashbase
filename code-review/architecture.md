@@ -192,7 +192,10 @@ source URL and installed package version.
 - Reconcile is folder-explicit and rediscovers lost in-memory work. Boot binds
   every registered folder and reconciles none; a folder reconciles when a window
   opens it, offering sources in bounded batches that yield the shared event loop.
-  Apply common hidden/dependency exclusions before traversal and mutation-triggered scheduling.
+  Apply common hidden/dependency exclusions to paths relative to the owning
+  registered folder before traversal and mutation-triggered scheduling. The
+  MFS adapter repeats that check against its longest bound folder; ancestors
+  outside the project must not affect eligibility.
   An incomplete directory scan fails reconciliation before unseen projections can
   be removed. Queuing invalidates stale final output; source removal retires all
   owned artifacts.
