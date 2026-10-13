@@ -158,7 +158,13 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
         models: event.models.map(toModel),
       };
     case 'tool':
-      return { id: event.id, input: event.input, kind: 'tool-started', name: event.name };
+      return {
+        id: event.id,
+        input: event.input,
+        kind: 'tool-started',
+        name: event.name,
+        ...(event.crew ? { crew: event.crew } : {}),
+      };
     case 'tool-delta':
       return { delta: event.delta, id: event.id, kind: 'tool-output' };
     case 'tool-result':
@@ -229,6 +235,7 @@ function socketUrl(serverOrigin: string, request: AgentConnectRequest): string {
     effort: request.effort,
     model: request.model,
     persona: request.persona,
+    crew: request.crew,
     resume: request.resume,
     folder: request.scope.path,
   });

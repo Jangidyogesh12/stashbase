@@ -84,6 +84,8 @@ export interface AgentConnectionOptions {
   folder?: string;
   /** The library persona this Chat runs under; absent runs none. */
   persona?: string;
+  /** The Default chat's crew choices, before or after native identification. */
+  crew?: string;
 }
 
 export type AgentSessionFolderResolution =

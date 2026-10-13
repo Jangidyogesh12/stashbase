@@ -16,6 +16,7 @@ import path from 'node:path';
 import { appDataRoot } from './local-data.ts';
 import { writeFileAtomic } from './atomic-write.ts';
 import { claudeConfigPath, codexConfigPath } from './agent-config-paths.ts';
+import { parsePortArg } from '../shared/port-arg.ts';
 
 const APP_ROOT = process.env.STASHBASE_APP_ROOT
   ? path.resolve(process.env.STASHBASE_APP_ROOT)
@@ -88,6 +89,9 @@ function localBin(name: string): string {
 }
 
 function writeMcpWrapper(homeDir = os.homedir()): string {
+  // Stdio clients must reach the host that generated their launcher. Explicit
+  // launcher arguments still win, for clients deliberately targeting a port.
+  const port = parsePortArg(process.argv.slice(2), 8090);
   const binDir = path.join(homeDir, '.stashbase', 'bin');
   const wrapper = currentMcpWrapper(homeDir);
   const resourcesPath = process.env.STASHBASE_RESOURCES_PATH || APP_ROOT;
@@ -106,10 +110,10 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
         ...(isBuilt
           ? [
               'set "ELECTRON_RUN_AS_NODE=1"',
-              `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %*`,
+              `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %* --port=${port}`,
             ]
           : [
-              `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %*`,
+              `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %* --port=${port}`,
             ]),
         '',
       ].join('\r\n')
@@ -122,10 +126,10 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
         ...(isBuilt
           ? [
               'export ELECTRON_RUN_AS_NODE=1',
-              `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
+              `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@" --port=${port}`,
             ]
           : [
-              `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
+              `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@" --port=${port}`,
             ]),
         '',
       ].join('\n');

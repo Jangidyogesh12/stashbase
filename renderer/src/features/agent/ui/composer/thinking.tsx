@@ -5,27 +5,25 @@
  *  at the composer's right edge beside Send, where the reader looks last
  *  before sending; the runtime, its permission mode, and the persona keep
  *  the left. */
-import { ChevronDown, ChevronLeft, ChevronRight, Lock, RefreshCw, Zap } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Zap } from 'lucide-react';
 import { useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import {
   DropdownContent,
   DropdownLabel,
   DropdownMenu,
   DropdownSeparator,
-  DropdownTrigger,
 } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
-import { Tooltip } from '@/components/ui/tooltip';
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { modelChoice, type ModelChoice } from '@/features/agent/domain/model-choice';
-import type { AgentModel } from '@/features/agent/domain/runtime-catalog';
 import type { AgentSessionState } from '@/features/agent/domain/session';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { cn } from '@/lib/utils';
 
-import { NARROW_LABEL, NARROWEST_LABEL, NARROWEST_TRIGGER } from './narrow';
+import { ComposerMenuTrigger } from './menu-trigger';
+import { NARROW_LABEL, NARROWEST_LABEL } from './narrow';
+import { AgentToolsControl, type AgentToolsControlProps } from './tools';
 
 type Layer = 'effort' | 'model';
 
@@ -36,14 +34,6 @@ function effortLabel(effort: string): string {
     .replace(/^xhigh$/u, 'Extra high')
     .replace(/[-_]+/gu, ' ')
     .replace(/^./u, (letter) => letter.toUpperCase());
-}
-
-/** A model priced well above the runtime's default is locked for now: the
- *  row stays listed with its cost multiple and a lock, but cannot be chosen,
- *  so readers stay on the default. */
-function costLock(model: AgentModel): { badge: string } | null {
-  const cost = model.relativeCost;
-  return cost !== undefined && cost >= 1.5 ? { badge: `${Math.round(cost)}× cost` } : null;
 }
 
 function effortDescription(effort: string): string | undefined {
@@ -74,6 +64,8 @@ export interface AgentThinkingControlProps {
     };
   onEffortChange(effort: string | null): void;
   onModelChange(model: string | null): void;
+  /** Default's tools, which take the place of its model choice. */
+  tools: Pick<AgentToolsControlProps, 'api' | 'chat' | 'onChanged' | 'onSaving'>;
   /** Called when the trigger is pressed, so the catalog can be re-read. */
   onRequestCatalog(): void;
   runtimeUpdate?: AgentRuntimeUpdateView | undefined;
@@ -183,27 +175,23 @@ function ModelLayer({
           onSelect={() => onModelChange(null)}
         />
       )}
-      {state.models.map((model) => {
-        const lock = costLock(model);
-        return (
-          <MenuItem
-            checked={model.id === choice.model?.id}
-            closeOnClick
-            disabled={runtimeUpdate?.busy === true || lock !== null}
-            // A runtime's model labels are aliases: "Opus" is whichever Opus
-            // that build runs. The release it resolves to is in the runtime's
-            // own description, which is the only place a reader can see that
-            // their Opus is now 5.5, so the rows carry it the way the levels
-            // above them already do.
-            {...(model.description === undefined ? {} : { description: model.description })}
-            {...(lock === null ? {} : { badge: lock.badge, trailingIcon: Lock })}
-            key={model.id}
-            label={model.label}
-            layout="wrap"
-            onSelect={() => onModelChange(model.id)}
-          />
-        );
-      })}
+      {state.models.map((model) => (
+        <MenuItem
+          checked={model.id === choice.model?.id}
+          closeOnClick
+          disabled={runtimeUpdate?.busy === true}
+          // A runtime's model labels are aliases: "Opus" is whichever Opus
+          // that build runs. The release it resolves to is in the runtime's
+          // own description, which is the only place a reader can see that
+          // their Opus is now 5.5, so the rows carry it the way the levels
+          // above them already do.
+          {...(model.description === undefined ? {} : { description: model.description })}
+          key={model.id}
+          label={model.label}
+          layout="wrap"
+          onSelect={() => onModelChange(model.id)}
+        />
+      ))}
       {runtimeUpdate && (
         <>
           <DropdownSeparator />
@@ -230,7 +218,8 @@ function ModelLayer({
 }
 
 /** Renders nothing for a runtime that advertises neither a model nor a level
- *  choice, so the caller places it without asking. */
+ *  choice, so the caller places it without asking. Default's main model is
+ *  fixed, so it offers its optional tools instead. */
 export function AgentThinkingControl({
   activeAgent,
   onEffortChange,
@@ -238,6 +227,7 @@ export function AgentThinkingControl({
   onRequestCatalog,
   runtimeUpdate,
   state,
+  tools,
 }: AgentThinkingControlProps) {
   const { effort, models } = activeAgent.abilities;
   const disabled = state.activeTurn;
@@ -251,6 +241,9 @@ export function AgentThinkingControl({
   const reading = effortName === null ? modelName : `${modelName}, ${effortName}`;
   const label = `Model and thinking: ${reading}`;
 
+  if (activeAgent.id === 'stashbase') {
+    return <AgentToolsControl key={tools.chat} {...tools} disabled={disabled} />;
+  }
   if (!effort && !models) return null;
 
   return (
@@ -260,43 +253,31 @@ export function AgentThinkingControl({
         if (open) setLayer(firstLayer);
       }}
     >
-      <Tooltip content={label} side="top">
-        <DropdownTrigger
-          render={
-            <Button
-              aria-label={label}
-              className={cn('max-w-56', NARROWEST_TRIGGER)}
-              disabled={disabled}
-              leadingIcon={Zap}
-              onClick={onRequestCatalog}
-              size="compact"
-              trailingIcon={ChevronDown}
-              variant="ghost"
-            >
-              {/* As the pane narrows the model's name folds away first and the
-                  level, the thing changed turn to turn, stays until the
-                  narrowest step. While no level is known, before the catalog
-                  has been read, the name stays in its place instead, so the
-                  trigger is never a bare icon above the narrowest step. */}
-              <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-                <span
-                  className={cn(
-                    'min-w-0 truncate',
-                    effortName === null ? NARROWEST_LABEL : NARROW_LABEL,
-                  )}
-                >
-                  {modelName}
-                </span>
-                {effortName !== null && (
-                  <span className={cn('shrink-0 text-muted-foreground', NARROWEST_LABEL)}>
-                    {effortName}
-                  </span>
-                )}
-              </span>
-            </Button>
-          }
-        />
-      </Tooltip>
+      <ComposerMenuTrigger
+        className="max-w-56"
+        disabled={disabled}
+        icon={Zap}
+        label={label}
+        onClick={onRequestCatalog}
+      >
+        {/* As the pane narrows the model's name folds away first and the
+            level, the thing changed turn to turn, stays until the
+            narrowest step. While no level is known, before the catalog
+            has been read, the name stays in its place instead, so the
+            trigger is never a bare icon above the narrowest step. */}
+        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+          <span
+            className={cn('min-w-0 truncate', effortName === null ? NARROWEST_LABEL : NARROW_LABEL)}
+          >
+            {modelName}
+          </span>
+          {effortName !== null && (
+            <span className={cn('shrink-0 text-muted-foreground', NARROWEST_LABEL)}>
+              {effortName}
+            </span>
+          )}
+        </span>
+      </ComposerMenuTrigger>
       <DropdownContent
         align="end"
         className="w-72 max-w-[calc(100vw-1rem)]"

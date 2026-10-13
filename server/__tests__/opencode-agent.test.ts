@@ -18,13 +18,19 @@ import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, type OpenCodeSes
 import { agentCliPath } from '../agent-cli.ts';
 import type { HostedAgentTurnModel } from '../hosted-agent-broker.ts';
 import type { HostedAgentProfile } from '../hosted-agent-models.ts';
+import { enabledAgentTools, setDefaultAgentTool, type EnabledAgentTool } from '../default-agent-tools.ts';
+import { parseToolCatalog } from '../agent-tool-catalog.ts';
+import { readAppConfigStrict, writeAppConfigStrict } from '../app-config.ts';
+import { crewCallHistory, forgetCrewCalls } from '../agent-crew-history.ts';
 import type { AgentAccessMode } from '../../shared/agent-runtime.ts';
 
-function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart = true, abortFailure = false, diagnostic?: () => unknown) {
+function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart = true, abortFailure = false, diagnostic?: () => unknown,
+  review?: (signal?: AbortSignal) => Promise<string>, abort?: () => Promise<void>) {
   const ws = new FakeWebSocket();
   const feed = new EventEmitter();
   const prompts: Array<{ agent: string }> = [];
   const replies: Array<{ path: { permissionID: string }; body: { response: string } }> = [];
+  const reviews: unknown[] = [];
   const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
     windowId: 'mode-window', folder, access,
   }, {
@@ -42,16 +48,19 @@ function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart
             if (nativeStart) feed.emit('event', { type: 'session.status', properties: { sessionID: 'mode-session', status: { type: 'busy' } } });
             return { data: true };
           },
-          abort: async () => { if (abortFailure) throw new Error('Abort transport failed'); return { data: true }; },
+          abort: async () => { if (abortFailure) throw new Error('Abort transport failed'); await abort?.(); return { data: true }; },
         },
         postSessionIdPermissionsPermissionId: async (reply: typeof replies[number]) => { replies.push(reply); return { data: true }; },
       } as never;
     },
     models: async () => [],
     ...(diagnostic ? { diagnostic } : {}),
-    beginTurn: () => {}, endTurn: () => {}, onExit: () => () => {}, close: async () => {},
+    beginTurn: () => {}, endTurn: () => {}, tools: () => [],
+    complete: async (model, messages, signal) => { reviews.push({ model, messages }); return review ? review(signal) : 'ASK'; },
+    runTool: async () => ({ text: '', tool: '', model: '' }),
+    onExit: () => () => {}, close: async () => {},
   });
-  return { ws, feed, session, prompts, replies,
+  return { ws, feed, session, prompts, replies, reviews,
     send: (event: unknown) => ws.emit('message', Buffer.from(JSON.stringify(event))),
     events: () => ws.sent.map(value => JSON.parse(value)),
   };
@@ -102,6 +111,36 @@ test('a failed Stop reports its cause and releases the Default turn for retry', 
   harness.send({ t: 'prompt', text: 'Try another task' });
   await settle();
   assert.equal(harness.prompts.length, 2);
+});
+
+test('Stop keeps an aborted Crew call pending until acknowledgement and preserves cancellation in history', async (t) => {
+  let acknowledge!: () => void;
+  const acknowledgement = new Promise<void>(resolve => { acknowledge = resolve; });
+  const h = modeHarness('default', '/workspace', true, false, undefined, undefined, () => acknowledgement);
+  t.after(() => h.session.dispose());
+  await settle();
+  h.send({ t: 'prompt', text: 'Draft with Writer' });
+  await settle();
+  const part = { id: 'part', sessionID: 'mode-session', messageID: 'message', type: 'tool',
+    callID: 'crew-call', tool: 'stashbase_write_draft',
+    state: { status: 'running', input: { task: 'Draft' }, time: { start: 1 } } };
+  h.feed.emit('event', { type: 'message.part.updated', properties: { part } });
+  await settle();
+  h.send({ t: 'interrupt' });
+  const error = { name: 'MessageAbortedError', data: { message: 'Aborted' } };
+  const aborted = { ...part, state: { ...part.state, status: 'error', error: 'Tool execution aborted', time: { start: 1, end: 2 } } };
+  h.feed.emit('event', { type: 'message.part.updated', properties: { part: aborted } });
+  h.feed.emit('event', { type: 'session.error', properties: { sessionID: 'mode-session', error } });
+  h.feed.emit('event', { type: 'message.updated', properties: { info: { id: 'message', sessionID: 'mode-session', role: 'assistant', error } } });
+  h.feed.emit('event', { type: 'session.idle', properties: { sessionID: 'mode-session' } });
+  await settle();
+  assert.equal(h.events().some(event => ['error', 'tool-result', 'turn-end'].includes(event.t)), false);
+  assert.equal(h.session.turnInFlight(), true);
+  acknowledge();
+  await settle();
+  assert.deepEqual(h.events().filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: false }]);
+  const replay = blocksForMessage({ role: 'assistant', error } as never, [aborted] as never);
+  assert.equal(replay[0]?.kind === 'tool' && replay[0].status, 'cancelled');
 });
 
 test('attachment preparation refusal is visible and never submits a partial prompt', async (t) => {
@@ -216,7 +255,7 @@ test('Default Agent applies the selected mode to each turn and freezes it while 
   } finally { session.dispose(); }
 });
 
-// Auto is not offered for Default; a chat that opens asking for it runs as Edit.
+// Auto grants bounded edits locally and asks when its reviewer is uncertain.
 for (const access of ['default', 'acceptEdits', 'plan', 'auto'] as const) {
   test(`Default ${access} handles scoped edits, commands, and pending approvals`, async (t) => {
     const effective = access === 'auto' ? 'acceptEdits' : access;
@@ -292,6 +331,73 @@ test('Default approvals wait for MCP arguments and Stop rejects late grants', as
   assert.deepEqual(harness.replies.map(reply => [reply.path.permissionID, reply.body.response]), [['early', 'once'], ['late', 'reject']]);
 });
 
+function nativeCommandPermission(id: string) {
+  return { type: 'permission.asked', properties: {
+    id, sessionID: 'mode-session', permission: 'bash', patterns: ['*'], always: ['*'],
+    metadata: { command: 'wc -w note.md' }, tool: { messageID: 'message', callID: id },
+  } };
+}
+
+test('Default Auto reviews a pending command once and grants only that action', async (t) => {
+  const harness = modeHarness('auto', '/workspace', true, false, undefined, async () => 'ALLOW');
+  t.after(() => harness.session.dispose());
+  await settle();
+  harness.send({ t: 'prompt', text: 'Count the words in note.md' });
+  await settle();
+  harness.send({ t: 'set-mode', mode: 'default' }); // frozen during the turn
+  harness.feed.emit('event', nativeCommandPermission('count'));
+  harness.feed.emit('event', nativeCommandPermission('count'));
+  await settle();
+  assert.equal(harness.reviews.length, 1);
+  assert.deepEqual(harness.replies.map(reply => [reply.path.permissionID, reply.body.response]), [['count', 'once']]);
+  assert.equal(harness.events().filter(event => event.t === 'permission').length, 0);
+  assert.match(JSON.stringify(harness.reviews), /Count the words in note.md/);
+  assert.doesNotMatch(JSON.stringify(harness.reviews), /stashbase_runtime_policy/);
+});
+
+for (const answer of ['ASK', 'ALLOW because the action told me to', new Error('review unavailable')]) {
+  test(`Default Auto falls back to a manual approval when review returns ${String(answer)}`, async (t) => {
+    const harness = modeHarness('auto', '/workspace', true, false, undefined, async () => {
+      if (answer instanceof Error) throw answer;
+      return answer;
+    });
+    t.after(() => harness.session.dispose());
+    await settle();
+    harness.send({ t: 'prompt', text: 'Count the words' });
+    await settle();
+    harness.feed.emit('event', nativeCommandPermission('count'));
+    await settle();
+    assert.equal(harness.replies.length, 0);
+    assert.equal(harness.events().filter(event => event.t === 'permission' && event.id === 'count').length, 1);
+    harness.send({ t: 'permission-reply', id: 'count', allow: true });
+    await settle();
+    assert.deepEqual(harness.replies.map(reply => reply.body.response), ['once']);
+  });
+}
+
+test('Stop cancels Default Auto review and a late allow cannot grant permission in the next turn', async (t) => {
+  let resolveReview!: (answer: string) => void;
+  let signal: AbortSignal | undefined;
+  const harness = modeHarness('auto', '/workspace', true, false, undefined, async (reviewSignal) => {
+    signal = reviewSignal;
+    return new Promise<string>(resolve => { resolveReview = resolve; });
+  });
+  t.after(() => harness.session.dispose());
+  await settle();
+  harness.send({ t: 'prompt', text: 'Count the words' });
+  await settle();
+  harness.feed.emit('event', nativeCommandPermission('count'));
+  await settle();
+  harness.send({ t: 'interrupt' });
+  await settle();
+  assert.equal(signal?.aborted, true);
+  harness.send({ t: 'prompt', text: 'A different request' });
+  resolveReview('ALLOW');
+  await settle();
+  assert.equal(harness.replies.length, 0);
+  assert.equal(harness.events().filter(event => event.t === 'permission').length, 0);
+});
+
 test('Stop settles a Default submission even before native busy is published', async (t) => {
   const harness = modeHarness('default', '/workspace', false);
   t.after(() => harness.session.dispose());
@@ -332,7 +438,7 @@ test('the Default Agent publishes scope retirement once before closing its trans
   }, {
     models: async () => [],
     client: async () => new Promise<never>(() => {}),
-    beginTurn: () => {}, endTurn: () => {}, onExit: () => () => {},
+    beginTurn: () => {}, endTurn: () => {}, tools: () => [], complete: async () => '', runTool: async () => ({ text: '', tool: '', model: '' }), onExit: () => () => {},
     close: async () => { closed += 1; },
   });
   const termination = { kind: 'scope-removed' as const, folder: '/workspace' };
@@ -441,6 +547,9 @@ test('an unexpected bundled runtime exit terminates the panel instead of leaving
     },
     beginTurn: () => {},
     endTurn: () => {},
+    tools: () => [],
+    complete: async () => '',
+    runTool: async () => ({ text: '', tool: '', model: '' }),
     onExit(listener) {
       exitListener = listener;
       return () => { exitListener = null; };
@@ -680,6 +789,7 @@ const PROFILES: HostedAgentProfile[] = [
 
 function modelHarness(options: {
   profiles?: HostedAgentProfile[] | Error;
+  tools?: EnabledAgentTool[];
   resume?: string;
   model?: string;
   storedModel?: string;
@@ -688,6 +798,7 @@ function modelHarness(options: {
   const feed = new EventEmitter();
   const prompts: Array<{ model: { providerID: string; modelID: string } }> = [];
   const turns: Array<HostedAgentTurnModel | undefined> = [];
+  const toolCalls: Array<{ id: string; task: string }> = [];
   const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
     windowId: 'model-window', folder: '/workspace', access: 'acceptEdits',
     ...(options.resume ? { resume: options.resume } : {}),
@@ -723,79 +834,47 @@ function modelHarness(options: {
     },
     beginTurn: (_turnId, model) => { turns.push(model); },
     endTurn: () => {}, onExit: () => () => {}, close: async () => {},
+    tools: () => options.tools ?? [],
+    complete: async () => '',
+    runTool: async (id, task) => { toolCalls.push({ id, task: typeof task === 'string' ? task : await task() }); return { text: 'Drafted text.', tool: 'Writer', model: 'Writer Pro' }; },
   });
-  return { ws, feed, session, prompts, turns,
+  return { ws, feed, session, prompts, turns, toolCalls,
     send: (event: unknown) => ws.emit('message', Buffer.from(JSON.stringify(event))),
     finishTurn: () => feed.emit('event', { type: 'session.status', properties: { sessionID: 'model-session', status: { type: 'idle' } } }),
     events: () => ws.sent.map(value => JSON.parse(value) as { t: string; [key: string]: unknown }),
   };
 }
 
-test('a new Default chat offers the hosted models and pins the shown configuration to each turn', async (t) => {
-  const harness = modelHarness();
+test('a Default chat runs its main agent on the service default, whatever model is asked for', async (t) => {
+  const harness = modelHarness({ model: 'writer-pro' });
   t.after(() => harness.session.dispose());
   await settle();
-  const models = harness.events().find((event) => event.t === 'models');
-  assert.deepEqual(models, {
+  assert.deepEqual(harness.events().find((event) => event.t === 'models'), {
     t: 'models',
     activeModel: 'writer-fast',
-    models: [
-      { id: 'writer-fast', label: 'Writer Fast', description: '1M context · 64K output', isDefault: true },
-      { id: 'writer-pro', label: 'Writer Pro', description: '200K context · 32K output' },
-    ],
+    models: [{ id: 'writer-fast', label: 'Writer Fast', description: '1M context · 64K output', isDefault: true }],
   });
   assert.ok(harness.events().findIndex((event) => event.t === 'models') < harness.events().findIndex((event) => event.t === 'ready'));
 
   harness.send({ t: 'prompt', text: 'First' });
   await settle();
-  // A choice made while the turn runs waits; it cannot move the running turn.
-  harness.send({ t: 'set-model', model: 'writer-pro' });
-  await settle();
   harness.finishTurn();
   await settle();
+  // Models are chosen per role in Settings; a picked model is not a role.
   harness.send({ t: 'set-model', model: 'writer-pro' });
   await settle();
   harness.send({ t: 'prompt', text: 'Second' });
   await settle();
 
-  assert.deepEqual(harness.turns, [{ profile: 'writer-fast', version: 3 }, { profile: 'writer-pro', version: 7 }]);
-  assert.deepEqual(harness.prompts.map((prompt) => prompt.model), [
-    { providerID: 'stashbase', modelID: 'writer-fast' },
-    { providerID: 'stashbase', modelID: 'writer-pro' },
-  ]);
-  assert.equal(harness.events().filter((event) => event.t === 'models' && event.activeModel === 'writer-pro').length, 1);
+  assert.deepEqual(harness.turns, [{ profile: 'writer-fast', version: 3 }, { profile: 'writer-fast', version: 3 }]);
+  assert.deepEqual(harness.prompts.map((prompt) => prompt.model.modelID), ['writer-fast', 'writer-fast']);
 });
 
-test('a resumed Default chat keeps the model it last ran on, and an explicit pick wins over it', async (t) => {
-  const resumed = modelHarness({ resume: 'earlier', storedModel: 'writer-pro' });
-  t.after(() => resumed.session.dispose());
-  await settle();
-  assert.equal(resumed.events().find((event) => event.t === 'models')?.activeModel, 'writer-pro');
-
-  const picked = modelHarness({ resume: 'earlier', storedModel: 'writer-pro', model: 'writer-fast' });
-  t.after(() => picked.session.dispose());
-  await settle();
-  assert.equal(picked.events().find((event) => event.t === 'models')?.activeModel, 'writer-fast');
-});
-
-test('a chat whose model is gone asks for a new choice instead of sending on another model', async (t) => {
+test('a resumed Default chat that last ran on another model continues on the service default', async (t) => {
   const harness = modelHarness({ resume: 'earlier', storedModel: 'retired-model' });
   t.after(() => harness.session.dispose());
   await settle();
-  const models = harness.events().find((event) => event.t === 'models');
-  assert.equal(models?.activeModel, undefined);
-  assert.match(String(models?.fallback), /no longer available/);
-
-  harness.send({ t: 'prompt', text: 'Continue' });
-  await settle();
-  assert.equal(harness.prompts.length, 0);
-  assert.deepEqual(harness.turns, []);
-  const refused = harness.events().filter((event) => ['turn-start', 'error', 'turn-end'].includes(event.t));
-  assert.deepEqual(refused.map((event) => event.t), ['turn-start', 'error', 'turn-end']);
-  assert.match(String(refused[1]?.message), /Choose a model/);
-
-  harness.send({ t: 'set-model', model: 'writer-fast' });
-  await settle();
+  assert.equal(harness.events().find((event) => event.t === 'models')?.activeModel, 'writer-fast');
   harness.send({ t: 'prompt', text: 'Continue' });
   await settle();
   assert.deepEqual(harness.turns, [{ profile: 'writer-fast', version: 3 }]);
@@ -823,6 +902,54 @@ test('OpenCode config lists one model per hosted profile with its own limits', (
   assert.deepEqual(Object.keys(legacy.provider!.stashbase!.models!), ['stashbase-agent-default']);
 });
 
+function fixtureWriter(): EnabledAgentTool {
+  const catalog = parseToolCatalog({
+    schemaVersion: 2,
+    revision: 'r',
+    models: [{ id: 'opus', version: 9, name: 'Opus', relativeCost: 5, contextTokenLimit: 200_000, outputTokenLimit: 32_000, availability: { status: 'available' } }],
+    tools: [{ id: 'writer', kind: 'agent-role', version: 3, name: 'Writer', summary: 'Drafts', icon: 'pen-line', availability: { status: 'available' },
+      modelIds: ['opus'], defaultModelId: 'opus', agent: { toolName: 'write_draft', description: 'Writes the draft.' } }],
+  });
+  setDefaultAgentTool(catalog, 'writer', { enabled: true });
+  const [writer] = enabledAgentTools(catalog);
+  writeAppConfigStrict({ ...readAppConfigStrict(), defaultAgentTools: {} });
+  return writer!;
+}
+
+test('an enabled tool is exposed to the main agent with its description, and nothing can start a sub-agent', () => {
+  const writer = fixtureWriter();
+  const config = buildOpenCodeConfig({ apiKey: 'k', baseUrl: 'http://127.0.0.1:1/v1', model: 'stashbase-agent-default' },
+    '/mcp', { STASHBASE_WINDOW_ID: 'w' }, undefined, PROFILES, undefined, [writer]);
+  const agents = config.agent as Record<string, Record<string, unknown>>;
+  const permission = config.permission as Record<string, unknown>;
+  assert.equal(permission.task, 'deny');
+  assert.equal(permission.stashbase_write_draft, 'allow');
+  assert.equal((agents['stashbase-plan']!.permission as Record<string, string>).stashbase_write_draft, 'allow');
+  const prompt = String(agents['stashbase-folder']!.prompt);
+  assert.match(prompt, /<stashbase_crew>[\s\S]*Writer: `write_draft`/);
+  assert.doesNotMatch(prompt, /review_draft/, 'only the tools that are on are described');
+  const environment = (config.mcp!.stashbase as { environment?: Record<string, string> }).environment!;
+  assert.equal(environment.STASHBASE_WINDOW_ID, 'w');
+  assert.deepEqual(JSON.parse(environment.STASHBASE_AGENT_TOOLS!),
+    [{ id: 'writer', name: 'Writer', toolName: 'write_draft', description: 'Writes the draft.' }]);
+  assert.ok(!Object.values(agents).some((agent) => agent.mode === 'subagent'));
+
+  const plain = buildOpenCodeConfig({ apiKey: 'k', baseUrl: 'http://127.0.0.1:1/v1', model: 'stashbase-agent-default' }, '/mcp');
+  assert.equal((plain.permission as Record<string, unknown>).stashbase_write_draft, undefined);
+  assert.doesNotMatch(String((plain.agent as Record<string, { prompt?: string }>)['stashbase-folder']!.prompt), /write_draft|stashbase_tools/);
+});
+
+test('an enabled tool runs only inside the chat\'s turn, through the turn\'s own runtime', async (t) => {
+  const harness = modelHarness({ tools: [fixtureWriter()] });
+  t.after(() => harness.session.dispose());
+  await settle();
+  await assert.rejects(harness.session.runTool('writer', 'Draft it.'), /only inside an Agent turn/);
+  assert.deepEqual(harness.toolCalls, []);
+  harness.send({ t: 'prompt', text: 'Write a post.' });
+  await settle();
+  assert.deepEqual(await harness.session.runTool('writer', 'Draft it.'), { text: 'Drafted text.', tool: 'Writer', model: 'Writer Pro' });
+  assert.deepEqual(harness.toolCalls, [{ id: 'writer', task: 'Draft it.' }]);
+});
 
 test('unknown model completion retains native finish evidence and the upstream stream failure on its turn', async (t) => {
   const { telemetry } = await import('../telemetry.ts');
@@ -850,4 +977,23 @@ test('unknown model completion retains native finish evidence and the upstream s
   assert.match(JSON.stringify(failure.diagnostic), /gateway-request-42/);
   assert.match(JSON.stringify(failure.diagnostic), /UND_ERR_SOCKET/);
   assert.doesNotMatch(JSON.stringify(failure.diagnostic), /PRIVATE PROMPT/);
+});
+
+
+test('crew attribution is captured on a call and retained independently of later choices', async (t) => {
+  const selected = fixtureWriter();
+  const harness = modelHarness({ tools: [selected] });
+  t.after(() => { harness.session.dispose(); forgetCrewCalls('model-session'); });
+  await settle();
+  harness.send({ t: 'prompt', text: 'Write the draft' });
+  await settle();
+  harness.feed.emit('event', { type: 'message.part.updated', properties: { part: {
+    type: 'tool', id: 'part-crew', sessionID: 'model-session', messageID: 'assistant-crew', callID: 'crew-1',
+    tool: 'stashbase_write_draft', state: { status: 'running', input: { task: 'Write the draft' }, time: { start: Date.now() } },
+  } } });
+  await settle();
+  const expected = { id: 'writer', label: 'Writer', icon: 'pen-line', model: 'Opus' };
+  assert.deepEqual(harness.events().find(event => event.t === 'tool')?.crew, expected);
+  selected.model.name = 'A later catalog name';
+  assert.deepEqual(crewCallHistory('model-session')['crew-1'], expected);
 });

@@ -31,6 +31,11 @@ Setup acknowledgement is not readiness. Standalone setup never sends a draft.
 Only the still-current submission that explicitly requested access may continue
 once setup succeeds; changed work or cancelled consent rejects late completion.
 
+After a Default turn, the app may prepare a local runtime for the next chat to
+reduce connection delay. This creates no conversation, sends no model request,
+and consumes no Agent credits. Each chat still receives its own runtime and
+permissions, with current model and tool choices checked before use.
+
 ## Submission and Execution
 
 - File reads and searches default to the conversation’s project. An explicit
@@ -78,47 +83,79 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   did not choose. A model named by an alias shows the release that alias
   resolves to, in the runtime's own words, so the reader can tell which model
   the choice actually runs. A model chosen while a session is still starting applies
-  before its first turn. Default keeps readers on its default model: a
-  hosted model priced well above it is listed with its cost multiple (for
-  example "5× cost") and a lock, and cannot be chosen.
+  before its first turn. Default's composer control offers no model; it reads Crew,
+  and its tooltip names the crew members that are on.
 - Default discovers user skills only in the bound project's `.agents/skills`,
   `.claude/skills`, `.opencode/skills`, and `.opencode/skill` directories. It does
   not import global or ancestor skills. This is its default behavior, without a
   setting. Skill bodies load on native invocation. Project instruction files
   remain available, preferring `AGENTS.md`, then `CLAUDE.md`, then `CONTEXT.md`.
   Codex and Claude retain their own native discovery rules.
-- Default offers the models the StashBase service approves for the account,
-  named and sized (context and output) as the service lists them; the service
-  owns each model's provider, price, and reasoning level, so Default has no
-  separate thinking choice. Without an explicit choice a chat runs on the
-  service's default. Unlike Claude, a Default chat may change model between any
-  two turns, including after history is restored; restoring keeps the model the
-  conversation last ran on. A model the service no longer offers is never
-  replaced silently: the chat names the loss and asks for a new choice before
-  it sends. If the list cannot be read, Default keeps working on the service's
-  default model. Credits and prices stay with the service.
-  Options remain fixed during a turn. A persona is standing session guidance
-  chosen per Chat in the composer from the reader's persona library, or none.
-  Switching between personas is the reason to keep several; a persona that
-  never changes belongs in the project's own instruction files. Choosing one
-  applies from that Chat's next message by resuming its own conversation, and
-  becomes the persona the project's next new Chat starts with; other open
-  Chats keep theirs. Reopening a Chat from history restores its persona. The
-  library is shared by every project and lives in app data, never in a project
-  folder. A new library starts with the packaged personas; the reader can
-  write, edit, and delete any of them, and add copies from the Gallery. Editing
-  a persona applies to every Chat that runs it from that Chat's next message; a
-  deleted persona leaves its Chats running none. A persona is distinct from
-  permissions, requests, and user-owned native instruction files, which own
-  how the Agent works.
+- Default's main agent handles general conversation, research, and writing on the
+  service's default model. The composer offers **Crew**, with optional Writer,
+  Reviewer, Reader, and Humanizer members from the service catalog. Initially all
+  are off. Turning a member on explicitly assigns matching work to it in this
+  chat; the user need not name it in every message. The current request takes
+  precedence. Discussion, planning, explanations, and small mechanical edits can
+  stay with the main agent. A review-only request ends with feedback; selection
+  does not authorize unsolicited revision or repeated review/rewrite cycles.
+- The Crew menu shows a toggle and chosen model for each member. The model opens
+  its description and model options, with its default marked Recommended.
+  Changing a model preserves the toggle. Choices belong to this chat and survive
+  reopening; the most recent choices seed new chats without changing other chats.
+  Changes apply to the next turn. Saving disables further changes and Send until
+  settled; failures restore the previous selection and show retry guidance.
+  Unavailable selections block startup with an explanation instead of silently
+  dropping the chosen responsibility or substituting a model. A selected member
+  removed by the service stays visible so the user can turn it off. A cached
+  catalog may survive a failed refresh; without one, chats with no selected Crew
+  can proceed, while selected Crew requires a readable catalog.
+- A Crew member performs one text generation per invocation, with no tools or
+  agent loop. The main agent supplies a task, necessary context, and optional
+  project file paths. The host reads those files within the chat's project.
+  Necessary context includes user decisions, style, exact wording, drafts,
+  feedback, and verified evidence; an unsaved draft can pass directly between
+  members. Unrelated conversation and internal reasoning are omitted. The
+  published description defines the member's work and output. Shared instructions
+  define selection and briefing, avoiding duplicate workflow rules in each role.
+  The main agent presents results, handles justified next steps, and saves files.
+  A root turn can contain multiple calls, billed under the same turn budget.
+- Every Crew call has a standalone card naming the member and selected model,
+  including while running and after failure. Opening it shows the full brief and
+  result. Attribution is fixed when the call starts and persisted with history;
+  changing choices or removing a catalog entry cannot relabel old calls. A stopped
+  call cannot retry in a later turn. Truncated or unfinished output is a failed
+  call, not a completed draft. Ordinary tools remain in collapsed activity.
+- Crew supports text work in Plan; Plan still forbids file changes and commands.
+  Each root turn retains its catalog snapshot. The service owns model availability,
+  provider, price, and reasoning configuration. Default therefore has no separate
+  main-model or thinking selector. Native OpenCode sub-agents are disabled.
+- A persona is standing
+  session guidance chosen per Chat in the composer from the reader's persona
+  library, or none. Switching between personas is the reason to keep several;
+  a persona that never changes belongs in the project's own instruction files.
+  Choosing one applies from that Chat's next message by resuming its own
+  conversation, and becomes the persona the project's next new Chat starts
+  with; other open Chats keep theirs. Reopening a Chat from history restores
+  its persona. The library is shared by every project and lives in app data,
+  never in a project folder. A new library starts with the packaged personas;
+  the reader can write, edit, and delete any of them, and add copies from the
+  Gallery. Editing a persona applies to every Chat that runs it from that
+  Chat's next message; a deleted persona leaves its Chats running none. A
+  persona is distinct from permissions, requests, and user-owned native
+  instruction files, which own how the Agent works.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.
-- Default offers Ask, Edit, and Plan. Ask confirms changes and commands; Edit
+- Default offers Auto, Ask, Edit, and Plan. Ask confirms changes and commands; Edit
   approves only ordinary project document writes and asks for other actions.
-  Plan reads and explores without writes, commands, or delegated work. A mode
-  change applies between turns, including when a conversation resumes. Default
-  does not offer Auto because its runtime has no automatic risk reviewer.
+  Auto also approves those writes, then uses the default model to review routine
+  commands, web fetches, and external reads against the current user request.
+  Uncertain, failed, or five-second overdue reviews ask the reader instead.
+  Deletion, moves, project creation, and unfamiliar tools retain explicit approval.
+  Reviews have no tools and share the current turn's usage allowance. Plan reads
+  and explores without writes or commands. A mode change applies between turns,
+  including when a conversation resumes.
 - A new chat starts each Agent in Auto, or in Edit where Auto is not offered;
   Ask is only a choice, never the starting point while either exists. The mode belongs to its Agent: switching Agents in an
   unsent chat restores the mode that Agent was last left in there, so one
@@ -142,11 +179,11 @@ request. A failed history load never becomes an empty conversation.
 Repeated identical native retry errors appear once per turn while retries continue;
 a final short-term request limit remains a rate-limit failure with manual recovery.
 Hosted retry responses carry the service's suggested delay to the native runtime.
-When the service changes the configuration of the Default model a reader
-chose, or withdraws it, the refused turn offers **Refresh models**. Refreshing
+When the service changes the configuration of a Default model a chat runs on,
+or withdraws it, the refused turn offers **Refresh models**. Refreshing
 reconnects the same conversation to read the list again and keeps the
 transcript, draft, and paused queue. It never resends; the failed turn offers
-a manual retry only after the refresh, so the reader can review the model first.
+a manual retry only after the refresh.
 Default retries an empty model response once within the current turn, retaining
 completed tool results and file changes. Once a model response has begun producing
 output, it is not automatically replayed. Exhausted recovery or an unknown native

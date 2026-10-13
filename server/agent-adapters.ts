@@ -52,11 +52,11 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     id: 'stashbase', label: 'Default', vendor: 'StashBase · OpenCode',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
-      // OpenCode has no native risk reviewer for the product's Auto promise.
-      modes: ['default', 'acceptEdits', 'plan'],
+      modes: AGENT_ACCESS_MODES,
       effort: false,
-      // Hosted model profiles; the service owns each one's reasoning level.
-      models: true,
+      // The main agent runs on the service's default profile; models are
+      // chosen per role in Settings, not per chat.
+      models: false,
       skills: false,
       steering: false,
       titleHint: true,

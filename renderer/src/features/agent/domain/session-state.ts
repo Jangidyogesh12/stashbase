@@ -180,7 +180,13 @@ type AgentSessionStateEvent =
       error: string | null;
     }
   | { kind: 'turn-started' }
-  | { kind: 'tool-started'; id: string; name: string; input: Record<string, unknown> }
+  | {
+      kind: 'tool-started';
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      crew?: import('./session-transcript').AgentCrewCall | undefined;
+    }
   | { kind: 'tool-output'; id: string; delta: string }
   | { kind: 'tool-finished'; id: string; content: string; isError: boolean }
   | {

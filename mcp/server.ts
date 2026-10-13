@@ -29,7 +29,7 @@ import { readAppConfigStrict } from '../server/app-config.ts';
 import { createNativeDiagnostics, telemetryAvailable } from '../server/native-diagnostics.ts';
 import packageInfo from '../package.json' with { type: 'json' };
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createProjectMcpServer } from './project-server.ts';
+import { createProjectMcpServer, parseMcpAgentTools } from './project-server.ts';
 import { parsePortArg } from '../shared/port-arg.ts';
 
 // Use 127.0.0.1 explicitly — the server binds to the IPv4 loopback and
@@ -43,6 +43,8 @@ const server = createProjectMcpServer({
   // Set only when a built-in panel session spawned this host: lets
   // `create_project` attribute the call to that live session.
   agentSessionId: process.env.STASHBASE_AGENT_SESSION_ID,
+  // Set only by a Default chat that enabled model tools.
+  agentTools: parseMcpAgentTools(process.env.STASHBASE_AGENT_TOOLS),
 });
 
 async function main() {

@@ -788,24 +788,45 @@ completion, malformed/error frames, broken streams and turn isolation without
 capturing prompt or generated text. These controlled streams do not establish a
 live provider's error shape or packaged delivery.
 
-- **Default model selection (2026-10-12):** Default reads approved hosted
-  profiles from `/v1/agent/models` (`server/hosted-agent-models.ts`) and uses
-  the existing model picker. `server/__tests__/opencode-agent.test.ts` covers
-  the default and explicit picks, a version pinned to each turn, changes held
-  until the next turn, the model restored from stored prompts, a withdrawn model
-  that must be chosen again, and the unversioned fallback when the list cannot
-  be read. Broker tests cover per-turn profile/version headers and 422
-  `model-changed` refusals. The pinned OpenCode smoke accepts the per-profile
-  config and its limits; a panel model change reaches the provider body and the
-  profile/version headers, and the stored prompt records the profile. The smoke
-  also asserts that no model call forces a tool choice, which the hosted Claude
-  profiles refuse. Renderer
-  tests cover **Refresh models**: it reconnects, keeps the draft, sends nothing,
-  and enables a manual retry only after the refresh. `hosted-agent-models.test.ts`
-  carries `relativeCost` through and tolerates an unreadable one;
-  `thinking.test.tsx` tags and disables rows priced 1.5× or more. Not yet proven: a built-app
-  pass against the production model list, or compaction at a real profile's
-  context limit.
+- **Default Crew (2026-10-13):** The main model comes from `/v1/agent/models`;
+  selected members come from `/v2/agent/tools`. `agent-tool-catalog.ts` owns the
+  account-scoped ETag cache; `default-agent-tools.ts` owns chat choices, new-chat
+  defaults, briefing, and catalog/turn snapshots. `/api/agent-tools` requires a
+  chat identity. `opencode-runtime.ts` registers selected members through MCP,
+  disables native sub-agents, and permits text-only Crew work in Plan. Published
+  descriptions define responsibilities; common prompt rules honor the current
+  request and avoid unsolicited rewrite cycles. `agent-crew-history.ts` persists
+  call attribution, carried by socket/history protocols to `role-call.tsx`.
+  `use-agent-tools.ts` owns optimistic per-chat choices, serialized saves,
+  rollback and visible errors; saving blocks Send.
+
+  Catalog/MCP tests cover availability, model selection, chat isolation, defaults,
+  removed members, ETag/account isolation and immutable turn snapshots. Broker
+  tests cover v2 selection headers, root budgets, sign-in retry, refusal codes,
+  and rejecting length-limited or incomplete SSE output. Panel tests cover
+  selected MCP registration, Plan, active-turn ownership and persisted attribution.
+  The reproduced Stop/version-refresh race is fixed by capturing cancellation and
+  turn identity before preparation; a regression proves no old-call retry after
+  Stop. Renderer hook tests cover failed-save rollback, retry, overlap prevention,
+  and late responses after changing chats. Transcript tests/Stories cover running,
+  successful and failed Crew cards with complete results and fixed model labels.
+  A built macOS desktop with an isolated empty project and the live deployed
+  gateway was driven through discussion (no member call), one Writer draft
+  (Opus: 563 input/757 output tokens), and Plan review of that unsaved draft
+  (one Reviewer call, GPT-6.1 Sol: 443 input/460 output tokens; no rewrite).
+  Writer and Reviewer cards and complete results were inspected by eye.
+  A subsequent live Writer call was stopped: the card showed Stopped, history
+  reopening retained its model/status, and the next turn replied successfully.
+  Changing a new chat to Reviewer alone left the old chat's Writer/Reviewer
+  choice intact. Native abort events now settle as cancellation after the abort
+  acknowledgement, with a focused regression for the error/idle ordering.
+  This pass also exposed and fixed the MCP launcher's lost custom host port;
+  the live round trip succeeded on port 8196 after the fix. The live gateway
+  still served catalog 1; service migration 23 for responsibility-only member
+  descriptions is committed separately but deployment remains unverified.
+  These examples establish the exercised routing and handoff, not general
+  writing quality, pricing, or provider cache efficiency.
+  A root snapshot lives only for its turn; process restart does not resume a turn.
 
 - **Low-credit calls (2026-10-11):** the hosted API's account-locked reservation
   reduces output to fit account/monthly and turn capacity while retaining input
@@ -852,11 +873,42 @@ executable: its login failure displayed the step, auth host, and ECONNREFUSED
 in the same prompt; Not now preserved the draft. This proves error propagation
 and UI recovery, not the original reporter's underlying Codex failure.
 
-**Default permissions and desktop commands (2026-10-08):** Default now declares
+**Default Auto and connection latency (2026-10-13):** Default now exposes all
+four access modes. `default-agent-permissions.ts` owns the bounded hosted review
+for Auto; `opencode-agent.test.ts` covers exact-action grants, manual fallback
+for uncertain/failed answers, frozen in-turn options, and Stop rejecting a late
+answer across turns. `default-agent-permissions.test.ts` covers the deadline
+while credentials remain pending and actions that must still ask. Broker tests
+prove cancellation prevents forwarding after a pending token arrives. The
+driven pinned-native smoke executes a reviewed `pwd` through the real panel,
+broker, and OpenCode process without a permission card, using a controlled
+gateway. A separate live-default-model check allowed a synthetic `pwd` request
+in 2,513 ms; a synthetic destructive shell command returned to manual approval
+at the five-second deadline. Neither check executed a destructive action. These
+limited cases do not establish general model risk judgment.
+
+`opencode-runtime.ts` now prepares one unused process and MCP connection after
+each turn, with exclusive claim, fresh model/tool comparison, a two-minute
+expiry, and window/project/shutdown cleanup. `opencode-warm-slot.test.ts` covers
+claim, replacement, refreshed idle expiry, and awaited cleanup. The native smoke proves unique
+MCP identities, independent chat disposal, changed model/tool configuration,
+and project binding. The repeatable `profile:default-session` scenario measured
+three runs per label with the real runtime and local catalog fixtures: baseline
+`73aaa4c1` cold 1,160–1,406 ms / next chat 1,115–2,792 ms; current code cold
+1,123–1,508 ms / next chat 14–16 ms after a fixed five-second idle interval. These exclude real catalog
+network and model latency; the first chat and an expired/mismatched spare still
+start cold. Per-call diagnostic tests distinguish headers, first byte, first
+visible text, and cached token counts without retaining conversation content.
+The native smoke also confirms the production `New Chat` title causes no extra
+title model call. Built desktop composition and limited live-provider cases are
+recorded above; representative network latency, cache reuse, and hosted Auto
+reviewer quality remain unproven for this change.
+
+**Default permissions and desktop commands (2026-10-08):** Default then declared
 Ask/Edit/Plan and maps each turn to an OpenCode profile. Edit uses the shared
 realpath-aware project-write predicate; commands, deletion, and broader access
-still need approval. Plan denies mutating and delegated tools. Auto remains
-unavailable because OpenCode has no native risk reviewer. MCP approvals wait
+still need approval. Plan denies mutating and delegated tools. Auto was
+unavailable until the host-owned reviewer above. MCP approvals wait
 for the same call's running arguments, which the real runtime can emit after
 its permission request. Grants apply once to a pending id; Stop rejects late
 grants. A reproduced duplicate idle event could finish the next optimistic

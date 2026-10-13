@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentCrewCallSchema } from './agent-tools';
 
 const boundedText = (maximum: number) => z.string().max(maximum);
 
@@ -72,7 +73,8 @@ const agentSessionToolBlockSchema = z
     id: boundedText(512),
     name: boundedText(512),
     input: z.record(z.string(), z.unknown()),
-    status: z.enum(["done", "error"]),
+    crew: agentCrewCallSchema.optional(),
+    status: z.enum(["done", "error", "cancelled"]),
     result: boundedText(4_194_304).optional(),
   })
   .strict();

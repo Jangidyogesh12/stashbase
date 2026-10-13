@@ -14,10 +14,12 @@ import { createAgentPreferencesAdapter, type AgentPreferencesPort } from '@/feat
 import {
   createAgentCatalogAdapter,
   createAgentPersonaAdapter,
+  createAgentToolsAdapter,
   createAgentContextAdapter,
   createAgentSessionAdapter,
   type AgentCatalogPort,
   type AgentPersonaPort,
+  type AgentToolsPort,
   type AgentContextPort,
   type AgentSessionPort,
 } from '@/features/agent/public';
@@ -91,6 +93,8 @@ export interface AppDependencies {
     preferences?: AgentPreferencesPort;
     context: AgentContextPort;
     persona: AgentPersonaPort;
+    /** Default's optional model tools. */
+    tools: AgentToolsPort;
     session: AgentSessionPort;
   };
   /** Opens the bug-report review for this window; null outside Electron. */
@@ -152,6 +156,7 @@ export function createDependencies(): AppDependencies {
       catalog: createAgentCatalogAdapter(http),
       preferences: createAgentPreferencesAdapter(http),
       persona: createAgentPersonaAdapter(http),
+      tools: createAgentToolsAdapter(http),
       context: createAgentContextAdapter(http, bridge.runtime.serverOrigin),
       session: createAgentSessionAdapter(http, bridge.runtime.serverOrigin),
     },

@@ -24,6 +24,7 @@ import {
   type AgentSessionTermination,
 } from './agent-contract.ts';
 import {
+  attributedAgentSession,
   liveSessionSet,
   registerAttributedAgentSession,
   unregisterAttributedAgentSession,
@@ -37,34 +38,24 @@ import { isStashbaseWorkspaceEdit } from './agent-file-permissions.ts';
 import type { AgentAccessMode } from '../shared/agent-runtime.ts';
 import {
   createOpenCodeSessionRuntime,
+  discardWarmOpenCodeForWindow,
+  discardWarmOpenCodeForFolder,
   openCodeClient,
+  type AgentToolResult,
   type OpenCodeSessionRuntime,
 } from './opencode-runtime.ts';
 import type { SessionBlock, SessionInfo } from '../shared/agent-sessions.ts';
-import { rememberAgentModels } from './agent-model-catalog.ts';
 import {
   DEFAULT_HOSTED_AGENT_PROFILE,
   defaultHostedAgentProfile,
   hostedAgentCatalogModels,
-  type HostedAgentProfile,
 } from './hosted-agent-models.ts';
+import { reviewDefaultAgentPermission } from './default-agent-permissions.ts';
+import { rememberCrewChat } from './default-agent-tools.ts';
+import { crewCallHistory, recordCrewCall, forgetCrewCalls } from './agent-crew-history.ts';
 
 const log = logger('opencode-agent');
 const DATA_REQUEST = { throwOnError: true as const };
-
-const MODEL_GONE = 'That model is no longer available. Choose a model before sending.';
-const STORED_MODEL_GONE = 'The model this chat used is no longer available. Choose a model before sending.';
-const MODEL_REQUIRED = 'Choose a model for this chat, then send again. The model it used is no longer available.';
-
-/** The hosted profile a stored conversation last ran on, as OpenCode recorded
- * it on the latest prompt. */
-export function storedOpenCodeModel(messages: ReadonlyArray<{ info: Message }>): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const info = messages[index]!.info;
-    if (info.role === 'user' && info.model?.providerID === 'stashbase' && info.model.modelID) return info.model.modelID;
-  }
-  return undefined;
-}
 
 /** Keep OpenCode's provider-specific tool vocabulary behind the adapter.
  * The renderer, history replay, and permission cards all consume the same
@@ -120,6 +111,7 @@ export class OpenCodeEventTranslator {
   private sessionId: string | null = null;
   private turnActive = false;
   private nativeTurnStarted = false;
+  private stopping = false;
   private lastFinishReason: string | undefined;
   private completion: Record<string, string | number> = {};
   private turnNumber = 0;
@@ -140,6 +132,7 @@ export class OpenCodeEventTranslator {
   beginTurn(): AgentServerEvent[] {
     if (this.turnActive) return [];
     this.turnActive = true;
+    this.stopping = false;
     this.turnNumber++;
     this.nativeTurnStarted = false;
     this.lastFinishReason = undefined;
@@ -159,6 +152,7 @@ export class OpenCodeEventTranslator {
       input_tokens: tokens.input, output_tokens: tokens.output, reasoning_tokens: tokens.reasoning };
   }
   endTurnWithError(): AgentServerEvent[] { return this.finishTurn(true); }
+  requestInterrupt(): void { this.stopping = true; }
   endTurnAfterInterrupt(): AgentServerEvent[] { return this.finishTurn(false, true); }
 
   translate(event: Event | EventPermissionAsked): AgentServerEvent[] {
@@ -182,6 +176,7 @@ export class OpenCodeEventTranslator {
         return this.matches(event.properties.sessionID) ? this.finishTurn(false) : [];
       case 'session.error': {
         if (event.properties.sessionID && !this.matches(event.properties.sessionID)) return [];
+        if (this.stopping && event.properties.error?.name === 'MessageAbortedError') return [];
         const message = eventErrorMessage(event);
         const events: AgentServerEvent[] = [];
         if (!this.errors.has(message)) {
@@ -208,6 +203,7 @@ export class OpenCodeEventTranslator {
         if (info.role !== 'assistant' || !this.turnActive || this.messageTurns.get(info.id) !== this.turnNumber) return [];
         if (info.finish) this.recordCompletion(info.id, info.finish, info.tokens);
         if (!info.error) return [];
+        if (this.stopping && info.error.name === 'MessageAbortedError') return [];
         const message = 'data' in info.error && typeof info.error.data?.message === 'string'
           ? info.error.data.message
           : info.error.name;
@@ -244,6 +240,8 @@ export class OpenCodeEventTranslator {
 
   private finishTurn(isError: boolean, interrupted = false): AgentServerEvent[] {
     if (!this.turnActive) return [];
+    // Native idle can arrive before the abort RPC confirms cancellation.
+    if (this.stopping && !isError && !interrupted) return [];
     // `session.status: idle` and `session.idle` can straddle the next prompt.
     // Its optimistic start is not evidence that the native runtime started it.
     if (!isError && !interrupted && !this.nativeTurnStarted) return [];
@@ -292,7 +290,7 @@ export class OpenCodeEventTranslator {
       events.push({ t: 'tool', id, name, input: part.state.input });
     }
     if ((part.state.status === 'completed' || part.state.status === 'error') && prior !== part.state.status) {
-      events.push({
+      if (!(this.stopping && part.state.status === 'error' && part.state.error === 'Tool execution aborted')) events.push({
         t: 'tool-result',
         id,
         content: part.state.status === 'completed' ? part.state.output : part.state.error,
@@ -324,7 +322,7 @@ export class OpenCodePanelSession {
   private readonly translator = new OpenCodeEventTranslator();
   private readonly cwd: string;
   readonly agentId = 'stashbase' as const;
-  readonly attributionId = randomUUID();
+  readonly attributionId: string;
   readonly windowId: string;
   private readonly runtime: OpenCodeSessionRuntime;
   private sessionId: string | null = null;
@@ -332,6 +330,8 @@ export class OpenCodePanelSession {
   private disposed = false;
   private interrupted = false;
   private access: AgentAccessMode;
+  private permissionReview = new AbortController();
+  private userRequest = '';
   private readonly pendingPermissions = new Set<string>();
   private readonly seenPermissions = new Set<string>();
   private readonly waitingToolPermissions = new Map<string, Extract<AgentServerEvent, { t: 'permission' }>>();
@@ -340,16 +340,10 @@ export class OpenCodePanelSession {
   private readonly onClose = () => this.dispose();
   private preparingAttachments: AbortController | null = null;
   private attachmentPreparation: Promise<FilePartInput[]> | null = null;
-  /** The hosted profiles this session offers, as read when it started. The
-   * versions here are the configuration the reader is choosing between. */
-  private profiles: readonly HostedAgentProfile[] = [];
-  private catalogReady = false;
-  /** A pick that arrived before the catalog could check it. */
-  private requestedModel: string | undefined;
-  /** The profile the next turn runs on; null runs the unversioned default. */
-  private model: string | null = null;
-  /** The chat's model is gone and no replacement was chosen yet. */
-  private modelRequired = false;
+  /** The main agent's profile, as the service listed it when this session
+   * started; undefined runs the unversioned default. Roles carry their own
+   * profiles in the runtime's configuration. */
+  private model: { profile: string; version: number } | undefined;
 
   constructor(
     private readonly ws: WebSocket,
@@ -361,17 +355,16 @@ export class OpenCodePanelSession {
       currentFolder: getCurrentFolder(),
     }));
     this.cwd = binding.cwd;
-    // Auto is not offered here; a new chat asks for it before the renderer
-    // settles, and Edit is where it settles.
-    this.access = options.access === 'auto' ? 'acceptEdits'
-      : options.access === 'acceptEdits' || options.access === 'plan' ? options.access : 'default';
+    this.access = options.access === 'auto' || options.access === 'acceptEdits' || options.access === 'plan'
+      ? options.access : 'default';
     this.windowId = normalizeWindowId(options.windowId);
-    this.requestedModel = options.model ?? undefined;
     this.runtime = runtime ?? createOpenCodeSessionRuntime({
       windowId: this.windowId,
-      agentSessionId: this.attributionId,
+      directory: this.cwd,
       persona: options.persona,
+      ...(options.crew || options.resume ? { crew: options.crew ?? options.resume! } : {}),
     });
+    this.attributionId = this.runtime.attributionId ?? randomUUID();
     this.stopRuntimeExitListener = this.runtime.onExit((error) => {
       if (!this.disposed) this.fail(error, true);
     });
@@ -384,6 +377,13 @@ export class OpenCodePanelSession {
   boundFolder(): string | null { return this.cwd; }
   turnInFlight(): boolean { return this.translator.isTurnActive(); }
 
+  /** Runs an enabled tool for the main agent, inside its running turn: one
+   * call on the tool's model, on the turn's catalog snapshot. */
+  async runTool(id: string, task: string | (() => Promise<string>), signal?: AbortSignal): Promise<AgentToolResult> {
+    if (!this.turnInFlight()) throw Object.assign(new Error('Tools run only inside an Agent turn.'), { status: 409 });
+    return this.runtime.runTool(id, task, signal);
+  }
+
   dispose(termination?: AgentSessionTermination): void {
     if (this.disposed) return;
     if (termination) send(this.ws, { t: 'exit', reason: termination.kind, folder: termination.folder });
@@ -392,6 +392,7 @@ export class OpenCodePanelSession {
     this.seenPermissions.clear();
     this.waitingToolPermissions.clear();
     this.preparingAttachments?.abort();
+    this.permissionReview.abort();
     this.abort.abort();
     this.stopRuntimeExitListener();
     this.runtime.endTurn();
@@ -410,13 +411,16 @@ export class OpenCodePanelSession {
   }
 
   private async initialize(): Promise<void> {
+    const started = performance.now();
     try {
       // Without a readable list the chat still runs, on the default profile
       // the service picks for an unversioned request.
-      this.profiles = await this.runtime.models().catch((error: unknown) => {
+      const profiles = await this.runtime.models().catch((error: unknown) => {
         log.warn(`could not read the Agent model list: ${errorMessage(error)}`);
         return [];
       });
+      const main = defaultHostedAgentProfile(profiles);
+      if (main) this.model = { profile: main.id, version: main.version };
       if (this.disposed) return;
       this.client = await this.runtime.client(this.cwd);
       const subscription = await this.client.event.subscribe({ signal: this.abort.signal });
@@ -430,70 +434,21 @@ export class OpenCodePanelSession {
         throw new Error('The OpenCode session does not belong to this Chat scope.');
       }
       this.sessionId = native.id;
+      if (this.options.crew) rememberCrewChat(this.options.crew, native.id);
       this.translator.bindSession(native.id);
       send(this.ws, { t: 'session-id', id: native.id });
       if (native.title) send(this.ws, { t: 'session-title', title: native.title });
-      const stored = this.options.resume ? await this.storedModel(native.id) : undefined;
-      if (this.disposed) return;
-      this.publishModels(stored);
+      // The main agent always runs on the service's default; the reader
+      // chooses each member's model in the Crew menu.
+      send(this.ws, main
+        ? { t: 'models', models: hostedAgentCatalogModels([main]), activeModel: main.id }
+        : { t: 'models', models: [] });
       send(this.ws, { t: 'skills', skills: [], state: 'empty' });
+      log.debug('session ready', { session_id: this.attributionId, elapsed_ms: Math.round(performance.now() - started) });
       send(this.ws, { t: 'ready' });
     } catch (error) {
       this.fail(error, true);
     }
-  }
-
-  private async storedModel(id: string): Promise<string | undefined> {
-    try {
-      const messages = await this.client!.session.messages({ ...DATA_REQUEST, path: { id } });
-      return storedOpenCodeModel(messages.data);
-    } catch (error) {
-      // An unreadable record is not a missing model: run the default.
-      log.debug(`could not read the chat's model: ${errorMessage(error)}`);
-      return undefined;
-    }
-  }
-
-  /** An explicit pick wins, then the model the conversation last ran on,
-   * then the service's default. A pick or a stored model the service no
-   * longer offers is never replaced silently: the reader chooses again. */
-  private publishModels(stored: string | undefined): void {
-    this.catalogReady = true;
-    if (this.profiles.length === 0) {
-      send(this.ws, { t: 'models', models: [] });
-      return;
-    }
-    const models = hostedAgentCatalogModels(this.profiles);
-    rememberAgentModels('stashbase', models);
-    const offered = (id: string) => this.profiles.some((profile) => profile.id === id);
-    const requested = this.requestedModel;
-    const remembered = requested ?? stored;
-    if (remembered !== undefined && !offered(remembered)) {
-      this.modelRequired = true;
-      send(this.ws, { t: 'models', models, fallback: requested !== undefined ? MODEL_GONE : STORED_MODEL_GONE });
-      return;
-    }
-    this.model = remembered ?? defaultHostedAgentProfile(this.profiles)!.id;
-    send(this.ws, { t: 'models', models, activeModel: this.model });
-  }
-
-  /** A choice applies from the next turn; the running one keeps its model. */
-  private selectModel(requested: string | undefined): void {
-    if (this.turnInFlight()) return;
-    if (!this.catalogReady) {
-      this.requestedModel = requested;
-      return;
-    }
-    if (this.profiles.length === 0) return;
-    const models = hostedAgentCatalogModels(this.profiles);
-    const id = requested ?? defaultHostedAgentProfile(this.profiles)!.id;
-    if (!this.profiles.some((profile) => profile.id === id)) {
-      send(this.ws, { t: 'models', models, fallback: MODEL_GONE });
-      return;
-    }
-    this.model = id;
-    this.modelRequired = false;
-    send(this.ws, { t: 'models', models, activeModel: id });
   }
 
   private async consume(stream: AsyncGenerator<Event>): Promise<void> {
@@ -518,6 +473,13 @@ export class OpenCodePanelSession {
           const nativeError = event.type === 'session.error' ? event.properties.error
             : event.type === 'message.updated' && event.properties.info.role === 'assistant' ? event.properties.info.error : undefined;
           const cause = item.t === 'error' ? this.translator.diagnostic(this.runtime.diagnostic?.()) : undefined;
+          if (item.t === 'tool' && this.sessionId) {
+            const selected = this.runtime.tools().find(({ tool }) => item.name === `stashbase_${tool.agent.toolName}` || item.name === tool.agent.toolName);
+            if (selected) {
+              item.crew = { id: selected.tool.id, label: selected.tool.name, icon: selected.tool.icon, model: selected.model.name };
+              recordCrewCall(this.sessionId, item.id, item.crew);
+            }
+          }
           send(this.ws, item, nativeError
             ? { ...providerErrorDiagnostic(nativeError) as object, cause }
             : cause);
@@ -530,6 +492,7 @@ export class OpenCodePanelSession {
           }
         }
         if (translated.some((item) => item.t === 'turn-end')) {
+          this.permissionReview.abort();
           this.pendingPermissions.clear();
           this.seenPermissions.clear();
           this.waitingToolPermissions.clear();
@@ -552,12 +515,9 @@ export class OpenCodePanelSession {
       event = parsed.data;
     } catch { return; }
     if (event.t === 'close') { this.dispose(); return; }
-    if (event.t === 'set-model') {
-      this.selectModel(event.model);
-      return;
-    }
+    if (event.t === 'set-model') return;
     if (event.t === 'set-mode') {
-      if (!this.turnInFlight() && (event.mode === 'default' || event.mode === 'acceptEdits' || event.mode === 'plan')) {
+      if (!this.turnInFlight() && (event.mode === 'default' || event.mode === 'acceptEdits' || event.mode === 'plan' || event.mode === 'auto')) {
         this.access = event.mode;
       }
       return;
@@ -568,20 +528,13 @@ export class OpenCodePanelSession {
       switch (event.t) {
         case 'prompt': {
           if (this.turnInFlight()) return;
-          if (this.modelRequired) {
-            for (const translated of this.translator.beginTurn()) send(this.ws, translated);
-            send(this.ws, agentTurnErrorEvent(MODEL_REQUIRED));
-            for (const translated of this.translator.endTurnWithError()) send(this.ws, translated);
-            return;
-          }
+          this.permissionReview.abort();
+          this.permissionReview = new AbortController();
+          this.userRequest = restoreHistoryAttachments(event.text).text;
           this.interrupted = false;
-          const profile = this.profiles.find((entry) => entry.id === this.model);
-          const modelID = profile?.id ?? DEFAULT_HOSTED_AGENT_PROFILE;
+          const modelID = this.model?.profile ?? DEFAULT_HOSTED_AGENT_PROFILE;
           beginAgentDiagnosticTurn(this.ws, event.telemetryTurnId, { model: modelID, native_session_id: this.sessionId });
-          this.runtime.beginTurn(
-            event.telemetryTurnId ?? randomUUID(),
-            profile ? { profile: profile.id, version: profile.version } : undefined,
-          );
+          this.runtime.beginTurn(event.telemetryTurnId ?? randomUUID(), this.model);
           for (const translated of this.translator.beginTurn()) send(this.ws, translated);
           if (event.titleHint) {
             void this.client.session.update({
@@ -609,15 +562,18 @@ export class OpenCodePanelSession {
             path: { id: this.sessionId },
             body: {
               model: { providerID: 'stashbase', modelID },
-              agent: this.access === 'plan' ? 'stashbase-plan' : this.access === 'acceptEdits' ? 'stashbase-edit' : 'stashbase-folder',
+              agent: this.access === 'plan' ? 'stashbase-plan'
+                : this.access === 'acceptEdits' || this.access === 'auto' ? 'stashbase-edit' : 'stashbase-folder',
               parts: [{ type: 'text', text: event.text }, ...attachments],
             },
           });
           break;
         }
         case 'interrupt':
+          this.permissionReview.abort();
           this.preparingAttachments?.abort();
           this.interrupted = true;
+          this.translator.requestInterrupt();
           this.pendingPermissions.clear();
           this.waitingToolPermissions.clear();
           if (this.attachmentPreparation) await this.attachmentPreparation.catch(() => undefined);
@@ -658,9 +614,20 @@ export class OpenCodePanelSession {
     const projectEdit = item.name.startsWith('stashbase_') && isStashbaseWorkspaceEdit({
       input: { server: 'stashbase', tool: item.name.slice('stashbase_'.length), arguments: item.input },
     }, this.cwd);
-    if (this.access === 'acceptEdits' && projectEdit) {
+    if ((this.access === 'acceptEdits' || this.access === 'auto') && projectEdit) {
       await this.replyPermission(item.id, true);
       return;
+    }
+    if (this.access === 'auto') {
+      const review = this.permissionReview;
+      const allowed = await reviewDefaultAgentPermission({
+        name: item.name, input: item.input, project: this.cwd, userRequest: this.userRequest,
+      }, (messages, signal) => this.runtime.complete(this.model ?? { profile: DEFAULT_HOSTED_AGENT_PROFILE }, messages, signal), review.signal);
+      if (review.signal.aborted || this.permissionReview !== review || this.disposed || !this.turnInFlight()) return;
+      if (allowed) {
+        await this.replyPermission(item.id, true);
+        return;
+      }
     }
     this.pendingPermissions.add(item.id);
     send(this.ws, item);
@@ -676,6 +643,7 @@ export class OpenCodePanelSession {
   }
 
   private fail(error: unknown, terminal: boolean): void {
+    this.permissionReview.abort();
     this.pendingPermissions.clear();
     this.seenPermissions.clear();
     this.waitingToolPermissions.clear();
@@ -694,13 +662,25 @@ export class OpenCodePanelSession {
 
 const sessions = liveSessionSet<OpenCodePanelSession>();
 
+/** The live Default chat a tool call is attributed to, if any. */
+export function openCodeToolSession(attributionId: string | undefined): OpenCodePanelSession | null {
+  const session = attributedAgentSession(attributionId);
+  return session instanceof OpenCodePanelSession ? session : null;
+}
+
 export function attachOpenCodeWebSocket(ws: WebSocket, options: AgentConnectionOptions): void {
   sessions.add(new OpenCodePanelSession(ws, options));
 }
 
-export const killActiveOpenCode = sessions.killWindow;
+export function killActiveOpenCode(windowId?: string): void {
+  sessions.killWindow(windowId);
+  void discardWarmOpenCodeForWindow(windowId);
+}
 
-export const killOpenCodeSessionsForFolder = sessions.killFolder;
+export function killOpenCodeSessionsForFolder(folder: string): void {
+  sessions.killFolder(folder);
+  void discardWarmOpenCodeForFolder(folder);
+}
 
 export function openCodeSessionHasContent(
   session: Pick<Session, 'title'>,
@@ -758,7 +738,9 @@ export function blocksForMessage(info: Message, parts: Part[]): SessionBlock[] {
       id: part.callID,
       name: normalizeOpenCodeToolName(part.tool),
       input: part.state.input,
-      status: part.state.status === 'error' ? 'error' : 'done',
+      status: part.state.status === 'error'
+        ? info.error?.name === 'MessageAbortedError' && part.state.error === 'Tool execution aborted' ? 'cancelled' : 'error'
+        : 'done',
       result: part.state.status === 'error' ? part.state.error : part.state.output,
     });
   }
@@ -789,8 +771,10 @@ async function sessionBlocks(
     client.session.messages({ ...DATA_REQUEST, path: { id } }),
     client.session.diff({ ...DATA_REQUEST, path: { id } }),
   ]);
+  const crew = crewCallHistory(id);
   return [
-    ...messages.data.flatMap((message) => blocksForMessage(message.info, message.parts)),
+    ...messages.data.flatMap((message) => blocksForMessage(message.info, message.parts))
+      .map((block) => block.kind === 'tool' && crew[block.id] ? { ...block, crew: crew[block.id] } : block),
     ...blocksForDiffs(diffs.data),
   ];
 }
@@ -864,6 +848,7 @@ export function openCodeHistoryActions(): AgentHistoryActions {
       const { client, cwd } = await clientFor(folder);
       await assertSessionInScope(client, id, cwd);
       await client.session.delete({ ...DATA_REQUEST, path: { id } });
+      forgetCrewCalls(id);
     },
   };
 }

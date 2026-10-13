@@ -72,6 +72,7 @@ import { createMcpHttpService } from './mcp-http-service.ts';
 import { runShutdownCleanup } from './shutdown-cleanup.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
 import { mount as mountAgentPreferencesRoutes } from './routes/agent-preferences.ts';
+import { mount as mountAgentToolRoutes } from './routes/agent-tools.ts';
 import { mount as mountAgentPersonaRoutes } from './routes/agent-persona.ts';
 import { isAgentPersonaId } from '../shared/agent-persona.ts';
 import { createRendererOriginPolicy } from './middleware/renderer-origin.ts';
@@ -313,6 +314,7 @@ mountFoldersRoutes(app);
 mountUploadRoutes(app);
 mountAttachRoutes(app);
 mountProjectFileRoutes(app);
+mountAgentToolRoutes(app); // after the project scope it reads files under
 mountTurnChangeRoutes(app);
 mountTerminalRoutes(app);
 mountMcpRoutes(app, mcpHttpService);
@@ -446,7 +448,8 @@ function agentIdOf(req: import('node:http').IncomingMessage): string {
 }
 
 function connectionOptionsOf(req: import('node:http').IncomingMessage): AgentConnectionOptions {
-  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req), model: modelOf(req), persona: personaOf(req) };
+  const crew = new URL(req.url ?? '', 'http://localhost').searchParams.get('crew');
+  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req), model: modelOf(req), persona: personaOf(req), ...(crew && /^[a-zA-Z0-9_-]{1,512}$/.test(crew) ? { crew } : {}) };
 }
 
 /** Model ids are opaque native identifiers. Keep only a small URL safety bound;

@@ -76,6 +76,17 @@ Agent works belongs to the user-owned `AGENTS.md` / `CLAUDE.md` native
 instruction files; a persona is distinct from them, from access control, and
 from internal routing.
 
+## Crew
+
+The Default Agent's optional specialists, such as Writer and Reviewer. Turning a
+member on assigns matching work to it in this chat on the selected model. New
+chats inherit the last choices; existing chats keep their own. The current request
+still governs the work. With none selected, the main agent handles the task.
+A persona supplies standing guidance; Crew assigns responsibilities. Each member
+performs a separate text generation. Code and service identifiers may call this
+a tool because MCP carries the invocation; the product calls it Crew to make the
+user's explicit choice clear.
+
 ## OpenQuill
 
 The included Agent runtime, named **Default** in the app. It uses StashBase

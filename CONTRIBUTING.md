@@ -107,6 +107,13 @@ the scenarios, and how to add one.
 - Packaged-app server logs: `~/Library/Logs/StashBase/`
 - Useful env vars: `STASHBASE_LOG=debug`, `STASHBASE_PYTHON=/path/to/python`, `STASHBASE_BUILD_EXTRACT=1`
 
+With `STASHBASE_LOG=debug`, Default Agent logs model-catalog and native connection
+times, spare-runtime readiness, and each model request's headers, first bytes,
+first visible text, and elapsed time. Requests include the profile and turn id;
+input/output and cache token counts appear when the gateway supplies them.
+These measurements contain no prompt or generated text. Gateway timing includes
+network and upstream work; it does not isolate the provider's own latency.
+
 API keys are configured in Settings, not environment variables.
 
 ## Release Notes for Maintainers

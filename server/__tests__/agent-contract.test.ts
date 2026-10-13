@@ -46,10 +46,10 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.equal(capabilities.claude!.titleHint, false);
   assert.equal(capabilities.codex!.steering, true);
   assert.equal(capabilities.codex!.titleHint, true);
-  assert.deepEqual(capabilities.stashbase!.modes, ['default', 'acceptEdits', 'plan']);
+  assert.deepEqual(capabilities.stashbase!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.deepEqual(capabilities.claude!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.deepEqual(capabilities.codex!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
-  assert.equal(capabilities.stashbase!.models, true);
+  assert.equal(capabilities.stashbase!.models, false);
   assert.equal(capabilities.stashbase!.effort, false);
   assert.equal(capabilities.stashbase!.skills, false);
   assert.equal(capabilities.stashbase!.attachments, true);

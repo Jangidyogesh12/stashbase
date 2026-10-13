@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ChatMessage, ChatMessageAction } from '@/components/ui/chat-message';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { ThinkingIndicator } from '@/components/ui/thinking-indicator';
+import { agentRoleCallView } from '@/features/agent/domain/agent-role-call';
 import { segmentFileMentions, type AgentContextItem } from '@/features/agent/domain/context';
 import { agentQuestions } from '@/features/agent/domain/question';
 import { latestUserBlock, type AgentTranscriptBlock } from '@/features/agent/domain/session';
@@ -27,26 +28,18 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 import { writeToClipboard } from '@/shared/ui/clipboard';
 import { basePathName } from '@/shared/utils/file-path';
 
-import {
-  AgentActivityGroup,
-  AgentPermissionCard,
-  visibleActivitySteps,
-  type AgentActivityStep,
-} from './activity';
+import { AgentActivityGroup, AgentPermissionCard, visibleActivitySteps } from './activity';
 import { DayDivider } from './day-divider';
 import { AgentMarkdown } from './markdown';
 import { AgentQuestionCard } from './question-card';
-import { closingReplies } from './transcript-order';
+import { AgentRoleCall } from './role-call';
+import { closingReplies, transcriptGroups } from './transcript-order';
 import { AgentTurnChangesCard, type AgentTurnChangeReview } from './turn-changes-card';
 import { TurnFailure } from './turn-failure';
 
 export { closingReplies } from './transcript-order';
 
 const TRANSCRIPT_PAGE_SIZE = 200;
-
-type TranscriptGroup =
-  | AgentTranscriptBlock
-  | { kind: 'activity'; id: string; steps: AgentActivityStep[] };
 
 /** Copies the untouched source text; the glyph confirms for a moment. */
 function CopyAction({ label, text }: { label: string; text: string }) {
@@ -69,22 +62,6 @@ function CopyAction({ label, text }: { label: string; text: string }) {
       onClick={copy}
     />
   );
-}
-
-function transcriptGroups(blocks: AgentTranscriptBlock[]): TranscriptGroup[] {
-  const groups: TranscriptGroup[] = [];
-  let activity: Extract<TranscriptGroup, { kind: 'activity' }> | null = null;
-  for (const block of blocks) {
-    if (block.kind === 'user') activity = null;
-    if (block.kind === 'thinking' || (block.kind === 'tool' && block.status !== 'awaiting')) {
-      if (!activity) {
-        activity = { kind: 'activity', id: `activity-${block.id}`, steps: [] };
-        groups.push(activity);
-      }
-      activity.steps.push(block);
-    } else groups.push(block);
-  }
-  return groups;
 }
 
 /** Context as it was sent, or the replayed attachments a native history
@@ -343,7 +320,10 @@ export const AgentTranscript = memo(function AgentTranscript({
       ? tailGroup
       : null;
   const tail = blocks.at(-1);
-  const narrated = liveGroup !== null || (tail?.kind === 'tool' && tail.status === 'awaiting');
+  const narrated =
+    liveGroup !== null ||
+    (tail?.kind === 'tool' && tail.status === 'awaiting') ||
+    (tailGroup?.kind === 'role-call' && tailGroup.tool.status === 'running');
   return (
     <>
       {hiddenCount > 0 && (
@@ -357,7 +337,13 @@ export const AgentTranscript = memo(function AgentTranscript({
         </Button>
       )}
       {groups.map((group) =>
-        group.kind === 'activity' ? (
+        group.kind === 'role-call' ? (
+          <AgentRoleCall
+            key={group.id}
+            status={group.tool.status}
+            view={agentRoleCallView(group.tool, group.role)}
+          />
+        ) : group.kind === 'activity' ? (
           <AgentActivityGroup
             focusToolId={decidedToolId}
             key={group.id}

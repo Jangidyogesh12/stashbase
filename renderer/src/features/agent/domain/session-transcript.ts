@@ -7,6 +7,13 @@ import type { AgentContextItem } from '@/features/agent/domain/context';
 
 type AgentToolStatus = 'running' | 'awaiting' | 'done' | 'error' | 'denied' | 'cancelled';
 
+export interface AgentCrewCall {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly model: string;
+}
+
 /** Why a turn failed, as this feature names it. The session adapter maps the
  *  wire vocabulary onto these names, so the domain never reads a protocol. */
 export type AgentTurnFailureReason =
@@ -84,6 +91,7 @@ export type AgentTranscriptBlock =
       id: string;
       name: string;
       input: Record<string, unknown>;
+      crew?: AgentCrewCall | undefined;
       status: AgentToolStatus;
       permissionId?: string | undefined;
       permissionRequested?: boolean | undefined;
@@ -125,13 +133,25 @@ export function appendBlock(
 
 export function startTool(
   transcript: AgentTranscriptBlock[],
-  tool: { id: string; name: string; input: Record<string, unknown> },
+  tool: {
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    crew?: AgentCrewCall | undefined;
+  },
 ): AgentTranscriptBlock[] {
   const index = transcript.findIndex((block) => block.kind === 'tool' && block.id === tool.id);
   if (index < 0) {
     return [
       ...transcript,
-      { id: tool.id, input: tool.input, kind: 'tool', name: tool.name, status: 'running' },
+      {
+        id: tool.id,
+        input: tool.input,
+        kind: 'tool',
+        name: tool.name,
+        crew: tool.crew,
+        status: 'running',
+      },
     ];
   }
   const next = transcript.slice();
@@ -141,6 +161,7 @@ export function startTool(
     next[index] = {
       ...current,
       input: tool.input,
+      crew: tool.crew ?? current.crew,
       name: tool.name,
       status: current.status === 'awaiting' ? 'awaiting' : 'running',
     };

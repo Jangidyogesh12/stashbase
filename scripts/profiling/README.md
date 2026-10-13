@@ -1,8 +1,8 @@
 # Profiling
 
-These scripts launch an isolated development StashBase, drive it through the
-Chrome DevTools Protocol, and record measurements you can compare between two
-versions of the code. Each scenario measures one user task. Run a scenario
+These scripts measure isolated StashBase runtimes so you can compare two
+versions of the code. Renderer scenarios drive a development window through
+the Chrome DevTools Protocol; host scenarios use the native runtime directly. Each scenario measures one user task. Run a scenario
 before and after a change, then compare the two labels.
 
 Results and CPU profiles go to `profiling.nosync/<scenario>/`, which Git ignores.
@@ -98,6 +98,31 @@ workspace session.
 | Tree reloads | 3–6 | 0 |
 | Saves | 6–15 | 1 |
 | Saved-file diff | +2,882 −1,729 | +1 −1 |
+
+## Scenario: Default session startup
+
+`pnpm profile:default-session --label after --runs 3` measures the real pinned
+OpenCode process, MCP readiness, and native chat creation. Use `--checkout
+/path/to/baseline` to measure another checkout with its own runtime code and
+available dependencies/build output. Compare with
+`pnpm profile:compare default-session --labels before,after`.
+
+The headless scenario isolates Settings and app data, supplies local catalog
+fixtures, and makes no external model requests. Each pair starts cold, ends a
+turn, waits five seconds to represent reading the answer, then starts another
+chat. The idle interval is excluded from startup latency. Renderer development
+build overhead does not apply to this scenario.
+
+| Metric | Before (`73aaa4c1`) | After (2.16 Crew changes) |
+|---|---|---|
+| `coldMs` | 1,160–1,406 ms | 1,123–1,508 ms |
+| `nextChatMs` | 1,115–2,792 ms | 14–16 ms |
+
+Reference ranges are three runs per label on the same macOS arm64 machine.
+The baseline worktree had unchanged source and untracked dependency/build
+symlinks, hence its raw revision label includes `+dirty`. These measurements
+exclude real catalog network latency, model generation, and UI rendering.
+An expired or incompatible spare still requires cold startup.
 
 ## Adding a scenario
 

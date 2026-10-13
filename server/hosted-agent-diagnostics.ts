@@ -1,4 +1,7 @@
 import { diagnosticText, errorDiagnostic, type ErrorDiagnostic } from '../shared/protocols/diagnostics.ts';
+import { logger } from './log.ts';
+
+const log = logger('agent-performance');
 
 /** Observe protocol metadata, never retain model text, tools, or request bodies.
  * A single bounded frame is transient parser state, discarded at each boundary. */
@@ -17,15 +20,23 @@ export class HostedAgentRequestDiagnostic {
   private status: number | undefined;
   private contentType: string | undefined;
   private requestId: string | undefined;
+  private readonly started = performance.now();
+  private headersMs: number | undefined;
+  private firstByteMs: number | undefined;
+  private firstTextMs: number | undefined;
+  private finishedMs: number | undefined;
+  private usage: Record<string, number> = {};
 
-  constructor(private readonly callId: string, private readonly attempt: number) {}
+  constructor(private readonly callId: string, private readonly attempt: number,
+    private readonly context?: { profile: string; turnId: string }) {}
 
   response(response: Response): Response {
+    this.headersMs = this.elapsed();
     this.status = response.status;
     this.contentType = response.headers.get('content-type') ?? undefined;
     this.requestId = response.headers.get('x-request-id') ?? response.headers.get('request-id')
       ?? response.headers.get('x-amzn-requestid') ?? undefined;
-    if (!response.body) { this.ended = true; return response; }
+    if (!response.body) { this.ended = true; this.finish(); return response; }
     const sse = this.contentType?.includes('text/event-stream');
     const reader = response.body.getReader();
     let released = false;
@@ -37,11 +48,13 @@ export class HostedAgentRequestDiagnostic {
           if (chunk.done) {
             this.ended = true;
             if (sse) this.observe(this.decoder.decode() + '\n\n');
+            this.finish();
             release();
             controller.close();
             return;
           }
           this.bytes += chunk.value.byteLength;
+          this.firstByteMs ??= this.elapsed();
           if (sse) this.observe(this.decoder.decode(chunk.value, { stream: true }));
           controller.enqueue(chunk.value);
         } catch (error) {
@@ -50,11 +63,28 @@ export class HostedAgentRequestDiagnostic {
           controller.error(error);
         }
       },
-      cancel: async (reason) => { try { await reader.cancel(reason); } finally { release(); } },
+      cancel: async (reason) => { try { await reader.cancel(reason); } finally { this.finish(); release(); } },
     }), { status: response.status, statusText: response.statusText, headers: response.headers });
   }
 
-  fail(error: unknown): void { this.failure = errorDiagnostic(error); }
+  fail(error: unknown): void { this.failure = errorDiagnostic(error); this.finish(); }
+
+  private elapsed(): number { return Math.round(performance.now() - this.started); }
+
+  private timing() {
+    return {
+      headers_ms: this.headersMs, first_byte_ms: this.firstByteMs,
+      first_text_ms: this.firstTextMs, elapsed_ms: this.finishedMs ?? this.elapsed(),
+      ...this.usage,
+    };
+  }
+
+  private finish(): void {
+    if (this.finishedMs !== undefined) return;
+    this.finishedMs = this.elapsed();
+    log.debug('model request', { call_id: this.callId, attempt: this.attempt,
+      profile: this.context?.profile, turn_id: this.context?.turnId, ...this.timing() });
+  }
 
   snapshot(): ErrorDiagnostic {
     return errorDiagnostic({
@@ -63,6 +93,7 @@ export class HostedAgentRequestDiagnostic {
         call_id: this.callId, attempt: this.attempt, bytes: this.bytes, frames: this.frames,
         stream_ended: this.ended, done: this.done, finish_reasons: [...this.finishes],
         malformed_frames: this.malformedFrames, oversized_frames: this.oversizedFrames,
+        ...this.timing(),
       })}`,
       status: this.status, content_type: this.contentType, request_id: this.requestId ?? this.callId,
       cause: this.failure,
@@ -98,6 +129,14 @@ export class HostedAgentRequestDiagnostic {
     try {
       const value = JSON.parse(data);
       if (!value || typeof value !== 'object') { this.malformedFrames++; return; }
+      for (const [name, count] of Object.entries({
+        input_tokens: value.usage?.prompt_tokens,
+        output_tokens: value.usage?.completion_tokens,
+        cached_tokens: value.usage?.prompt_tokens_details?.cached_tokens,
+        cache_write_tokens: value.usage?.prompt_tokens_details?.cache_write_tokens,
+      })) {
+        if (typeof count === 'number' && Number.isFinite(count) && count >= 0) this.usage[name] = count;
+      }
       if (value.error) {
         const error = value.error;
         this.fail({ name: 'ModelStreamError',
@@ -107,6 +146,8 @@ export class HostedAgentRequestDiagnostic {
       }
       if (Array.isArray(value.choices)) {
         for (const choice of value.choices) {
+          if (typeof choice?.delta?.content === 'string' && choice.delta.content.length > 0)
+            this.firstTextMs ??= this.elapsed();
           if (typeof choice?.finish_reason === 'string' && this.finishes.size < 8)
             this.finishes.add(diagnosticText(choice.finish_reason, 120));
         }

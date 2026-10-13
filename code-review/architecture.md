@@ -297,13 +297,26 @@ stable status without download, retry, or a new durable demand latch.
   shaped leaves every runtime unchanged. The offer is advisory and shares the
   existing native update flow; it never gates a turn, a session, or a model
   choice.
+- Generated stdio MCP launchers retain the generating host's HTTP port. Explicit
+  launcher arguments may override it; a custom-port runtime must never call a
+  different app instance on the default port.
 - Codex MCP setup parses TOML and replaces only StashBase table ranges, preserving
   unrelated configuration. Invalid or unsupported configuration fails untouched.
   `server/agent-config-paths.ts` owns configuration identity for setup and Claude
   model metadata; MCP writes respect the same `CODEX_HOME` / `CLAUDE_CONFIG_DIR`
   inherited by provider processes.
 - Each OpenQuill chat owns an authenticated loopback OpenCode process; each Codex
-  chat owns its app-server/thread. History readers have separate ownership. All Codex app-server
+  chat owns its app-server/thread. After a Default turn, the host may prepare one
+  unused OpenCode process and its MCP connection for the next chat. Claiming that
+  spare transfers exclusive ownership, including its private attribution id;
+  active chats never share it. Window, project, account, persona and instruction
+  path must match; a fresh model catalog and current attached tools must match
+  its configuration or it is retired and started again. Prewarming creates no
+  native chat or model request. Subsequent matching turns refresh its idle
+  deadline or replace an expired spare. One app-wide spare expires after two idle minutes
+  and is retired on window close, project removal, or shutdown. Startup cancellation
+  cannot resurrect a retired process, and shutdown awaits already-retiring servers.
+  History readers have separate ownership. All Codex app-server
   owners share retirement that waits for exit and escalates process-tree termination;
   shutdown also awaits readers and already-retiring processes.
   Process death settles pending RPCs/turns, and generation guards reject late
@@ -414,10 +427,17 @@ stable status without download, retry, or a new durable demand latch.
   app-owned turn socket and do not receive Chat turn-review cards.
 - Codex modes use on-request approval with mode-specific sandbox/review policy;
   Claude maps native modes. Default maps Ask/Edit/Plan to OpenCode profiles;
-  Edit shares `agent-file-permissions.ts` with the other adapters, granting only
+  Auto uses the Edit profile with host-owned review. Edit and Auto share
+  `agent-file-permissions.ts` with the other adapters, granting only
   ordinary StashBase document writes inside the bound project (including
   realpath checks). Plan denies unlisted tools in the native profile and rejects
-  unexpected mutating permission requests. Default offers no Auto reviewer.
+  unexpected mutating permission requests. `default-agent-permissions.ts`
+  reviews Auto's routine commands, web fetches, and external reads with the
+  default hosted model, no tools, and the same turn's accounting. Only an exact
+  ALLOW answer grants the pending action; uncertain output, errors, or a
+  five-second deadline return to manual approval. Destructive and unfamiliar
+  tools bypass review and still ask. Stop, disposal, and turn retirement cancel
+  review; late answers cannot approve a later turn's action.
   Approval replies grant once, require a pending request id, and never persist
   an `always` grant across modes. Options stay frozen while a turn runs.
   The bundled runtime filters inherited credentials and injection flags while
@@ -481,46 +501,81 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   saved credentials. Network, timeout, rate-limit, and server failures preserve them.
 - Avatar proxying is restricted to validated HTTPS provider hosts with bounded
   redirects/time/bytes/type; it is not a general fetch endpoint.
-- OpenQuill receives a random session-local model broker credential, not account
-  secrets. Model calls require an active submitted turn, retain its id/idempotency
-  across the one auth-refresh retry, and cannot expose account tokens in history.
-  Turn/channel retirement cancels body reads and pending upstream work; awaited
-  credential acquisition cannot forward a request after retirement.
-  The broker buffers a bounded empty SSE prefix and retries an empty model call
-  once with the same body and turn, including completed tool results. The new
-  model attempt gets a fresh accounting key. Any output, tool-call data, provider
-  error, or unrecognized event disables replay; ordinary output still streams.
-  Repeated empty responses fail without native automatic retries. Cancellation
-  retires both prefix buffering and recovery before another upstream call.
-  The hosted ledger sizes output under its account lock against available
-  account and turn budgets, preserving the conservative input reservation.
-  Its approved output limit travels to the provider; the desktop never computes
-  a budget from the displayed percentage. Hosted quota failures distinguish
-  insufficient request credits from insufficient turn budget and preserve their
-  recovery classification through the native runtime message boundary.
-  `server/hosted-agent-models.ts` reads the approved model profiles. Each
-  OpenQuill chat reads them once at start and configures its OpenCode process
-  with the same list, so stored prompts name their profile and compaction uses
-  that profile's limits. A turn sends the profile and the version the reader was
-  shown; the broker pins both to the turn, tool continuations included. Changed
-  or withdrawn profiles leave the broker as 422, outside native retries, and
-  classify as `model-changed`. Versions, limits, and upstream identity stay in
-  the host; the listing keeps the hosted catalog in memory only. The service's
-  `relativeCost` (price against its default, which dollar amounts never leave)
-  is the one profile field forwarded to the picker, which locks rows at 1.5× or
-  more. The lock is renderer-only: the host still runs any approved profile a
-  chat already names. Until the service reports `relativeCost`, the host fills
-  it for the known premium profile ids (Opus, Sonnet, Sol).
-  Hosted quota/accounting and Stripe billing stay external; the desktop exposes
-  bounded usage, plans, and subscription status. The host requests Checkout and
-  Portal pages with the account session and hands the renderer only a verified
-  Stripe-hosted URL; desktop account tokens never appear in links or Stripe
-  configuration. Billing HTTP calls share a twenty-second deadline across retries;
-  authentication refresh retains its existing ten-second bound. Native browser acknowledgement is bounded to ten seconds;
-  renderer billing retains the result to report launch failures. The exact,
-  data-free `stashbase://billing-return` link only focuses a window and cannot
-  grant rights or acknowledge an OAuth flow. Website billing uses its own browser session.
-  Child environment and AppData HOME/config isolate ambient secrets and user config.
+- OpenQuill receives a random session-local model broker credential, not
+  account secrets. Model calls require an active submitted turn, retain its
+  id/idempotency across the one auth-refresh retry, and cannot expose account
+  tokens in history. Turn/channel retirement cancels body reads and pending
+  upstream work; awaited credential acquisition cannot forward a request after
+  retirement. The broker buffers a bounded empty SSE prefix and retries an
+  empty model call once with the same body and turn, including completed tool
+  results. The new model attempt gets a fresh accounting key. Any output,
+  tool-call data, provider error, or unrecognized event disables replay;
+  ordinary output still streams. Repeated empty responses fail without native
+  automatic retries. Cancellation retires both prefix buffering and recovery
+  before another upstream call. The hosted ledger sizes output under its
+  account lock against available account and turn budgets, preserving the
+  conservative input reservation. Its approved output limit travels to the
+  provider; the desktop never computes a budget from the displayed percentage.
+  Hosted quota failures distinguish insufficient request credits from
+  insufficient turn budget and preserve their recovery classification through
+  the native runtime message boundary. `server/hosted-agent-models.ts` reads
+  the approved model profiles. Each OpenQuill chat reads them once at start
+  and configures its OpenCode process with the same list, so stored prompts
+  name their profile and compaction uses that profile's limits. The main agent
+  always runs on the service's default profile. `server/agent-tool-catalog.ts`
+  reads the tool catalog (`GET /v2/agent/tools`): the tools, their published
+  names and descriptions, and a tool model pool independent of the main
+  Agent's profiles, cached per account with the service's ETag (304 reuses it,
+  a failed refresh keeps a valid copy, sign-out clears it; without a copy,
+  selected Crew blocks startup and a chat without Crew can proceed). `server/default-agent-tools.ts` holds no tool of
+  its own: it resolves the chat's choices in app config `agentCrewChats` against a catalog.
+  `defaultAgentTools` seeds new chats only; a draft key transfers to the native
+  session id before it is announced. Deletion removes the chat's choices. It never
+  replaces an unusable pick or disabled default with another model, and owns
+  the rules every tool shares (the briefing, the brief format, and the tool
+  prompt, which uses the published responsibility and output description).
+  Shared instructions express the selected division of work, current-task
+  precedence, and necessary context, including unsaved drafts and evidence. Each chat takes a
+  catalog snapshot at start; each root turn copies it, so every role shares
+  one catalog version, and only a turn not yet bound by an accepted call may
+  move to a newer catalog, for the same tool on the same model, after
+  `agent_tool_version_changed`. An enabled tool reaches the main agent as a
+  StashBase MCP tool registered by the stdio host its chat spawns
+  (`STASHBASE_AGENT_TOOLS`, the catalog's function names and descriptions; a
+  name that collides with a built-in tool is not registered), with the shared
+  briefing added to the main agent's instructions; `task` is denied, so
+  OpenCode starts no sub-agent. A call goes to
+  `/api/project/agent-tools/:tool` under the chat's project scope; it runs far
+  longer than the runtime's per-request MCP timeout, so the MCP host sends a
+  progress notification every few seconds, which the runtime takes as a reason
+  to restart that timeout, and a cancelled request aborts the call. Turn identity and its abort signal
+  are captured before file reads and retained through catalog refresh/retry;
+  the host reads the named files there and the broker sends one completion to
+  `/v2/agent/chat/completions` under the root turn id, selected by the tool,
+  tool version, tool model, and tool model version headers and never by a main
+  profile. Direct completion requires a stop finish reason and the SSE DONE
+  marker; truncated and interrupted output fails instead of becoming a draft.
+  `server/agent-crew-history.ts` persists member/model attribution by native
+  session and call id in app data, independent of the mutable catalog. The
+  WebSocket and history protocols carry that metadata to standalone Crew cards.
+  Deleting the native chat removes its attribution. OpenCode's own requests and the Auto permission review run on the
+  turn's main profile over v1. Changed or withdrawn main profiles leave the
+  broker as 422, outside native retries, and classify as `model-changed`; tool
+  refusals keep the service code and never fall back to another model.
+  Versions, limits, and upstream identity stay in the host; the listing keeps
+  the hosted catalog in memory only. Hosted quota/accounting and Stripe
+  billing stay external; the desktop exposes bounded usage, plans, and
+  subscription status. The host requests Checkout and Portal pages with the
+  account session and hands the renderer only a verified Stripe-hosted URL;
+  desktop account tokens never appear in links or Stripe configuration.
+  Billing HTTP calls share a twenty-second deadline across retries;
+  authentication refresh retains its existing ten-second bound. Native browser
+  acknowledgement is bounded to ten seconds; renderer billing retains the
+  result to report launch failures. The exact, data-free
+  `stashbase://billing-return` link only focuses a window and cannot grant
+  rights or acknowledge an OAuth flow. Website billing uses its own browser
+  session. Child environment and AppData HOME/config isolate ambient secrets
+  and user config.
 - Built-in HTTP and external MCP share Project Operations. Streamable HTTP checks
   the current Settings token on every POST; rotation invalidates old tokens.
   Loopback is default; Docker opt-in exposes only the separate MCP listener.

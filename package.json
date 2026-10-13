@@ -70,7 +70,7 @@
     "test:inventory": "node scripts/check-test-inventory.mjs",
     "test:toolchain": "node --test scripts/check-vite-plus-toolchain.test.mjs scripts/vite-plus-ci.test.mjs && node scripts/check-vite-plus-toolchain.mjs",
     "eval:semantic-retrieval": "node --import tsx scripts/run-semantic-retrieval-eval.ts",
-    "test:agent": "node --import tsx --test server/__tests__/agent.test.ts server/__tests__/agent-contract.test.ts server/turn-changes.test.ts server/__tests__/agent-history-routes.test.ts server/__tests__/agent-projects.test.ts server/__tests__/agent-runtime-installer.test.ts server/__tests__/agent-runtime-recovery.test.ts server/__tests__/agent-turn-failure.test.ts server/__tests__/codex-agent.test.ts server/__tests__/agent-model-catalog.test.ts server/__tests__/claude-model-catalog.test.ts server/__tests__/agent-cli.test.ts server/__tests__/opencode-agent.test.ts server/__tests__/hosted-agent-broker.test.ts server/__tests__/hosted-agent-models.test.ts server/codex-history.test.ts",
+    "test:agent": "node --import tsx --test server/__tests__/agent.test.ts server/__tests__/agent-contract.test.ts server/turn-changes.test.ts server/__tests__/agent-history-routes.test.ts server/__tests__/agent-projects.test.ts server/__tests__/agent-runtime-installer.test.ts server/__tests__/agent-runtime-recovery.test.ts server/__tests__/agent-turn-failure.test.ts server/__tests__/codex-agent.test.ts server/__tests__/agent-model-catalog.test.ts server/__tests__/claude-model-catalog.test.ts server/__tests__/agent-cli.test.ts server/__tests__/opencode-agent.test.ts server/__tests__/opencode-warm-slot.test.ts server/__tests__/default-agent-permissions.test.ts server/__tests__/default-agent-tools.test.ts server/__tests__/hosted-agent-broker.test.ts server/__tests__/hosted-agent-diagnostics.test.ts server/__tests__/hosted-agent-models.test.ts server/codex-history.test.ts",
     "profile:editing": "node scripts/profiling/editing.mjs",
     "profile:compare": "node scripts/profiling/compare.mjs",
     "test:agent:native": "node --import tsx --test server/__tests__/agent-native-smoke.test.ts",
@@ -111,7 +111,8 @@
     "test:renderer:a11y": "pnpm --filter @stashbase/renderer test:a11y",
     "build:services": "pnpm build:server && pnpm build:mcp",
     "typecheck:host": "tsc --noEmit && pnpm typecheck:electron-boundary",
-    "test:electron:smoke:built": "node electron/renderer/smoke-runner.cjs"
+    "test:electron:smoke:built": "node electron/renderer/smoke-runner.cjs",
+    "profile:default-session": "node --import tsx scripts/profiling/default-session.mjs"
   },
   "build": {
     "appId": "com.stashbase.app",

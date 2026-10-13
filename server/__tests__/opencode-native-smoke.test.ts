@@ -1,3 +1,4 @@
+import './isolated-home.ts';
 import { attachmentPdf } from './attachment-fixtures.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -12,7 +13,7 @@ import { pathToFileURL } from 'node:url';
 import type { WebSocket } from 'ws';
 import { createOpencodeClient, type Event as LegacyEvent } from '@opencode-ai/sdk';
 import type { EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
-import { blocksForMessage, OpenCodeEventTranslator, OpenCodePanelSession, storedOpenCodeModel } from '../opencode-agent.ts';
+import { blocksForMessage, OpenCodeEventTranslator, OpenCodePanelSession } from '../opencode-agent.ts';
 import { ensureMcpLauncher } from '../agent-mcp.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { HostedAgentBroker } from '../hosted-agent-broker.ts';
@@ -21,7 +22,12 @@ import {
   buildOpenCodeConfig,
   bundledOpenCodeExecutable,
   openCodeRuntimeEnvironment,
+  createOpenCodeSessionRuntime,
+  stopOpenCodeRuntime,
 } from '../opencode-runtime.ts';
+import { setHostedAccountSession } from '../app-config.ts';
+import { setDefaultAgentTool } from '../default-agent-tools.ts';
+import { parseToolCatalog } from '../agent-tool-catalog.ts';
 
 type Event = LegacyEvent | EventPermissionAsked;
 
@@ -139,6 +145,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const gatewayRequests: Array<Record<string, unknown>> = [];
   const gatewayModels: Array<{ profile: string | undefined; version: string | undefined }> = [];
   let nextTool: { name: string; arguments: string } | undefined;
+  const reviews: Array<Record<string, unknown>> = [];
   let emptyResponses = 0;
   let emptyAfterTool = false;
   const gateway = http.createServer(async (request, response) => {
@@ -149,6 +156,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
       profile: request.headers['x-stashbase-agent-profile'] as string | undefined,
       version: request.headers['x-stashbase-agent-profile-version'] as string | undefined,
     });
+    const body = gatewayRequests.at(-1)!;
+    const reviewing = Array.isArray(body.messages) && body.messages.some((message) =>
+      message.role === 'system' && String(message.content).startsWith('Review one proposed action'));
+    if (reviewing) reviews.push(body);
     const tool = nextTool ?? (gatewayRequests.length === 1
       ? { name: 'read', arguments: JSON.stringify({ filePath: externalFile }) }
       : gatewayRequests.length === 3
@@ -172,7 +183,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
           tool_calls: [{
             index: 0, id: `smoke-tool-${gatewayRequests.length}`, type: 'function', function: tool,
           }],
-        } : { role: 'assistant', content: empty ? '' : 'probe ok' },
+        } : { role: 'assistant', content: reviewing ? 'ALLOW' : empty ? '' : 'probe ok' },
         finish_reason: null,
       }],
     })}\n\n`);
@@ -294,7 +305,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const subscription = await client.event.subscribe({ signal: subscriptions.signal, sseMaxRetryAttempts: 1 });
   const events: Event[] = [];
   const translator = new OpenCodeEventTranslator();
-  const session = (await client.session.create({ throwOnError: true, body: { title: 'Native Smoke' } })).data;
+  const session = (await client.session.create({ throwOnError: true, body: { title: 'New Chat' } })).data;
   assert.ok(filesystemPath.equal(session.directory, temporaryRoot),
     `SDK session scope ${JSON.stringify(session.directory)} differs from fixture ${JSON.stringify(temporaryRoot)}`);
   translator.bindSession(session.id);
@@ -323,6 +334,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     },
   });
   await consumed;
+  assert.equal(gatewayRequests.length, 2, 'one read and its answer must not incur an extra title model call');
   const initialRequest = JSON.stringify(gatewayRequests[0]);
   assert.ok(!initialRequest.includes('ANCESTOR_SKILL_'), 'ancestor skills must not reach the model');
   assert.match(initialRequest, /PROJECT_INSTRUCTIONS_RETAINED/);
@@ -406,14 +418,17 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     models: async () => SMOKE_PROFILES,
     client: async () => client,
     beginTurn: (turnId, selected) => broker.beginTurn('native-smoke', turnId, selected),
+    tools: () => [],
+    complete: (profile, messages, signal) => broker.complete('native-smoke', profile, messages, signal),
+    runTool: async () => { throw new Error('No tools in this smoke.'); },
     endTurn: () => broker.endTurn('native-smoke'),
     onExit: () => () => {}, close: async () => {},
   });
   await socket.waitFor('ready');
   const modeFile = path.join(temporaryRoot, 'mode-result.md');
-  const runPanelTurn = async (allowError = false) => {
+  const runPanelTurn = async (allowError = false, text = 'Run the fixture probe.') => {
     const ended = socket.waitFor('turn-end', allowError);
-    socket.request({ t: 'prompt', text: 'Run the fixture probe.' });
+    socket.request({ t: 'prompt', text });
     await ended;
   };
   nextTool = { name: 'stashbase_write_file', arguments: JSON.stringify({ path: modeFile, content: 'Edit allowed' }) };
@@ -425,9 +440,8 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Edit allowed', 'Plan must reject a provider that attempts a write');
 
-  // A model chosen between turns reaches the provider body and the hosted
-  // headers together, and the stored prompt names it for a later resume.
-  stage = 'panel model choice';
+  // The main agent stays on the default profile; a model pick is not a role.
+  stage = 'panel main model';
   const firstPanelCall = gatewayModels.findIndex((entry) => entry.version !== undefined);
   assert.deepEqual(gatewayModels[firstPanelCall], { profile: 'stashbase-agent-default', version: '4' });
   socket.request({ t: 'set-model', model: 'writer-pro' });
@@ -435,12 +449,9 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   await runPanelTurn();
   assert.ok(gatewayRequests.length > beforeChoice);
   for (let index = beforeChoice; index < gatewayRequests.length; index++) {
-    assert.equal(gatewayRequests[index]!.model, 'writer-pro');
-    assert.deepEqual(gatewayModels[index], { profile: 'writer-pro', version: '9' });
+    assert.equal(gatewayRequests[index]!.model, 'stashbase-agent-default');
+    assert.deepEqual(gatewayModels[index], { profile: 'stashbase-agent-default', version: '4' });
   }
-  const panelSession = socket.events.find((event) => event.t === 'session-id')!.id!;
-  const panelHistory = (await client.session.messages({ throwOnError: true, path: { id: panelSession } })).data;
-  assert.equal(storedOpenCodeModel(panelHistory), 'writer-pro');
   nextTool = { name: 'bash', arguments: JSON.stringify({ command: `echo changed > '${modeFile}'`, description: 'Attempt a command in Plan' }) };
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Edit allowed', 'Plan must reject shell writes');
@@ -452,6 +463,18 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Ask approved', 'switching out of Plan must restore approved writes');
   assert.equal(socket.events.filter(event => event.t === 'permission').length, 1);
+
+  stage = 'Auto command review';
+  socket.request({ t: 'set-mode', mode: 'auto' });
+  const autoStart = socket.events.length;
+  nextTool = { name: 'bash', arguments: JSON.stringify({ command: 'pwd', description: 'Show the project directory' }) };
+  await runPanelTurn(false, 'Show the project directory with pwd.');
+  assert.equal(reviews.length, 1, 'Auto must review the exact native command through the hosted broker');
+  assert.equal(reviews[0].tools, undefined, 'the reviewer has no tools');
+  assert.match(JSON.stringify(reviews[0].messages), /Show the project directory with pwd/);
+  const autoEvents = socket.events.slice(autoStart) as Array<{ t: string; content?: string; isError?: boolean }>;
+  assert.equal(autoEvents.filter(event => event.t === 'permission').length, 0);
+  assert.ok(autoEvents.some(event => event.t === 'tool-result' && !event.isError && event.content?.includes(temporaryRoot)));
 
   socket.request({ t: 'set-mode', mode: 'acceptEdits' });
   stage = 'empty response recovery';
@@ -489,9 +512,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
       : []
   );
   const folderTools = toolNames(gatewayRequests[0]);
-  for (const name of ['bash', 'read', 'task']) {
+  for (const name of ['bash', 'read']) {
     assert.ok(folderTools.includes(name), `folder profile omitted ${name}`);
   }
+  assert.ok(!folderTools.includes('task'), 'Default must not expose native sub-agents');
   for (const name of ['stashbase_read_file', 'stashbase_write_file']) {
     assert.ok(folderTools.includes(name), `folder profile omitted ${name}`);
   }
@@ -580,4 +604,84 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.equal(child.exitCode, null, `OpenCode exited unexpectedly (${child.exitCode ?? child.signalCode})`);
   assert.equal(child.signalCode, null, `OpenCode exited unexpectedly (${child.signalCode})`);
   completed = true;
+});
+
+test('prewarmed native chats retain exclusive attribution and refresh changed models and tools', { timeout: 30_000 }, async (t) => {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-warm-native-')));
+  setHostedAccountSession({
+    userId: 'warm-fixture', email: 'fixture@example.invalid', accessToken: 'fixture-only', refreshToken: 'fixture-only',
+    expiresAt: Math.floor(Date.now() / 1000) + 3600,
+  });
+  let profiles = SMOKE_PROFILES.map(profile => ({ ...profile,
+    id: profile.isDefault ? profile.id : 'claude-sonnet-5-5',
+  }));
+  let reads = 0;
+  const toolCatalog = parseToolCatalog({
+    schemaVersion: 2,
+    revision: 'smoke',
+    models: [{ id: 'claude-sonnet-5-5', version: 1, name: 'Claude Sonnet 5.5', relativeCost: 2.7, contextTokenLimit: 200_000,
+      outputTokenLimit: 64_000, availability: { status: 'available' } }],
+    tools: [{ id: 'writer', kind: 'agent-role', version: 1, name: 'Writer', summary: 'Drafts', icon: 'pen-line',
+      availability: { status: 'available' }, modelIds: ['claude-sonnet-5-5'], defaultModelId: 'claude-sonnet-5-5',
+      agent: { toolName: 'write_draft', description: 'Writes the draft.' } }],
+  });
+  const originalFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.pathname === '/v1/agent/models') {
+      reads++;
+      return Response.json({ models: profiles });
+    }
+    if (url.pathname === '/v2/agent/tools') {
+      return Response.json({ schemaVersion: 2, revision: toolCatalog.revision, models: toolCatalog.models,
+        tools: toolCatalog.tools.map(tool => ({ ...tool, kind: 'agent-role' })) });
+    }
+    assert.equal(url.hostname, '127.0.0.1', 'startup must not make model or other external requests');
+    return originalFetch(input, init);
+  });
+  t.after(async () => {
+    await stopOpenCodeRuntime();
+    setHostedAccountSession(undefined);
+    setDefaultAgentTool(toolCatalog, 'writer', { enabled: false });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  const context = { windowId: 'warm-window', directory: root, persona: undefined };
+  const first = createOpenCodeSessionRuntime(context);
+  const firstClient = await first.client(root);
+  assert.equal((await firstClient.mcp.status({ throwOnError: true })).data.stashbase?.status, 'connected');
+  const firstSession = (await firstClient.session.create({ body: { title: 'First chat' }, throwOnError: true })).data;
+  first.endTurn();
+  await new Promise<void>(resolve => setImmediate(resolve));
+
+  const second = createOpenCodeSessionRuntime(context);
+  const secondClient = await second.client(root);
+  assert.notEqual(first.attributionId, second.attributionId);
+  const config = (await secondClient.config.get({ throwOnError: true })).data;
+  const mcp = config.mcp!.stashbase as { environment: Record<string, string> };
+  assert.equal(mcp.environment.STASHBASE_AGENT_SESSION_ID, second.attributionId);
+  assert.equal((await secondClient.session.list({ throwOnError: true })).data.length, 1, 'warming must not create blank history');
+  const secondSession = (await secondClient.session.create({ body: { title: 'Second chat' }, throwOnError: true })).data;
+  assert.notEqual(firstSession.id, secondSession.id);
+  await first.close();
+  assert.equal((await secondClient.session.get({ path: { id: secondSession.id }, throwOnError: true })).data.title, 'Second chat');
+  second.endTurn();
+  await new Promise<void>(resolve => setImmediate(resolve));
+
+  // A saved choice made after warm-up must reach the new chat even when
+  // the service's profiles themselves did not change.
+  setDefaultAgentTool(toolCatalog, 'writer', { enabled: true });
+  const third = createOpenCodeSessionRuntime(context);
+  const thirdClient = await third.client(root);
+  const thirdConfig = (await thirdClient.config.get({ throwOnError: true })).data;
+  assert.deepEqual(JSON.parse((thirdConfig.mcp!.stashbase as typeof mcp).environment.STASHBASE_AGENT_TOOLS!).map((tool: { id: string }) => tool.id), ['writer']);
+  third.endTurn();
+  await new Promise<void>(resolve => setImmediate(resolve));
+
+  profiles = profiles.map(profile => ({ ...profile, version: profile.version + 1, outputTokenLimit: 4096 }));
+  const fourth = createOpenCodeSessionRuntime(context);
+  const fourthClient = await fourth.client(root);
+  const fourthConfig = (await fourthClient.config.get({ throwOnError: true })).data;
+  assert.equal(fourthConfig.provider!.stashbase!.models!['stashbase-agent-default']!.limit!.output, 4096);
+  assert.equal(reads, 4, 'a new chat must revalidate the service catalog before using a spare');
+  await assert.rejects(fourth.client(path.dirname(root)), /another project/);
 });

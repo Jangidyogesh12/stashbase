@@ -26,6 +26,7 @@ import { processPrivateTokenMatches } from '../process-private-token.ts';
 import { currentWindowId } from '../folder.ts';
 import { stopAgentRuntime } from '../agent-contract.ts';
 import { stopOpenCodeRuntime } from '../opencode-runtime.ts';
+import { clearToolCatalogCache } from '../agent-tool-catalog.ts';
 
 const log = logger('routes/account');
 const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google']);
@@ -227,6 +228,8 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     stopAgentRuntime('stashbase');
     await stopOpenCodeRuntime();
     await signOutHostedAccount();
+    // The tool catalog is per account; a later sign-in reads its own.
+    clearToolCatalogCache();
     res.json(await hostedAccountState());
   });
 }

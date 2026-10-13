@@ -14,16 +14,19 @@ Chat, Documents assistance, and runtimes.
    The action clearly sends, queues, or stops work. A persona sets how the Agent
    talks and writes in this Chat from the next message on and remains distinct
    from the current request. The reader can switch personas between messages,
-   write a new one, or browse ready-made personas to add one.
+   write a new one, or browse ready-made personas to add one. Default also offers
+   Crew: select who handles matching work in this chat and choose each member's
+   model. Existing chats keep their choices; new chats inherit the last selection.
 3. Follow replies and useful progress. Routine tools and provided thinking are
    grouped per turn and collapsed. The group holding a running turn names the
    step in hand so long work visibly advances; a settled group states what it
    did. Approvals, turn failures, and file results remain individually
    actionable. An Agent's clarifying questions appear as a card with its
    options and a line for the reader's own answer; answering continues the
-   turn, and skipping tells the Agent no answer was given. Tool-call failures
-   do not appear in chat, including activity summaries and expanded details. The Agent explains task outcomes; native
-   execution history retains the failed attempts.
+   turn, and skipping tells the Agent no answer was given. Ordinary tool-call failures
+   do not appear in activity summaries or expanded details; the Agent explains
+   task outcomes and native history retains the failed attempts. Selected Crew
+   calls have their own cards, including failed calls and their explanations.
    Only successful file operations contribute to changed-file results. A
    write made through a shell command or a subagent names no file and shows
    no result; when such a turn settles, the project's files refresh so the

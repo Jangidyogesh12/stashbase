@@ -1,8 +1,5 @@
-/** The Agent conversation surface: the transcript, the connection strip that
- *  explains a stopped session, and the composer beneath them. The workspace
- *  only reads session state and hands verbs back to the runtime; every
- *  decision about what a connection means is a domain selector. */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+/** Conversation surface. Reads session state and invokes runtime actions. */
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -59,6 +56,7 @@ function ChatWorkspace({
   catalogPort,
   header = true,
   persona: personaApi,
+  tools: toolsApi,
   onBrowsePersonas,
   onOpenAgentSettings,
   onSignIn,
@@ -75,6 +73,7 @@ function ChatWorkspace({
   catalogPort: AgentCatalogPort;
 }) {
   const activeId = active.id;
+  const [crewSaving, setCrewSaving] = useState(false);
   const scopeEnvironment = useStore(runtime.store, (state) => state.scopeEnvironment);
   const state = useStore(
     active.store,
@@ -281,9 +280,7 @@ function ChatWorkspace({
                         : [selectedAgent, ...catalog.agents]
                     }
                     disabled={busy || runtimeUpdate.busy || preferencesUnavailable}
-                    onAgentChange={(agent) => {
-                      void runtime.chooseAgent(agent);
-                    }}
+                    onAgentChange={(agent) => void runtime.chooseAgent(agent)}
                   />
                   {readyAgent && readyAgent.abilities.modes.length > 0 && (
                     <AgentPermissionMode
@@ -309,10 +306,17 @@ function ChatWorkspace({
                     onRequestCatalog={active.start}
                     runtimeUpdate={readyAgent.updatable ? runtimeUpdate : undefined}
                     state={{ ...state, activeTurn: busy || preferencesUnavailable }}
+                    tools={{
+                      api: toolsApi,
+                      chat: state.nativeSessionId ?? activeId,
+                      onChanged: active.applyPersona,
+                      onSaving: setCrewSaving,
+                    }}
                   />
                 ) : null
               }
               sendable={
+                !crewSaving &&
                 !catalog.loading &&
                 !catalog.error &&
                 !runtimeUpdate.busy &&
@@ -383,17 +387,5 @@ export default function ManagedAgentWorkspace(props: AgentWorkspaceProps) {
   }, [catalog.readyAgents, props.runtime]);
 
   if (!active) return null;
-  return (
-    <ChatWorkspace
-      active={active}
-      {...props}
-      catalogPort={props.catalog}
-      catalog={{
-        agents: catalog.agents,
-        error: catalog.error,
-        loading: catalog.loading,
-        refresh: catalog.refresh,
-      }}
-    />
-  );
+  return <ChatWorkspace active={active} {...props} catalogPort={props.catalog} catalog={catalog} />;
 }
