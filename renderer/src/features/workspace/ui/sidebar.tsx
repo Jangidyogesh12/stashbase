@@ -1,19 +1,44 @@
 /**
  * The project section of the sidebar: the active folder as a collapsible
- * section header carrying the tree's creates. A window keeps its folder for
- * its life; another folder is another window (File → New Window lands on the
- * welcome screen, where folders are opened, created, imported and removed),
- * so the header offers no way to switch.
+ * section header carrying the tree's creates, whose name is the project
+ * switcher. A window keeps its folder for its life, so another project opens
+ * in its own window, or focuses the window already showing it; removing a
+ * project stays on the welcome screen.
  */
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ChevronRight, FilePlus, Folder, FoldVertical, FolderPlus, RefreshCw } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  FilePlus,
+  Folder,
+  FolderDown,
+  FolderOpen,
+  FoldVertical,
+  FolderPlus,
+  Plus,
+  RefreshCw,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import {
+  DropdownContent,
+  DropdownMenu,
+  DropdownSeparator,
+  DropdownTrigger,
+} from '@/components/ui/dropdown';
+import { MenuItem } from '@/components/ui/menu-item';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { ProjectRegistryPort } from '@/features/workspace/application/ports';
 import { projectQuery } from '@/features/workspace/application/queries';
+import {
+  displayFolderPath,
+  folderName,
+  isTemporaryFolderPath,
+  parentFolderPath,
+} from '@/features/workspace/domain/project';
+import type { ProjectEntry } from '@/features/workspace/hooks/use-project-entry';
 import { FOCUS_RING } from '@/lib/focus-ring';
 import { fontWeights } from '@/lib/font-weight';
 import { useShape } from '@/lib/shape-context';
@@ -26,10 +51,9 @@ export interface ProjectSidebarProps {
   api: ProjectRegistryPort;
   /** The id of the region the header folds, for its `aria-controls`. */
   contentId: string;
-  /** Whether the header folds its region and offers the tree's creates
-   *  (default true). False in Chats mode: the fold and the creates belong
-   *  to the file tree, so the header is the name alone there. */
-  foldable?: boolean | undefined;
+  /** The window's one entry operation, shared with Welcome, which the
+   *  switcher's rows start. */
+  entry: ProjectEntry;
   /** Starts a new file in the folder, beside the tree's selection. Absent,
    *  the header offers no such action. */
   onNewFile?: (() => void) | undefined;
@@ -43,10 +67,17 @@ export interface ProjectSidebarProps {
   open: boolean;
 }
 
+/** Enough recent projects to switch between without the menu scrolling;
+ *  the rest stay on the welcome screen. */
+const RECENT_LIMIT = 8;
+/** The menu hangs off the sidebar's header, so its rows keep the sidebar's
+ *  8px inset and glyph gap, as the account menu at the column's foot does. */
+const MENU_ROW = 'gap-2 px-2';
+
 export function ProjectSidebar({
   api,
   contentId,
-  foldable = true,
+  entry,
   onCollapseAll,
   onNewFile,
   onNewFolder,
@@ -60,9 +91,8 @@ export function ProjectSidebar({
   // with the caller and only the header's toggle, chevron, and action
   // reservation come from here. The actions overlaying its end are the
   // creates on offer.
-  // The header is its own toggle: the fold chevron rides inline after the
-  // name, always showing which way the section stands, and the kit's group
-  // label, whose chevron lives at the row's end, is not involved.
+  // The fold is the leading glyph's, since the name opens the switcher; the
+  // kit's group label, whose chevron lives at the row's end, is not involved.
   const shape = useShape();
   const pivot = useMotionTier(spring.fast);
 
@@ -87,98 +117,161 @@ export function ProjectSidebar({
     );
   }
 
-  const activeFolder = project.data.activeFolder;
+  const { activeFolder, homeDirectory } = project.data;
   if (!activeFolder) return null;
-
-  // The header's substance: a 32px row, one step over the 28px rows it
-  // heads, the folder glyph on the column's 16px glyph line with the name
-  // set semibold at the rows' 13px after it, on the rows' own text line, so
-  // the identity reads as a heading and not as a stray row. Ink throughout, no fill and no rule:
-  // a line under it sat too close to the Chats panel's own.
-  const name = (
-    <>
-      <Folder aria-hidden className="size-3.5 shrink-0" strokeWidth={2} />
-      <span className="min-w-0 truncate" style={{ fontVariationSettings: fontWeights.semibold }}>
-        {activeFolder.name}
-      </span>
-    </>
-  );
-  const rowClass = 'h-8 gap-2 text-ui-13 text-foreground';
+  // The same memory of places Welcome lists, without the scratch folders a
+  // smoke test or an import registers.
+  const recent = project.data.projects
+    .filter((member) => !isTemporaryFolderPath(member.path))
+    .slice(0, RECENT_LIMIT);
+  const names = recent.map((member) => folderName(member.path));
+  const sharedNames = new Set(names.filter((name, index) => names.indexOf(name) !== index));
   const actionsCount = (onNewFile ? 1 : 0) + (onNewFolder ? 1 : 0) + (onCollapseAll ? 1 : 0);
-
-  if (!foldable) {
-    return (
-      // Chats mode: the name alone, the same row at the same size, with no
-      // fold and no creates, since both belong to the file tree.
-      <div
-        className={cn('flex w-full shrink-0 items-center px-2 select-none', rowClass)}
-        data-folder-header=""
-        title={activeFolder.name}
-      >
-        {name}
-      </div>
-    );
-  }
 
   return (
     // No extra horizontal wrap: the group's own p-2 already gives the 8px
-    // inset every other sidebar row uses (footer, tree), and the row's own
+    // inset every other sidebar row uses (footer, tree), and the trigger's own
     // padding then lands the glyph on the sidebar's shared 16px column, same
     // as the footer rows' glyphs.
     <div className="group/group-header relative w-full">
-      {/* The folder is a section header, the way a workspace heads its rows
-       *  in a multi-root sidebar: the name in ink, a click folds the content
-       *  beneath it, and a chevron right after the name, always showing,
-       *  says which way it stands, down when unfolded and right when folded,
-       *  the way a chat client's sidebar keeps its chevron beside the name.
-       *  It is neither a place the reader is at nor a control that stands
-       *  out, so it carries no fill and no current-page claim. Its header
+      {/* The folder heads its rows the way a workspace heads a document
+       *  tool's sidebar: the name, with a muted chevron-down after it, is
+       *  the project switcher, and the folder glyph before it is the fold,
+       *  turning into a chevron while the pointer is over the row or the
+       *  section is folded, the way a page icon becomes its toggle. A fold
+       *  chevron after the name read as the switcher's own mark. Its header
        *  actions overlay the row's end at the rows' own action size, 24px
-       *  boxes 4px apart, the pitch a tree row's trailing actions keep:
-       *  the basic creates, New file and New folder, and Collapse all while
-       *  the tree is showing. Hover is the column's from this row down: the
-       *  navigator carries `group/group-header-hover` on the region from the
-       *  folder name to the footer, so the pointer anywhere over the
-       *  folder's content shows the actions, and the band above and the
-       *  footer below leave them be. Focus stays the row's own, through
-       *  `group/group-header` here, so a focused view tab or tree row does
-       *  not leave the actions standing. */}
-      <button
-        aria-controls={contentId}
-        aria-expanded={open}
-        className={cn(
-          'flex w-full shrink-0 cursor-pointer items-center px-2 text-left outline-none select-none',
-          rowClass,
-          FOCUS_RING,
-          shape.item,
-        )}
+       *  boxes 4px apart: the basic creates, New file and New folder, and
+       *  Collapse all while the tree is showing. Hover is the column's from
+       *  this row down for the actions: the navigator carries
+       *  `group/group-header-hover` on the region from the folder name to
+       *  the footer. The glyph's swap answers this row alone, so a pointer
+       *  over the tree leaves the folder a folder. */}
+      <div
+        className="flex h-8 w-full items-center"
         data-folder-header=""
-        onClick={() => onOpenChange(!open)}
         // The name stops short of the action cluster: 24px per action plus
-        // 4px between, and that gap again before the text, less the 8px the
-        // row's own padding already gives: 28n + 6.
+        // 4px between, and that gap again before the text.
         style={{ paddingRight: `${actionsCount * 28 + 6}px` }}
-        title={activeFolder.name}
-        type="button"
       >
-        {name}
-        {/* -ml-1 pulls the chevron to 4px behind the name, closer than the
-         *  row's 8px gap, so it reads as the name's own mark. One
-         *  chevron-right glyph, sprung 90° to point down while unfolded. It
-         *  shows with the actions, under the column's hover or a keyboard
-         *  focus, and stays while folded as the reopen cue. */}
-        <motion.span
-          animate={{ rotate: open ? 90 : 0 }}
+        {/* ml-[5px] and the 20px box put the 14px glyph at the row's 8px
+         *  inset, the column's shared 16px glyph line. */}
+        <button
+          aria-controls={contentId}
+          aria-expanded={open}
+          aria-label={open ? 'Fold project' : 'Unfold project'}
           className={cn(
-            '-ml-1 inline-flex shrink-0 text-muted-foreground transition-opacity duration-fast',
-            'group-hover/group-header:opacity-100 group-hover/group-header-hover:opacity-100 group-has-[:focus-visible]/group-header:opacity-100 pointer-coarse:opacity-100',
-            open ? 'opacity-0' : 'opacity-100',
+            'relative ml-[5px] inline-grid size-5 shrink-0 cursor-pointer place-items-center text-foreground outline-none',
+            FOCUS_RING,
+            shape.item,
           )}
-          transition={pivot}
+          onClick={() => onOpenChange(!open)}
+          type="button"
         >
-          <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />
-        </motion.span>
-      </button>
+          <Folder
+            aria-hidden
+            className={cn(
+              'col-start-1 row-start-1 size-3.5 transition-opacity duration-fast',
+              open
+                ? 'group-hover/group-header:opacity-0 group-has-[:focus-visible]/group-header:opacity-0'
+                : 'opacity-0',
+            )}
+            strokeWidth={2}
+          />
+          {/* One chevron-right glyph, sprung 90° to point down while
+           *  unfolded, so it says which way the section stands. */}
+          <motion.span
+            animate={{ rotate: open ? 90 : 0 }}
+            className={cn(
+              'col-start-1 row-start-1 inline-flex text-muted-foreground transition-opacity duration-fast',
+              open
+                ? 'opacity-0 group-hover/group-header:opacity-100 group-has-[:focus-visible]/group-header:opacity-100'
+                : 'opacity-100',
+            )}
+            transition={pivot}
+          >
+            <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />
+          </motion.span>
+        </button>
+        <DropdownMenu disabled={entry.isPending}>
+          <DropdownTrigger
+            render={
+              <button
+                aria-label={`Switch project: ${activeFolder.name}`}
+                className={cn(
+                  // ml-0.5 and pl-[3px] land the name 8px past the glyph,
+                  // the gap every sidebar row keeps, with the hover fill
+                  // clear of the glyph's own box.
+                  'ml-0.5 flex h-7 min-w-0 cursor-pointer items-center gap-1 pr-1.5 pl-[3px] text-left text-ui-13 text-foreground outline-none select-none hover:bg-hover data-[popup-open]:bg-hover',
+                  FOCUS_RING,
+                  shape.item,
+                )}
+                title={activeFolder.path}
+                type="button"
+              />
+            }
+          >
+            {/* The header's substance: a 32px row, one step over the 28px
+             *  rows it heads, the name set semibold at the rows' 13px, so
+             *  the identity reads as a heading and not as a stray row. */}
+            <span
+              className="min-w-0 truncate"
+              style={{ fontVariationSettings: fontWeights.semibold }}
+            >
+              {activeFolder.name}
+            </span>
+            <ChevronDown
+              aria-hidden
+              className="size-3 shrink-0 text-muted-foreground"
+              strokeWidth={1.5}
+            />
+          </DropdownTrigger>
+          <DropdownContent align="start" className="w-72">
+            {recent.map((member) => (
+              <MenuItem
+                checked={member.path === activeFolder.path}
+                className={MENU_ROW}
+                // A choice that takes the reader elsewhere: the menu is done
+                // either way, unlike a radio that stays to be changed again.
+                closeOnClick
+                // Distinct folders may share a name; only then does the
+                // directory each sits in say which is which. The full path
+                // is the row's title either way.
+                {...(sharedNames.has(folderName(member.path)) && {
+                  description: displayFolderPath(parentFolderPath(member.path), homeDirectory),
+                })}
+                key={member.path}
+                label={folderName(member.path)}
+                // Another project opens in its own window, or focuses the
+                // window already showing it; this one keeps its folder.
+                onSelect={() => {
+                  if (member.path !== activeFolder.path) entry.select(member.path);
+                }}
+                title={member.path}
+              />
+            ))}
+            {recent.length > 0 && <DropdownSeparator />}
+            <MenuItem
+              className={MENU_ROW}
+              icon={FolderOpen}
+              label="Open project…"
+              onSelect={entry.open}
+            />
+            <MenuItem
+              className={MENU_ROW}
+              icon={Plus}
+              label="Create project…"
+              onSelect={() => entry.create(homeDirectory)}
+            />
+            <MenuItem
+              className={MENU_ROW}
+              icon={FolderDown}
+              label="Import from GitHub…"
+              onSelect={entry.importDialog.start}
+            />
+          </DropdownContent>
+        </DropdownMenu>
+      </div>
       {actionsCount > 0 && (
         // Revealed with the column's hover, or with a keyboard focus inside
         // the header (focus-visible, not focus-within: a click on an action
@@ -230,6 +323,11 @@ export function ProjectSidebar({
             </Tooltip>
           )}
         </div>
+      )}
+      {entry.failure && (
+        <FailureLine className="px-2 pb-1" tone="input">
+          {entry.failure}
+        </FailureLine>
       )}
     </div>
   );

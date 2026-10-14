@@ -97,8 +97,8 @@ export function ProjectWelcome({
 
   const { homeDirectory } = project.data;
   // The list is a memory of the places the reader works, so the scratch
-  // directories a smoke test or an import registers stay out of it. They
-  // remain projects, and the sidebar's chooser still lists them.
+  // directories a smoke test or an import registers stay out of it, as they
+  // do from the sidebar's switcher. They remain projects.
   const recent = project.data.projects.filter((member) => !isTemporaryFolderPath(member.path));
   const creating = folders.pendingRequest?.kind === 'create';
   const opening = folders.pendingRequest?.kind === 'open';

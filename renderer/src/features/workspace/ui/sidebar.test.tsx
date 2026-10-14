@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { ProjectRegistryPort } from '@/features/workspace/application/ports';
+import type { ProjectEntry } from '@/features/workspace/hooks/use-project-entry';
 import { projectApi, projectRegistrySnapshot, pendingProjectApi } from '@/test/fakes/workspace';
 import { withQueryClient } from '@/test/query';
 
@@ -20,14 +21,36 @@ const researchMember = {
   openedAt: '2026-08-31T12:00:00.000Z',
   path: RESEARCH.path,
 };
+const notesMember = {
+  favorite: false,
+  openedAt: '2026-08-30T12:00:00.000Z',
+  path: '/project/notes',
+};
 const activeProject = projectRegistrySnapshot({
   ...emptyProject,
   activeFolder: RESEARCH,
-  projects: [researchMember],
+  projects: [researchMember, notesMember],
 });
 
-type SidebarTestProps = Omit<ProjectSidebarProps, 'api' | 'contentId' | 'onOpenChange' | 'open'> &
-  Partial<Pick<ProjectSidebarProps, 'contentId' | 'onOpenChange' | 'open'>> & {
+function projectEntry(overrides: Partial<ProjectEntry> = {}): ProjectEntry {
+  return {
+    failure: null,
+    isPending: false,
+    pendingRequest: null,
+    create: vi.fn(),
+    open: vi.fn(),
+    select: vi.fn(),
+    copy: vi.fn(),
+    importDialog: { open: false, request: {} as never, close: vi.fn(), start: vi.fn() },
+    ...overrides,
+  };
+}
+
+type SidebarTestProps = Omit<
+  ProjectSidebarProps,
+  'api' | 'contentId' | 'entry' | 'onOpenChange' | 'open'
+> &
+  Partial<Pick<ProjectSidebarProps, 'contentId' | 'entry' | 'onOpenChange' | 'open'>> & {
     api: Partial<ProjectRegistryPort>;
   };
 
@@ -35,6 +58,7 @@ function renderProject({ api, ...props }: SidebarTestProps) {
   return withQueryClient(
     <ProjectSidebar
       contentId="folder-content"
+      entry={projectEntry()}
       onOpenChange={vi.fn()}
       open
       {...props}
@@ -51,20 +75,82 @@ describe('project sidebar', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('renders the active folder as a section header that folds, with no way to switch folders', async () => {
+  it('folds the section from the chevron beside the name', async () => {
     const onOpenChange = vi.fn();
     renderProject({ api: { load: vi.fn(async () => activeProject) }, onOpenChange });
 
-    const header = await screen.findByRole('button', { name: 'Research' });
-    expect(header.getAttribute('aria-expanded')).toBe('true');
-    expect(header.getAttribute('aria-controls')).toBe('folder-content');
-    expect(header.getAttribute('aria-current')).toBeNull();
-    await userEvent.setup().click(header);
+    const fold = await screen.findByRole('button', { name: 'Fold project' });
+    expect(fold.getAttribute('aria-expanded')).toBe('true');
+    expect(fold.getAttribute('aria-controls')).toBe('folder-content');
+    await userEvent.setup().click(fold);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 
-    // A window keeps its folder; another folder is another window.
-    expect(screen.queryByRole('button', { name: 'Switch folder' })).toBeNull();
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+  it('switches to another recent project from the name, keeping this window its own', async () => {
+    const entry = projectEntry();
+    renderProject({ api: { load: vi.fn(async () => activeProject) }, entry });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Switch project: Research' }));
+    const current = await screen.findByRole('menuitemradio', { name: /research/ });
+    expect(current.getAttribute('aria-checked')).toBe('true');
+    await user.click(current);
+    expect(entry.select).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: 'Switch project: Research' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: /notes/ }));
+    expect(entry.select).toHaveBeenCalledExactlyOnceWith('/project/notes');
+  });
+
+  it('tells projects that share a name apart by their directory', async () => {
+    const twin = { ...notesMember, path: '/archive/research' };
+    renderProject({
+      api: {
+        load: vi.fn(async () =>
+          projectRegistrySnapshot({
+            ...activeProject,
+            projects: [researchMember, notesMember, twin],
+          }),
+        ),
+      },
+    });
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Switch project: Research' }));
+
+    // A unique name stands alone; the shared one carries its directory.
+    expect(await screen.findByRole('menuitemradio', { name: 'notes' })).not.toBeNull();
+    expect(screen.getByRole('menuitemradio', { name: /^research\. \/archive/ })).not.toBeNull();
+    expect(screen.getByRole('menuitemradio', { name: 'research. ~' })).not.toBeNull();
+  });
+
+  it('opens, creates, and imports projects through the shared entry', async () => {
+    const entry = projectEntry();
+    renderProject({ api: { load: vi.fn(async () => activeProject) }, entry });
+    const user = userEvent.setup();
+    const choose = async (name: string) => {
+      await user.click(await screen.findByRole('button', { name: 'Switch project: Research' }));
+      await user.click(await screen.findByRole('menuitem', { name }));
+    };
+
+    await choose('Open project…');
+    expect(entry.open).toHaveBeenCalledOnce();
+    await choose('Create project…');
+    expect(entry.create).toHaveBeenCalledWith('/project');
+    await choose('Import from GitHub…');
+    expect(entry.importDialog.start).toHaveBeenCalledOnce();
+  });
+
+  it('says why an entry from the switcher failed', async () => {
+    renderProject({
+      api: { load: vi.fn(async () => activeProject) },
+      entry: projectEntry({ failure: 'That project could not be opened.' }),
+    });
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'That project could not be opened.',
+    );
   });
 
   it('offers New file and New folder on the header when the window can make them', async () => {
@@ -77,20 +163,6 @@ describe('project sidebar', () => {
     expect(onNewFile).toHaveBeenCalledOnce();
     await user.click(screen.getByRole('button', { name: 'New folder' }));
     expect(onNewFolder).toHaveBeenCalledOnce();
-  });
-
-  it('is the name alone, with no fold and no creates, while not foldable', async () => {
-    renderProject({
-      api: { load: vi.fn(async () => activeProject) },
-      foldable: false,
-      onNewFile: vi.fn(),
-      onNewFolder: vi.fn(),
-    });
-
-    expect(await screen.findByText('Research')).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Research' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'New file' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
   });
 
   it('offers Collapse all beside the creates when the tree is showing', async () => {
@@ -111,7 +183,7 @@ describe('project sidebar', () => {
   it('offers no creates on the header without a window to make them in', async () => {
     renderProject({ api: { load: vi.fn(async () => activeProject) } });
 
-    await screen.findByRole('button', { name: 'Research' });
+    await screen.findByRole('button', { name: 'Switch project: Research' });
     expect(screen.queryByRole('button', { name: 'New file' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
   });

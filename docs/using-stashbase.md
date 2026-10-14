@@ -38,6 +38,8 @@ supported files directly.
 
 - **Cmd/Ctrl+O:** find and open a file in the active folder.
 - **Cmd/Ctrl+Shift+P** or **F1:** open the Command Palette.
+- **Project name at the top of the sidebar:** switch to a recent project, or
+  open, create, or import one. It opens in its own window.
 - **File → New Window** or **Cmd/Ctrl+Shift+N:** work in another window.
 - **Cmd/Ctrl+W:** close the active document tab.
 - **@ mentions in Chat:** find a file or folder and insert its relative path.

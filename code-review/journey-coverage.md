@@ -288,11 +288,20 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
 
 **Intent:** [J02](../design-docs/journeys/README.md#j02-add-and-open-a-folder).
 
-**Implementation:** Renderer: `renderer/src/features/workspace/hooks/use-project-entry.ts`, `renderer/src/features/workspace/hooks/use-project-entry-receiver.ts`, `renderer/src/features/workspace/application/open-folder.ts`, `renderer/src/features/workspace/application/remove-folder.ts`.
+**Implementation:** Renderer: `renderer/src/features/workspace/hooks/use-project-entry.ts`, `renderer/src/features/workspace/hooks/use-project-entry-receiver.ts`, `renderer/src/features/workspace/ui/sidebar.tsx`, `renderer/src/features/workspace/application/open-folder.ts`, `renderer/src/features/workspace/application/remove-folder.ts`.
 Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-file-mutations.ts`.
 
 **Status:** Partial and release-dependent.
 
+- **Sidebar project switcher (2026-10-14):** the folder header's name opens a
+  menu of recent projects plus Open, Create, and Import from GitHub, driving the
+  window's shared `useProjectEntry`; the leading folder glyph owns the fold.
+  `sidebar.test.tsx` covers the routing to entry, the current project as a
+  no-op, same-name disambiguation, and the failure line. An isolated macOS
+  built-app pass opened a seeded project, chose another recent project from the
+  switcher, and got a second window on it while the first kept its project and
+  closed the menu. Open, Create, and Import through the switcher reuse the
+  entry flow's existing evidence and were not driven again.
 - **Linux project entry (2026-10-13):** Main windows now keep the native menu
   visible on Linux, exposing File → New Window from an occupied project. The
   Electron menu contract covers this chrome option and the New Window action;

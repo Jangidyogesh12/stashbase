@@ -335,6 +335,7 @@ function WorkspaceWindow() {
             }
             onBrowseGallery={gallery.browse}
             onReprocess={refresh.reprocess}
+            projectEntry={entry}
             settings={chrome.settings}
             sources={sources}
             workspace={workspace}

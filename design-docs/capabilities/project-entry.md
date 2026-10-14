@@ -16,8 +16,11 @@ usable; Agent setup and indexing are independent.
   Existing work remains available until a replacement entry succeeds.
 - Startup reaches Welcome without seeding projects or native instruction files.
   Explicit entry restores saved work. Only explicit removal forgets registration.
-- From an occupied desktop window, File → New Window opens Welcome to enter
-  another project. Keep that menu visible on Linux so this route is discoverable.
+- An occupied window keeps its project. Its sidebar's project name opens a
+  switcher: recent projects, Open, Create, and Import from GitHub. Each follows
+  the window rule, so another project opens in its own window or focuses the
+  window already showing it. File → New Window still opens Welcome, which
+  also offers removal; keep that menu visible on Linux.
 - Removing a project preserves source files and separately registered nested
   projects. It retires that project's background work and disables sending in
   retained conversations; it never moves them into another project.
