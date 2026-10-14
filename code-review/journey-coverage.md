@@ -794,6 +794,15 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Missing Codex history prerequisite (2026-10-14):** `codex-history.test.ts`
+exercises list/read/rename/delete with no discoverable executable, no child
+launch, and the shared HTTP envelope's `412 AGENT_NOT_INSTALLED`. Existing native
+ownership checks remain covered. This does not establish real Windows CLI
+discovery or authentication.
+The same built-host pass returned that prerequisite for Codex while Claude's
+history remained HTTP 200, using controlled absent-CLI discovery and isolated
+empty native history.
+
 **Default skill scope (2026-10-13):** `server/opencode-runtime.ts` disables native
 external/upward config discovery and supplies project-relative skill paths plus
 the project's instruction-file path. The pinned OpenCode smoke first reproduced

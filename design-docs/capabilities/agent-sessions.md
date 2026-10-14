@@ -176,6 +176,8 @@ repair, an outdated runtime, provider limits, transport loss, and turn failure s
 recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
+An uninstalled Agent is an installation prerequisite when reading its history,
+not a server failure or evidence that its native history is empty.
 Repeated identical native retry errors appear once per turn while retries continue;
 a final short-term request limit remains a rate-limit failure with manual recovery.
 Hosted retry responses carry the service's suggested delay to the native runtime.

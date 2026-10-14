@@ -368,6 +368,9 @@ stable status without download, retry, or a new durable demand latch.
 - Native history is authoritative. Native cwd determines project ownership; no
   override store or live session migration exists. History and WebSocket startup
   require a registered project; no aggregate history endpoint is exposed.
+  A missing Codex executable reports `412 AGENT_NOT_INSTALLED` at its process
+  owner; history reads and mutations preserve that prerequisite instead of
+  reporting empty history or HTTP 500. Installed-runtime failures still propagate.
 - Transcript presentation omits failed tools from activity rows and summaries
   without deleting native history or inferring recovery from later calls.
   Empty activity groups render nothing. Turn failures and permission decisions

@@ -25,7 +25,10 @@ export function spawnCodexAppServerProcess(
 ): ChildProcessWithoutNullStreams {
   const command = resolveCodexBinary();
   if (!command) {
-    throw new Error('Codex CLI not found. Install Codex or set STASHBASE_CODEX_BIN to the codex executable.');
+    throw Object.assign(new Error('Codex CLI not found. Install Codex in Settings → Agents to access its chats.'), {
+      status: 412,
+      code: 'AGENT_NOT_INSTALLED',
+    });
   }
   log.info(`spawning Codex app-server via ${command}`);
   return ownAgentProcess(spawn(command, ['app-server', '--listen', 'stdio://'], {
