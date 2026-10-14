@@ -10,14 +10,14 @@
  *
  * Default `pymupdf` route uses `pymupdf4llm` for LLM-friendly markdown
  * (heading detection, table extraction, figure screenshots), falling back
- * to plain PyMuPDF text extraction when the richer layout pass fails.
+ * to native text and direct local OCR for missing text or failed layout passes.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
 import { derivedNoteFor, derivedBundleFor, derivedBatchesFor, derivedDir } from './derived-store.ts';
-import { extractorSpawn, prepareExtractorRuntime } from './python-host.ts';
+import { extractorComponent, extractorSpawn, prepareExtractorRuntime } from './python-host.ts';
 import { TransientConversionError, type ConversionSpec } from './conversion.ts';
 import { lowerExtractorPriority, runExtractor, spawnOptionsForPdfOcr, terminateExtractorTree } from './extractor-process.ts';
 import type { ConversionProgress } from './conversion-status.ts';
@@ -72,7 +72,10 @@ async function pdfConversionPriority(pdfAbsPath: string, signal: AbortSignal): P
   return hasTextLayer ? PDF_COST_TEXT_LAYER : PDF_COST_OCR_OR_UNKNOWN;
 }
 
-function probePdfTextLayer(pdfAbsPath: string, signal: AbortSignal): Promise<boolean> {
+async function probePdfTextLayer(pdfAbsPath: string, signal: AbortSignal): Promise<boolean> {
+  // Status discovers an existing component without creating download demand.
+  // A missing/downloading component is unknown cost, not a missing dev script.
+  if (signal.aborted || (await extractorComponent.status()).status !== 'installed') return false;
   return new Promise((resolve) => {
     if (signal.aborted) {
       resolve(false);

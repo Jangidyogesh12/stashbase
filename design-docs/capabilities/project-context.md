@@ -14,8 +14,10 @@ an empty project and a conversation without references are valid.
   remains searchable when its parent path is hidden, including a cloud drive's
   internal mount path; hidden directories inside the project stay excluded.
 - Publish only complete, current preparation output. Partial, stale, cancelled,
-  or orphaned output cannot serve as evidence. Empty OCR output is a valid
-  non-searchable result. The [format matrix](project-files.md#format-capability-matrix)
+  or orphaned output cannot serve as evidence. Empty completed OCR, including a
+  textless PDF, is a valid non-searchable result; an OCR execution failure is not.
+  PDFs with missing extracted text try local OCR without changing the original.
+  The [format matrix](project-files.md#format-capability-matrix)
   defines which sources participate.
 - Preview, preparation, and semantic-index readiness are separate. Background work
   prioritizes interaction without blocking unrelated documents or conversation.

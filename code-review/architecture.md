@@ -179,8 +179,11 @@ release archive in Python requirements and constraints; setup verifies both its
 source URL and installed package version.
 
 - Completion is format-specific and current-source-bound: PDF needs its terminal
-  marker; DOCX needs sanitized marked output with text. Empty completed OCR is a
-  successful non-searchable result. Checkpoints are not completion. Media playback never creates prepared text.
+  marker; DOCX needs sanitized marked output with text. Empty completed PDF/image
+  OCR is a successful non-searchable result with no synthetic title. Missing PDF
+  page text falls back to native text and then direct local OCR inside the bounded
+  batch worker. OCR failure or timeout cannot publish empty success. Checkpoints
+  are not completion. Media playback never creates prepared text.
 - One process scheduler owns capacity and prioritizes explicit interaction, open
   projects, then background work. Cooperative yield preserves task identity while
   releasing capacity. Status storage errors fail closed and reject cancellation
@@ -227,7 +230,9 @@ source URL and installed package version.
 ### Optional Local Components
 
 One PDF/OCR installation owner shares demand and waiters. Cost/status reads never
-start downloads. Waiting conversions yield their lane. A process makes one
+start downloads. PDF cost probes discover already installed components through
+that owner and return unknown cost while unavailable; packaged probes never fall
+back to development scripts. Waiting conversions yield their lane. A process makes one
 automatic demand attempt; failure has no timer retry. A durable demand latch
 permits one next-launch attempt; Retry beside a waiting PDF/image starts one shared attempt.
 Cancellation removes source demand and clears the durable latch when its last

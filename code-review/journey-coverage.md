@@ -638,6 +638,22 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 ## J04: Preparation
 
+**PDF component probes and textless pages (2026-10-14):** `pdf-runtime.test.ts`
+covers a packaged layout with no loose extractor scripts: unavailable probes
+neither launch nor request a download, and installed probes/conversions select
+the same component. `pdf_extract_test.py` covers missing native/scanned pages,
+layout failure, empty completed OCR, source preservation, failed-OCR publication
+refusal, and timeout refusal without an unbounded OCR restart. A real macOS
+source-extractor pass reproduced the reported error with a one-page blank PDF;
+after the fix that fixture completes with only a marker, while text and scanned
+text PDFs remain readable. The reporter's PDF and Windows component execution
+remain unverified; these logs alone do not establish whether its input was blank.
+An isolated built-host HTTP pass with real Python/MFS also opened those three
+PDFs, settled preparation without failures, retrieved only the two readable PDFs
+by keyword with page locators, and verified unchanged source hashes. Validation:
+744 host tests, 31 Python tests plus daemon smoke, 19 package-input tests, host
+type checks, and documentation checks. No Windows package was built in this pass.
+
 **Windows pipe encoding (2026-10-13):** the launcher and Python daemon explicitly
 own UTF-8 stdin/stdout. A real subprocess regression starts with CP1252 encoding,
 indexes emoji and multilingual text, retrieves it, and verifies UTF-8 output.

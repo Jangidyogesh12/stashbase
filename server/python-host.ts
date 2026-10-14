@@ -113,6 +113,7 @@ export function extractorSpawn(
 ): { cmd: string; args: string[] } {
   const bin = process.env.STASHBASE_EXTRACT_BIN || resolvePackagedExtractBin();
   if (bin) return { cmd: bin, args: [mode, ...args] };
+  if (usesManagedExtractor()) throw new Error('PDF/OCR component is not ready yet.');
   const cmd = pythonBin();
   const script = pythonScript(scriptName);
   if (isPackagedRuntime() && cmd === 'python3') {
