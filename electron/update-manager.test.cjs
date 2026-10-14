@@ -326,3 +326,50 @@ test('updater reports the original error and stage once across emit and rejectio
   assert.equal(manager.getState().phase, 'error');
   manager.dispose();
 });
+
+test('expected check network failures are warnings, while retries still update state and schedule checks', async () => {
+  const reported = [];
+  const { manager, updater, scheduled } = harness({
+    onDiagnostic: (error, context, severity) => reported.push({ error, context, severity }),
+  });
+  for (const code of ['ERR_INTERNET_DISCONNECTED', 'ERR_NETWORK_CHANGED', 'ERR_NETWORK_IO_SUSPENDED', 'ERR_NAME_NOT_RESOLVED']) {
+    const failure = new Error(`net::${code}`);
+    updater.checkForUpdates = async () => { updater.emit('error', failure); throw failure; };
+    await manager.check();
+    assert.equal(reported.at(-1).severity, 'warning');
+    assert.equal(reported.at(-1).error, failure);
+    assert.equal(reported.at(-1).context.stage, 'checking');
+    assert.equal(manager.getState().message, failure.message);
+    assert.equal(scheduled.at(-1).delay, 15 * 60_000);
+  }
+  assert.equal(reported.length, 4, 'emit and rejection are one occurrence');
+  updater.checkForUpdates = async () => updater.emit('update-available', { version: '2.1.0' });
+  await manager.check();
+  assert.equal(manager.getState().phase, 'available');
+  assert.equal(manager.getState().message, undefined);
+  manager.dispose();
+});
+
+test('check certificates and integrity failures, and network failures during downloads/install, remain errors', async () => {
+  const reported = [];
+  const { manager, updater } = harness({
+    onDiagnostic: (error, context, severity) => reported.push({ error, context, severity }),
+    installUpdate: () => { throw new Error('net::ERR_INTERNET_DISCONNECTED'); },
+  });
+  for (const failure of [new Error('net::ERR_CERT_AUTHORITY_INVALID'),
+    Object.assign(new Error('Checksum mismatch: net::ERR_NAME_NOT_RESOLVED'), { code: 'ERR_SHA512' })]) {
+    updater.checkForUpdates = async () => { throw failure; };
+    await manager.check();
+    assert.equal(reported.at(-1).severity, 'error');
+  }
+  updater.emit('update-available', { version: '2.1.0' });
+  updater.downloadUpdate = async () => { throw new Error('net::ERR_INTERNET_DISCONNECTED'); };
+  await manager.primaryAction();
+  assert.equal(reported.at(-1).severity, 'error');
+  assert.equal(reported.at(-1).context.stage, 'downloading');
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  await manager.primaryAction();
+  assert.equal(reported.at(-1).severity, 'error');
+  assert.equal(reported.at(-1).context.stage, 'installing');
+  manager.dispose();
+});

@@ -437,7 +437,7 @@ const desktopUpdates = createUpdateManager({
   installUpdate: installDesktopUpdate,
   openReleasePage: (url) => openHttpExternal(url, 'update release URL'),
   onStateChange: (state) => replacementUpdates?.publish(state),
-  onDiagnostic: (error, context) => nativeDiagnostics.record(error, 'app-update', { ...context, process: 'electron-main' }),
+  onDiagnostic: (error, context, severity) => nativeDiagnostics.record(error, 'app-update', { ...context, process: 'electron-main' }, severity),
   debugEnabled: !app.isPackaged,
 });
 const bugReports = createBugReportService({

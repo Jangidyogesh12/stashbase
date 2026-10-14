@@ -118,6 +118,10 @@ cost; otherwise the user can wait for refill or manage their plan.
   leaves the current application and downloaded update recoverable. Relaunch waits
   for the previous local service to release its port before opening the replacement.
   Development notification previews have no authority to invoke the updater.
+  Offline, network-change, suspended-network and DNS failures during a check
+  remain retryable and report as warnings. Repeated identical check warnings
+  are counted in hourly windows; download, installation, certificate and
+  integrity failures remain errors.
 - Official desktop builds disclose default-on usage statistics and detailed error
   diagnostics under one opt-out. Signing in associates the preceding anonymous
   activity with the stable StashBase account, across installations. Installation

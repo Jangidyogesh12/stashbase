@@ -164,6 +164,22 @@ and built cross-process smoke passed. Host startup/crash diagnostics additionall
 retain the final bounded 8 KB of the Electron-managed service log when the host
 collector cannot initialize.
 
+**Update connectivity diagnostics (2026-10-14):** `electron/update-manager.cjs`
+reports recognized offline, network-change, suspended-network and DNS failures
+during checking as warnings. `server/native-diagnostics.ts` preserves severity
+and replays the spool in occurrence order; `server/telemetry.ts` counts identical
+native check warnings in hourly windows with original identity/version/time.
+Updater tests cover emit/rejection deduplication, retry/recovery and retained
+download/install/certificate/integrity errors. Native diagnostic tests exercise
+hourly aggregation, offline replay, shutdown/restart, account changes and opt-out.
+These controlled failures do not establish the cause of a user's network outage.
+A macOS Electron runtime pass used an isolated network session to trigger three
+real Chromium DNS failures, observed one immediate warning and two queued repeats,
+then recovered against a local update feed. The production update manager, built
+native spool and bundled collector ran with isolated configuration and replaced
+telemetry transport. Updated host tests, type checks, update contracts and real
+Electron lifecycle smoke passed; Windows packaged networking remains unverified.
+
 
 
 A 2026-10-09 built-source desktop pass used an isolated application/profile,

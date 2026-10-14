@@ -19,6 +19,7 @@ const recordSchema = z.object({
   identity: z.object({ installationId: z.string().uuid(), anonymousId: z.string().uuid(),
     firstSeenAt: z.string().datetime(), userId: z.string().optional() }).optional(),
   operation: z.string().max(200), diagnostic: diagnosticSchema,
+  severity: z.enum(['error', 'warning']).optional(),
   context: diagnosticContextSchema,
 }).strict();
 export type NativeDiagnostic = z.infer<typeof recordSchema>;
@@ -34,7 +35,7 @@ export function createNativeDiagnostics(options: {
   const clear = () => { for (const name of files()) fs.rmSync(path.join(directory, name), { force: true }); };
   return {
     clear() { try { clear(); } catch { /* Never block preference changes. */ } },
-    record(error: unknown, operation: string, context: DiagnosticContext = {}) {
+    record(error: unknown, operation: string, context: DiagnosticContext = {}, severity: 'error' | 'warning' = 'error') {
       try {
         if (!options.available) return;
         const config = read();
@@ -46,7 +47,7 @@ export function createNativeDiagnostics(options: {
             ...(accountUsageId(config) ? { userId: accountUsageId(config) } : {}) } : undefined;
         const record = recordSchema.parse({ uuid: randomUUID(), timestamp: new Date(now()).toISOString(),
           version: options.version, os: process.platform, accountId: accountUsageId(config), identity,
-          operation, diagnostic: errorDiagnostic(error), context: boundedDiagnosticContext(context) });
+          operation, severity, diagnostic: errorDiagnostic(error), context: boundedDiagnosticContext(context) });
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
         const file = path.join(directory, `${record.uuid}.json`);
         writeFileAtomic(file, JSON.stringify(record), { mode: 0o600 });
@@ -57,6 +58,7 @@ export function createNativeDiagnostics(options: {
         if (!options.available) return;
         const config = read();
         if (!usageState(config, now()).enabled) { clear(); return; }
+        const pending: { file: string; record: NativeDiagnostic }[] = [];
         for (const name of files()) {
           const file = path.join(directory, name);
           let remove = false;
@@ -67,9 +69,16 @@ export function createNativeDiagnostics(options: {
             // Without a previously allocated identity, do not attribute an old
             // startup failure to an account that signed in afterward.
             remove = age > QUEUE_TTL || age < -60_000
-              || (!record.identity && record.accountId !== accountUsageId(config)) || accept(record);
+              || (!record.identity && record.accountId !== accountUsageId(config));
+            if (!remove) pending.push({ file, record });
           } catch { remove = true; }
           finally { if (remove) fs.rmSync(file, { force: true }); }
+        }
+        // UUID filenames have no chronology. Replay offline diagnostics in
+        // occurrence order so aggregation uses their original time windows.
+        pending.sort((a, b) => a.record.timestamp.localeCompare(b.record.timestamp));
+        for (const { file, record } of pending) {
+          if (accept(record)) fs.rmSync(file, { force: true });
         }
       } catch { /* Retry after the host or filesystem recovers. */ }
     },

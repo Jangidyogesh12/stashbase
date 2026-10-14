@@ -6,6 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { createNativeDiagnostics } from './native-diagnostics.ts';
 import { createTelemetry } from './telemetry.ts';
+import { randomUUID } from 'node:crypto';
 import type { AppConfigFile } from './app-config.ts';
 
 test('native failures survive host restart with original time/version, then opt-out erases them', async (t) => {
@@ -55,4 +56,87 @@ test('native suppression creates no files and an unowned startup failure cannot 
     native.drain(() => { assert.fail('must not attribute a first-launch failure to a different account'); });
     assert.deepEqual(fs.readdirSync(directory), []);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('native update warnings aggregate hourly across checks, preserve occurrence metadata and flush on shutdown', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-update-warnings-'));
+  let now = Date.now();
+  let config: AppConfigFile = { telemetry: { enabled: true, installationId: randomUUID(), anonymousId: randomUUID(), firstSeenAt: new Date(now).toISOString() } };
+  const read = () => structuredClone(config);
+  const write = (value: AppConfigFile) => { config = structuredClone(value); };
+  const sent: any[] = [];
+  const native = createNativeDiagnostics({ directory, available: true, version: '2.16.3', now: () => now, read });
+  const options = { available: true, version: '2.16.4', os: process.platform, projectToken: 'fixture', host: 'https://example.invalid',
+    read, write, now: () => now, native, fetch: async (_url: unknown, init?: RequestInit) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } };
+  const service = createTelemetry(options);
+  const failure = new Error('net::ERR_INTERNET_DISCONNECTED');
+  const record = () => native.record(failure, 'app-update', { stage: 'checking' }, 'warning');
+  const drain = async () => { t.mock.timers.tick(5000); await service.flush(); };
+  try {
+    record();
+    await drain();
+    assert.deepEqual(sent.map((event) => [event.event, event.properties.occurrences]), [['application_warning', 1]]);
+    now += 15 * 60_000;
+    record();
+    const repeated = JSON.parse(fs.readFileSync(path.join(directory, fs.readdirSync(directory)[0]), 'utf8'));
+    await drain();
+    now += 15 * 60_000;
+    record();
+    await drain();
+    assert.equal(sent.length, 1);
+    now += 30 * 60_000;
+    t.mock.timers.tick(60_000);
+    await service.flush();
+    assert.equal(sent[1].event, 'application_warning');
+    assert.equal(sent[1].properties.occurrences, 2);
+    assert.equal(sent[1].uuid, repeated.uuid);
+    assert.equal(sent[1].timestamp, repeated.timestamp);
+    assert.equal(sent[1].properties.app_version, '2.16.3');
+    record();
+    await drain();
+    now += 15 * 60_000;
+    record(); // Close must drain this last native occurrence before releasing counts.
+    service.close();
+    assert.equal(config.telemetry?.queue?.length, 1);
+    assert.equal((config.telemetry?.queue?.[0].event as any).occurrences, 1);
+    assert.deepEqual(fs.readdirSync(directory), []);
+    const restarted = createTelemetry(options);
+    await restarted.flush();
+    assert.equal(sent.reduce((total, event) => total + event.properties.occurrences, 0), 5);
+    restarted.close();
+  } finally { service.close(); fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('offline native warnings retain account boundaries and opt-out erases counted repeats', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-update-identity-'));
+  let now = Date.now();
+  let config: AppConfigFile = { account: { session: { userId: 'first-user' } }, telemetry: { enabled: true, installationId: randomUUID(), anonymousId: randomUUID(), firstSeenAt: new Date(now).toISOString(), userId: 'first-user' } } as AppConfigFile;
+  const read = () => structuredClone(config);
+  const write = (value: AppConfigFile) => { config = structuredClone(value); };
+  const native = createNativeDiagnostics({ directory, available: true, version: 'test', now: () => now, read });
+  const failure = new Error('net::ERR_NETWORK_CHANGED');
+  const record = () => native.record(failure, 'app-update', { stage: 'checking' }, 'warning');
+  // Deliberately reverse the spool order: filename ordering must not define windows.
+  now += 15 * 60_000; record(); now -= 15 * 60_000; record(); now += 15 * 60_000;
+  const sent: any[] = [];
+  const service = createTelemetry({ available: true, version: 'test', os: 'win32', projectToken: 'fixture', host: 'https://example.invalid',
+    read, write, now: () => now, native, fetch: async (_url, init) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } });
+  try {
+    t.mock.timers.tick(5000); await service.flush();
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].properties.user_id, 'first-user');
+    config.account!.session!.userId = 'second-user';
+    service.identityChanged();
+    record();
+    t.mock.timers.tick(5000); await service.flush();
+    const warnings = sent.filter((event) => event.event === 'application_warning');
+    assert.deepEqual(warnings.map((event) => event.properties.user_id), ['first-user', 'second-user']);
+    service.update({ enabled: false });
+    record();
+    service.close();
+    assert.deepEqual(fs.readdirSync(directory), []);
+    assert.equal(config.telemetry?.queue, undefined);
+  } finally { service.close(); fs.rmSync(directory, { recursive: true, force: true }); }
 });

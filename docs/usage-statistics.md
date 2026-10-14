@@ -103,6 +103,14 @@ per window; an isolated one produces a single event with `occurrences = 1`.
 Counts not yet sent at shutdown join the delivery queue. Older builds omit
 `occurrences` and reported warnings as `application_error`.
 
+Native update checks classify recognized offline, network-change, suspended-network
+and DNS failures as warnings. Their identical diagnostics use a one-hour window,
+since periodic checks are fifteen minutes apart. The first warning is immediate;
+later reports carry the repeat count. Identity, source version and diagnostic
+remain separate aggregation keys. Download/install failures and unexpected check
+failures retain error severity. Queued native reports preserve occurrence order,
+and shutdown queues pending repeat counts; opt-out erases them.
+
 Save, project-open and billing operations retain their initiating identity across
 an asynchronous account switch. A turn's random correlation ID retains its
 initiating identity and session until its one terminal result in the same host

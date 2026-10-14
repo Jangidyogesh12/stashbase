@@ -45,7 +45,7 @@ export function createTelemetry(options: {
   let retry: ReturnType<typeof setTimeout> | undefined;
   let retryDelay = 1000;
   let generation = 0;
-  const occurrences = new Map<string, { event: DiagnosticEvent; identity: UsageIdentity; startedAt: number; repeated: number }>();
+  const occurrences = new Map<string, { event: DiagnosticEvent; identity: UsageIdentity; startedAt: number; repeated: number; native?: NativeDiagnostic }>();
   let occurrenceTimer: ReturnType<typeof setInterval> | undefined;
   const turns = new Map<string, { identity: UsageIdentity; startedAt: number; sessionId?: string }>();
   const allowed = () => options.available && !stopped && !collectionStopped;
@@ -157,14 +157,18 @@ export function createTelemetry(options: {
     }
     return usageIdentity(state, now());
   };
-  const windowOpen = (bucket: { event: DiagnosticEvent; startedAt: number }) =>
-    now() >= bucket.startedAt && now() - bucket.startedAt < OCCURRENCE_WINDOWS[bucket.event.event];
+  const windowOpen = (bucket: { event: DiagnosticEvent; startedAt: number }, at = now()) => {
+    const window = bucket.event.event === 'application_warning' && bucket.event.source === 'native'
+      && bucket.event.operation === 'app-update' && bucket.event.context?.stage === 'checking'
+      ? 60 * 60_000 : OCCURRENCE_WINDOWS[bucket.event.event];
+    return at >= bucket.startedAt && at - bucket.startedAt < window;
+  };
   /** Report counted repeats of closed windows (or all, before shutdown). */
   const releaseOccurrences = (all = false) => {
     for (const [key, bucket] of occurrences) {
       if (!all && windowOpen(bucket)) continue;
       occurrences.delete(key);
-      if (bucket.repeated) capture({ ...bucket.event, occurrences: bucket.repeated }, bucket.identity, generation, true);
+      if (bucket.repeated) capture({ ...bucket.event, occurrences: bucket.repeated }, bucket.identity, generation, true, bucket.native);
     }
     if (!occurrences.size) { clearInterval(occurrenceTimer); occurrenceTimer = undefined; }
   };
@@ -191,29 +195,41 @@ export function createTelemetry(options: {
       if ((state.queue?.length ?? 0) > QUEUE_LIMIT - 2) { kick(); return; }
       const identity = synchronize(config, state);
       if (captured && captured.installationId !== identity.installationId) return;
+      if (native && state.queue?.some((item) => item.uuid === native.uuid)) return true;
       const event = parsed.data;
       if ('diagnostic' in event && event.diagnostic) event.diagnostic = errorDiagnostic(event.diagnostic);
       if ('context' in event && event.context) event.context = sanitizeContext(event.context);
       if (event.event === 'application_error' || event.event === 'application_warning') {
         event.operation = diagnosticOperation(event.operation);
-        if (!rollup && !native) {
+        if (!rollup && (!native || event.event === 'application_warning')) {
           const repetitions = event.occurrences ?? 1;
           delete event.occurrences;
           // The key is the redacted event, so every counted repeat carries
           // exactly the diagnostic that was reported for its window.
           const diagnosticIdentity = captured ?? identity;
-          const key = JSON.stringify([diagnosticIdentity.anonymousId, diagnosticIdentity.userId, event]);
+          const key = JSON.stringify([diagnosticIdentity.anonymousId, diagnosticIdentity.userId, native?.version, native?.os, event]);
           const bucket = occurrences.get(key);
-          if (bucket && windowOpen(bucket)) { bucket.repeated += repetitions; return; }
+          const occurredAt = native ? Date.parse(native.timestamp) : now();
+          if (bucket && windowOpen(bucket, occurredAt)) {
+            // A rollup keeps the first repeated native occurrence's UUID/time,
+            // version and identity, even if delivered by a later host build.
+            if (!bucket.repeated) bucket.native = native;
+            bucket.repeated += repetitions;
+            return native ? true : undefined;
+          }
           event.occurrences = (bucket?.repeated ?? 0) + repetitions;
           occurrences.delete(key);
           if (occurrences.size >= 100) {
             const [oldestKey, oldest] = occurrences.entries().next().value!;
             occurrences.delete(oldestKey);
             // Saved below with this event; a nested capture would be overwritten.
-            if (oldest.repeated) (state.queue ??= []).push(entry(oldest.identity, { ...oldest.event, occurrences: oldest.repeated }));
+            if (oldest.repeated) {
+              const summary = entry(oldest.identity, { ...oldest.event, occurrences: oldest.repeated });
+              if (oldest.native) Object.assign(summary, { uuid: oldest.native.uuid, timestamp: oldest.native.timestamp, version: oldest.native.version, os: oldest.native.os });
+              (state.queue ??= []).push(summary);
+            }
           }
-          occurrences.set(key, { event: { ...event }, identity: diagnosticIdentity, startedAt: now(), repeated: 0 });
+          occurrences.set(key, { event: { ...event }, identity: diagnosticIdentity, startedAt: occurredAt, repeated: 0 });
           if (!occurrenceTimer) {
             occurrenceTimer = setInterval(() => releaseOccurrences(), 60_000);
             occurrenceTimer.unref();
@@ -258,8 +274,8 @@ export function createTelemetry(options: {
   };
   const drainNative = () => {
     if (collectionStopped) { options.native?.clear(); return; }
-    options.native?.drain((record) => capture({ event: 'application_error', source: 'native',
-    operation: record.operation, diagnostic: record.diagnostic, context: record.context }, record.identity, generation, false, record) === true);
+    options.native?.drain((record) => capture({ event: record.severity === 'warning' ? 'application_warning' : 'application_error', source: 'native',
+    operation: record.operation, diagnostic: record.diagnostic, context: record.context, occurrences: 1 }, record.identity, generation, false, record) === true);
   };
   const nativeTimer = options.native && options.available ? setInterval(drainNative, 5000) : undefined;
   nativeTimer?.unref();
@@ -318,8 +334,8 @@ export function createTelemetry(options: {
     flush,
     /** Counted repeats are queued durably and delivered after the next launch. */
     close() {
-      try { releaseOccurrences(true); } catch { /* Shutdown never depends on analytics. */ }
       drainNative();
+      try { releaseOccurrences(true); } catch { /* Shutdown never depends on analytics. */ }
       clearInterval(nativeTimer);
       stopped = true; cancel();
     },

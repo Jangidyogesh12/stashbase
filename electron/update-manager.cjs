@@ -2,6 +2,15 @@ const DEFAULT_RELEASE_URL = 'https://github.com/liliu-z/stashbase/releases/lates
 const DEFAULT_STARTUP_DELAY_MS = 30_000;
 const DEFAULT_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const UPDATE_SIMULATIONS = new Set(['off', 'available', 'downloading', 'ready', 'installing', 'error']);
+const CHECK_NETWORK_ERRORS = new Set([
+  'ERR_INTERNET_DISCONNECTED', 'ERR_NETWORK_CHANGED',
+  'ERR_NETWORK_IO_SUSPENDED', 'ERR_NAME_NOT_RESOLVED',
+]);
+
+function checkNetworkError(error) {
+  const code = error?.code ?? /^net::(ERR_[A-Z_]+)(?:\s|$)/.exec(errorMessage(error))?.[1];
+  return CHECK_NETWORK_ERRORS.has(code);
+}
 
 function nextPatchVersion(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version));
@@ -141,7 +150,8 @@ function createUpdateManager(options) {
   function onError(error) {
     if (!error || typeof error !== 'object' || !reportedErrors.has(error)) {
       if (error && typeof error === 'object') reportedErrors.add(error);
-      try { onDiagnostic(error, { stage: state.phase, target_version: state.availableVersion }); } catch { /* reporting is optional */ }
+      const severity = state.phase === 'checking' && checkNetworkError(error) ? 'warning' : 'error';
+      try { onDiagnostic(error, { stage: state.phase, target_version: state.availableVersion }, severity); } catch { /* reporting is optional */ }
     }
     if (state.phase === 'installing') {
       installAttempt = null;

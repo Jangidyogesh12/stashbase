@@ -829,6 +829,13 @@ exited during main's quit sequence.
   throttled focus does not postpone periodic checks. Manual checks bypass the
   automatic preference, while timers/focus/wake honor it. Disposal prevents new
   requests and retires the timer.
+  The update manager classifies only recognized connectivity failures during
+  checking as warnings; all other phases and failures retain error severity.
+  Native diagnostics spool that severity. The host aggregates identical check
+  warnings in hourly windows by captured identity, version and diagnostic,
+  preserving the first report and counted repeats. Replay follows occurrence
+  time, and shutdown drains the spool before flushing repeat counts. Collection
+  suppression and opt-out apply to both initial reports and rollups.
 - Renderer requests never choose feed, path, or phase. Automatic checks do not
   authorize downloads/install. Production exposes no development simulator.
   Update offers render in the sidebar footer. The separate development tools
