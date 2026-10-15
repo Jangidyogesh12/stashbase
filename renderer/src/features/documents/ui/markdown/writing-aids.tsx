@@ -1,4 +1,5 @@
 import type { CrepeBuilder } from '@milkdown/crepe/builder';
+import { inlineCodeAttr } from '@milkdown/kit/preset/commonmark';
 import type { Node as ProseMirrorNode } from '@milkdown/kit/prose/model';
 import { Plugin, type EditorState } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view';
@@ -83,9 +84,11 @@ function centerCaret(view: EditorView): void {
  * while typewriter scrolling is on, asked at each move so the setting applies
  * without rebuilding the editor, and only for typing and keyboard moves, so a
  * click places the caret where the reader pointed; and every new document
- * reaches the word counter.
+ * reaches the word counter. Inline code is paths and identifiers, so it is
+ * kept out of the spellchecker, which could only underline it.
  */
 export function attachWritingAids(editor: CrepeBuilder, counter: WordCounter): void {
+  editor.editor.config((ctx) => ctx.set(inlineCodeAttr.key, () => ({ spellcheck: 'false' })));
   let pointerPlaced = false;
   editor.editor.use(
     $prose(

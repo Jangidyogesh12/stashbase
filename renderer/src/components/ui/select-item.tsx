@@ -11,6 +11,7 @@ import { Select as SelectPrimitive } from '@base-ui/react/select';
 import { forwardRef, type HTMLAttributes } from 'react';
 
 import { MenuItemCheck } from '@/components/internal/menu-item-check';
+import { menuRowTone } from '@/components/internal/menu-row-tone';
 import { useProximityRow } from '@/components/internal/proximity-row';
 import type { IconComponent } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
@@ -70,7 +71,8 @@ const SelectItem = forwardRef<HTMLDivElement, SelectItemProps>(
               // a long list compresses rows to fit instead of scrolling.
               `relative z-10 flex ${sizeClasses.control} shrink-0 items-center ${sizeClasses.gap} ${shape.item} ${sizeClasses.itemPx} ${sizeClasses.text} cursor-pointer outline-none select-none`,
               'transition-[color] duration-fast',
-              isActive || isChecked ? 'text-foreground' : 'text-muted-foreground',
+              // The glyph below keeps the muted rest on its own.
+              menuRowTone(isActive || isChecked),
               disabled && 'pointer-events-none opacity-50',
               className,
             )}
@@ -82,7 +84,10 @@ const SelectItem = forwardRef<HTMLDivElement, SelectItemProps>(
           <Icon
             size={sizeClasses.icon}
             strokeWidth={isActive || isChecked ? 2 : 1.5}
-            className="shrink-0 transition-[color,stroke-width] duration-fast"
+            className={cn(
+              'shrink-0 transition-[color,stroke-width] duration-fast',
+              isActive || isChecked ? 'text-foreground' : 'text-muted-foreground',
+            )}
           />
         )}
 

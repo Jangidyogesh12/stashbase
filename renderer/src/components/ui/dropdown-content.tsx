@@ -49,6 +49,9 @@ interface DropdownContentProps {
   side?: MenuPositionerProps['side'];
   align?: MenuPositionerProps['align'];
   sideOffset?: number;
+  /** Positions the menu against this element instead of its trigger, for a
+   *  menu opened from inside a panel that should clear the whole panel. */
+  anchor?: MenuPositionerProps['anchor'];
 }
 
 const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
@@ -60,6 +63,7 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
       side = 'bottom',
       align = 'start',
       sideOffset = 6,
+      anchor,
     },
     ref,
   ) => {
@@ -145,6 +149,7 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
     return (
       <Menu.Portal>
         <Menu.Positioner
+          {...(anchor === undefined ? {} : { anchor })}
           side={side}
           align={align}
           sideOffset={sideOffset}
@@ -156,8 +161,8 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
                 render={<Elevated offset={2} shadowLevel={3} ref={mergeRefs(containerRef, ref)} />}
                 {...surface.surfaceProps}
                 className={cn(
-                  // min-w tracks the trigger via the Positioner's
-                  // --anchor-width var.
+                  // min-w tracks the anchor, the trigger unless the caller
+                  // names another, via the Positioner's --anchor-width var.
                   `relative flex max-h-[min(480px,var(--available-height))] w-72 max-w-full min-w-[var(--anchor-width)] flex-col gap-0.5 overflow-y-auto ${shape.container} p-1 outline-none select-none`,
                   className,
                 )}

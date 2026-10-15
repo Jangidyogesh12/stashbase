@@ -36,11 +36,36 @@ const BLOCK_CHOICES = [
 const label = (word: string, attributes = '') =>
   `<span class="markdown-toolbar-label"${attributes}>${word}</span>`;
 
-const chevron =
-  '<svg class="markdown-toolbar-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+/** A stroked glyph from Lucide, the app's own icon set. */
+function glyph(body: string, className?: string): string {
+  const named = className === undefined ? '' : ` class="${className}"`;
+  return `<svg${named} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+}
 
-const check =
-  '<svg class="markdown-heading-menu-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+/** Lucide's bold, italic, strikethrough, code, link and sigma in place of
+ *  Crepe's filled glyphs, which read heavy beside every other control. */
+const GLYPHS = {
+  boldIcon: glyph(
+    '<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>',
+  ),
+  codeIcon: glyph('<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>'),
+  italicIcon: glyph(
+    '<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/>',
+  ),
+  latexIcon: glyph(
+    '<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/>',
+  ),
+  linkIcon: glyph(
+    '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  ),
+  strikethroughIcon: glyph(
+    '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/>',
+  ),
+};
+
+const chevron = glyph('<path d="m6 9 6 6 6-6"/>', 'markdown-toolbar-chevron');
+
+const check = glyph('<path d="M20 6 9 17l-5-5"/>', 'markdown-heading-menu-check');
 
 /** The block kind every text block in the selection shares: 0 for paragraphs,
  *  the level for headings, or null when they differ or are something else. */
@@ -145,6 +170,7 @@ function toggleHeadingMenu(ctx: Ctx) {
  *  present, as its last. */
 export function selectionToolbar({ askAgent }: SelectionActions): ToolbarFeatureConfig {
   return {
+    ...GLYPHS,
     buildToolbar: (builder) => {
       // The menu shows the current kind itself, so the trigger never wears
       // Crepe's active fill.

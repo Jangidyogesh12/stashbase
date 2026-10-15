@@ -19,7 +19,6 @@ import {
   type ExactSearchRequest,
   type ExactSearchResult,
 } from '@/features/retrieval/domain/exact-search';
-import { parentPathOf } from '@/shared/utils/file-path';
 
 import type { SearchBackend, SearchRows } from './backend';
 import { rowLabel, SourceName } from './row';
@@ -27,7 +26,6 @@ import { rowLabel, SourceName } from './row';
 const EXACT_DELAY_MS = 160;
 
 interface ExactGroup {
-  readonly directory: string;
   readonly occurrences: readonly ExactSearchOccurrence[];
   /** Row number of this group's first occurrence. */
   readonly start: number;
@@ -65,7 +63,6 @@ function groupOccurrences(result: ExactSearchResult, folderPath: string): ExactG
     const occurrences = exactSearchOccurrences(file);
     if (occurrences.length === 0) continue;
     groups.push({
-      directory: parentPathOf(file.source.path),
       occurrences,
       start,
       totalMatches: file.totalMatches,
@@ -107,11 +104,6 @@ function exactRows(
                 {group.totalMatches}
               </span>
             </div>
-            {group.directory && (
-              <p className="truncate px-9 pb-1 text-ui-10 text-muted-foreground">
-                {group.directory}
-              </p>
-            )}
             {group.occurrences.map((occurrence, offset) => {
               const index = group.start + offset;
               const location = matchLocation(occurrence.match);

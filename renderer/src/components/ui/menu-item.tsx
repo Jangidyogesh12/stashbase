@@ -29,6 +29,7 @@ import { forwardRef, type HTMLAttributes } from 'react';
 
 import { MenuItemCheck } from '@/components/internal/menu-item-check';
 import { MenuItemSwitch } from '@/components/internal/menu-item-switch';
+import { menuRowTone } from '@/components/internal/menu-row-tone';
 import { useProximityRow } from '@/components/internal/proximity-row';
 import { Badge } from '@/components/ui/badge';
 import { WeightedLabel } from '@/components/ui/weighted-label';
@@ -178,10 +179,9 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
 
     const labelText = (
       <WeightedLabel
-        className="min-w-0 flex-1"
+        className={cn('min-w-0 flex-1', menuRowTone(isActive || checked === true))}
         data-menu-item-label
         emphasized={false}
-        lit={isActive || checked === true}
         overflow={wrapsLabel ? 'wrap' : 'truncate'}
       >
         {label}
@@ -269,7 +269,14 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
         {trailingAction && TrailingActionIcon && (
           <Button
             aria-label={trailingAction.label}
-            className="-my-1 -mr-1 shrink-0"
+            // Shown on the highlighted row only, the way a renamable name
+            // offers its pencil on hover: a column of identical glyphs down
+            // every row read as clutter. It keeps its room at rest, so the
+            // row never reflows, and stays on where there is no hover.
+            className={cn(
+              '-my-1 -mr-1 shrink-0 transition-[color,opacity] duration-fast',
+              isActive ? 'opacity-100' : 'opacity-0 pointer-coarse:opacity-100',
+            )}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();

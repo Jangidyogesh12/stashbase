@@ -297,6 +297,18 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
                 ? 'placeholder:text-muted-foreground/70'
                 : 'placeholder:text-muted-foreground',
               sizeClasses.text,
+              // A whole-pixel line box: the type's own 1.5 leading made the
+              // input 19.5px tall, so centring it in the control left it on a
+              // quarter pixel and the caret drew blurred and taller than the
+              // letters. 16px at the default interface size, scaled with it
+              // and rounded to an even pixel, keeps it on the grid at every
+              // size and tall enough that the input never clips its glyphs.
+              'leading-[round(calc(16px*var(--ui-scale,1)),2px)]',
+              // The input clips to its own box, and a caret before the first
+              // character straddles that edge, so its left half was cut off.
+              // One pixel of padding gives it room; the matching negative
+              // margin keeps the text where it was.
+              '-mx-px px-px',
             )}
             style={{ fontVariationSettings: fontWeights.normal }}
             {...props}
