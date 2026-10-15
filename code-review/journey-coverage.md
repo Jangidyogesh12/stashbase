@@ -1850,6 +1850,19 @@ Host/services: `electron/bug-report-service.cjs`, `electron/bug-report-handoff.c
 
 ## J10: Core loop
 
+**Release source pass (2026-10-16):** The merged 2.16.6 candidate passed the
+complete `pnpm check`, including all twelve renderer gates, 773 host tests,
+three bundled OpenCode checks, host types, service builds and Electron smoke.
+A separate native window loaded those built renderer/services with isolated
+configuration and collection disabled (`available: false`). The driven pass
+cancelled the native folder picker, opened a disposable project, inspected
+General/Agents/Advanced settings and Gallery covers, retained an unsent chat
+while opening a document, attached the document as context, saved an edit,
+and found that durable text through keyword search. The window quit cleanly.
+This source harness does not establish signed-package delivery, real-provider
+model quality, or N-to-N+1 updates. Native Codex discovery reported a missing
+local executable behind its npm launcher; no installation or login was attempted.
+
 **Intent:** [J10](../design-docs/journeys/README.md#j10-turn-a-local-project-into-durable-agent-assisted-work).
 
 **Implementation:** Renderer: `renderer/src/app/composition/folder/use-agent-environment.ts`, `renderer/src/app/composition/folder/refresh-folder.ts`.
@@ -1999,6 +2012,15 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
   permission failures. The standard Electron smoke also passed cover, hero,
   thumbnail decoding and selection with production CSP. Installed delivery
   remains a release check.
+- **Gallery cover frame runtime pass (2026-10-15):** covers are drawn at 16:9
+  without the project's name, and the shelf card prints the name in a band
+  below the picture instead of over it. A native window of the built renderer
+  loaded an unpublished local index of redrawn covers through
+  `STASHBASE_GALLERY_INDEX_URL`, with relative screenshot paths served from
+  `app://renderer`. It showed the full cover in every Welcome card, the hover
+  description rising over the picture without changing card height, and the
+  full cover on the entry page. The proxied CDN path was not exercised before
+  publication.
 
 ## Maintenance Rule
 

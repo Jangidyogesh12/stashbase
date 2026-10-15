@@ -34,12 +34,12 @@ it('uses the refreshed entry for an already-open detail and copy action', async 
       <Shop port={{ loadIndex: () => response }} copy={copy} />
     </Providers>,
   );
-  fireEvent.click(screen.getByRole('button', { name: /How to Start a Startup/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Resume Builder/ }));
   const updated: GalleryEntry = {
-    id: 'how-to-start-a-startup',
+    id: 'resume-builder',
     name: 'Updated project',
     repo: 'https://github.com/owner/new',
-    category: 'course',
+    category: 'career',
     description: 'Updated description',
 
     about: null,
@@ -80,7 +80,7 @@ it('removes the copy action when publication withdraws the selected project', as
       <Shop port={{ loadIndex: () => response }} copy={vi.fn()} />
     </Providers>,
   );
-  fireEvent.click(screen.getByRole('button', { name: /How to Start a Startup/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Resume Builder/ }));
   await act(async () => publish([]));
   await screen.findByText(/This project is no longer in the Gallery/);
   expect(screen.queryByRole('button', { name: 'Make a copy' })).toBeNull();
@@ -97,7 +97,7 @@ it('keeps the personas shop and the project Gallery apart', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Browse personas' }));
   const personas = await screen.findByRole('dialog', { name: 'Personas' });
   expect(within(personas).getByRole('button', { name: /Essayist/ })).toBeTruthy();
-  expect(within(personas).queryByRole('button', { name: /How to Start a Startup/ })).toBeNull();
+  expect(within(personas).queryByRole('button', { name: /Resume Builder/ })).toBeNull();
   fireEvent.keyDown(personas, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 

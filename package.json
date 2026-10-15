@@ -2,7 +2,7 @@
   "name": "stashbase",
   "version": "2.16.5",
   "packageManager": "pnpm@11.5.1",
-  "description": "StashBase is an IDE for writing: brainstorm, draft, and revise in local projects.",
+  "description": "An open-source, local-first writing workspace. Write with Claude and Codex, drawing on your own sources and past work.",
   "author": {
     "name": "liliu-z",
     "email": "bingwuthu@gmail.com"

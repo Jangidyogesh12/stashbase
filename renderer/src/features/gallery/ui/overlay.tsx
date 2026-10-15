@@ -28,8 +28,7 @@ const HEADERS: Record<GallerySection, { title: string; description: string }> = 
     title: 'Personas',
   },
   projects: {
-    description:
-      'Explore how people organize files and write with agents. Find ideas for your own workflow.',
+    description: 'Find ideas for your own workflow.',
     title: 'Gallery',
   },
 };

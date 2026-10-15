@@ -4,8 +4,6 @@ import { cn } from '@/lib/utils';
 
 import { GalleryImage } from './image';
 
-const HERO_FRAME = { aspectRatio: '16 / 9' } as const;
-
 export function GalleryScreenshot({
   name,
   screenshot,
@@ -17,18 +15,18 @@ export function GalleryScreenshot({
   return (
     <div
       className={cn(
-        'relative flex w-full items-center justify-center overflow-hidden border border-border bg-surface-3',
+        // Covers are drawn at 16:9, the same frame as the shelf's cards.
+        'relative flex aspect-video w-full items-center justify-center overflow-hidden border border-border bg-surface-3',
         !screenshot && 'border-dashed',
         shape.panel,
       )}
-      style={HERO_FRAME}
     >
       {screenshot ? (
         <GalleryImage
           key={screenshot}
           retryable
           alt={`${name} cover`}
-          className="absolute inset-0 size-full object-cover object-top"
+          className="absolute inset-0 size-full object-cover"
           src={screenshot}
         />
       ) : (

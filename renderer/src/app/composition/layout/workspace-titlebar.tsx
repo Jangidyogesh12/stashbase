@@ -83,7 +83,23 @@ export function WorkspaceTitlebar({
   // is away (or renders as a sheet), in the same window corner it left.
   const showsTrigger = isMobile || !open;
   return (
-    <header className="workspace-titlebar flex h-11 shrink-0 items-center border-b border-border px-2">
+    <header className="workspace-titlebar relative flex h-11 shrink-0 items-center border-b border-border px-2">
+      {/* Welcome is centred on the whole row, not on the slot between the
+       *  corners: the left corner also holds the traffic lights' room, so the
+       *  slot's centre sits right of the window's and the word would miss the
+       *  lockup centred beneath it. It takes no pointer, so the corner's
+       *  trigger stays reachable under it. */}
+      <AnimatePresence initial={false}>
+        {!hasActiveFolder && (
+          <motion.div
+            {...FADE}
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            key="welcome"
+          >
+            <span className="truncate text-caption font-medium text-foreground">Welcome</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="workspace-titlebar-controls flex items-center">
         <AnimatePresence initial={false}>
           {showsTrigger && (
@@ -141,15 +157,7 @@ export function WorkspaceTitlebar({
           </div>
         )}
         <AnimatePresence initial={false}>
-          {!hasActiveFolder ? (
-            <motion.div
-              {...FADE}
-              className="absolute inset-0 flex items-center justify-center bg-background"
-              key="welcome"
-            >
-              <span className="truncate text-caption font-medium text-foreground">Welcome</span>
-            </motion.div>
-          ) : chatHasCard ? (
+          {chatHasCard && (
             // The cover's own edge, travelling the way the pane's seam does
             // and on the same step, so one edge appears to cross the whole
             // window rather than two surfaces agreeing to change at once.
@@ -170,7 +178,7 @@ export function WorkspaceTitlebar({
             >
               <ChatTitle runtime={agent} />
             </motion.div>
-          ) : null}
+          )}
         </AnimatePresence>
       </div>
       {hasActiveFolder && !chatHasCard ? (
