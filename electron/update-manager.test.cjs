@@ -373,3 +373,23 @@ test('check certificates and integrity failures, and network failures during dow
   assert.equal(reported.at(-1).context.stage, 'installing');
   manager.dispose();
 });
+
+test('GitHub release wrappers retain the severity of the actual check failure, never feed contents', async () => {
+  const reported = [];
+  const { manager, updater } = harness({ onDiagnostic: (error, context, severity) => reported.push({ error, context, severity }) });
+  const latest = 'Unable to find latest version on GitHub (https://github.com/liliu-z/stashbase/releases/latest), please ensure a production release exists: Error: net::ERR_NETWORK_IO_SUSPENDED';
+  for (const [code, message, severity] of [
+    ['ERR_UPDATER_INVALID_RELEASE_FEED', `Cannot parse releases feed: Error: ${latest}\n    at request\nXML:\n<feed/>`, 'warning'],
+    ['ERR_UPDATER_LATEST_VERSION_NOT_FOUND', latest, 'warning'],
+    ['ERR_UPDATER_INVALID_RELEASE_FEED', 'Cannot parse releases feed: Error: Invalid XML\nXML:\n<entry>net::ERR_NETWORK_IO_SUSPENDED</entry>', 'error'],
+    ['ERR_UPDATER_INVALID_RELEASE_FEED', latest.replace('ERR_NETWORK_IO_SUSPENDED', 'ERR_CERT_AUTHORITY_INVALID'), 'error'],
+    ['ERR_SHA512', latest, 'error'],
+  ]) {
+    const failure = Object.assign(new Error(message), { code });
+    updater.checkForUpdates = async () => { throw failure; };
+    await manager.check();
+    assert.equal(reported.at(-1).severity, severity);
+    assert.equal(reported.at(-1).error, failure);
+  }
+  manager.dispose();
+});

@@ -879,7 +879,8 @@ exited during main's quit sequence.
   automatic preference, while timers/focus/wake honor it. Disposal prevents new
   requests and retires the timer.
   The update manager classifies only recognized connectivity failures during
-  checking as warnings; all other phases and failures retain error severity.
+  checking as warnings, including GitHubProvider's known latest-release wrappers.
+  Feed XML is never classification evidence; all other phases and failures retain error severity.
   Native diagnostics spool that severity. The host aggregates identical check
   warnings in hourly windows by captured identity, version and diagnostic,
   preserving the first report and counted repeats. Replay follows occurrence

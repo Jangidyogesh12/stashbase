@@ -48,6 +48,18 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Diagnostic follow-up (2026-10-16):** updater regressions cover recognized network
+errors inside GitHub's latest-release/feed wrappers, while certificate, integrity
+and genuine feed errors remain errors; strings inside feed XML cannot downgrade
+them. An isolated allowance-route HTTP regression preserves local 502 separately
+from upstream 404/request ID/content type and retains nested network causes without
+adding credentials or response bodies to diagnostics or the renderer response.
+The production allowance 404/network failures still require upstream evidence.
+Validation passed `pnpm test:updates` (49 tests), `pnpm test:agent` (345),
+the allowance/indexer/telemetry/diagnostic/client-error suites (70), host types,
+documentation checks and the server build. This host/main change did not include
+a packaged UI pass or production diagnostic-delivery verification.
+
 **Intel entry (2026-09-17):** macOS build and source CI include native x64,
 with dual-architecture update metadata and Homebrew selection owned by the
 [Release Runbook](release-pipeline.md#macos-developer-id-distribution).

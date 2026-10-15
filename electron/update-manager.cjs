@@ -9,7 +9,14 @@ const CHECK_NETWORK_ERRORS = new Set([
 
 function checkNetworkError(error) {
   const code = error?.code ?? /^net::(ERR_[A-Z_]+)(?:\s|$)/.exec(errorMessage(error))?.[1];
-  return CHECK_NETWORK_ERRORS.has(code);
+  if (CHECK_NETWORK_ERRORS.has(code)) return true;
+  // GitHubProvider wraps the request failure, sometimes twice, and appends
+  // the release XML. Inspect only its known request wrapper, never feed text
+  // or arbitrary errors (in particular integrity/certificate failures).
+  if (!['ERR_UPDATER_INVALID_RELEASE_FEED', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND'].includes(code)) return false;
+  const explanation = errorMessage(error).split('\nXML:', 1)[0];
+  const nested = /Unable to find latest version on GitHub \([^\r\n]+\), please ensure a production release exists: Error: net::(ERR_[A-Z_]+)(?:\s|$)/.exec(explanation)?.[1];
+  return CHECK_NETWORK_ERRORS.has(nested);
 }
 
 function nextPatchVersion(version) {
