@@ -60,9 +60,10 @@ function ToolsLayer({ go, view }: { go(layer: Layer): void; view: AgentToolsView
   return (
     <>
       <DropdownLabel className="font-medium text-foreground">Crew</DropdownLabel>
-      {/* The name alone does not say what a crew is for. */}
+      {/* Said as picking who comes along: the rows below already name what
+          each member does, and new chats start from the same picks. */}
       <p className="-mt-1 px-2 pb-1.5 text-caption text-muted-foreground">
-        Choose who handles matching work in this chat. New chats remember your choices.
+        Pick who's on your crew for this chat. New chats start with the same crew.
       </p>
       {view.tools.map((tool) => {
         if (tool.unavailable) {

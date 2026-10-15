@@ -19,7 +19,7 @@ export function useRotatingPrompt(prompts: readonly string[], paused: boolean): 
     if (paused || reduceMotion || count < 2) return;
     const timer = setInterval(
       () => setIndex((current) => (current + 1) % count),
-      ambient.labelCycleMs,
+      ambient.promptCycleMs,
     );
     return () => clearInterval(timer);
   }, [count, paused, reduceMotion]);

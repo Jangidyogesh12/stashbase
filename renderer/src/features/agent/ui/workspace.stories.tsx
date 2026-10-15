@@ -389,7 +389,8 @@ export const ModelPicker: Story = {
   play: async () => {
     await readyWorkspace();
     await userEvent.click(screen.getByRole('button', { name: /^Model and thinking:/ }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: /^Model\./ }));
+    // The panel names the model; the model list opens one step under it.
+    await userEvent.click(await screen.findByRole('button', { name: /^Model: / }));
     await screen.findByRole('menuitem', { name: /Update Codex/ });
   },
 };

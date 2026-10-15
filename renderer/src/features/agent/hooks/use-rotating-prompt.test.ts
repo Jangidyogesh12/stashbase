@@ -18,33 +18,33 @@ describe('useRotatingPrompt', () => {
     const { result } = renderHook(() => useRotatingPrompt(PROMPTS, false));
     expect(result.current).toBe(PROMPTS[0]);
 
-    act(() => vi.advanceTimersByTime(ambient.labelCycleMs));
+    act(() => vi.advanceTimersByTime(ambient.promptCycleMs));
     expect(result.current).toBe(PROMPTS[1]);
-    act(() => vi.advanceTimersByTime(ambient.labelCycleMs * 2));
+    act(() => vi.advanceTimersByTime(ambient.promptCycleMs * 2));
     expect(result.current).toBe(PROMPTS[0]);
   });
 
   it('holds still while paused and resumes from where it stopped', () => {
     let paused = false;
     const { rerender, result } = renderHook(() => useRotatingPrompt(PROMPTS, paused));
-    act(() => vi.advanceTimersByTime(ambient.labelCycleMs));
+    act(() => vi.advanceTimersByTime(ambient.promptCycleMs));
     expect(result.current).toBe(PROMPTS[1]);
 
     paused = true;
     rerender();
-    act(() => vi.advanceTimersByTime(ambient.labelCycleMs * 3));
+    act(() => vi.advanceTimersByTime(ambient.promptCycleMs * 3));
     expect(result.current).toBe(PROMPTS[1]);
 
     paused = false;
     rerender();
-    act(() => vi.advanceTimersByTime(ambient.labelCycleMs));
+    act(() => vi.advanceTimersByTime(ambient.promptCycleMs));
     expect(result.current).toBe(PROMPTS[2]);
   });
 
   it('shows nothing for no prompts and never cycles a single one', () => {
     expect(renderHook(() => useRotatingPrompt([], false)).result.current).toBeNull();
     const single = renderHook(() => useRotatingPrompt(['Only'], false));
-    act(() => vi.advanceTimersByTime(ambient.labelCycleMs * 2));
+    act(() => vi.advanceTimersByTime(ambient.promptCycleMs * 2));
     expect(single.result.current).toBe('Only');
   });
 });

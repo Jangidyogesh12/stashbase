@@ -114,7 +114,7 @@ describe('mention editor', () => {
   it('leaves a hint placeholder alone on Tab', () => {
     const { editor, field, onValueChange } = harness({
       acceptPlaceholder: false,
-      placeholder: 'Write with StashBase…',
+      placeholder: 'Message your agent…',
     });
     pressKey(field, 'Tab');
     expect(editor.state.doc.toString()).toBe('');

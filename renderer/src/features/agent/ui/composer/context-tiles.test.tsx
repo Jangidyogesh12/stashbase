@@ -100,6 +100,23 @@ describe('bound context tiles', () => {
     await expectNoA11yViolations(container);
   });
 
+  it('opens a passage chip on the words, not on their Markdown marker', () => {
+    render(
+      <SentContextTiles
+        items={[
+          {
+            kind: 'passage',
+            quote: '1. First. No resume? Your LinkedIn profile works too.',
+            source: { folderPath: '/lib', path: 'README.md' },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/^First\. No resume\?/u)).not.toBeNull();
+    expect(screen.queryByText(/^1\. /u)).toBeNull();
+  });
+
   it('renders nothing for a turn that carried no context', () => {
     const { container } = render(<SentContextTiles items={[]} />);
     expect(container.firstChild).toBeNull();

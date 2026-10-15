@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { claudeUpgradeOffer, claudeUpgradeOfferFrom } from '../claude-model-catalog.ts';
+import { claudeModelRelease, claudeUpgradeOffer, claudeUpgradeOfferFrom } from '../claude-model-catalog.ts';
 
 const DISABLED = {
   value: 'cc-update-required-1',
@@ -69,4 +69,18 @@ test('the file is re-read once it changes, so an update withdraws the offer', (t
   fs.writeFileSync(file, JSON.stringify({ additionalModelOptionsCache: [RUNNABLE] }));
   fs.utimesSync(file, new Date(), new Date(Date.now() + 1000));
   assert.equal(claudeUpgradeOffer(file), undefined);
+});
+
+// Descriptions as Claude's own handshake gives them for its aliases.
+test('an alias reads as the release its own description starts with', () => {
+  assert.equal(claudeModelRelease('Opus 5.5 with 1M context · Best for everyday, complex tasks'), 'Opus 5.5');
+  assert.equal(claudeModelRelease('Fable 5.1 · Most capable for your hardest and longest-running tasks'), 'Fable 5.1');
+  assert.equal(claudeModelRelease('Sonnet 5 · Efficient for routine tasks'), 'Sonnet 5');
+  assert.equal(claudeModelRelease('Haiku 4.5 · Fastest for quick answers'), 'Haiku 4.5');
+});
+
+test('a description that does not start with a release names none, and the alias stands', () => {
+  assert.equal(claudeModelRelease('Update to 2.1.280+ to use Opus 5.5'), undefined);
+  assert.equal(claudeModelRelease('Most capable'), undefined);
+  assert.equal(claudeModelRelease(undefined), undefined);
 });

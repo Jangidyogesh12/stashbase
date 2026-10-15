@@ -6,6 +6,9 @@ export interface AgentModel {
   id: string;
   label: string;
   description?: string;
+  /** The release an alias resolves to ("Opus 5.5" for Claude's "Opus"),
+   *  where the runtime names models by alias. */
+  release?: string;
   /** Effort levels this model accepts; a model that names none runs only at
    *  whatever the runtime defaults to. */
   supportedEfforts?: string[];

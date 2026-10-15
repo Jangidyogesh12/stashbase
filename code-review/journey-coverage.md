@@ -1426,8 +1426,8 @@ once. The signal offers an update attempt, not a claimed minimum version or
 guaranteed account access. Not proven: a real Codex update and successful provider
 turn through the packaged application for this failure.
 
-**Model-picker update entry (2026-10-04):** `ui/composer/thinking.tsx` also
-offers the native updater in the model list before a turn fails, using the
+**Model-picker update entry (2026-10-04):** `ui/composer/thinking-models.tsx`
+also offers the native updater in the model list before a turn fails, using the
 host's `updatable` capability and `use-agent-runtime-update.ts`. The mounted
 workspace regression starts with only an older model, invokes Update Codex,
 then verifies reconnection publishes the replacement catalog and keeps the

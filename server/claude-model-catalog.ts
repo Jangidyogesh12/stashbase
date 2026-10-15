@@ -130,6 +130,18 @@ export function claudeUpgradeOffer(file = claudeConfigPath()): ClaudeUpgradeOffe
   return offer;
 }
 
+/** The release an alias resolves to, read from the start of Claude's own
+ * description: "Opus 5.5 with 1M context · Best for everyday, complex tasks"
+ * gives "Opus 5.5". Claude names its models by alias ("Opus", "Default"), so
+ * the description is the only place a release appears before a turn has run.
+ * Only a leading name and version number is taken, with no model names known
+ * here; a description shaped any other way gives nothing, and the alias
+ * stands. */
+export function claudeModelRelease(description: string | undefined): string | undefined {
+  const match = description?.match(/^([A-Z][\w-]*(?: [A-Z][\w-]*)*) (\d+(?:\.\d+)*)(?=$|[\s·,])/u);
+  return match ? `${match[1]} ${match[2]}` : undefined;
+}
+
 /** The handshake's entries in the shared shape. The persisted effort is a
  * session-wide choice in Claude, so it becomes the default effort of every
  * model that can run at it. */
@@ -137,10 +149,12 @@ function claudeCatalogModels(entries: ClaudeCatalogEntry[], settings: ClaudeUser
   return entries.map((entry) => {
     const supportedEfforts = entry.supportedEffortLevels;
     const effort = settings.effortLevel;
+    const release = claudeModelRelease(entry.description);
     return {
       id: entry.value,
       label: entry.displayName || entry.value,
       ...(entry.description ? { description: entry.description } : {}),
+      ...(release ? { release } : {}),
       ...(supportedEfforts?.length ? { supportedEfforts } : {}),
       ...(effort && supportedEfforts?.includes(effort) ? { defaultEffort: effort } : {}),
     };

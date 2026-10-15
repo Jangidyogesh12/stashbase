@@ -260,7 +260,7 @@ function ChatWorkspace({
               onSkillChange={active.setSkill}
               onStop={active.interrupt}
               onSend={access.send}
-              placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Write with StashBase…'}
+              placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Message your agent…'}
               placeholderIsPrompt={promptPlaceholder !== null}
               queue={state.queuedPrompts.map(({ context, id, text }) => ({
                 files: context.flatMap((item) =>
@@ -269,7 +269,14 @@ function ChatWorkspace({
                 id,
                 text,
               }))}
+              // Left, what goes into the writing beside the attachments: the
+              // persona it is written in. Right, what follows the Agent: who
+              // runs the turn, under what permissions, on which model at
+              // what level; changing the Agent changes that whole group.
               leftSlot={
+                <AgentPersonaControl disabled={busy} onBrowse={onBrowsePersonas} picker={persona} />
+              }
+              rightSlot={
                 <>
                   <AgentProviderControl
                     activeAgent={selectedAgent}
@@ -290,30 +297,23 @@ function ChatWorkspace({
                       onChange={active.setAccessMode}
                     />
                   )}
-                  <AgentPersonaControl
-                    disabled={busy}
-                    onBrowse={onBrowsePersonas}
-                    picker={persona}
-                  />
+                  {readyAgent && (
+                    <AgentThinkingControl
+                      activeAgent={readyAgent}
+                      onEffortChange={active.setEffort}
+                      onModelChange={active.setModel}
+                      onRequestCatalog={active.start}
+                      runtimeUpdate={readyAgent.updatable ? runtimeUpdate : undefined}
+                      state={{ ...state, activeTurn: busy || preferencesUnavailable }}
+                      tools={{
+                        api: toolsApi,
+                        chat: state.nativeSessionId ?? activeId,
+                        onChanged: active.applyPersona,
+                        onSaving: setCrewSaving,
+                      }}
+                    />
+                  )}
                 </>
-              }
-              rightSlot={
-                readyAgent ? (
-                  <AgentThinkingControl
-                    activeAgent={readyAgent}
-                    onEffortChange={active.setEffort}
-                    onModelChange={active.setModel}
-                    onRequestCatalog={active.start}
-                    runtimeUpdate={readyAgent.updatable ? runtimeUpdate : undefined}
-                    state={{ ...state, activeTurn: busy || preferencesUnavailable }}
-                    tools={{
-                      api: toolsApi,
-                      chat: state.nativeSessionId ?? activeId,
-                      onChanged: active.applyPersona,
-                      onSaving: setCrewSaving,
-                    }}
-                  />
-                ) : null
               }
               sendable={
                 !crewSaving &&

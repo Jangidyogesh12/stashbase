@@ -53,14 +53,19 @@ function renderControl(overrides: Partial<ControlProps> = {}) {
   return { ...spies, user: userEvent.setup() };
 }
 
-/** The accessible names of the options an open layer marks as selected. */
+/** The thinking slider's thumb, as assistive technology reaches it. */
+function slider(): HTMLElement {
+  return screen.getByRole('slider', { name: 'Thinking' });
+}
+
+/** The accessible names of the options the open model menu marks as selected. */
 function checkedNames(): string[] {
   return screen
     .getAllByRole('menuitemradio', { checked: true })
     .map((option) => option.getAttribute('aria-label') ?? option.textContent ?? '');
 }
 
-/** The accessible names of every option the open layer offers, in order. */
+/** The accessible names of every option the open model menu offers, in order. */
 function optionNames(): string[] {
   return screen
     .getAllByRole('menuitemradio')
@@ -85,40 +90,40 @@ describe('agent composer model-and-thinking control', () => {
     await user.click(trigger);
     expect(onRequestCatalog).toHaveBeenCalledTimes(1);
 
-    // The declared default is one of the levels, so no separate Default row.
-    expect(optionNames()).toEqual([
-      'Low. Faster',
-      'Medium. Balanced',
-      'High. Deeper reasoning',
-      'Extra high. Deepest reasoning',
-      'Max. Maximum reasoning',
-      'Auto',
-    ]);
-    expect(checkedNames()).toEqual(['Medium. Balanced']);
-    expect(screen.getByRole('menuitem', { name: 'Model. Codex Max' })).not.toBeNull();
+    // The ranked levels share one slider, from Low to Max; Auto does not
+    // rank, so it is offered beside the slider.
+    expect(slider().getAttribute('aria-valuetext')).toBe('Medium, Balanced');
+    expect(slider().getAttribute('max')).toBe('4');
+    expect(screen.getByRole('button', { name: 'Auto' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Model: Codex Max' })).not.toBeNull();
+    // Already on the model's own level, so there is nothing to reset.
+    expect(
+      screen
+        .getByRole('button', { name: "Reset thinking to the model's default" })
+        .hasAttribute('disabled'),
+    ).toBe(true);
 
-    await user.click(screen.getByRole('menuitemradio', { name: 'Extra high. Deepest reasoning' }));
-    expect(onEffortChange).toHaveBeenCalledWith('xhigh');
-    // A level pick keeps the menu open, as every choice menu here does.
-    expect(screen.getByRole('menu')).not.toBeNull();
+    slider().focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onEffortChange).toHaveBeenLastCalledWith('high');
+    await user.click(screen.getByRole('button', { name: 'Auto' }));
+    expect(onEffortChange).toHaveBeenLastCalledWith('auto');
+    // A level change keeps the panel open, so the reader can see it land.
+    expect(screen.getByRole('dialog', { name: 'Model and thinking' })).not.toBeNull();
   });
 
-  it('keeps the model one layer deeper, marks the one that will run, and offers the way back', async () => {
+  it('keeps the model one step deeper and marks the one that will run', async () => {
     const { onModelChange, user } = renderControl({
       state: sessionState({ models: [GPT, MINI] }),
     });
 
     await user.click(screen.getByRole('button', { name: 'Model and thinking: Codex Max, Medium' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Model. Codex Max' }));
+    await user.click(screen.getByRole('button', { name: 'Model: Codex Max' }));
 
     // The runtime named its default, so the list needs no Default row.
     expect(optionNames()).toEqual(['Codex Max', 'Codex Mini']);
     expect(checkedNames()).toEqual(['Codex Max']);
 
-    await user.click(screen.getByRole('menuitem', { name: 'Back' }));
-    expect(checkedNames()).toEqual(['Medium. Balanced']);
-
-    await user.click(screen.getByRole('menuitem', { name: 'Model. Codex Max' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'Codex Mini' }));
     expect(onModelChange).toHaveBeenCalledWith('gpt-mini');
   });
@@ -128,13 +133,20 @@ describe('agent composer model-and-thinking control', () => {
     const trigger = screen.getByRole('button', { name: 'Model and thinking: Codex Max, Medium' });
 
     await user.click(trigger);
-    await user.click(screen.getByRole('menuitem', { name: 'Model. Codex Max' }));
+    await user.click(screen.getByRole('button', { name: 'Model: Codex Max' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'Codex Mini' }));
-    // The pick closes the menu, which leaves once its exit has played.
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull(), { timeout: 2000 });
+    // The pick closes the menu and the panel, which leave once their exits
+    // have played.
+    await waitFor(
+      () => {
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(screen.queryByRole('dialog')).toBeNull();
+      },
+      { timeout: 2000 },
+    );
 
     await user.click(trigger);
-    expect(await screen.findByRole('menuitemradio', { name: 'Medium. Balanced' })).not.toBeNull();
+    expect(await screen.findByRole('slider', { name: 'Thinking' })).not.toBeNull();
   });
 
   it('reads the explicit picks back and says when a model has no level to choose', async () => {
@@ -151,8 +163,8 @@ describe('agent composer model-and-thinking control', () => {
     });
     await user.click(screen.getByRole('button', { name: 'Model and thinking: Codex Mini' }));
     expect(screen.getByText('Thinking is set by the runtime')).not.toBeNull();
-    expect(screen.queryAllByRole('menuitemradio')).toHaveLength(0);
-    expect(screen.getByRole('menuitem', { name: 'Model. Codex Mini' })).not.toBeNull();
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Model: Codex Mini' })).not.toBeNull();
   });
 
   /** A runtime's model labels are aliases: "Opus" is whichever Opus that
@@ -167,7 +179,7 @@ describe('agent composer model-and-thinking control', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Model and thinking: Default' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Model. Default' }));
+    await user.click(screen.getByRole('button', { name: 'Model: Default' }));
 
     expect(
       screen.getByRole('menuitemradio', {
@@ -176,7 +188,7 @@ describe('agent composer model-and-thinking control', () => {
     ).not.toBeNull();
   });
 
-  it('keeps a Default row wherever the runtime has named no default of its own', async () => {
+  it('keeps a way back to the runtime default wherever the runtime has named none', async () => {
     const first = renderControl({
       activeAgent: CLAUDE_AGENT,
       state: sessionState({ models: [OPUS] }),
@@ -184,11 +196,21 @@ describe('agent composer model-and-thinking control', () => {
 
     await first.user.click(screen.getByRole('button', { name: 'Model and thinking: Default' }));
     expect(screen.getByText('Thinking is set by the runtime')).not.toBeNull();
-    await first.user.click(screen.getByRole('menuitem', { name: 'Model. Default' }));
+    await first.user.click(screen.getByRole('button', { name: 'Model: Default' }));
     expect(optionNames()).toEqual(['Default', 'Opus']);
     expect(checkedNames()).toEqual(['Default']);
     await first.user.click(screen.getByRole('menuitemradio', { name: 'Opus' }));
     expect(first.onModelChange).toHaveBeenCalledWith('opus');
+    cleanup();
+
+    // Opus declares no level of its own: until one is chosen the slider
+    // stands at Default, and Reset returns there.
+    const unplaced = renderControl({
+      activeAgent: CLAUDE_AGENT,
+      state: sessionState({ model: 'opus', models: [OPUS] }),
+    });
+    await unplaced.user.click(screen.getByRole('button', { name: 'Model and thinking: Opus' }));
+    expect(slider().getAttribute('aria-valuetext')).toBe('Default');
     cleanup();
 
     const second = renderControl({
@@ -196,10 +218,54 @@ describe('agent composer model-and-thinking control', () => {
       state: sessionState({ effort: 'high', model: 'opus', models: [OPUS] }),
     });
     await second.user.click(screen.getByRole('button', { name: 'Model and thinking: Opus, High' }));
-    expect(optionNames()).toEqual(['Default', 'Low. Faster', 'High. Deeper reasoning']);
-    expect(checkedNames()).toEqual(['High. Deeper reasoning']);
-    await second.user.click(screen.getByRole('menuitemradio', { name: 'Default' }));
+    expect(slider().getAttribute('aria-valuetext')).toBe('High, Deeper reasoning');
+    await second.user.click(
+      screen.getByRole('button', { name: "Reset thinking to the model's default" }),
+    );
     expect(second.onEffortChange).toHaveBeenCalledWith(null);
+  });
+
+  /** Claude names models by alias and says the release only in its own
+   *  description, which the catalog reads into `release`. */
+  it('names an alias by the release it resolves to, and drops the parenthetical from names', async () => {
+    const description = 'Opus 5.5 with 1M context · Best for everyday, complex tasks';
+    const { user } = renderControl({
+      activeAgent: CLAUDE_AGENT,
+      state: sessionState({
+        effort: 'high',
+        models: [
+          { description, id: 'default', label: 'Default (recommended)', release: 'Opus 5.5' },
+          {
+            description,
+            id: 'opus[1m]',
+            isDefault: true,
+            label: 'Opus (1M context)',
+            release: 'Opus 5.5',
+            supportedEfforts: ['low', 'high'],
+          },
+        ],
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Model and thinking: Opus 5.5, High' }));
+    await user.click(screen.getByRole('button', { name: 'Model: Opus 5.5' }));
+    expect(optionNames()).toEqual([`Default. ${description}`, `Opus. ${description}`]);
+  });
+
+  it('keeps the parenthetical where dropping it would leave two models one name', async () => {
+    const { user } = renderControl({
+      activeAgent: CLAUDE_AGENT,
+      state: sessionState({
+        models: [
+          { id: 'opus', isDefault: true, label: 'Opus', supportedEfforts: ['low', 'high'] },
+          { id: 'opus[1m]', label: 'Opus (1M context)', supportedEfforts: ['low', 'high'] },
+        ],
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Model and thinking: Opus' }));
+    await user.click(screen.getByRole('button', { name: 'Model: Opus' }));
+    expect(optionNames()).toEqual(['Opus', 'Opus (1M context)']);
   });
 
   it('falls back to the model the runtime is actually running when none is chosen', () => {
@@ -222,21 +288,16 @@ describe('agent composer model-and-thinking control', () => {
     const { user } = renderControl({
       activeAgent: CLAUDE_AGENT,
       state: sessionState({
+        effort: 'high',
         model: 'opus',
         models: [OPUS],
         transcript: [{ id: 'u1', kind: 'user', text: 'Summarize the plan' }],
       }),
     });
 
-    await user.click(screen.getByRole('button', { name: 'Model and thinking: Opus' }));
-    expect(
-      screen.getByRole('menuitem', { name: 'Model. Opus' }).getAttribute('aria-disabled'),
-    ).toBe('true');
-    expect(
-      screen
-        .getByRole('menuitemradio', { name: 'High. Deeper reasoning' })
-        .getAttribute('aria-disabled'),
-    ).not.toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Model and thinking: Opus, High' }));
+    expect(screen.getByRole('button', { name: 'Model: Opus' }).hasAttribute('disabled')).toBe(true);
+    expect(slider().hasAttribute('disabled')).toBe(false);
   });
 
   it('opens straight on the model list for a runtime with no level to choose', async () => {
@@ -247,6 +308,6 @@ describe('agent composer model-and-thinking control', () => {
 
     await user.click(screen.getByRole('button', { name: 'Model and thinking: Codex Max, Medium' }));
     expect(optionNames()).toEqual(['Codex Max', 'Codex Mini']);
-    expect(screen.queryByRole('menuitem', { name: 'Back' })).toBeNull();
+    expect(screen.queryByRole('slider')).toBeNull();
   });
 });
