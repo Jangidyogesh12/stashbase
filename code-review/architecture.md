@@ -448,7 +448,12 @@ stable status without download, retry, or a new durable demand latch.
   ALLOW answer grants the pending action; uncertain output, errors, or a
   five-second deadline return to manual approval. Destructive and unfamiliar
   tools bypass review and still ask. Stop, disposal, and turn retirement cancel
-  review; late answers cannot approve a later turn's action.
+  approval authority and undispatched reviews. After dispatch, the broker drains
+  the tool-free classification with a 256-token output cap and a 30-second
+  transport deadline, retaining its original turn for accounting. The five-second
+  decision deadline never aborts that active request. Broker shutdown cancels
+  remaining drains; late answers cannot approve a later turn's action. Main Agent
+  and Crew requests still abort when their turn ends.
   Approval replies grant once, require a pending request id, and never persist
   an `always` grant across modes. Options stay frozen while a turn runs.
   The bundled runtime filters inherited credentials and injection flags while
@@ -515,8 +520,9 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
 - OpenQuill receives a random session-local model broker credential, not
   account secrets. Model calls require an active submitted turn, retain its
   id/idempotency across the one auth-refresh retry, and cannot expose account
-  tokens in history. Turn/channel retirement cancels body reads and pending
-  upstream work; awaited credential acquisition cannot forward a request after
+  tokens in history. Turn/channel retirement cancels main Agent/Crew body reads
+  and pending upstream work. Already dispatched Auto classifications drain under
+  the bounded permission-review lifecycle above; awaited credential acquisition cannot forward a request after
   retirement. The broker buffers a bounded empty SSE prefix and retries an
   empty model call once with the same body and turn, including completed tool
   results. The new model attempt gets a fresh accounting key. Any output,

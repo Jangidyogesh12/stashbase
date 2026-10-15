@@ -146,6 +146,11 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const gatewayModels: Array<{ profile: string | undefined; version: string | undefined }> = [];
   let nextTool: { name: string; arguments: string } | undefined;
   const reviews: Array<Record<string, unknown>> = [];
+  let delayedReview: Promise<void> | undefined;
+  let releaseReview: (() => void) | undefined;
+  let reviewDisconnected = false;
+  let finishReview: (() => void) | undefined;
+  t.after(() => releaseReview?.());
   let emptyResponses = 0;
   let emptyAfterTool = false;
   const gateway = http.createServer(async (request, response) => {
@@ -159,7 +164,14 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     const body = gatewayRequests.at(-1)!;
     const reviewing = Array.isArray(body.messages) && body.messages.some((message) =>
       message.role === 'system' && String(message.content).startsWith('Review one proposed action'));
-    if (reviewing) reviews.push(body);
+    if (reviewing) {
+      reviews.push(body);
+      if (delayedReview) {
+        response.on('close', () => { if (!response.writableEnded) reviewDisconnected = true; });
+        response.on('finish', () => finishReview?.());
+        await delayedReview;
+      }
+    }
     const tool = nextTool ?? (gatewayRequests.length === 1
       ? { name: 'read', arguments: JSON.stringify({ filePath: externalFile }) }
       : gatewayRequests.length === 3
@@ -475,6 +487,22 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const autoEvents = socket.events.slice(autoStart) as Array<{ t: string; content?: string; isError?: boolean }>;
   assert.equal(autoEvents.filter(event => event.t === 'permission').length, 0);
   assert.ok(autoEvents.some(event => event.t === 'tool-result' && !event.isError && event.content?.includes(temporaryRoot)));
+
+  stage = 'Auto decision timeout with delayed accounting';
+  delayedReview = new Promise<void>(resolve => { releaseReview = resolve; });
+  const drained = new Promise<void>(resolve => { finishReview = resolve; });
+  const delayedStart = socket.events.length;
+  nextTool = { name: 'bash', arguments: JSON.stringify({ command: 'pwd', description: 'Show the project directory again' }) };
+  await runPanelTurn(false, 'Show the project directory again with pwd.');
+  assert.equal(socket.events.slice(delayedStart).filter(event => event.t === 'permission').length, 1,
+    'slow Auto review must fall back to manual approval');
+  await runPanelTurn();
+  releaseReview!();
+  await drained;
+  assert.equal(reviewDisconnected, false, 'manual fallback and the next turn must not abort an accepted review');
+  assert.equal(reviews.length, 2);
+  assert.equal(reviews[1].max_tokens, 256);
+  delayedReview = undefined;
 
   socket.request({ t: 'set-mode', mode: 'acceptEdits' });
   stage = 'empty response recovery';

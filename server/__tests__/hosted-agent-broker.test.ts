@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import http from 'node:http';
+import { reviewDefaultAgentPermission } from '../default-agent-permissions.ts';
 import { HostedAgentBroker, HostedAgentToolError } from '../hosted-agent-broker.ts';
 import { OpenCodeEventTranslator } from '../opencode-agent.ts';
 import { classifyAgentTurnFailure } from '../agent-turn-failure.ts';
@@ -490,6 +492,101 @@ test('a canceled tool or permission review cannot forward after pending credenti
   token.resolve('late-token');
   await rejected;
   assert.equal(calls, 0);
+});
+
+test('manual approval fallback drains an already dispatched review under its original turn', async (t) => {
+  const deadline = new AbortController();
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 5_000 ? deadline.signal : timeout(ms));
+  const received = deferred<{ response: http.ServerResponse; body: Record<string, unknown> }>();
+  let disconnected = false;
+  const gateway = http.createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    response.on('close', () => { if (!response.writableEnded) disconnected = true; });
+    received.resolve({ response, body: JSON.parse(Buffer.concat(chunks).toString()) });
+  });
+  await new Promise<void>(resolve => gateway.listen(0, '127.0.0.1', resolve));
+  t.after(() => { gateway.closeAllConnections(); gateway.close(); });
+  const address = gateway.address() as { port: number };
+  const headers: Headers[] = [];
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: (url, init) => { headers.push(new Headers(init?.headers)); return fetch(url, init); },
+    upstreamUrl: `http://127.0.0.1:${address.port}`, clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  broker.runtime('review');
+  const turnId = '00000000-0000-4000-8000-000000000004';
+  broker.beginTurn('review', turnId);
+  let completion!: Promise<string>;
+  const decision = reviewDefaultAgentPermission({ name: 'Bash', input: { command: 'pwd' }, project: '/fixture', userRequest: 'Show the directory.' },
+    (messages, signal) => {
+      completion = broker.complete('review', { profile: 'stashbase-agent-default' }, messages, signal);
+      return completion;
+    }, new AbortController().signal);
+  const { response, body } = await received.promise;
+  deadline.abort();
+  assert.equal(await decision, false, 'overdue review returns to manual approval');
+  broker.endTurn('review');
+  broker.beginTurn('review', '00000000-0000-4000-8000-000000000005');
+  response.writeHead(200, { 'content-type': 'text/event-stream' });
+  response.end('data: {"choices":[{"delta":{"content":"ALLOW"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+  assert.equal(await completion, 'ALLOW', 'already dispatched work finishes instead of producing a disconnected estimate');
+  assert.equal(await decision, false, 'late ALLOW never authorizes an action');
+  assert.equal(disconnected, false);
+  assert.equal(headers.length, 1);
+  assert.equal(headers[0].get('x-stashbase-agent-turn-id'), turnId);
+  assert.equal(body.max_tokens, 256, 'permission classification has a bounded output budget');
+});
+
+for (const stop of ['deadline', 'shutdown'] as const) {
+  test(`a dispatched permission review cannot outlive its ${stop}`, async (t) => {
+    const deadline = new AbortController();
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 30_000 ? deadline.signal : timeout(ms));
+    const received = deferred<void>();
+    const broker = new HostedAgentBroker({
+      accessToken: async () => 'fixture-token',
+      fetch: async (_url, init) => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+        received.resolve();
+      }),
+      upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+    });
+    await broker.start();
+    t.after(() => broker.close());
+    broker.runtime('review');
+    broker.beginTurn('review', '00000000-0000-4000-8000-000000000004');
+    const result = assert.rejects(broker.complete('review', { profile: 'stashbase-agent-default' }, []));
+    await received.promise;
+    if (stop === 'deadline') deadline.abort();
+    else await broker.close();
+    await result;
+  });
+}
+
+test('an expired permission decision does not retry a rejected authentication attempt', async (t) => {
+  const response = deferred<Response>();
+  const received = deferred<void>();
+  let authentications = 0;
+  const broker = new HostedAgentBroker({
+    accessToken: async () => { authentications++; return 'fixture-token'; },
+    fetch: async () => { received.resolve(); return response.promise; },
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  broker.runtime('review');
+  broker.beginTurn('review', '00000000-0000-4000-8000-000000000004');
+  const decision = new AbortController();
+  const result = assert.rejects(broker.complete('review', { profile: 'stashbase-agent-default' }, [], decision.signal));
+  await received.promise;
+  decision.abort();
+  response.resolve(new Response('{}', { status: 401 }));
+  await result;
+  assert.equal(authentications, 1);
 });
 
 

@@ -30,8 +30,9 @@ export async function reviewDefaultAgentPermission(
   let onAbort: (() => void) | undefined;
   try {
     reviewSignal.throwIfAborted();
-    // Token refresh may still be pending when the deadline expires. Restore
-    // manual approval immediately; a late completion must never grant access.
+    // The broker checks this deadline before dispatch; an accepted, bounded
+    // classification drains independently for accounting. Restore manual
+    // approval immediately; a late completion must never grant access.
     const aborted = new Promise<string>((resolve) => {
       onAbort = () => resolve('ASK');
       reviewSignal.addEventListener('abort', onAbort, { once: true });

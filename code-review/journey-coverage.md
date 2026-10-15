@@ -810,6 +810,24 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Auto review refunds (2026-10-15):** All ten affected production refunds aligned
+with proxy HTTP 499 and local Bash permission starts by 5.118–5.163 seconds. The
+published Auto review's five-second deadline aborted an already dispatched model
+call; the old gateway misclassified this as a provider connection failure.
+`hosted-agent-broker.test.ts` reproduced that disconnect over real local HTTP.
+The broker now separates permission decision expiry from bounded response draining,
+preserves the original accounting turn, and never lets a late ALLOW grant access.
+Focused tests cover manual fallback, credential wait cancellation, and ordinary
+turn cancellation. The bundled OpenCode smoke drives slow review, manual approval,
+a subsequent turn, and late response completion without a disconnect. A separate
+local broker/gateway/PostgreSQL pass confirms one exact settlement (363,000,000
+picodollars), matching original turn/window totals, no hold, and no waiver after
+the decision expires. Production Gemini and Haiku short-generation probes
+completed; the actual synthetic Gemini permission review took 9.52 seconds,
+exceeding the old cutoff. Three approved probes cost US$0.00071075 in total,
+outside user allowance. This does not establish arbitrary long-request reliability
+or packaged delivery.
+
 **Missing Codex history prerequisite (2026-10-14):** `codex-history.test.ts`
 exercises list/read/rename/delete with no discoverable executable, no child
 launch, and the shared HTTP envelope's `412 AGENT_NOT_INSTALLED`. Existing native

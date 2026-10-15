@@ -152,6 +152,10 @@ permissions, with current model and tool choices checked before use.
   Auto also approves those writes, then uses the default model to review routine
   commands, web fetches, and external reads against the current user request.
   Uncertain, failed, or five-second overdue reviews ask the reader instead.
+  That decision deadline prevents new review dispatch, but an already dispatched
+  review finishes within its own bounded output and time budget so its actual
+  usage can settle. A late answer never authorizes an action, including after
+  manual approval, Stop, or a new turn. Application shutdown cancels remaining work.
   Deletion, moves, project creation, and unfamiliar tools retain explicit approval.
   Reviews have no tools and share the current turn's usage allowance. Plan reads
   and explores without writes or commands. A mode change applies between turns,

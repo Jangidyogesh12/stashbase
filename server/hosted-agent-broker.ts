@@ -247,6 +247,7 @@ function completionText(
 }
 
 export class HostedAgentBroker {
+  private readonly permissionReviews = new Set<AbortController>();
   private server: http.Server | null = null;
   private startPromise: Promise<void> | null = null;
   private port = 0;
@@ -351,8 +352,11 @@ export class HostedAgentBroker {
 
   /**
    * One model call on the main Agent's own profile, inside the session's
-   * running turn and accounted under it (the Auto permission review). Tool
-   * calls use `completeTool`. Answers the generated text.
+   * running turn and accounted under it (the Auto permission review). The
+   * caller's signal gates dispatch and the approval decision, not an already
+   * dispatched read-only classification. Drain that response under a bounded
+   * lifetime so manual fallback does not turn successful work into unknown fees.
+   * Tool calls use `completeTool`. Answers the generated text.
    */
   async complete(
     agentSessionId: string,
@@ -364,16 +368,24 @@ export class HostedAgentBroker {
     const channel = apiKey ? this.channels.get(apiKey) : undefined;
     if (!channel?.turnId) throw new Error('The Agent tool call is not bound to an active turn.');
     const turnId = channel.turnId;
-    const callSignal = signal ? AbortSignal.any([signal, channel.turnAbort.signal]) : channel.turnAbort.signal;
-    const body = JSON.stringify({ model: model.profile, messages, stream: true });
+    const admissionSignal = signal ? AbortSignal.any([signal, channel.turnAbort.signal]) : channel.turnAbort.signal;
+    const lifetime = new AbortController();
+    let callSignal: AbortSignal | undefined;
+    const body = JSON.stringify({ model: model.profile, messages, stream: true, max_tokens: 256 });
     const idempotencyKey = crypto.randomUUID();
     let attempt = 0;
     const call = async (forceRefresh: boolean) => {
       const diagnostic = new HostedAgentRequestDiagnostic(idempotencyKey, ++attempt, { profile: model.profile, turnId });
       try {
-        callSignal.throwIfAborted();
+        admissionSignal.throwIfAborted();
+        lifetime.signal.throwIfAborted();
         const token = await this.dependencies.accessToken({ forceRefresh });
-        callSignal.throwIfAborted();
+        admissionSignal.throwIfAborted();
+        lifetime.signal.throwIfAborted();
+        if (!callSignal) {
+          callSignal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(30_000)]);
+          this.permissionReviews.add(lifetime);
+        }
         return diagnostic.response(await this.dependencies.fetch(this.dependencies.upstreamUrl, {
           method: 'POST',
           headers: this.gatewayHeaders(token, {
@@ -384,18 +396,22 @@ export class HostedAgentBroker {
         }));
       } catch (error) { diagnostic.fail(error); throw error; }
     };
-    let upstream = await call(false);
-    if (upstream.status === 401) {
-      await upstream.body?.cancel();
-      upstream = await call(true);
+    try {
+      let upstream = await call(false);
+      if (upstream.status === 401) {
+        await upstream.body?.cancel();
+        upstream = await call(true);
+      }
+      if (!upstream.ok) {
+        const payload = await upstream.json().catch(() => null) as GatewayError | null;
+        const code = payload?.error?.code ?? payload?.code;
+        throw new Error((code && MODEL_REFUSALS[code])
+          ?? payload?.error?.message ?? payload?.message ?? `The Agent gateway failed (HTTP ${upstream.status}).`);
+      }
+      return completionText(await upstream.text(), (chunk) => new Error(chunk.message ?? 'The Agent model failed.'), () => new Error('The Agent model returned an empty response.'));
+    } finally {
+      this.permissionReviews.delete(lifetime);
     }
-    if (!upstream.ok) {
-      const payload = await upstream.json().catch(() => null) as GatewayError | null;
-      const code = payload?.error?.code ?? payload?.code;
-      throw new Error((code && MODEL_REFUSALS[code])
-        ?? payload?.error?.message ?? payload?.message ?? `The Agent gateway failed (HTTP ${upstream.status}).`);
-    }
-    return completionText(await upstream.text(), (chunk) => new Error(chunk.message ?? 'The Agent model failed.'), () => new Error('The Agent model returned an empty response.'));
   }
 
   /**
@@ -517,6 +533,7 @@ export class HostedAgentBroker {
     this.server = null;
     this.port = 0;
     for (const channel of this.channels.values()) channel.turnAbort.abort();
+    for (const review of this.permissionReviews) review.abort();
     this.channels.clear();
     this.channelBySession.clear();
     if (!server) return;
