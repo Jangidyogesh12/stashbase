@@ -9,7 +9,7 @@
  */
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { Readable } from 'node:stream';
+import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import {
   hostedAccessToken,
@@ -19,6 +19,7 @@ import {
 import { DEFAULT_HOSTED_AGENT_PROFILE } from './hosted-agent-models.ts';
 import { logger } from './log.ts';
 import { HostedAgentRequestDiagnostic } from './hosted-agent-diagnostics.ts';
+import { modelStream, INTERRUPTED_MODEL_RESPONSE } from './hosted-agent-stream.ts';
 
 const log = logger('hosted-agent-broker');
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
@@ -26,7 +27,6 @@ const AGENT_GATEWAY_PATH = '/v1/agent/chat/completions';
 /** Tool calls have their own endpoint and their own model pool. */
 const AGENT_TOOL_GATEWAY_PATH = '/v2/agent/chat/completions';
 const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const MAX_EMPTY_PREFIX_BYTES = 64 * 1024;
 
 /** The hosted model profile one turn runs on. `version` is the configuration
  * the reader was shown; without it the service runs the profile as it is now. */
@@ -72,86 +72,6 @@ const MODEL_REFUSALS: Record<string, string> = {
   agent_model_unavailable:
     'The selected model is no longer available. Refresh the models and choose another one.',
 };
-
-/** Hold only empty SSE framing before committing the downstream response.
- * Once any output (especially tool arguments) arrives, replay is forbidden.
- * Unknown extensions/errors pass through unchanged rather than being retried. */
-async function modelStream(upstream: Response, signal: AbortSignal): Promise<Readable | null> {
-  if (!upstream.body) return null;
-  if (!upstream.headers.get('content-type')?.includes('text/event-stream')) {
-    return Readable.fromWeb(upstream.body);
-  }
-  const reader = upstream.body.getReader();
-  const cancel = () => { void reader.cancel().catch(() => {}); };
-  signal.addEventListener('abort', cancel, { once: true });
-  const chunks: Uint8Array[] = [];
-  const decoder = new TextDecoder();
-  let pending = '';
-  let bytes = 0;
-  let handedOff = false;
-  let cleanupPromise: Promise<void> | undefined;
-  const cleanup = (): Promise<void> => {
-    signal.removeEventListener('abort', cancel);
-    return cleanupPromise ??= reader.cancel().catch(() => {}).then(() => reader.releaseLock());
-  };
-  const emptyFrame = (frame: string): boolean => {
-    const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:'))
-      .map(line => line.slice(5).trimStart()).join('\n').trim();
-    if (!data || data === '[DONE]') return true;
-    try {
-      const payload = JSON.parse(data);
-      if (!payload || payload.error || !Array.isArray(payload.choices)) return false;
-      return payload.choices.every((choice: { delta?: Record<string, unknown>; finish_reason?: string | null }) => {
-        if (!choice || ![undefined, null, 'stop', 'unknown'].includes(choice.finish_reason)) return false;
-        if (!choice.delta || typeof choice.delta !== 'object') return false;
-        return Object.entries(choice.delta).every(([key, value]) =>
-          key === 'role' || (key === 'content' && (value == null || (typeof value === 'string' && !value.trim()))));
-      });
-    } catch { return false; }
-  };
-  try {
-    while (true) {
-      signal.throwIfAborted();
-      const next = await reader.read();
-      signal.throwIfAborted();
-      if (!next.done) {
-        chunks.push(next.value);
-        bytes += next.value.byteLength;
-      }
-      pending += decoder.decode(next.value, { stream: !next.done });
-      const frames = pending.split(/\r?\n\r?\n/);
-      pending = frames.pop() ?? '';
-      if (next.done && pending) frames.push(pending);
-      if (frames.some(frame => !emptyFrame(frame))) {
-        handedOff = true;
-        const stream = Readable.from((async function* () {
-          try {
-            yield* chunks;
-            while (!next.done) {
-              signal.throwIfAborted();
-              const chunk = await reader.read();
-              if (chunk.done) break;
-              yield chunk.value;
-            }
-          } finally {
-            await cleanup();
-          }
-        })());
-        // Also release a prefix whose consumer is cancelled before iteration.
-        stream.once('close', () => { void cleanup(); });
-        return stream;
-      }
-      if (bytes > MAX_EMPTY_PREFIX_BYTES) {
-        throw Object.assign(new Error('The Agent model returned too much data without a reply.'), { status: 422 });
-      }
-      if (next.done) return null;
-    }
-  } finally {
-    if (!handedOff) {
-      await cleanup();
-    }
-  }
-}
 
 interface GatewayError {
   code?: string;
@@ -394,7 +314,7 @@ export class HostedAgentBroker {
           body,
           signal: callSignal,
         }));
-      } catch (error) { diagnostic.fail(error); throw error; }
+      } catch (error) { if (!admissionSignal.aborted) diagnostic.fail(error); throw error; }
     };
     try {
       let upstream = await call(false);
@@ -462,7 +382,7 @@ export class HostedAgentBroker {
           body,
           signal: callSignal,
         }));
-      } catch (error) { diagnostic.fail(error); throw error; }
+      } catch (error) { if (!callSignal.aborted) diagnostic.fail(error); throw error; }
     };
     let upstream = await call(false);
     if (upstream.status === 401) {
@@ -607,16 +527,19 @@ export class HostedAgentBroker {
         return upstream;
       };
       let upstream = await authenticatedCall();
-      let stream: Readable | null = null;
+      let stream: Readable | 'empty' | 'interrupted' = 'empty';
+      let interrupted = false;
       if (upstream.ok) {
         stream = await modelStream(upstream, signal);
-        if (!stream) {
+        interrupted = stream === 'interrupted';
+        if (typeof stream === 'string') {
           // A fresh model attempt has its own accounting identity, but keeps
           // this turn and the exact context (including completed tool results).
-          log.warn('empty model response; retrying the current model call once');
+          log.warn(`${stream} model response; retrying the current model call once`);
           idempotencyKey = crypto.randomUUID();
           upstream = await authenticatedCall();
           if (upstream.ok) stream = await modelStream(upstream, signal);
+          interrupted ||= stream === 'interrupted';
         }
       }
       if (!upstream.ok) {
@@ -651,10 +574,10 @@ export class HostedAgentBroker {
         return;
       }
 
-      if (!stream) {
-        // 422 prevents the native runtime from adding an unbounded retry loop
+      if (typeof stream === 'string') {
+        // 422 prevents the native runtime from adding another retry loop
         // after our bounded recovery. Do not resend the whole user turn.
-        writeJson(response, 422, { error: {
+        writeJson(response, 422, { error: interrupted ? INTERRUPTED_MODEL_RESPONSE : {
           message: 'The Agent model returned an empty response twice. The task may be incomplete; completed file changes have been kept.',
           type: 'stashbase_hosted_error', code: 'agent_empty_response',
         } });

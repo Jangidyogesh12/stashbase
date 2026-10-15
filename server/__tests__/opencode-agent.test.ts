@@ -230,6 +230,48 @@ test('repeated native retry status does not repeat the same provider error in on
   assert.deepEqual(translator.translate(retry(error)), [{ t: 'notice', message: error }]);
 });
 
+test('native text and reasoning deltas remain visible on stream failure without repeating final snapshots', () => {
+  const translator = new OpenCodeEventTranslator();
+  translator.bindSession('session-1');
+  translator.beginTurn();
+  for (const type of ['text', 'reasoning'] as const) {
+    const part = { id: type, sessionID: 'session-1', messageID: 'assistant-1', type, text: '', time: { start: 1 } };
+    assert.deepEqual(translator.translate({ type: 'message.part.updated', properties: { part } }), []);
+    const delta = { id: 'delta', type: 'message.part.delta' as const,
+      properties: { sessionID: 'session-1', messageID: 'assistant-1', partID: type, field: 'text', delta: 'Partial reply' } };
+    assert.deepEqual(translator.translate({ ...delta, properties: { ...delta.properties, sessionID: 'other' } }), []);
+    assert.deepEqual(translator.translate(delta), [{ t: type === 'text' ? 'text' : 'thinking', delta: 'Partial reply' }]);
+    assert.deepEqual(translator.translate({ type: 'message.part.updated', properties: { part: { ...part, text: 'Partial reply' } } }), []);
+  }
+  const failure = translator.translate({ type: 'session.error', properties: { sessionID: 'session-1',
+    error: { name: 'UnknownError', data: { message: JSON.stringify({ code: 'agent_response_interrupted', message: 'native envelope' }) } },
+  } });
+  assert.equal(failure[0]?.t, 'error');
+  assert.ok(failure[0]?.t === 'error' && failure[0].message.startsWith('The Agent model response was interrupted.'));
+  translator.beginTurn();
+  assert.deepEqual(translator.translate({ id: 'late', type: 'message.part.delta',
+    properties: { sessionID: 'session-1', messageID: 'assistant-1', partID: 'text', field: 'text', delta: 'Late old output' } }), []);
+});
+
+test('accounting recovery refusal settles as a rate limit after native retries finish', () => {
+  const translator = new OpenCodeEventTranslator();
+  translator.bindSession('session-1');
+  translator.translate({ type: 'session.status', properties: { sessionID: 'session-1', status: { type: 'busy' } } });
+  const message = 'Agent calls have unresolved accounting or repeated recent fee waivers. Wait before retrying; contact support if this persists.';
+  for (const notice of ['fetch failed', message]) {
+    assert.deepEqual(translator.translate({ type: 'session.status', properties: {
+      sessionID: 'session-1', status: { type: 'retry', message: notice, attempt: 1, next: 1000 },
+    } }), [{ t: 'notice', message: notice }]);
+    assert.equal(translator.isTurnActive(), true, 'a retry notice does not release native work');
+  }
+  assert.deepEqual(translator.translate({ type: 'session.error', properties: {
+    sessionID: 'session-1', error: { name: 'APIError', data: { message, statusCode: 429, isRetryable: true } },
+  } }), [{ t: 'error', message, failure: { kind: 'rate-limit' } }]);
+  assert.deepEqual(translator.translate({ type: 'session.idle', properties: { sessionID: 'session-1' } }),
+    [{ t: 'turn-end', isError: true }]);
+  assert.equal(translator.isTurnActive(), false);
+});
+
 test('Default Agent applies the selected mode to each turn and freezes it while working', async () => {
   const { session, prompts, send, feed } = modeHarness('plan');
   try {

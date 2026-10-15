@@ -840,6 +840,38 @@ loaded General and Agent settings plus account/subscription state, and quit
 cleanly. This manual pass made no model call; other-platform manual UI and real
 N-to-N+1 update journeys remain unverified.
 
+**Default stream interruption recovery (2026-10-14):** Local native logs showed
+five `agent_provider_unavailable` stream errors after completed file reads.
+The bundled runtime's retry parser labels unknown errors containing `unavailable`
+as "Provider is overloaded"; this does not establish provider capacity as the
+cause. The broker now bounds recovery before output to one additional call,
+sharing the existing empty-response budget, and makes subsequent interruptions
+terminal without replaying completed tools. After output, it preserves deltas
+and emits a terminal interruption. Diagnostics retain the original gateway cause
+even when the broker cancels the failed stream. The native pass also exposed
+missing `message.part.delta` handling: the translator now delivers text and
+reasoning before completion and deduplicates final cumulative snapshots.
+Broker regressions cover fragmented UTF-8/SSE, combined output/error frames,
+large output, mixed failures, retained tool context and accounting identities;
+translator tests cover live deltas and late-turn isolation. The native fixture
+exercises failure after a real file write and after visible partial output,
+then continuation in the same session. Production SSH was unavailable, so the
+original upstream error and real-provider recovery remain unverified.
+Validation passed `pnpm test:agent` (334 tests), `pnpm test:opencode:native`
+(3 tests), `pnpm typecheck:host`, `pnpm test:docs`, and `pnpm build:server`.
+No packaged UI pass was performed for this host-only change.
+
+**Accounting recovery refusal (2026-10-14):** A production Windows 2.16.3
+diagnostic confirmed `agent_usage_recovery_limited` / HTTP 429 after native
+retries. `agent-turn-failure.ts` now classifies its message as a rate limit,
+preserving the service explanation instead of leaving the final error unclassified.
+The `opencode-agent.test.ts` regression first reproduced the missing classification;
+it covers network and accounting retry notices, the final classified error, and
+failed native-idle settlement. This does not establish which accounting threshold
+the account reached or restore its hosted admission.
+Validation passed the 77 translator/classifier/broker tests, host types, and
+documentation checks. No packaged or real-provider recovery pass was performed.
+
 **Missing Codex history prerequisite (2026-10-14):** `codex-history.test.ts`
 exercises list/read/rename/delete with no discoverable executable, no child
 launch, and the shared HTTP envelope's `412 AGENT_NOT_INSTALLED`. Existing native

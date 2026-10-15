@@ -153,6 +153,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   t.after(() => releaseReview?.());
   let emptyResponses = 0;
   let emptyAfterTool = false;
+  let interruptions = 0;
+  let interruptionsAfterTool = 0;
+  let partialInterruption = false;
+  let finishPartial: () => void;
   const gateway = http.createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -184,8 +188,23 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
       emptyAfterTool = false;
       emptyResponses = 1;
     }
+    if (tool && interruptionsAfterTool) {
+      interruptions = interruptionsAfterTool;
+      interruptionsAfterTool = 0;
+    }
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     const base = { id: 'chatcmpl-stashbase-smoke', object: 'chat.completion.chunk', created: 1, model: 'stashbase-agent-default' };
+    if (!tool && interruptions > 0) {
+      interruptions--;
+      if (partialInterruption) {
+        partialInterruption = false;
+        const observed = new Promise<void>(resolve => { finishPartial = resolve; response.once('close', resolve); });
+        response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: 'assistant', content: 'Partial reply retained' }, finish_reason: null }] })}\n\n`);
+        await observed;
+      }
+      response.end('data: {"error":{"code":"agent_provider_unavailable","message":"The Agent model provider interrupted the response."}}\n\n');
+      return;
+    }
     response.write(`data: ${JSON.stringify({
       ...base,
       choices: [{
@@ -529,6 +548,37 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.deepEqual(failureEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
   stage = 'follow-up after failure';
   await runPanelTurn(); // The same native session remains usable after the failure.
+
+  stage = 'hosted interruption after file write';
+  const interruptedStart = socket.events.length;
+  const callsBeforeInterruption = gatewayRequests.length;
+  nextTool = { name: 'stashbase_write_file', arguments: JSON.stringify({ path: modeFile, content: 'Saved before interruption' }) };
+  interruptionsAfterTool = 2;
+  await runPanelTurn(true);
+  const interruptedEvents = socket.events.slice(interruptedStart) as Array<{ t: string; message?: string; isError?: boolean }>;
+  assert.equal(gatewayRequests.length - callsBeforeInterruption, 3, 'write plus exactly two failed continuation calls');
+  assert.equal(interruptedEvents.filter(event => event.t === 'tool-result').length, 1, 'never replay the completed write');
+  assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Saved before interruption');
+  assert.ok(interruptedEvents.some(event => event.t === 'error' && event.message?.includes('response was interrupted')));
+  assert.ok(!interruptedEvents.some(event => event.message?.includes('Provider is overloaded')));
+  assert.deepEqual(interruptedEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
+
+  stage = 'hosted interruption after partial output';
+  const partialStart = socket.events.length;
+  const callsBeforePartial = gatewayRequests.length;
+  interruptions = 1;
+  partialInterruption = true;
+  const partialText = socket.waitFor('text');
+  const partialTurn = runPanelTurn(true);
+  await partialText;
+  finishPartial!();
+  await partialTurn;
+  const partialEvents = socket.events.slice(partialStart) as Array<{ t: string; delta?: string; message?: string; isError?: boolean }>;
+  assert.equal(gatewayRequests.length - callsBeforePartial, 1, 'native runtime must not replay partial output');
+  assert.ok(partialEvents.some(event => event.t === 'text' && event.delta?.includes('Partial reply retained')), JSON.stringify(partialEvents));
+  assert.ok(partialEvents.some(event => event.t === 'error' && event.message?.includes('response was interrupted')));
+  assert.deepEqual(partialEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
+  await runPanelTurn();
   panel.dispose();
 
   const toolNames = (request: Record<string, unknown>) => (

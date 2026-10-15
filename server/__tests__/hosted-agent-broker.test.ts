@@ -277,6 +277,86 @@ test('repeated empty model responses fail visibly after one retry', async (t) =>
   assert.match(body.error.message, /empty response twice/);
 });
 
+const interruptedResponse = 'data: {"error":{"code":"agent_provider_unavailable","message":"The Agent model provider interrupted the response."}}\n\n';
+
+test('a hosted stream interruption before output retries the continuation once and preserves completed tool results', async (t) => {
+  const answer = 'data: {"choices":[{"delta":{"content":"Recovered"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+  const harness = await streamHarness(t, attempt => sse(attempt === 1 ? interruptedResponse : answer));
+  const response = await harness.request();
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), answer);
+  assert.equal(harness.calls.length, 2);
+  assert.equal(harness.calls[0].body, harness.calls[1].body);
+  assert.equal(harness.calls[0].turn, harness.calls[1].turn);
+  assert.notEqual(harness.calls[0].key, harness.calls[1].key);
+});
+
+test('repeated hosted stream interruptions end without inviting native overload retries', async (t) => {
+  const harness = await streamHarness(t, () => sse(interruptedResponse));
+  const response = await harness.request();
+  assert.equal(response.status, 422);
+  assert.equal(harness.calls.length, 2);
+  const body = await response.json() as { error: { code: string; message: string } };
+  assert.equal(body.error.code, 'agent_response_interrupted');
+  assert.match(body.error.message, /interrupted.*completed file changes have been kept/);
+  assert.doesNotMatch(body.error.message, /overload|unavailable/i);
+  assert.match(JSON.stringify(harness.broker.diagnostic('empty-response')), /agent_provider_unavailable/);
+});
+
+for (const sequence of [[emptyResponse, interruptedResponse], [interruptedResponse, emptyResponse]]) {
+  test(`empty and interrupted responses share one recovery budget: ${sequence[0] === emptyResponse ? 'empty' : 'interrupted'} first`, async (t) => {
+    const harness = await streamHarness(t, attempt => sse(sequence[attempt - 1]!));
+    const response = await harness.request();
+    assert.equal(response.status, 422);
+    assert.equal(harness.calls.length, 2);
+    assert.match(await response.text(), /agent_response_interrupted/);
+  });
+}
+
+test('an interruption sharing a frame with output preserves the output without replaying it', async (t) => {
+  const harness = await streamHarness(t, () => sse(`data: ${JSON.stringify({
+    choices: [{ delta: { content: 'Keep this text' }, finish_reason: 'error',
+      error: { code: 'agent_provider_unavailable', message: 'Interrupted' } }],
+  })}\r\n\r\n`));
+  const response = await harness.request();
+  const text = await response.text();
+  assert.equal(response.status, 200);
+  assert.equal(harness.calls.length, 1);
+  assert.match(text, /Keep this text/);
+  assert.match(text, /agent_response_interrupted/);
+  assert.doesNotMatch(text, /agent_provider_unavailable/);
+  assert.match(JSON.stringify(harness.broker.diagnostic('empty-response')), /agent_provider_unavailable/);
+});
+
+test('large model frames keep Unicode output intact and still stop on a following hosted interruption', async (t) => {
+  const prefix = `data: ${JSON.stringify({ choices: [{ delta: { content: '📝'.repeat(80_000) } }] })}\r\n\r\n`;
+  const harness = await streamHarness(t, () => new Response(prefix + interruptedResponse, { headers: { 'content-type': 'text/event-stream' } }));
+  const text = await (await harness.request()).text();
+  assert.ok(text.startsWith(prefix));
+  assert.match(text, /agent_response_interrupted/);
+  assert.equal(harness.calls.length, 1);
+});
+
+for (const delta of [{ content: 'Partial 中文 reply' }, { reasoning_content: 'Thinking' },
+  { tool_calls: [{ index: 0, function: { arguments: '{' } }] }]) {
+  test(`a hosted interruption after output is terminal, including within one transport chunk: ${JSON.stringify(delta)}`, async (t) => {
+    const prefix = `data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`;
+    const wire = prefix + interruptedResponse;
+    for (const fragmented of [false, true]) {
+      const harness = await streamHarness(t, () => fragmented ? sse(wire)
+        : new Response(wire, { headers: { 'content-type': 'text/event-stream' } }));
+      const response = await harness.request();
+      const text = await response.text();
+      assert.equal(response.status, 200);
+      assert.ok(text.startsWith(prefix), 'keep every already-produced delta');
+      assert.match(text, /agent_response_interrupted/);
+      assert.doesNotMatch(text, /agent_provider_unavailable|Provider is overloaded/);
+      assert.equal(harness.calls.length, 1);
+      assert.match(JSON.stringify(harness.broker.diagnostic('empty-response')), /agent_provider_unavailable/);
+    }
+  });
+}
+
 for (const output of [
   { choices: [{ delta: { tool_calls: [{ index: 0, id: 'write', type: 'function', function: { name: 'stashbase_write_file', arguments: '{' } }] } }] },
   { choices: [{ delta: { content: 'Partial reply' } }] },

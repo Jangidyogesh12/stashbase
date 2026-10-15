@@ -3,7 +3,7 @@ import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-repor
 import { prepareAgentAttachments } from './agent-attachments.ts';
 import { agentClientEventSchema } from '../shared/protocols/websocket/agent-session.ts';
 import { randomUUID } from 'node:crypto';
-import type { EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
+import type { EventMessagePartDelta, EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
 import type {
   Event,
   FileDiff,
@@ -52,6 +52,7 @@ import {
 } from './hosted-agent-models.ts';
 import { reviewDefaultAgentPermission } from './default-agent-permissions.ts';
 import { rememberCrewChat } from './default-agent-tools.ts';
+import { INTERRUPTED_MODEL_RESPONSE } from './hosted-agent-stream.ts';
 import { crewCallHistory, recordCrewCall, forgetCrewCalls } from './agent-crew-history.ts';
 
 const log = logger('opencode-agent');
@@ -94,12 +95,18 @@ function providerErrorDiagnostic(error: unknown): unknown {
     request_id: headers?.['x-request-id'] ?? headers?.['request-id'] ?? headers?.['x-amzn-requestid'] };
 }
 
-function eventErrorMessage(event: Extract<Event, { type: 'session.error' }>): string {
-  const error = event.properties.error;
+function nativeErrorMessage(error: Extract<Event, { type: 'session.error' }>['properties']['error']): string {
   if (!error) return 'The Agent turn failed.';
   if ('data' in error && error.data && typeof error.data === 'object') {
     const data = error.data as { message?: unknown; responseBody?: unknown };
-    if (typeof data.message === 'string' && data.message) return data.message;
+    if (typeof data.message === 'string' && data.message) {
+      // OpenCode serializes SSE error objects into UnknownError prose. Decode
+      // only our terminal envelope; all other provider messages stay intact.
+      try {
+        if (JSON.parse(data.message)?.code === INTERRUPTED_MODEL_RESPONSE.code) return INTERRUPTED_MODEL_RESPONSE.message;
+      } catch { /* ordinary provider prose */ }
+      return data.message;
+    }
     if (typeof data.responseBody === 'string' && data.responseBody) return data.responseBody;
   }
   return error.name;
@@ -116,7 +123,7 @@ export class OpenCodeEventTranslator {
   private completion: Record<string, string | number> = {};
   private turnNumber = 0;
   private readonly messageTurns = new Map<string, number>();
-  private readonly content = new Map<string, string>();
+  private readonly content = new Map<string, { text: string; type: 'text' | 'reasoning'; messageID: string }>();
   private readonly tools = new Map<string, ToolPart['state']['status']>();
   private readonly toolNames = new Map<string, string>();
   private readonly toolInputs = new Map<string, Record<string, unknown>>();
@@ -155,7 +162,7 @@ export class OpenCodeEventTranslator {
   requestInterrupt(): void { this.stopping = true; }
   endTurnAfterInterrupt(): AgentServerEvent[] { return this.finishTurn(false, true); }
 
-  translate(event: Event | EventPermissionAsked): AgentServerEvent[] {
+  translate(event: Event | EventPermissionAsked | EventMessagePartDelta): AgentServerEvent[] {
     switch (event.type) {
       case 'session.status': {
         if (!this.matches(event.properties.sessionID)) return [];
@@ -177,7 +184,7 @@ export class OpenCodeEventTranslator {
       case 'session.error': {
         if (event.properties.sessionID && !this.matches(event.properties.sessionID)) return [];
         if (this.stopping && event.properties.error?.name === 'MessageAbortedError') return [];
-        const message = eventErrorMessage(event);
+        const message = nativeErrorMessage(event.properties.error);
         const events: AgentServerEvent[] = [];
         if (!this.errors.has(message)) {
           this.errors.add(message);
@@ -204,15 +211,22 @@ export class OpenCodeEventTranslator {
         if (info.finish) this.recordCompletion(info.id, info.finish, info.tokens);
         if (!info.error) return [];
         if (this.stopping && info.error.name === 'MessageAbortedError') return [];
-        const message = 'data' in info.error && typeof info.error.data?.message === 'string'
-          ? info.error.data.message
-          : info.error.name;
+        const message = nativeErrorMessage(info.error);
         if (this.errors.has(message)) return [];
         this.errors.add(message);
         return [agentTurnErrorEvent(message)];
       }
       case 'message.part.updated':
         return this.part(event.properties.part, event.properties.delta);
+      case 'message.part.delta': {
+        const { sessionID, messageID, partID, field, delta } = event.properties;
+        if (!this.matches(sessionID) || !this.turnActive || field !== 'text'
+            || this.userMessages.has(messageID) || this.messageTurns.get(messageID) !== this.turnNumber) return [];
+        const part = this.content.get(partID);
+        if (!part || part.messageID !== messageID || !delta) return [];
+        part.text += delta;
+        return [{ t: part.type === 'text' ? 'text' : 'thinking', delta }];
+      }
       case 'permission.asked':
       case 'permission.updated': {
         const permission = event.properties;
@@ -262,10 +276,10 @@ export class OpenCodeEventTranslator {
     if (this.messageTurns.get(part.messageID) !== this.turnNumber) return [];
     if (part.type === 'step-finish' && this.turnActive) this.recordCompletion(part.messageID, part.reason, part.tokens);
     if (part.type === 'text' || part.type === 'reasoning') {
-      const previous = this.content.get(part.id) ?? '';
+      const previous = this.content.get(part.id)?.text ?? '';
       const next = part.text;
       const addition = delta ?? (next.startsWith(previous) ? next.slice(previous.length) : next);
-      this.content.set(part.id, next);
+      this.content.set(part.id, { text: next, type: part.type, messageID: part.messageID });
       if (!addition) return [];
       return [{ t: part.type === 'text' ? 'text' : 'thinking', delta: addition }];
     }

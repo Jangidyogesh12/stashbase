@@ -40,11 +40,13 @@ export class HostedAgentRequestDiagnostic {
     const sse = this.contentType?.includes('text/event-stream');
     const reader = response.body.getReader();
     let released = false;
+    let cancelled = false;
     const release = () => { if (!released) { released = true; reader.releaseLock(); } };
     return new Response(new ReadableStream<Uint8Array>({
       pull: async (controller) => {
         try {
           const chunk = await reader.read();
+          if (cancelled) return;
           if (chunk.done) {
             this.ended = true;
             if (sse) this.observe(this.decoder.decode() + '\n\n');
@@ -58,12 +60,16 @@ export class HostedAgentRequestDiagnostic {
           if (sse) this.observe(this.decoder.decode(chunk.value, { stream: true }));
           controller.enqueue(chunk.value);
         } catch (error) {
+          if (cancelled) return;
           this.fail(error);
           release();
           controller.error(error);
         }
       },
-      cancel: async (reason) => { try { await reader.cancel(reason); } finally { this.finish(); release(); } },
+      cancel: async (reason) => {
+        cancelled = true;
+        try { await reader.cancel(reason); } finally { this.finish(); release(); }
+      },
     }), { status: response.status, statusText: response.statusText, headers: response.headers });
   }
 
@@ -137,8 +143,10 @@ export class HostedAgentRequestDiagnostic {
       })) {
         if (typeof count === 'number' && Number.isFinite(count) && count >= 0) this.usage[name] = count;
       }
-      if (value.error) {
-        const error = value.error;
+      const streamError = value.error ?? (Array.isArray(value.choices)
+        ? value.choices.find((choice: { error?: unknown } | null) => choice?.error)?.error : undefined);
+      if (streamError) {
+        const error = streamError;
         this.fail({ name: 'ModelStreamError',
           message: typeof error === 'string' ? error : error.message ?? 'Model stream returned an error',
           code: error.code ?? error.type, status: error.status ?? error.status_code,

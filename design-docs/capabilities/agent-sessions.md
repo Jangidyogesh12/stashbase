@@ -183,16 +183,21 @@ request. A failed history load never becomes an empty conversation.
 An uninstalled Agent is an installation prerequisite when reading its history,
 not a server failure or evidence that its native history is empty.
 Repeated identical native retry errors appear once per turn while retries continue;
-a final short-term request limit remains a rate-limit failure with manual recovery.
+a final short-term request limit or accounting-recovery refusal remains a rate-limit
+failure with manual recovery. Accounting recovery may require service-side
+reconciliation; its message must not imply exhausted credits or a guaranteed reset time.
 Hosted retry responses carry the service's suggested delay to the native runtime.
 When the service changes the configuration of a Default model a chat runs on,
 or withdraws it, the refused turn offers **Refresh models**. Refreshing
 reconnects the same conversation to read the list again and keeps the
 transcript, draft, and paused queue. It never resends; the failed turn offers
 a manual retry only after the refresh.
-Default retries an empty model response once within the current turn, retaining
-completed tool results and file changes. Once a model response has begun producing
-output, it is not automatically replayed. Exhausted recovery or an unknown native
+Default retries an empty model response or a hosted stream interruption before
+output once within the current turn, retaining completed tool results and file
+changes. Both failures share the same single retry. A stream interruption is not
+evidence of provider overload. Once a model response has begun producing output,
+it is not automatically replayed; streamed text and reasoning remain visible on
+failure. Exhausted recovery or an unknown native
 completion shows an incomplete-turn failure, never silent success. Recovery must
 not automatically repeat the whole user request or its completed file operations.
 An unknown outcome keeps the runtime or connection's reported failure visible

@@ -36,7 +36,7 @@ const AUTH_PATTERN =
 const QUOTA_PATTERN =
   /usage limit|quota|credit balance|out of credits|usage cap|spending (limit|cap|budget)|plan limit|(weekly|monthly|5-hour) limit|insufficient_quota/i;
 const RATE_LIMIT_PATTERN =
-  /rate.?limit|too many (?:agent )?requests|too much short-term usage|\b429\b|overloaded|\b529\b|throttl/i;
+  /rate.?limit|too many (?:agent )?requests|too much short-term usage|agent_usage_recovery_limited|agent calls have unresolved accounting or repeated recent fee waivers|\b429\b|overloaded|\b529\b|throttl/i;
 const NETWORK_PATTERN =
   /\bnetwork\b|econnrefused|econnreset|enotfound|etimedout|esockettimedout|eai_again|epipe|fetch failed|socket hang ?up|getaddrinfo|no internet|connection (error|failed|refused|reset|closed|lost)|(could not|couldn.t|unable to) (connect|reach)/i;
 

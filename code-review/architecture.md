@@ -340,8 +340,18 @@ stable status without download, retry, or a new durable demand latch.
   retain their originating turn so trailing error updates cannot fail a new turn.
   Its translator coalesces identical retry status messages within a turn while
   preserving native retries and distinct causes; the final short-term usage
-  refusal classifies as a rate limit. The hosted broker forwards the gateway's
+  refusal, including an accounting-recovery refusal, classifies as a rate limit.
+  Retry notices alone do not settle the turn; native idle releases it after failure.
+  The hosted broker forwards the gateway's
   `Retry-After` on 429/503 responses to the native runtime.
+  `hosted-agent-stream.ts` owns bounded SSE inspection for the broker. Empty
+  responses and the gateway's `agent_provider_unavailable` stream errors share
+  one recovery attempt before output. Exhaustion becomes HTTP 422; after output,
+  that error becomes a terminal SSE envelope whose code cannot trigger native
+  overload retries. Original gateway errors remain in diagnostics. The translator
+  unwraps only this owned terminal envelope and consumes native text/reasoning
+  delta events, reconciling final snapshots without duplicating output. Stale
+  deltas cannot cross session, message, or turn boundaries.
 - Project Agent preferences are explicit choices in Node-owned app config, keyed
   by registered project scope. Readiness and history restore never write them.
   Thinking effort is stored separately per Agent in that project. Composer choices
