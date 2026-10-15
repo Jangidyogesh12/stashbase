@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
 import { appDependencies } from '@/test/fakes/app';
-import { accountPort, SIGNED_IN_ACCOUNT, SIGNED_OUT_ACCOUNT } from '@/test/fakes/settings';
+import {
+  accountPort,
+  agentRuntimePort,
+  IDLE_ALLOWANCE,
+  SIGNED_IN_ACCOUNT,
+  SIGNED_OUT_ACCOUNT,
+} from '@/test/fakes/settings';
 import { filesApi, workspaceAdapters } from '@/test/fakes/workspace';
 
 afterEach(cleanup);
@@ -90,6 +96,42 @@ describe('account row', () => {
     },
     LAZY_TEST_MS,
   );
+
+  it('refreshes credits on menu open and does not present stale credit after a refresh failure', async () => {
+    let fail = false;
+    let remainingPercent = 78;
+    const getAllowance = vi.fn(async () => {
+      if (fail) throw new Error('Offline');
+      return { ...IDLE_ALLOWANCE, remainingPercent, reservedPercent: 25 };
+    });
+    const base = appDependencies();
+    render(
+      <Providers>
+        <App
+          dependencies={appDependencies({
+            settings: {
+              ...base.settings,
+              accountApi: accountPort(SIGNED_IN_ACCOUNT),
+              agentRuntimeApi: agentRuntimePort({ getAllowance }),
+            },
+          })}
+        />
+      </Providers>,
+    );
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole('button', { name: 'Account: Ada Lovelace' });
+    await waitFor(() => expect(getAllowance).toHaveBeenCalled());
+    remainingPercent = 15;
+    await user.click(trigger);
+    expect(await screen.findByText('15%')).not.toBeNull();
+    expect(screen.queryByText('78%')).toBeNull();
+    expect(screen.getByText('25% temporarily reserved')).not.toBeNull();
+    await user.keyboard('{Escape}');
+    fail = true;
+    await user.click(trigger);
+    expect(await screen.findByText('Unavailable')).not.toBeNull();
+    expect(screen.queryByText('15%')).toBeNull();
+  });
 
   it('names the signed-in person and offers credits, plans, and sign-out from a menu', async () => {
     const account = accountPort(SIGNED_IN_ACCOUNT);

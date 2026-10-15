@@ -209,8 +209,8 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
           full_name: 'Ada Lovelace', avatar_url: 'https://lh3.googleusercontent.com/a/profile-photo',
         } },
       });
-      if (String(url).endsWith('/v1/agent/usage')) return Response.json({
-        profile: 'stashbase-agent-default', remainingPercent: 75,
+      if (String(url).endsWith('/v1/agent/usage?include=reservations')) return Response.json({
+        profile: 'stashbase-agent-default', remainingPercent: 75, reservedPercent: 10,
         inputTokens: 100, outputTokens: 25, cacheReadTokens: 10,
         windowStartedAt: '2026-08-01T00:00:00.000Z', windowEndsAt: '2026-08-08T00:00:00.000Z',
       });
@@ -242,6 +242,7 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
   assert.equal(output.calls[1].authorization, 'Bearer access-1');
   assert.equal(output.calls[1].authorization, 'Bearer access-1');
   assert.equal(output.agentAllowance.remainingPercent, 75);
+  assert.equal(output.agentAllowance.reservedPercent, 10);
   assert.equal(output.session.refreshToken, 'refresh-1');
   assert.equal(output.source, 'openai');
   assert.equal(output.state.email, 'person@example.com');

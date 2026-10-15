@@ -105,7 +105,6 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
   const allowance = useQuery({
     ...agentAllowanceQuery(port),
     enabled: stashbaseReady,
-    refetchInterval: 30_000,
   });
   const { refetch: refreshAllowance } = allowance;
   useWindowFocus(refreshAllowance, stashbaseReady);

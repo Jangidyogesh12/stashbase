@@ -28,10 +28,12 @@ import {
 import type { AgentRuntimePort } from '@/features/settings/application/ports';
 import { agentAllowanceQuery } from '@/features/settings/application/queries';
 import { accountLabel } from '@/features/settings/domain/account';
+import { reservedCreditsDetail } from '@/features/settings/domain/agent-allowance';
 import { useAccountView } from '@/features/settings/hooks/account-context';
 import { ProgressBar } from '@/features/settings/ui/rows';
 import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
+import { useWindowFocus } from '@/shared/runtime/use-window-focus';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 import { clamp } from '@/shared/utils/clamp';
 
@@ -66,6 +68,8 @@ export function SidebarAccountRow({
   const person = account.account;
   const signedIn = person?.signedIn ?? false;
   const credits = useQuery({ ...agentAllowanceQuery(agentRuntimeApi), enabled: signedIn });
+
+  useWindowFocus(credits.refetch, signedIn);
 
   if (!person || !signedIn) {
     return (
@@ -117,10 +121,18 @@ export function SidebarAccountRow({
 
   const label = accountLabel(person);
   const percent =
-    credits.data === undefined ? null : clamp(Math.round(credits.data.remainingPercent), 0, 100);
+    credits.isError || credits.data === undefined
+      ? null
+      : clamp(Math.round(credits.data.remainingPercent), 0, 100);
+  const reserved = percent !== null && credits.data ? reservedCreditsDetail(credits.data) : null;
   return (
     <SidebarMenuItem>
-      <DropdownMenu disabled={account.busy}>
+      <DropdownMenu
+        disabled={account.busy}
+        onOpenChange={(open) => {
+          if (open) void credits.refetch();
+        }}
+      >
         <DropdownTrigger
           render={
             <SidebarMenuButton
@@ -165,6 +177,14 @@ export function SidebarAccountRow({
               </span>
             </span>
             {percent !== null && <ProgressBar className="mt-1.5" value={percent} />}
+            {reserved && (
+              <span
+                className="mt-1.5 block text-muted-foreground"
+                title="Reserved for active requests or fees awaiting confirmation. These credits are excluded from the available balance."
+              >
+                {reserved}
+              </span>
+            )}
           </DropdownLabel>
           <MenuItem
             className={SIDEBAR_ROW}

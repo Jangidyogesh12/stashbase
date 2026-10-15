@@ -200,3 +200,20 @@ export const NeedsSignIn: Story = { args: { account: signedOut, port: accountReq
 export const UpdateOffersAModel: Story = {
   args: { account: signedIn, port: upgradeOfferedPort() },
 };
+
+export const ReservedCredits: Story = {
+  args: {
+    account: signedIn,
+    port: {
+      ...fakePort(),
+      getAllowance: async () => ({
+        remainingPercent: 15,
+        reservedPercent: 24.565635,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        windowEndsAt: '2026-10-18T09:06:28.329Z',
+      }),
+    },
+  },
+};

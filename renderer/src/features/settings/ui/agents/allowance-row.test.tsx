@@ -11,13 +11,22 @@ describe('AllowanceRow', () => {
   it('says the window has not started when the server reports no end date', () => {
     render(<AllowanceRow allowance={IDLE_ALLOWANCE} />);
 
-    expect(screen.getByText('100% remaining · Resets every 7 days from first use')).not.toBeNull();
+    expect(screen.getByText('100% available · Resets every 7 days from first use')).not.toBeNull();
   });
 
   it('clamps a nonsensical percentage into the bar it can actually draw', () => {
     render(<AllowanceRow allowance={{ ...IDLE_ALLOWANCE, remainingPercent: 148.6 }} />);
 
-    expect(screen.getByText(/^100% remaining/u)).not.toBeNull();
+    expect(screen.getByText(/^100% available/u)).not.toBeNull();
+  });
+
+  it('shows small pending reservations without rounding them to zero', () => {
+    render(
+      <AllowanceRow
+        allowance={{ ...IDLE_ALLOWANCE, remainingPercent: 15, reservedPercent: 0.25 }}
+      />,
+    );
+    expect(screen.getByText(/15% available · <1% temporarily reserved/u)).not.toBeNull();
   });
 
   it('names the refill moment once the window has one', () => {

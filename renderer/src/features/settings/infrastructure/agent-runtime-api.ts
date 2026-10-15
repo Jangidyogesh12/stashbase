@@ -146,6 +146,7 @@ function toAllowance(wire: HostedAgentAllowanceWire): AgentAllowance {
     inputTokens: wire.inputTokens,
     outputTokens: wire.outputTokens,
     remainingPercent: wire.remainingPercent,
+    ...(wire.reservedPercent !== undefined ? { reservedPercent: wire.reservedPercent } : {}),
     windowEndsAt: wire.windowEndsAt,
   };
 }

@@ -34,6 +34,7 @@ test('live provider messages classify by their vocabulary', () => {
   assert.equal(classifyAgentTurnFailure("You've reached your usage limit. It resets at 5pm."), 'quota');
   assert.equal(classifyAgentTurnFailure('429 insufficient_quota: You exceeded your current quota'), 'quota');
   assert.equal(classifyAgentTurnFailure('Free Agent credits are exhausted. Reset next week.'), 'allowance-exhausted');
+  assert.equal(classifyAgentTurnFailure('agent_allowance_reserved'), 'allowance-exhausted');
   // Old runtimes and persisted messages retain their wire vocabulary.
   assert.equal(classifyAgentTurnFailure('StashBase weekly Agent allowance exhausted.'), 'allowance-exhausted');
   assert.equal(classifyAgentTurnFailure('quota_exhausted: StashBase weekly Agent allowance exhausted'), 'allowance-exhausted');

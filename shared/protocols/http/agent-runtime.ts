@@ -157,6 +157,7 @@ export const hostedAgentAllowanceSchema = z
   .object({
     profile: z.string().min(1).max(200),
     remainingPercent: z.number().finite(),
+    reservedPercent: z.number().min(0).max(100).optional(),
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),
     cacheReadTokens: z.number().int().nonnegative(),

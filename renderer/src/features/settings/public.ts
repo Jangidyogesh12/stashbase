@@ -25,3 +25,5 @@ export type { TelemetryPort } from './application/telemetry-port';
 export { createTelemetryAdapter } from './infrastructure/telemetry-api';
 export { LocalComponentRecovery } from './ui/general/local-component-recovery';
 export { ReadingTextMenu } from './ui/appearance/reading-text-menu';
+
+export { useRefreshAgentAllowance } from './hooks/use-refresh-agent-allowance';

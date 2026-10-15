@@ -1062,6 +1062,28 @@ host types, Electron boundary tests and built smoke, and documentation checks.
 The live probe exercised the SDK protocol, not the application UI; the changed
 journey through the built desktop and packaged behavior remain unverified.
 
+**Credit freshness and reservations (2026-10-15):** the account menu refetches on
+opening and window focus; its shared query polls every thirty seconds. App
+composition invalidates credits after every Default turn outcome, including
+failure, independently of telemetry delivery. Settings and the menu show reserved
+capacity separately, and failed refreshes do not leave a stale numeric balance
+presented as current. A renderer regression reproduces 78% becoming 15% on menu
+open and a failed refresh becoming Unavailable; a composition test covers a
+failed Default turn. API contract coverage preserves legacy payloads and exposes
+reservation percentages only to opted-in clients. Database recovery tests cover
+refusals with outstanding holds and the five-minute, exactly-once waiver from
+first uncertainty, including absent provider generation IDs. Real-provider
+unknown-cost recovery still depends on provider evidence or that deadline. The built
+ReservedCredits Story was inspected at the 28rem Settings width, showing 15%
+available and 25% reserved without clipping; this fixture is not a production
+settlement or packaged-release pass. A built Electron pass against the deployed
+API on 2026-10-15 opened the current account menu and Settings -> Agents: both
+showed 40% available after automatic recovery, matching the production ledger
+(39.680695% available, no held user credits). Telemetry reported unavailable.
+Renderer gates, host types, 323 Agent tests, 22 hosted-account tests, Electron
+boundary tests and the real Electron smoke passed on the current main baseline.
+A fresh packaged pass remains part of the release verification.
+
 **Default Agent billing:** Settings -> Agents shows the subscription, reached also
 from the sidebar account menu, through
 `settings/hooks/use-billing.ts` and `settings/ui/agents/subscription-rows.tsx`.
@@ -1570,6 +1592,14 @@ included, again as Agent text: OpenCode streams the prompt's text part like a
 reply's, and `OpenCodeEventTranslator` forwarded every text part. It now drops
 parts of messages OpenCode announced as the user's; `opencode-agent.test.ts`
 owns that rule and the history restore.
+
+Additional hosted accounting evidence (API repository):
+*agent-credit-admission.test.ts* reproduces the long-context/remaining-credit
+refusal and verifies concurrent admission with separate user/provider ceilings,
+refund and late-result races, and request-to-window/turn/minute/provider totals.
+*agent-usage-waiver.test.ts* covers paid-month and reset isolation. The five-minute
+refund begins at first uncertainty; this evidence does not prove live-provider
+pricing or a newly packaged desktop journey.
 
 ## J07: Converge
 

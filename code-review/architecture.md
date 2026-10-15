@@ -524,8 +524,12 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   ordinary output still streams. Repeated empty responses fail without native
   automatic retries. Cancellation retires both prefix buffering and recovery
   before another upstream call. The hosted ledger sizes output under its
-  account lock against available account and turn budgets, preserving the
-  conservative input reservation. Its approved output limit travels to the
+  account lock against available funds. UTF-8 profiles can buffer half the input
+  estimate at platform risk when a useful output budget cannot fit; provider-day
+  exposure retains the full input estimate and approved output. User charging
+  is capped by its separate reservation. Unknown user fees are refunded after
+  five minutes from first uncertainty, on recovery sweeps, allowance reads or
+  retries; late accounting only adjusts platform cost. Its approved output limit travels to the
   provider; the desktop never computes a budget from the displayed percentage.
   Hosted quota failures distinguish insufficient request credits from
   insufficient turn budget and preserve their recovery classification through
@@ -602,6 +606,15 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   because Claude otherwise defers MCP definitions behind its tool search once a
   user's other connectors grow, leaving the model a tool name with no description. External clients copy their setup manually. No second client-config
   or credentials store belongs in StashBase.
+
+Credit snapshots are shared through Settings' query owner. App composition
+invalidates that query on Default turn completion independently of telemetry
+transport; account-menu opening, focus and bounded polling refresh the same key.
+The hosted usage endpoint exposes reservation percentages only with explicit
+`include=reservations`, preserving the strict response contract of installed
+clients. The percentage includes active and unsettled reservations and never
+adds them back to the available balance. Admission refusals carry their locked
+allowance snapshot to the gateway so their explanation reflects held capacity.
 
 ## Usage Statistics
 

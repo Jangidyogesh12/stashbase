@@ -103,11 +103,24 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   promptly, including unfinished requests, while ordinary local work remains usable.
 
 Default Agent reduces each model call's output budget to fit the remaining
-credits and turn budget. A smaller budget may shorten or truncate the response;
-remaining credits do not guarantee completion of a whole task. When the input
-and minimum output cannot fit, report insufficient credits for this request,
+credits. If a conservative UTF-8 input estimate leaves too little output, the
+service can buffer up to half that input estimate at platform risk, while retaining
+the full supplier reservation. User charges never exceed their reserved credits;
+actual usage releases any surplus. A smaller budget may shorten or truncate the
+response; remaining credits do not guarantee completion of a whole task. When the
+buffered input and minimum output cannot fit, report insufficient credits for this request,
 without claiming the balance is zero. A shorter conversation can reduce input
 cost; otherwise the user can wait for refill or manage their plan.
+
+The sidebar and Settings read the same available-credit snapshot. Refresh it when
+opening the account menu, returning to the window, and finishing a Default Agent
+turn (including failures and cancellations); poll while the signed-in surface is
+mounted so other-device usage and settlement become visible. A failed refresh
+must not present an old percentage as current. Display temporarily reserved
+credits separately from available credits: active requests and unconfirmed fees
+both hold capacity, and that capacity is already excluded from the available
+percentage. A refusal involving reservations explains the hold and directs the
+reader to current credits rather than claiming all credits are spent.
 
 ## Other Settings Decisions
 
@@ -200,3 +213,10 @@ current ceiling. Free credits keep their separate seven-day window. Paid-tier ch
 prorations. Cancellation retains access until paid-through, then returns to Free.
 A browser success redirect is not evidence of payment; pending confirmation stays
 visible until the API confirms rights. Failed billing does not discard local work.
+
+Unconfirmed fees stop occupying user credits after five minutes from the first
+uncertain outcome. Reading credits or retrying triggers due refunds even when
+the background recovery worker is delayed. Refunds are permanent for the user;
+late provider accounting changes platform cost only. Normal active generations
+do not become free just because execution lasts five minutes. Service safety
+limits still apply to repeated failures and platform-paid waivers.

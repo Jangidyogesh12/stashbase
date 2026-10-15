@@ -128,8 +128,9 @@ export interface AgentCatalog {
 
 /** The standing hosted allowance, as the allowance row presents it. */
 export interface AgentAllowance {
-  /** How much of the 7-day window is left, as a percentage. */
+  /** Available credits after usage and reservations, as a percentage. */
   readonly remainingPercent: number;
+  readonly reservedPercent?: number;
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cacheReadTokens: number;

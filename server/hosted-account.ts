@@ -473,7 +473,7 @@ export async function fetchHostedAgentAllowance(
   options: { forceRefreshToken?: boolean } = {},
 ): Promise<HostedAgentAllowance> {
   const token = await hostedAccessToken({ forceRefresh: options.forceRefreshToken });
-  const response = await fetch(`${STASHBASE_API_URL}/v1/agent/usage`, {
+  const response = await fetch(`${STASHBASE_API_URL}/v1/agent/usage?include=reservations`, {
     headers: {
       authorization: `Bearer ${token}`,
       'x-stashbase-client-version': CLIENT_VERSION,

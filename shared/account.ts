@@ -11,6 +11,7 @@
 export interface HostedAgentAllowance {
   profile: string;
   remainingPercent: number;
+  reservedPercent?: number;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
