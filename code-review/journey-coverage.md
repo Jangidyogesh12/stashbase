@@ -825,8 +825,20 @@ picodollars), matching original turn/window totals, no hold, and no waiver after
 the decision expires. Production Gemini and Haiku short-generation probes
 completed; the actual synthetic Gemini permission review took 9.52 seconds,
 exceeding the old cutoff. Three approved probes cost US$0.00071075 in total,
-outside user allowance. This does not establish arbitrary long-request reliability
-or packaged delivery.
+outside user allowance. A later 2.16.4 Haiku request recorded
+`client_stream_interrupted` 5.353 seconds after its Bash tool part appeared;
+subsequent requests settled without account lockout. These probes do not establish
+arbitrary long-request reliability or a live packaged Auto-review billing journey.
+The [2.16.5 source CI](https://github.com/liliu-z/stashbase/actions/runs/38748865835)
+and [coordinated release](https://github.com/liliu-z/stashbase/actions/runs/38751098272)
+passed on all four native targets. All 15 public app assets, three update metadata
+files and sidecars, the separate eight-asset extractor set, and Homebrew were
+verified. The downloaded arm64 DMG matched both update metadata and the cask;
+strict/deep codesign, Gatekeeper, and stapler passed locally. On macOS 27.0.1,
+the official 2.16.5 app launched with telemetry unavailable, displayed its version,
+loaded General and Agent settings plus account/subscription state, and quit
+cleanly. This manual pass made no model call; other-platform manual UI and real
+N-to-N+1 update journeys remain unverified.
 
 **Missing Codex history prerequisite (2026-10-14):** `codex-history.test.ts`
 exercises list/read/rename/delete with no discoverable executable, no child
