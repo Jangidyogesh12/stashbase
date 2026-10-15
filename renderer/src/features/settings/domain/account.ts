@@ -7,7 +7,7 @@
  * about search, and no search surface reads the account.
  */
 
-/** A one-time banner about the account: sign in while signed out. */
+/** A banner about the account: sign in while signed out. */
 export type AccountOffer = 'sign-in';
 
 export interface HostedAccount {

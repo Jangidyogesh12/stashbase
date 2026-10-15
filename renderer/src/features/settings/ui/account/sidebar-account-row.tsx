@@ -3,11 +3,12 @@
  *
  * Signed out it is one button that starts the browser sign-in; what the
  * account is worth (the bundled Agent's free credits) is stated in
- * Settings → Agents rather than inside this row. Signed in the row and its
- * menu wear the same initials disc — the theme's ink around the name's first
- * letters, never a provider picture — and the menu holds the credits, Plans
- * and billing (the subscription in Settings → Agents), Settings, and sign-out. The same sign-in the Agents section runs, through
- * the same port, so the two entries can never disagree.
+ * Settings → Agents rather than inside this row. It is the same sign-in the
+ * Agents section runs, through the same port, so the two entries can never
+ * disagree. Signed in, the row leads with the same person glyph as every
+ * other sidebar row, and its menu opens on the initials disc, then the
+ * credits, Plans and billing (the plan in Settings → Agents), Settings, and
+ * sign-out.
  */
 import { useQuery } from '@tanstack/react-query';
 import { CreditCard, Gauge, LogOut, Settings as SettingsIcon, UserRound, X } from 'lucide-react';
@@ -138,10 +139,11 @@ export function SidebarAccountRow({
             <SidebarMenuButton
               aria-label={`Account: ${label}`}
               label={label}
-              // 20px in the 16px glyph slot: the negative margins keep the
-              // slot's footprint (and the label column) while the disc
-              // overhangs a pixel each side, so two letters get room.
-              leading={<AccountAvatar account={person} className="-mx-0.5" size={20} />}
+              // The same glyph as the signed-out row: the name beside it says
+              // who, so the row needs no initials disc of its own, and it keeps
+              // the column's glyph-and-label rhythm. The menu's header keeps
+              // the disc, where it heads the account's details.
+              icon={UserRound}
             />
           }
         />

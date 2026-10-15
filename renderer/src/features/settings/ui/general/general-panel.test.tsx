@@ -37,7 +37,7 @@ describe('GeneralPanel', () => {
     const row = updateRow({ autoCheckEnabled: true });
     renderPanel(row);
 
-    expect(screen.getByText('StashBase 2.0.0')).not.toBeNull();
+    expect(screen.getByText('Version 2.0.0')).not.toBeNull();
     expect(screen.getByText('StashBase is up to date.')).not.toBeNull();
     const auto = screen.getByRole('switch', { name: 'Check for updates automatically' });
     expect(auto.getAttribute('aria-checked')).toBe('true');

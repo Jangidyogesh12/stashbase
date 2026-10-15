@@ -21,7 +21,7 @@ Agent history; supplied environment variables do not configure BYOK access.
 
 Settings owns lasting preferences and connection configuration:
 
-- **General:** appearance, usage statistics, and updates. Appearance is user-wide
+- **General:** appearance, updates, and usage statistics, in that order. Appearance is user-wide
   and grouped as:
   - **Theme:** a mode (match system, light, dark) plus a light theme and a dark
     theme chosen separately from published palettes (StashBase, Catppuccin,
@@ -30,13 +30,14 @@ Settings owns lasting preferences and connection configuration:
     menus, dialogs, and the window background from launch.
   - **Interface:** interface size, which reaches all chrome text, and reduce
     motion (match system or on).
-  - **Writing:** the writing font, chosen from the two included reading fonts
+  - **Documents:** how document text looks: the document font, chosen from the two included reading fonts
     (Serif, the default, and Sans) or any font installed on the computer; the
     code font, from the bundled monospace or installed monospaced fonts; and
     reading text size, line spacing, and line width. The document's reading
     menu edits the same reading font and size.
-  - **Editor:** spellcheck and its language (where the system offers a
-    choice), focus mode, typewriter scrolling, and word count.
+  - **Writing:** what helps while writing: spellcheck and its language (where
+    the system offers a choice), focus mode, typewriter scrolling, and word
+    count.
 
   Every appearance value is a preset except the two font names, which are
   validated as names before they are stored. An installed writing font
@@ -174,18 +175,21 @@ reader to current credits rather than claiming all credits are spent.
 
 ## Default Agent Subscriptions
 
-A window that is signed out shows a one-time banner in the notice strip, with or
-without a folder open: "Sign in for free Default Agent credits, valid for 7
-days." with Sign in and Not now. A completed sign-in or Not now answers it for
-the installation; signing out does not bring it back. The sidebar account row
+A window that is signed out shows a banner in the notice strip, with or
+without a folder open: "Sign in for free Agent credits every week." with Sign in
+and Not now. It states what signing in gives, neither a commitment to use the
+Default Agent nor the allowance's terms, which Settings → Agents shows. A completed sign-in or Not now answers it for
+the installation until the next sign-out, which brings it back: signed out, the
+reader is where the banner first found them. The sidebar account row
 remains the account's only home, and the banner starts the same sign-in.
 
 Plus and Pro add hosted Default Agent capacity; local files, writing tools,
-Claude/Codex access, and BYOK search remain independent. Settings -> Agents shows
+Claude/Codex access, and BYOK search remain independent. Settings → Agents shows
 the signed-in account's plan, beside its credits; Plans and billing in the
 sidebar account menu opens it there. A Free account sees each tier with its price and
 Subscribe; a subscribed account sees its plan, paid-through or end date, and
-Manage or cancel. Subscribe asks the hosted API, as the desktop account, for a
+Manage or cancel while the plan still renews. After cancellation, the same
+portal action reads Manage billing, since nothing is left to cancel. Subscribe asks the hosted API, as the desktop account, for a
 Stripe Checkout page and opens it in the system browser, so paying never requires
 a website sign-in. Manage or cancel opens the Stripe Customer Portal the same
 way. The desktop host holds the session token and verifies that the returned page

@@ -58,7 +58,7 @@ describe('describeRuntime', () => {
     },
   );
 
-  it('routes an account-required failure to sign-in regardless of failure stage', () => {
+  it('leaves an account-required failure to the Account row, whatever its stage', () => {
     const display = describeRuntime(
       codex({
         installed: true,
@@ -73,11 +73,7 @@ describe('describeRuntime', () => {
       }),
       false,
     );
-    expect(display).toEqual({
-      description: 'An account is required to use the Default Agent.',
-      stage: 'install',
-      action: { kind: 'account', label: 'Sign in' },
-    });
+    expect(display).toEqual({ description: 'Needs sign-in', stage: 'install', action: null });
   });
 
   it('offers sign-in for an authenticate-stage failure without an account-required refusal', () => {
@@ -144,13 +140,13 @@ describe('describeRuntime', () => {
     expect(display.description).toBe('MCP failed.');
   });
 
-  it('treats an installed runtime with an idle preparation as already ready, without the "Ready to chat" prefix', () => {
+  it('treats an installed runtime with an idle preparation as already ready, without saying Ready', () => {
     const display = describeRuntime(
       codex({ installed: true, ownership: 'system', preparation: { kind: 'idle' } }),
       false,
     );
     expect(display).toEqual({
-      description: 'Installed on your system',
+      description: 'Installed',
       stage: 'ready',
       action: null,
     });
@@ -170,7 +166,7 @@ describe('describeRuntime', () => {
       false,
     );
     expect(display).toEqual({
-      description: 'Ready to chat · Installed on your system · 2.1.220',
+      description: 'Ready · 2.1.220',
       stage: 'ready',
       action: { kind: 'update', label: 'Update' },
     });
@@ -191,7 +187,7 @@ describe('describeRuntime', () => {
       false,
     );
     expect(display).toEqual({
-      description: 'Opus 5.5 needs a newer Claude · Installed on your system · 2.1.276',
+      description: 'Opus 5.5 needs a newer Claude · 2.1.276',
       stage: 'ready',
       action: { kind: 'update', label: 'Update' },
     });
@@ -211,17 +207,17 @@ describe('describeRuntime', () => {
   });
 
   it.each([
-    ['bundled', 'Included with StashBase'],
-    ['system', 'Installed on your system'],
+    ['bundled', 'Ready · Included with StashBase'],
+    ['system', 'Ready'],
   ] as const)(
-    'describes a ready %s runtime with the "Ready to chat" prefix and matching ownership text',
+    'describes a ready %s runtime, naming only the bundled one as included',
     (ownership, label) => {
       const display = describeRuntime(
         codex({ installed: true, ownership, preparation: { kind: 'ready' } }),
         false,
       );
       expect(display).toEqual({
-        description: `Ready to chat · ${label}`,
+        description: label,
         stage: 'ready',
         action: null,
       });

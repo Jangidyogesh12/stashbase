@@ -1,5 +1,5 @@
-/** The Default Agent subscription inside the Default group: the account's
- *  plan, the tiers it can buy, or the wait for a browser payment to confirm. */
+/** The Default Agent's plan rows: the account's plan, the tiers it can buy,
+ *  or the wait for a browser payment to confirm. */
 import { Button } from '@/components/ui/button';
 import {
   billingPaid,
@@ -22,7 +22,18 @@ function subscriptionDetail(status: BillingStatus): string {
       ? `${plan} · Renewal canceled. Access until ${paidDate(status.paidThrough)}`
       : `${plan} · Paid through ${paidDate(status.paidThrough)}`;
   }
-  return 'Paid credits are not active. Manage or cancel your subscription to check payment.';
+  return 'Paid credits are not active. Check your payment.';
+}
+
+/** Cancel is named only while something could still renew: a subscription
+ *  that has not been canceled, or a payment the API has yet to confirm. After
+ *  cancellation the same portal only shows billing. */
+function manageLabel(billing: BillingViewModel): string {
+  const { status } = billing;
+  const renewing =
+    billing.confirming !== null ||
+    (status !== null && billingSubscribed(status) && !status.cancelAtPeriodEnd);
+  return renewing ? 'Manage or cancel' : 'Manage billing';
 }
 
 export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
@@ -37,12 +48,12 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
       size="compact"
       variant="tertiary"
     >
-      {billing.opening === 'portal' ? 'Opening browser…' : 'Manage or cancel'}
+      {billing.opening === 'portal' ? 'Opening browser…' : manageLabel(billing)}
     </Button>
   );
   const browserHelp = billing.browserPage === 'portal' && !billing.busy && !billing.failure && (
     <p className="text-caption text-muted-foreground">
-      Manage or cancel in your browser, then return here. If it did not open, try again.
+      Finish in your browser, then return here. If it did not open, try again.
     </p>
   );
 
@@ -55,7 +66,7 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
             ? 'Waiting for payment in your browser.'
             : 'Payment is not confirmed yet. Refresh or check your subscription in the browser.'
         }
-        title="Subscription"
+        title="Plan"
         trail={manage}
       >
         {failure}
@@ -88,7 +99,7 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
 
   if (billingSubscribed(status)) {
     return (
-      <SettingsRow as="li" detail={subscriptionDetail(status)} title="Subscription" trail={manage}>
+      <SettingsRow as="li" detail={subscriptionDetail(status)} title="Plan" trail={manage}>
         {failure}
         {browserHelp}
       </SettingsRow>
@@ -99,8 +110,8 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
     <>
       <SettingsRow
         as="li"
-        detail="Free. Have a promotion code? Enter it on the payment page."
-        title="Subscription"
+        detail="Free · Paid plans add monthly credits."
+        title="Plan"
         trail={manage}
       >
         {failure}
@@ -116,7 +127,7 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
       {billing.plans.map((plan) => (
         <SettingsRow
           as="li"
-          detail={`${billingPrice(plan)} · More Default Agent credits`}
+          detail={billingPrice(plan)}
           key={plan.priceId}
           title={plan.name}
           titleTone={plan.available ? 'default' : 'muted'}

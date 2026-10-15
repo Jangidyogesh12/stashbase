@@ -188,7 +188,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       log.info('OAuth sign-in completed');
       res.type('html').send(oauthResultPage({
         title: 'Signed in to StashBase',
-        message: 'Your account is ready. This page will return you to the app automatically.',
+        message: 'Your account is ready.',
         autoReturn: true,
         returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,
         returnIntentUrl: `/api/account/oauth/return-intent?flow=${encodeURIComponent(flowId)}`,

@@ -1,5 +1,5 @@
 /**
- * General › Appearance: four groups (Theme, Interface, Writing, Editor) over
+ * General › Appearance: four groups (Theme, Interface, Documents, Writing) over
  * one saved record. Each row changes one field, applies it to this window at
  * once, and saves it; the fonts and spellcheck languages come from this
  * computer where the desktop app can list them.
@@ -120,10 +120,12 @@ export function AppearancePanel({ appearanceApi, systemTextApi }: AppearancePane
           <PresetRowView appearance={appearance} row={PRESET_ROWS.reduceMotion} />
         </SettingsList>
       </SettingsGroup>
-      <SettingsGroup title="Writing">
+      {/* Documents is how the text looks; Writing is what helps while
+       *  writing it. */}
+      <SettingsGroup title="Documents">
         <SettingsList>
           <SettingsRow
-            detail="Serif suits prose; Sans suits documents full of code. Or use any font on this computer."
+            detail="The typeface for your documents."
             title="Font"
             trail={
               <FontPicker
@@ -132,7 +134,7 @@ export function AppearancePanel({ appearanceApi, systemTextApi }: AppearancePane
                 includedValue={preferences?.readingFont ?? null}
                 installed={system.fonts}
                 installedFailure={system.fontsFailure?.message ?? null}
-                label="Writing font"
+                label="Document font"
                 onChooseIncluded={(value) => {
                   if (isReadingFont(value)) appearance.change(readingFontChange(value));
                 }}
@@ -168,7 +170,7 @@ export function AppearancePanel({ appearanceApi, systemTextApi }: AppearancePane
           <PresetRowView appearance={appearance} row={PRESET_ROWS.lineWidth} />
         </SettingsList>
       </SettingsGroup>
-      <SettingsGroup title="Editor">
+      <SettingsGroup title="Writing">
         <SettingsList>
           {EDITOR_TOGGLES.map((toggle) => (
             <SettingsRow

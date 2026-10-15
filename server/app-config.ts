@@ -106,8 +106,9 @@ export interface AppConfigFile {
   };
   account?: {
     session?: HostedAccountSession;
-    /** One-time account banners already taken up or declined. Kept outside
-     *  the session so signing out does not bring them back. */
+    /** Account banners already taken up or declined. Kept outside the
+     *  session so an answer outlasts the launch; signing out forgets the
+     *  sign-in banner's answer on purpose. */
     offersSeen?: HostedAccountOffer[];
   };
   /** Settings-managed bearer credential and explicit exposure preference for
@@ -296,6 +297,16 @@ export function markAccountOfferSeen(offer: HostedAccountOffer): void {
   const seen = Array.isArray(cfg.account?.offersSeen) ? cfg.account.offersSeen : [];
   if (seen.includes(offer)) return;
   cfg.account = { ...(cfg.account ?? {}), offersSeen: [...seen.filter((item) => ACCOUNT_OFFERS.includes(item)), offer] };
+  writeAppConfigStrict(cfg);
+}
+
+/** Shows an offer again: signing out returns the reader to where the
+ *  sign-in banner first found them. */
+export function forgetAccountOfferSeen(offer: HostedAccountOffer): void {
+  const cfg = readAppConfigStrict();
+  const seen = cfg.account?.offersSeen;
+  if (!Array.isArray(seen) || !seen.includes(offer)) return;
+  cfg.account = { ...cfg.account, offersSeen: seen.filter((item) => item !== offer) };
   writeAppConfigStrict(cfg);
 }
 

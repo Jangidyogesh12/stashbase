@@ -3,13 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { DependencyProvider } from '@/app/composition/dependency-context';
-import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
 import {
   ProjectWelcome,
   useProjectEntry,
   type WorkspaceSessionController,
 } from '@/features/workspace/public';
 import { createWorkspaceSessionRuntime } from '@/features/workspace/test-support';
+import type { WorkspaceNotice } from '@/shared/domain/workspace-notice';
 import { appDependencies } from '@/test/fakes/app';
 import { sessionPersistence } from '@/test/fakes/workspace';
 import { createTestQueryClient, queryWrapper } from '@/test/query';

@@ -31,10 +31,9 @@ export function keyIsActive(state: EmbedderState): boolean {
   return state.hasKey;
 }
 
-/** What the configured provider means for search, said once under the group. */
-export function describeEmbedderSource(state: EmbedderState): string {
-  if (keyIsActive(state)) {
-    return `Search by meaning is on. Indexing and searches use your ${EMBEDDER_PROVIDER_LABELS[state.provider]} key.`;
-  }
-  return 'Search by meaning is off. Add a key to turn it on.';
+/** The setting's state in a few words. */
+export function embedderSummary(state: EmbedderState): string {
+  return keyIsActive(state)
+    ? `On · ${EMBEDDER_PROVIDER_LABELS[state.provider]}`
+    : 'Off · Needs an API key';
 }

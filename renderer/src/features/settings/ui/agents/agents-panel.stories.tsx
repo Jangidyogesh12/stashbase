@@ -127,9 +127,9 @@ const signedIn: AccountPort = {
   startSignIn: async () => ({ flowId: 'flow', url: 'https://accounts.example/sign-in' }),
 };
 
-/** Nobody signed in, so the bundled agent cannot run a turn yet: the row
- *  recedes and says what would clear it, and the account row above offers the
- *  same sign-in in the same shape. */
+/** Nobody signed in, so the bundled agent cannot run a turn yet: its row
+ *  recedes and says it needs sign-in, and the Account row below owns the
+ *  action. */
 const signedOut: AccountPort = {
   ...signedIn,
   load: async () => SIGNED_OUT,

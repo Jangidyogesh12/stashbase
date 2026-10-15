@@ -16,6 +16,7 @@ export type {
   HostedOAuthStatus,
 } from '../shared/account.ts';
 import {
+  forgetAccountOfferSeen,
   getHostedAccountSession,
   markAccountOfferSeen,
   pendingAccountOffers,
@@ -383,6 +384,10 @@ export async function signOutHostedAccount(): Promise<void> {
   avatarCache = null;
   profileHydration = null;
   if (!session) return;
+  // Signed out, the reader is back where the sign-in banner first found them,
+  // so it shows again; a Not now from then on holds until the next sign-out.
+  // A sign-out with no session is not one, and leaves a Not now standing.
+  try { forgetAccountOfferSeen('sign-in'); } catch { /* the sign-out stands without the banner */ }
   try { await supabaseAuth('/logout?scope=local', {}, session.accessToken); } catch { /* local sign-out still succeeds */ }
 }
 

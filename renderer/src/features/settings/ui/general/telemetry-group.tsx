@@ -25,7 +25,7 @@ export function TelemetryGroup({
             <>
               {model.preferences?.available === false
                 ? 'This build does not send usage statistics or error diagnostics.'
-                : 'Share activity and error details, including messages, file paths, stack traces and runtime context. Credentials are filtered. Signing in links activity to your account. Documents and chats are not recorded.'}{' '}
+                : 'Sends activity and error details, such as messages, file paths and stack traces, to help fix problems. Credentials are filtered, and documents and chats are not recorded. Signing in links this to your account.'}{' '}
               <Button
                 size="compact"
                 variant="ghost"

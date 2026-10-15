@@ -13,10 +13,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import { useBootProgress } from '@/app/bootstrap/use-boot-progress';
 import type { TurnReview } from '@/app/composition/folder/use-turn-review';
-import {
-  useWorkspaceNotices,
-  type WorkspaceNotice,
-} from '@/app/composition/folder/use-workspace-notices';
+import { useWorkspaceNotices } from '@/app/composition/folder/use-workspace-notices';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
 import type { SettingsSectionId, SettingsTarget } from '@/features/settings/public';
 import type {
@@ -24,6 +21,7 @@ import type {
   WorkspaceRuntime,
   WorkspaceSessionController,
 } from '@/features/workspace/public';
+import type { WorkspaceNotice } from '@/shared/domain/workspace-notice';
 import { useCommandSurface, type CommandSurface } from '@/shared/runtime/use-command-surface';
 
 import type { PreparationCommands } from './use-preparation-commands';
