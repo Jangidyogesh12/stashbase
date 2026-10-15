@@ -144,7 +144,12 @@ reader to current credits rather than claiming all credits are spent.
   Diagnostic explanations, paths, stack traces, nested causes and bounded process
   output are retained to support debugging. Known credential patterns are filtered;
   documents, chats, arbitrary provider payloads and whole logs are not collected.
-  Bounded offline delivery preserves occurrence time and identity. Opt-out stops
+  Bounded offline delivery preserves occurrence time and identity. A submitted
+  Agent turn can retain content-free progress and its result across restarts.
+  If a prior host left no result, recovery reports an interrupted turn with an
+  unknown outcome; it does not infer success, failure, or an exact end time.
+  Lost connections and recoverable tool errors remain distinct from confirmed
+  task failures. Opt-out stops
   pending delivery and erases queued work; re-enabling never backfills disabled
   activity. A signed-in account can be associated again after re-enabling.
   [Usage statistics](../../docs/usage-statistics.md) owns the event definitions,

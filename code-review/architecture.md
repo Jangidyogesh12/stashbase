@@ -658,8 +658,13 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
 - Foreground input and document/Agent engagement establish activity, not timers,
   background work or streamed output. All windows share category suppression and
   sessions. Save/project/billing work captures initiating identity before await;
-  turn correlation retains identity/session through terminal signals. Unknown
-  terminal turns after restart or opt-out cannot manufacture completion.
+  turn correlation persists identity/session, original version and observation times.
+  Each admitted pending turn reserves a terminal queue slot; terminal insertion
+  and pending removal are one atomic config write and bypass ordinary event rate
+  limiting. Renderer preparation and host execution facts converge by turn ID.
+  Restart recovery reports an interrupted unknown result, never inferred success
+  or a fabricated end time/duration. Unknown terminal IDs cannot manufacture starts;
+  opt-out clears pending turns and bounded recent-completion IDs.
 - Settings General discloses account linking and controls both usage and errors.
   Opt-out stops this process even if saving fails, cancels transport, and on a
   successful save removes the queue and all local analytics state. There is no
@@ -678,10 +683,25 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   bounded original messages, unknown as well as known codes, nested causes and
   actionable stacks through `shared/protocols/diagnostics.ts`. HTTP request IDs and
   method/route context connect failed results with their diagnostic. Agent turns
-  carry the renderer turn ID and initiating identity; setup stages share attempt
+  carry the renderer turn ID and initiating identity. Shared socket connection IDs
+  exist before the first prompt. Context-read HTTP requests explicitly propagate
+  their submitting turn ID; unrelated HTTP calls never inherit one globally.
+  Native adapters report host acceptance, dispatch, permissions, tool boundaries
+  and terminal facts independently of renderer delivery. The owned model broker
+  reports request/response boundaries and failures directly. Only stage transitions
+  persist, never each streamed token; last stage is evidence, not inferred cause.
+  Tool failures contain bounded call IDs/categories, not inputs or results, and do
+  not themselves settle a turn. Setup stages share attempt
   and retry IDs. Background diagnostics retain the operation sentence. HTTP, Agent,
   background and renderer failures converge here without throwing into operations,
   recursively reporting analytics failures, or creating another privacy setting.
+  A runtime error immediately followed by an exit with the same explanation
+  contributes one diagnostic, retaining the original cause; both protocol events
+  still reach the renderer. Closed sessions cannot publish late discovery failures.
+  Allowance-query diagnostics retain the original network cause or upstream
+  status/request ID separately from the local HTTP result. Unexpected daemon
+  and Agent startup exits retain bounded, credential-filtered stderr and the
+  available exit code/signal, without serializing process configuration.
   Renderer JSON-body failures retain the original cause, status (including 2xx),
   content type and host-issued response request ID. Requested cancellation stays
   cancellation; empty HEAD/204/205 responses are not decode failures. The Agent

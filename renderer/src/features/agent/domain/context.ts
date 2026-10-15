@@ -77,6 +77,17 @@ export function contextItemName(item: AgentContextItem): string {
     : basePathName(item.source.path);
 }
 
+const PASSAGE_EXCERPT_WORDS = 6;
+
+/** A passage's first words, without the Markdown marker its first line opens
+ *  with ("1.", "-", "#", ">", a task box), which would read as part of it. */
+export function passageExcerpt(quote: string): string {
+  const text = quote.replace(/^(?:\s*(?:[-*+]|\d+[.)]|#{1,6}|>|\[[ xX]\])(?=\s))+\s*/u, '');
+  const words = text.split(/\s+/u).filter(Boolean);
+  const head = words.slice(0, PASSAGE_EXCERPT_WORDS).join(' ');
+  return words.length > PASSAGE_EXCERPT_WORDS ? `${head}…` : head;
+}
+
 /** A passage of `source`, or null when the selection holds no text. */
 export function passageContextItem(
   source: SourceReference,

@@ -4,7 +4,7 @@ import { EventEmitter, on } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import type { Event } from '@opencode-ai/sdk';
 import type { WebSocket } from 'ws';
@@ -14,7 +14,9 @@ import {
   OpenCodePanelSession,
   openCodeSessionHasContent,
 } from '../opencode-agent.ts';
-import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, type OpenCodeSessionRuntime } from '../opencode-runtime.ts';
+import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, waitForOpenCodeServer, type OpenCodeSessionRuntime } from '../opencode-runtime.ts';
+import { agentProcessExitDiagnostic } from '../agent-process.ts';
+import { errorDiagnostic } from '../error-diagnostics.ts';
 import { agentCliPath } from '../agent-cli.ts';
 import type { HostedAgentTurnModel } from '../hosted-agent-broker.ts';
 import type { HostedAgentProfile } from '../hosted-agent-models.ts';
@@ -82,6 +84,27 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
+
+test('OpenCode startup exit retains its code or signal and bounded stderr', async (t) => {
+  for (const killed of [false, true]) {
+    const child = spawn(process.execPath, ['-e', "require('fs').writeSync(2, 'startup failure token=private-secret'); " +
+      (killed ? 'setInterval(() => {}, 1000)' : 'process.exit(7)')], { stdio: ['ignore', 'pipe', 'pipe'] });
+    t.after(() => { child.kill('SIGKILL'); });
+    const closed = new Promise<void>(resolve => child.once('close', () => resolve()));
+    const waiting = waitForOpenCodeServer(child, 12345, agentProcessExitDiagnostic(child));
+    if (killed) child.stderr.once('data', () => child.kill('SIGKILL'));
+    await assert.rejects(waiting, error => {
+      const diagnostic = errorDiagnostic(error);
+      assert.match(diagnostic.message, /during startup/);
+      if (!killed) assert.equal(diagnostic.exit_code, 7);
+      else assert.equal(diagnostic.signal, 'SIGKILL');
+      assert.match(diagnostic.stderr!, /startup failure/);
+      assert.doesNotMatch(JSON.stringify(diagnostic), /private-secret/);
+      return true;
+    });
+    await closed;
+  }
+});
 
 test('Stop retires attachment preparation before another turn and does not report a cancelled read failure', async (t) => {
   const harness = modeHarness('acceptEdits');
@@ -564,7 +587,10 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
   }
 });
 
-test('an unexpected bundled runtime exit terminates the panel instead of leaving a turn working', async () => {
+test('an unexpected bundled runtime exit terminates the panel with one diagnostic', async (t) => {
+  const { telemetry } = await import('../telemetry.ts');
+  const captured: any[] = [];
+  t.mock.method(telemetry, 'scoped', () => (event: unknown) => captured.push(event));
   const ws = new FakeWebSocket();
   let exitListener: ((error: Error) => void) | null = null;
   let closeCalls = 0;
@@ -616,6 +642,9 @@ test('an unexpected bundled runtime exit terminates the panel instead of leaving
   assert.ok(events.some((event) => event.t === 'exit' && event.message?.includes('SIGKILL')));
   assert.equal(ws.readyState, 3);
   assert.equal(closeCalls, 1);
+  const failures = captured.filter(event => event.event === 'application_error');
+  assert.equal(failures.length, 1);
+  assert.match(failures[0].diagnostic.causes[0].message, /SIGKILL/);
 });
 
 test('OpenCode events normalize into the Shared Agent Contract without duplicate cumulative content', () => {

@@ -654,6 +654,12 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 ## J04: Preparation
 
+**Daemon exit evidence (2026-10-16):** the host retains a bounded, credential-filtered
+stderr tail and exit code/signal for unexpected MFS exits. A real child-process
+fixture verifies startup failure evidence and a subsequent successful restart.
+The fixture uses Node, not Python/MFS; the reported production code-1 failure's
+traceback and root cause remain unknown.
+
 **PDF component probes and textless pages (2026-10-14):** `pdf-runtime.test.ts`
 covers a packaged layout with no loose extractor scripts: unavailable probes
 neither launch nor request a download, and installed probes/conversions select
@@ -810,6 +816,17 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Closed startup and duplicate diagnostics (2026-10-16):** Codex regressions close
+the socket during model/skill discovery and verify no subsequent requests,
+readiness or failure diagnostics. OpenCode's error/exit pair still reaches the UI
+but reports one original failure. Real child-process fixtures cover startup
+exit-code and signal diagnostics with credential-filtered stderr. These checks
+establish local lifecycle/diagnostic behavior, not the cause of production
+WebSocket 1006 disconnects or OpenCode startup termination.
+`pnpm test:opencode:native` also passed its three checks using the actual bundled
+runtime and a local fixture gateway, including SDK sessions and warm-runtime reuse;
+this does not establish real-provider behavior.
+
 **Auto review refunds (2026-10-15):** All ten affected production refunds aligned
 with proxy HTTP 499 and local Bash permission starts by 5.118–5.163 seconds. The
 published Auto review's five-second deadline aborted an already dispatched model
@@ -880,6 +897,30 @@ discovery or authentication.
 The same built-host pass returned that prerequisite for Codex while Claude's
 history remained HTTP 200, using controlled absent-CLI discovery and isolated
 empty native history.
+
+**Turn diagnostics (2026-10-14):** `server/telemetry.ts`, `telemetry-state.ts`
+and `telemetry-turns.ts` own durable pending turns, reserved terminal admission,
+identity/version continuity, terminal deduplication and unknown-result recovery.
+`error-reporting.ts` observes native lifecycle facts; the hosted model diagnostic
+owner emits request failures independently of native forwarding. Renderer context
+reads carry explicit turn IDs and socket errors share connection IDs, including
+later turns after a prior server error. Manual retries rejected by context
+validation now settle as blocked. `server/telemetry.test.ts` exercises restart,
+account change, offline saturation, opt-out, update shutdown, native process exit,
+socket loss and tool recovery. Renderer regressions exercise rejected retry IDs
+and second-turn disconnect correlation. Model-stream tests verify source reporting
+and upstream request IDs without content. These controlled tests do not establish
+Daniel's historical cause, production PostHog receipt, or saved alert configuration.
+
+Validation passed `pnpm check:web` (all twelve gates), `pnpm test:agent`,
+`pnpm typecheck:host`, `pnpm test:electron`, `pnpm test:electron:smoke:built`,
+`pnpm test:opencode:native`, the focused telemetry/client-error/shutdown suites,
+and `pnpm test:docs`. The built renderer's Interrupted Turn Story was inspected
+by eye: partial output, unknown-outcome explanation and explicit reconnect action
+remain visible. That static fixture does not prove reconnect execution. The native
+OpenCode run uses a local fake model gateway; desktop smoke uses isolated fixtures
+and disables collection. No test events were sent to production analytics.
+
 
 **Default skill scope (2026-10-13):** `server/opencode-runtime.ts` disables native
 external/upward config discovery and supplies project-relative skill paths plus

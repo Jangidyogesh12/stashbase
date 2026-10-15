@@ -1,4 +1,4 @@
-import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 import { isStashbaseWorkspaceEdit, isWorkspaceFileChange } from './agent-file-permissions.ts';
 import { retireAgentProcess } from './agent-process.ts';
 /**
@@ -177,11 +177,15 @@ export class CodexSession implements AttributedAgentSession {
     // cannot select a model for that first turn.
     try {
       await this.ensureAppServer();
+      if (this.closed) return;
       await this.resolveModel();
+      if (this.closed) return;
       await this.publishSkills();
+      if (this.closed) return;
       // Loading a historic thread is what lets the native app-server return
       // its persisted model metadata before the panel becomes interactive.
       if (this.resumeThreadId) await this.ensureThread();
+      if (this.closed) return;
       this.ready = true;
       this.send({ t: 'ready' });
     } catch (err: unknown) {
@@ -312,6 +316,7 @@ export class CodexSession implements AttributedAgentSession {
       this.throwIfInterruptedBeforeTurn();
       const threadId = await this.ensureThread(titleHint);
       this.throwIfInterruptedBeforeTurn();
+      agentDiagnosticStage(this.ws, 'runtime_dispatched');
       const startTurn = (override: string | undefined) => this.request('turn/start', {
         threadId,
         cwd: this.activeCwd(),
@@ -481,10 +486,12 @@ export class CodexSession implements AttributedAgentSession {
   }
 
   private async publishSkills(forceReload = false): Promise<void> {
+    if (this.closed) return;
     const cwd = this.activeCwd();
     if (!cwd) return;
     try {
       const result = await this.request('skills/list', { cwds: [cwd], ...(forceReload ? { forceReload: true } : {}) }) as JsonObject;
+      if (this.closed) return;
       const entries = Array.isArray(result.data) ? result.data : [];
       const entry = entries.find((item) => stringValue((item as JsonObject).cwd) === cwd) as JsonObject | undefined;
       const raw = Array.isArray(entry?.skills) ? entry.skills : [];
@@ -500,7 +507,12 @@ export class CodexSession implements AttributedAgentSession {
         skills.push({ id, label: stringValue(value.displayName) || name, ...(stringValue(value.shortDescription) || stringValue(value.description) ? { description: stringValue(value.shortDescription) || stringValue(value.description) } : {}) });
       }
       this.send({ t: 'skills', skills, state: skills.length ? 'available' : 'empty' });
-    } catch (err) { this.skills.clear(); this.send({ t: 'skills', skills: [], state: 'failed', error: errorMessage(err) }); log.warn('load Codex skills failed:', err); }
+    } catch (err) {
+      if (this.closed) return;
+      this.skills.clear();
+      this.send({ t: 'skills', skills: [], state: 'failed', error: errorMessage(err) });
+      log.warn('load Codex skills failed:', err);
+    }
   }
 
   private async ensureThread(titleHint = ''): Promise<string> {
@@ -911,6 +923,7 @@ export class CodexSession implements AttributedAgentSession {
   }
 
   private send(obj: AgentServerEvent, cause?: unknown): void {
+    if (this.closed) return;
     reportAgentRuntimeError('codex', obj, this.ws, cause);
     if (this.ws.readyState !== 1 /* OPEN */) return;
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }

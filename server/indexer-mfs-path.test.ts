@@ -5,8 +5,27 @@ import path from 'node:path';
 import test from 'node:test';
 import { createFilesystemPath } from './filesystem-path.ts';
 import { isMfsDaemonRetiringError, MfsDaemon } from './mfs-daemon.ts';
+import { errorDiagnostic } from './error-diagnostics.ts';
 
 const windowsPath = createFilesystemPath({ platform: 'win32', cwd: 'C:/' });
+
+test('daemon startup failures retain a bounded credential-filtered stderr tail and can restart', async (t) => {
+  let failures = true;
+  const daemon = new MfsDaemon(() => ({ command: process.execPath, cwd: os.tmpdir(), args: ['-e', failures
+    ? "require('fs').writeSync(2, 'x'.repeat(9000) + '\\nTraceback: missing native dependency token=private-secret'); process.exit(1)"
+    : "process.stdout.write(JSON.stringify({event:'ready'}) + '\\n'); process.stdin.resume()"] }));
+  t.after(() => daemon.close());
+  await assert.rejects(daemon.ensureReady(), (error) => {
+    const diagnostic = errorDiagnostic(error);
+    assert.equal(diagnostic.exit_code, 1);
+    assert.match(diagnostic.stderr!, /Traceback: missing native dependency/);
+    assert.ok(diagnostic.stderr!.length <= 8_000);
+    assert.doesNotMatch(diagnostic.stderr!, /private-secret/);
+    return true;
+  });
+  failures = false;
+  await daemon.ensureReady();
+});
 
 test('an older Intel Mac rejects native search without starting a daemon', async (t) => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform');

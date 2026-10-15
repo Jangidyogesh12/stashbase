@@ -83,7 +83,11 @@ test('Electron defers the Linux deb relaunch until its server child exits', asyn
     app,
     serverProc: child,
     relaunchAfterServerExit: true,
-    requestJson: async () => ({ reachable: true, statusCode: 202 }),
+    desktopUpdates: { getState: () => ({ phase: 'installing' }) },
+    requestJson: async (_port, _path, _timeout, options) => {
+      assert.equal(options.headers['x-stashbase-shutdown-reason'], 'app_update');
+      return { reachable: true, statusCode: 202 };
+    },
     SERVER_PORT: 8090,
     SERVER_SHUTDOWN_TOKEN: 'test-token',
     process: { exitCode: 0 },

@@ -1,4 +1,4 @@
-import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 /** OpenCode implementation of StashBase's Shared Agent Contract. */
 import { prepareAgentAttachments } from './agent-attachments.ts';
 import { agentClientEventSchema } from '../shared/protocols/websocket/agent-session.ts';
@@ -571,6 +571,7 @@ export class OpenCodePanelSession {
             }
           }
           if (this.disposed || this.interrupted || preparation.signal.aborted) return;
+          agentDiagnosticStage(this.ws, 'runtime_dispatched');
           await this.client.session.promptAsync({
             ...DATA_REQUEST,
             path: { id: this.sessionId },

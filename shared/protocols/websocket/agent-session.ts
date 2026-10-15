@@ -177,6 +177,7 @@ export const agentServerEventSchema = z.union([
 ]);
 
 const agentSessionConnectFields = {
+  telemetryConnectionId: z.string().uuid().optional(),
   access: agentAccessModeSchema.default("auto"),
   agent: agentIdSchema,
   effort: boundedText(64).optional(),

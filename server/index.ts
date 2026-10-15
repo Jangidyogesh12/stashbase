@@ -240,7 +240,7 @@ app.get('/api/health', (_req, res) => {
 
 mountInternalShutdownRoute(app, {
   token: process.env.STASHBASE_SHUTDOWN_TOKEN ?? '',
-  shutdown: () => { void shutdown('Electron request'); },
+  shutdown: (reason) => { void shutdown(reason); },
 });
 
 // Static layer is mounted before the API routes for renderer bundle
@@ -448,8 +448,10 @@ function agentIdOf(req: import('node:http').IncomingMessage): string {
 }
 
 function connectionOptionsOf(req: import('node:http').IncomingMessage): AgentConnectionOptions {
-  const crew = new URL(req.url ?? '', 'http://localhost').searchParams.get('crew');
-  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req), model: modelOf(req), persona: personaOf(req), ...(crew && /^[a-zA-Z0-9_-]{1,512}$/.test(crew) ? { crew } : {}) };
+  const query = new URL(req.url ?? '', 'http://localhost').searchParams;
+  const crew = query.get('crew');
+  const connectionId = query.get('telemetryConnectionId');
+  return { ...(connectionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(connectionId) ? { telemetryConnectionId: connectionId } : {}), windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req), model: modelOf(req), persona: personaOf(req), ...(crew && /^[a-zA-Z0-9_-]{1,512}$/.test(crew) ? { crew } : {}) };
 }
 
 /** Model ids are opaque native identifiers. Keep only a small URL safety bound;
@@ -568,7 +570,7 @@ let shuttingDown = false;
 async function shutdown(reason: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  telemetry.close();
+  telemetry.close(reason === 'app_update' ? 'app_update' : reason === 'app_shutdown' ? 'app_shutdown' : 'host_shutdown');
   log.info(`shutdown: ${reason}`);
   // Stop accepting new connections immediately; in-flight ones drain.
   try { server.close(); } catch { /* already gone */ }

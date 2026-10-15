@@ -36,9 +36,10 @@ export function createAgentContextAdapter(
 ): AgentContextPort {
   const attachTarget = new URL('/api/agent/attach', serverOrigin);
   return {
-    async resolve(source, signal): Promise<ResolvedContextFile> {
+    async resolve(source, signal, telemetryTurnId): Promise<ResolvedContextFile> {
       const query = new URLSearchParams({ path: `${source.folderPath}/${source.path}` });
       return request(client, {
+        ...(telemetryTurnId ? { telemetryTurnId } : {}),
         error: AgentContextError,
         failure: resolveFailure,
         failureSchema: agentContextFileFailureSchema,

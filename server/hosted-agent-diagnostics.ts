@@ -1,3 +1,4 @@
+import { telemetry } from './telemetry.ts';
 import { diagnosticText, errorDiagnostic, type ErrorDiagnostic } from '../shared/protocols/diagnostics.ts';
 import { logger } from './log.ts';
 
@@ -26,16 +27,24 @@ export class HostedAgentRequestDiagnostic {
   private firstTextMs: number | undefined;
   private finishedMs: number | undefined;
   private usage: Record<string, number> = {};
+  private readonly capture = telemetry.scoped();
+  private reportedFailure = false;
 
   constructor(private readonly callId: string, private readonly attempt: number,
-    private readonly context?: { profile: string; turnId: string }) {}
+    private readonly context?: { profile: string; turnId: string }) {
+    if (context) telemetry.observeTurn(context.turnId, { stage: 'model_request_started',
+      context: { call_id: callId, call_attempt: attempt } });
+  }
 
   response(response: Response): Response {
     this.headersMs = this.elapsed();
+    if (this.context) telemetry.observeTurn(this.context.turnId, { stage: 'response_started',
+      context: { call_id: this.callId, call_attempt: this.attempt } });
     this.status = response.status;
     this.contentType = response.headers.get('content-type') ?? undefined;
     this.requestId = response.headers.get('x-request-id') ?? response.headers.get('request-id')
       ?? response.headers.get('x-amzn-requestid') ?? undefined;
+    if (!response.ok) this.reportFailure();
     if (!response.body) { this.ended = true; this.finish(); return response; }
     const sse = this.contentType?.includes('text/event-stream');
     const reader = response.body.getReader();
@@ -73,7 +82,20 @@ export class HostedAgentRequestDiagnostic {
     }), { status: response.status, statusText: response.statusText, headers: response.headers });
   }
 
-  fail(error: unknown): void { this.failure = errorDiagnostic(error); this.finish(); }
+  fail(error: unknown): void {
+    this.failure = errorDiagnostic(error);
+    this.finish();
+    this.reportFailure();
+  }
+
+  private reportFailure(): void {
+    if (!this.context || this.reportedFailure) return;
+    // A header-only refusal may later gain an explicit provider explanation.
+    this.reportedFailure = this.failure !== undefined;
+    this.capture({ event: 'application_error', source: 'agent', runtime: 'stashbase', operation: 'model-request',
+      turn_id: this.context.turnId, diagnostic: this.snapshot(),
+      context: { call_id: this.callId, call_attempt: this.attempt, stage: 'model_request_started' } });
+  }
 
   private elapsed(): number { return Math.round(performance.now() - this.started); }
 

@@ -10,10 +10,13 @@ import { diagnosticOperation, errorDiagnostic } from './error-diagnostics.ts';
 import { diagnosticText } from '../shared/protocols/diagnostics.ts';
 import { diagnosticScope, type DiagnosticScope } from './diagnostic-context.ts';
 import { accountUsageId, usageState, usageIdentity, usagePayload, QUEUE_LIMIT,
-  type QueuedUsage, type UsageIdentity, type TelemetryState } from './telemetry-state.ts';
+  turnCapacity, TURN_LIMIT, type PendingTurn, type QueuedUsage, type UsageIdentity, type TelemetryState } from './telemetry-state.ts';
+import { finishTelemetryTurn, type TurnObservation } from './telemetry-turns.ts';
 import destination from './telemetry-destination.json' with { type: 'json' };
 import packageInfo from '../package.json' with { type: 'json' };
 export type { TelemetryState } from './telemetry-state.ts';
+
+const turnIdentity = (turn: PendingTurn): UsageIdentity => ({ installationId: turn.installationId, anonymousId: turn.anonymousId, firstSeenAt: turn.firstSeenAt, ...(turn.userId ? { userId: turn.userId } : {}) });
 
 type DiagnosticEvent = Extract<TelemetryEvent, { event: 'application_error' | 'application_warning' }>;
 /** A diagnostic is reported when first seen; repeats inside its window are
@@ -47,7 +50,8 @@ export function createTelemetry(options: {
   let generation = 0;
   const occurrences = new Map<string, { event: DiagnosticEvent; identity: UsageIdentity; startedAt: number; repeated: number; native?: NativeDiagnostic }>();
   let occurrenceTimer: ReturnType<typeof setInterval> | undefined;
-  const turns = new Map<string, { identity: UsageIdentity; startedAt: number; sessionId?: string }>();
+  // WS facts can arrive before the renderer's independent start HTTP request.
+  const earlyTurns = new Map<string, { at: number; observations: TurnObservation[] }>();
   const allowed = () => options.available && !stopped && !collectionStopped;
   const preferences = () => ({ enabled: usageState(options.read(), now()).enabled, available: options.available });
   const save = (config: AppConfigFile, state: TelemetryState) => {
@@ -67,7 +71,7 @@ export function createTelemetry(options: {
     occurrences.clear();
     clearInterval(occurrenceTimer);
     occurrenceTimer = undefined;
-    turns.clear();
+    earlyTurns.clear();
   };
   const sanitizeContext = (context: Record<string, unknown>) => Object.fromEntries(Object.entries(context).map(([key, value]) => [key, typeof value === 'string' ? diagnosticText(value, 500) : value]));
   const send = async (queued: QueuedUsage, controller: AbortController) => {
@@ -185,14 +189,23 @@ export function createTelemetry(options: {
       const config = options.read();
       const state = usageState(config, now());
       if (!state.enabled) return;
-      const turn = parsed.data.event === 'agent_turn_finished' && parsed.data.turn_id ? turns.get(parsed.data.turn_id) : undefined;
-      if (parsed.data.event === 'agent_turn_finished' && parsed.data.turn_id) {
-        if (!turn || now() - turn.startedAt > 86400_000) return;
-        captured = turn.identity;
+      const eventTurnId = 'turn_id' in parsed.data ? parsed.data.turn_id : undefined;
+      const turn = eventTurnId ? state.turns?.find((item) => item.turnId === eventTurnId) : undefined;
+      if (parsed.data.event === 'agent_turn_finished' && eventTurnId) {
+        if (!turn) return;
+        finishTelemetryTurn(state, turn, { ...parsed.data, source: parsed.data.source ?? 'renderer' }, now());
+        save(config, state);
+        kick();
+        return true;
       }
-      // Reserve room for a link and its event; never evict an identity link
-      // while accepting later events that depend on it.
-      if ((state.queue?.length ?? 0) > QUEUE_LIMIT - 2) { kick(); return; }
+      if (parsed.data.event === 'agent_turn_started' && eventTurnId) {
+        if (turn || state.finishedTurns?.[eventTurnId] !== undefined) return;
+        if ((state.turns?.length ?? 0) >= TURN_LIMIT) return;
+      }
+      if (turn) captured = turnIdentity(turn);
+      // Reserve an identity link, the new event, and every admitted terminal.
+      const reservation = parsed.data.event === 'agent_turn_started' && eventTurnId ? 3 : 2;
+      if (turnCapacity(state) > QUEUE_LIMIT - reservation) { kick(); return; }
       const identity = synchronize(config, state);
       if (captured && captured.installationId !== identity.installationId) return;
       if (native && state.queue?.some((item) => item.uuid === native.uuid)) return true;
@@ -223,7 +236,7 @@ export function createTelemetry(options: {
             const [oldestKey, oldest] = occurrences.entries().next().value!;
             occurrences.delete(oldestKey);
             // Saved below with this event; a nested capture would be overwritten.
-            if (oldest.repeated) {
+            if (oldest.repeated && turnCapacity(state) < QUEUE_LIMIT - 3) {
               const summary = entry(oldest.identity, { ...oldest.event, occurrences: oldest.repeated });
               if (oldest.native) Object.assign(summary, { uuid: oldest.native.uuid, timestamp: oldest.native.timestamp, version: oldest.native.version, os: oldest.native.os });
               (state.queue ??= []).push(summary);
@@ -260,17 +273,72 @@ export function createTelemetry(options: {
       const queued = entry(captured ?? identity, event, turn?.sessionId ?? (currentIdentity ? state.sessionId : undefined));
       if (native) Object.assign(queued, { uuid: native.uuid, timestamp: native.timestamp, version: native.version, os: native.os });
       if (!state.queue?.some((item) => item.uuid === queued.uuid)) (state.queue ??= []).push(queued);
+      if (event.event === 'agent_turn_started' && event.turn_id) {
+        (state.turns ??= []).push({ ...identity, turnId: event.turn_id, runtime: event.runtime,
+          startedAt: queued.timestamp, observedAt: queued.timestamp, stage: 'preparing', sequence: 0,
+          version: queued.version, os: queued.os, ...(state.sessionId ? { sessionId: state.sessionId } : {}) });
+      }
       save(config, state);
       if (event.event === 'agent_turn_started' && event.turn_id) {
-        if (turns.size >= 100) turns.delete(turns.keys().next().value!);
-        turns.set(event.turn_id, { identity, startedAt: now(), sessionId: state.sessionId });
+        const early = earlyTurns.get(event.turn_id);
+        earlyTurns.delete(event.turn_id);
+        if (early && now() - early.at < 120_000) {
+          for (const observation of early.observations) observeTurn(event.turn_id, observation);
+        }
       }
-      if (event.event === 'agent_turn_finished' && event.turn_id) turns.delete(event.turn_id);
       if (event.event === 'app_opened') opened = true;
       count++;
       kick();
       return true;
     } catch { /* Unavailable persistence fails closed without affecting work. */ }
+  };
+  const observeTurn = (turnId: string | undefined, observation: TurnObservation) => {
+    if (!turnId || !allowed()) return;
+    try {
+      const config = options.read();
+      const state = usageState(config, now());
+      if (!state.enabled || state.finishedTurns?.[turnId] !== undefined) return;
+      const turn = state.turns?.find((item) => item.turnId === turnId);
+      if (!turn) {
+        if (!earlyTurns.has(turnId) && earlyTurns.size >= TURN_LIMIT) earlyTurns.delete(earlyTurns.keys().next().value!);
+        const early = earlyTurns.get(turnId) ?? { at: now(), observations: [] };
+        if (early.observations.length >= 32 && 'outcome' in observation) early.observations.pop();
+        if (early.observations.length < 32) early.observations.push(observation);
+        earlyTurns.set(turnId, early);
+        return;
+      }
+      if ('outcome' in observation) {
+        capture({ event: 'agent_turn_finished', runtime: turn.runtime, turn_id: turnId,
+          ...observation, source: observation.source ?? 'host' });
+        return;
+      }
+      const parsed = telemetryEventSchema.safeParse({ event: 'agent_turn_stage', runtime: turn.runtime,
+        turn_id: turnId, stage: observation.stage, sequence: turn.sequence + 1,
+        ...(observation.context ? { context: boundedDiagnosticContext(observation.context) } : {}) });
+      if (!parsed.success || parsed.data.event !== 'agent_turn_stage') return;
+      const context = parsed.data.context;
+      // Stream deltas never write disk. A new model call may repeat the stage.
+      if (turn.stage === observation.stage && !context?.call_id) return;
+      turn.stage = observation.stage;
+      turn.observedAt = new Date(now()).toISOString();
+      turn.sequence++;
+      if (context) turn.context = { ...turn.context, ...sanitizeContext(context) };
+      save(config, state);
+      capture(parsed.data, turnIdentity(turn));
+    } catch { /* Diagnostics never block execution, including a full/unwritable disk. */ }
+  };
+  const retireTurns = (reason: 'host_restarted' | 'app_shutdown' | 'host_shutdown' | 'app_update') => {
+    if (!allowed()) return;
+    try {
+      const config = options.read();
+      const state = usageState(config, now());
+      if (!state.enabled || !state.turns?.length) return;
+      for (const turn of [...state.turns]) finishTelemetryTurn(state, turn, {
+        event: 'agent_turn_finished', runtime: turn.runtime, outcome: 'interrupted', reason,
+        source: reason === 'host_restarted' ? 'recovery' : 'host',
+      }, now());
+      save(config, state);
+    } catch { /* Leave the durable records for another healthy launch. */ }
   };
   const drainNative = () => {
     if (collectionStopped) { options.native?.clear(); return; }
@@ -279,8 +347,10 @@ export function createTelemetry(options: {
   };
   const nativeTimer = options.native && options.available ? setInterval(drainNative, 5000) : undefined;
   nativeTimer?.unref();
+  retireTurns('host_restarted');
   return {
     preferences,
+    observeTurn,
     capture(input: TelemetryEvent) { capture(input); },
     /** Capture before asynchronous host work to keep its terminal outcome on
      * the initiating account even if another window signs out or switches. */
@@ -291,7 +361,7 @@ export function createTelemetry(options: {
         if (!allowed()) return (_event: TelemetryEvent) => {};
         const config = options.read();
         const state = usageState(config, now());
-        if (!state.enabled || (state.queue?.length ?? 0) >= QUEUE_LIMIT) return (_event: TelemetryEvent) => {};
+        if (!state.enabled || turnCapacity(state) >= QUEUE_LIMIT - 1) return (_event: TelemetryEvent) => {};
         const identity = synchronize(config, state);
         save(config, state);
         kick();
@@ -305,7 +375,7 @@ export function createTelemetry(options: {
         if (!allowed()) return;
         const config = options.read();
         const state = usageState(config, now());
-        if (!state.enabled || (state.queue?.length ?? 0) >= QUEUE_LIMIT) return;
+        if (!state.enabled || turnCapacity(state) >= QUEUE_LIMIT - 1) return;
         synchronize(config, state);
         save(config, state);
         kick();
@@ -333,7 +403,8 @@ export function createTelemetry(options: {
     },
     flush,
     /** Counted repeats are queued durably and delivered after the next launch. */
-    close() {
+    close(reason?: 'app_shutdown' | 'host_shutdown' | 'app_update') {
+      if (reason) retireTurns(reason);
       drainNative();
       try { releaseOccurrences(true); } catch { /* Shutdown never depends on analytics. */ }
       clearInterval(nativeTimer);

@@ -1,6 +1,7 @@
 import type { ErrorReporter } from '@/shared/runtime/error-reporting';
 export interface HttpRequest {
   body?: unknown;
+  telemetryTurnId?: string;
   method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   signal?: AbortSignal;
@@ -28,8 +29,10 @@ export function createHttpClient(
   const baseUrl = new URL(serverOrigin);
   return {
     ...(reportError ? { reportError } : {}),
-    async request({ body, method = 'GET', path, signal }) {
+    async request({ body, method = 'GET', path, signal, telemetryTurnId }) {
       const headers = new Headers({ accept: 'application/json' });
+      if (telemetryTurnId) headers.set('x-stashbase-agent-turn-id', telemetryTurnId);
+      const correlation = telemetryTurnId ? { turn_id: telemetryTurnId } : {};
       const init: RequestInit = { headers, method, ...(signal ? { signal } : {}) };
       if (body !== undefined) {
         headers.set('content-type', 'application/json');
@@ -40,7 +43,11 @@ export function createHttpClient(
         response = await fetchRequest(new URL(path, baseUrl), init);
       } catch (error) {
         if (!signal?.aborted || signal.reason?.name === 'TimeoutError')
-          reportError?.(error, 'http-transport', { method, route: path.split('?')[0] ?? path });
+          reportError?.(error, 'http-transport', {
+            ...correlation,
+            method,
+            route: path.split('?')[0] ?? path,
+          });
         throw error;
       }
       let responseBody: unknown = null;
@@ -59,7 +66,7 @@ export function createHttpClient(
               content_type: response.headers.get('content-type') ?? undefined,
             }),
             'http-response',
-            { method, route: path.split('?')[0] ?? path },
+            { ...correlation, method, route: path.split('?')[0] ?? path },
           );
           if (signal?.aborted) throw signal.reason;
         }

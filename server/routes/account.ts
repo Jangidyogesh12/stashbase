@@ -101,6 +101,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await fetchHostedAgentAllowance());
     } catch (error: unknown) {
+      res.locals.diagnosticError = error;
       res.status(502).json({ error: errorMessage(error) });
     }
   });

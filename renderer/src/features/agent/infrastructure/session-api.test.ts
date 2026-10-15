@@ -70,6 +70,7 @@ describe('Agent session API', () => {
       agent: 'codex',
       effort: 'high',
       folder: '/Notes & Plans',
+      telemetryConnectionId: expect.any(String),
       model: 'gpt-codex',
     });
     expect(url.searchParams.has('windowId')).toBe(false);
@@ -386,4 +387,51 @@ describe('Agent session API', () => {
       }),
     ]);
   });
+});
+
+it('joins a disconnect to the new turn after an earlier server error on the same connection', () => {
+  let message: (event: { data: unknown }) => void = vi.fn();
+  let closed: (event?: Pick<CloseEvent, 'code' | 'reason' | 'wasClean'>) => void = vi.fn();
+  let opened = '';
+  const reportError = vi.fn();
+  const socket = {
+    readyState: 1,
+    addEventListener(type: string, callback: typeof message | typeof closed) {
+      if (type === 'message') message = callback as typeof message;
+      if (type === 'close') closed = callback as typeof closed;
+    },
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+    send: vi.fn(),
+  };
+  const connection = createAgentSessionAdapter(
+    { ...httpClient(), reportError },
+    'http://localhost',
+    (url) => {
+      opened = url;
+      return socket;
+    },
+  ).connect(
+    { agent: 'stashbase', scope: { kind: 'folder', path: '/project' } },
+    {
+      onClose: vi.fn(),
+      onEvent: vi.fn(),
+      onInvalidResponse: vi.fn(),
+    },
+  );
+  const first = crypto.randomUUID();
+  const second = crypto.randomUUID();
+  connection.send?.({ kind: 'prompt', text: 'First', skill: null, telemetryTurnId: first });
+  message({ data: JSON.stringify({ t: 'error', message: 'First failed' }) });
+  message({ data: JSON.stringify({ t: 'turn-end', isError: true }) });
+  connection.send?.({ kind: 'prompt', text: 'Second', skill: null, telemetryTurnId: second });
+  closed({ code: 1006, reason: '', wasClean: false });
+  expect(reportError).toHaveBeenCalledWith(expect.any(Error), 'agent-connection', {
+    turn_id: second,
+    connection_id: new URL(opened).searchParams.get('telemetryConnectionId'),
+    close_code: 1006,
+    was_clean: false,
+    close_initiator: 'unknown',
+  });
+  expect(JSON.stringify(reportError.mock.calls)).not.toContain(first);
 });

@@ -226,11 +226,16 @@ function history(path: string, signal: AbortSignal): TransportRequest {
   };
 }
 
-function socketUrl(serverOrigin: string, request: AgentConnectRequest): string {
+function socketUrl(
+  serverOrigin: string,
+  request: AgentConnectRequest,
+  connectionId: string,
+): string {
   const url = new URL('/ws/agent', serverOrigin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   const wire = agentSessionConnectSchema.parse({
     agent: request.agent,
+    telemetryConnectionId: connectionId,
     access: ACCESS_MODE_WIRE[request.access ?? 'auto'],
     effort: request.effort,
     model: request.model,
@@ -252,9 +257,19 @@ export function createAgentSessionAdapter(
 ): AgentSessionPort {
   return {
     connect(request, listener: AgentConnectionListener) {
-      const connectionError = (message: string) =>
-        client.reportError?.(new Error(message), 'agent-connection');
-      const socket = createSocket(socketUrl(serverOrigin, request));
+      const connectionId = crypto.randomUUID();
+      let activeTurnId: string | undefined;
+      const connectionError = (message: string, close?: Pick<CloseEvent, 'code' | 'wasClean'>) =>
+        client.reportError?.(new Error(message), 'agent-connection', {
+          connection_id: connectionId,
+          ...((listener.telemetryTurnId?.() ?? activeTurnId)
+            ? { turn_id: listener.telemetryTurnId?.() ?? activeTurnId }
+            : {}),
+          ...(close
+            ? { close_code: close.code, was_clean: close.wasClean, close_initiator: 'unknown' }
+            : {}),
+        });
+      const socket = createSocket(socketUrl(serverOrigin, request, connectionId));
       let settledByServer = false;
       const onMessage = (message: { data: unknown }) => {
         if (typeof message.data !== 'string') {
@@ -266,6 +281,7 @@ export function createAgentSessionAdapter(
         try {
           const wire = agentServerEventSchema.parse(JSON.parse(message.data));
           if (wire.t === 'exit' || wire.t === 'error') settledByServer = true;
+          if (wire.t === 'turn-end') activeTurnId = undefined;
           event = sessionEvent(wire);
         } catch {
           connectionError('Agent returned an invalid frame.');
@@ -280,6 +296,7 @@ export function createAgentSessionAdapter(
         if (!settledByServer)
           connectionError(
             `Agent connection closed unexpectedly (code ${event?.code ?? 'unknown'}, clean ${event?.wasClean ?? false}): ${event?.reason ?? ''}`,
+            event,
           );
         listener.onClose();
       };
@@ -290,6 +307,10 @@ export function createAgentSessionAdapter(
           if (socket.readyState !== SOCKET_OPEN) return false;
           try {
             socket.send(JSON.stringify(agentClientEventSchema.parse(clientEvent(command))));
+            if (command.kind === 'prompt') {
+              settledByServer = false;
+              activeTurnId = command.telemetryTurnId;
+            }
             return true;
           } catch {
             // A refused frame tells the runtime to reconnect and

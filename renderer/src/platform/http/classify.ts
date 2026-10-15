@@ -53,6 +53,7 @@ export interface TransportOptions<Extra extends string = never> {
 }
 
 export interface TransportRequest<Extra extends string = never> extends TransportOptions<Extra> {
+  readonly telemetryTurnId?: string;
   readonly body?: unknown;
   readonly method?: HttpRequest['method'] | undefined;
   readonly path: string;
@@ -142,10 +143,11 @@ export async function send<Extra extends string = never>(
   client: HttpClient,
   options: TransportRequest<Extra>,
 ): Promise<HttpResponse> {
-  const { body, method, path, signal } = options;
+  const { body, method, path, signal, telemetryTurnId } = options;
   let response: HttpResponse;
   try {
     response = await client.request({
+      ...(telemetryTurnId ? { telemetryTurnId } : {}),
       ...(body === undefined ? {} : { body }),
       ...(method === undefined ? {} : { method }),
       path,

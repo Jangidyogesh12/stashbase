@@ -1157,7 +1157,8 @@ app.on('will-quit', (event) => {
   quitting = true;
   void requestJson(SERVER_PORT, '/api/internal/shutdown', 1500, {
     method: 'POST',
-    headers: { 'x-stashbase-shutdown-token': SERVER_SHUTDOWN_TOKEN },
+    headers: { 'x-stashbase-shutdown-token': SERVER_SHUTDOWN_TOKEN,
+      'x-stashbase-shutdown-reason': desktopUpdates.getState().phase === 'installing' ? 'app_update' : 'app_shutdown' },
   }).then((result) => {
     if (result.reachable && result.statusCode === 202) return;
     // POSIX receives this gracefully; Windows uses it only after the explicit

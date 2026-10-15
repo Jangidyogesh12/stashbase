@@ -1,3 +1,4 @@
+import { agentProcessExitDiagnostic } from './agent-process.ts';
 /**
  * App-scoped owner of the pinned OpenCode headless server.
  *
@@ -477,10 +478,11 @@ class OpenCodeRuntime {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
+    const exitDiagnostic = agentProcessExitDiagnostic(child);
     this.startingProcess = child;
 
     try {
-      const url = await waitForServer(child, port);
+      const url = await waitForOpenCodeServer(child, port, exitDiagnostic);
       if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
       this.startingProcess = null;
       const running = { process: child, url, authorization };
@@ -489,7 +491,7 @@ class OpenCodeRuntime {
         if (this.running?.process !== child) return;
         this.running = null;
         const reason = code ?? signal ?? 'unknown';
-        const error = new Error(`The included Agent runtime exited unexpectedly (${reason}).`);
+        const error = exitDiagnostic(`The included Agent runtime exited unexpectedly (${reason}).`, code, signal);
         log.warn(error.message);
         for (const listener of this.exitListeners) listener(error);
       });
@@ -506,7 +508,11 @@ function cryptoRandomSecret(): string {
   return crypto.randomBytes(32).toString('base64url');
 }
 
-function waitForServer(child: ChildProcessByStdio<null, Readable, Readable>, expectedPort: number): Promise<string> {
+export function waitForOpenCodeServer(
+  child: ChildProcessByStdio<null, Readable, Readable>,
+  expectedPort: number,
+  exitDiagnostic: ReturnType<typeof agentProcessExitDiagnostic>,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let output = '';
     let settled = false;
@@ -531,7 +537,9 @@ function waitForServer(child: ChildProcessByStdio<null, Readable, Readable>, exp
     child.stdout.on('data', inspect);
     child.stderr.on('data', inspect);
     child.once('error', (error) => finish(error));
-    child.once('exit', (code) => finish(new Error(`OpenCode exited during startup (${code}). ${output.trim()}`)));
+    child.once('exit', (code, signal) => finish(exitDiagnostic(
+      `OpenCode exited during startup (${code ?? signal ?? 'unknown'}). ${output.trim()}`, code, signal,
+    )));
     const timeout = setTimeout(() => {
       finish(new Error(`OpenCode did not start within ${START_TIMEOUT_MS}ms. ${output.trim()}`));
     }, START_TIMEOUT_MS);

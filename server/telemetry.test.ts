@@ -131,7 +131,7 @@ test('default-on manual collection has only allowed fields and no source or acco
   f.service.capture({ event: 'project_entry_result', outcome: 'success', path: '/private' } as any);
   await tick();
   assert.equal(f.sent.length, 1);
-  assert.equal(f.sent[0].body.properties.schema_version, 4);
+  assert.equal(f.sent[0].body.properties.schema_version, 5);
   assert.equal(f.sent[0].body.properties.$process_person_profile, false);
   assert.equal(f.sent[0].body.properties.$geoip_disable, true);
   assert.equal(f.sent[0].body.properties.$ip, null);
@@ -634,4 +634,202 @@ test('oversized operation context cannot discard an otherwise actionable diagnos
   assert.ok(f.sent[0].body.properties.context.route.length <= 500);
   assert.match(f.sent[0].body.properties.context.route, /image.png$/);
   f.service.close();
+});
+
+
+test('turn recovery retains the originating identity/version and never invents a completion time', async () => {
+  const f = fixture();
+  const turn_id = crypto.randomUUID();
+  account(f, 'A');
+  f.service.capture({ event: 'agent_turn_started', runtime: 'stashbase', turn_id });
+  f.advance(5000);
+  f.service.observeTurn(turn_id, { stage: 'runtime_dispatched' });
+  await f.service.flush();
+  const pending = f.config().telemetry!.turns![0];
+  f.service.close(); // No observed shutdown: simulate losing the host.
+  account(f, 'B');
+  f.advance(60_000);
+  const recovered = createTelemetry({ ...f.options, version: 'next-version' });
+  await recovered.flush();
+  const result = f.sent.find(({ body }) => body.event === 'agent_turn_finished')!.body;
+  assert.equal(result.distinct_id, 'user:A');
+  assert.equal(result.properties.app_version, '2.7.0');
+  assert.equal(result.properties.last_observed_at, pending.observedAt);
+  assert.equal(result.properties.outcome, 'interrupted');
+  assert.equal(result.properties.reason, 'host_restarted');
+  assert.ok(result.properties.recovered_at);
+  assert.equal(result.properties.finished_at, undefined);
+  assert.equal(result.properties.duration, undefined);
+  recovered.capture({ event: 'agent_turn_finished', turn_id, runtime: 'stashbase', outcome: 'success' });
+  recovered.capture({ event: 'agent_turn_started', turn_id, runtime: 'stashbase' });
+  await recovered.flush();
+  assert.equal(f.sent.filter(({ body }) => body.event === 'agent_turn_finished').length, 1);
+  recovered.close();
+});
+
+test('host completion wins once even when its facts race ahead of the start request', async () => {
+  const f = fixture();
+  const turn_id = crypto.randomUUID();
+  const connection_id = crypto.randomUUID();
+  f.service.observeTurn(turn_id, { stage: 'host_accepted', context: { connection_id } });
+  f.service.observeTurn(turn_id, { stage: 'runtime_dispatched' });
+  f.service.observeTurn(turn_id, { outcome: 'success', reason: 'completed' });
+  f.service.capture({ event: 'agent_turn_started', runtime: 'codex', turn_id });
+  f.service.capture({ event: 'agent_turn_finished', runtime: 'codex', turn_id, outcome: 'failed' });
+  await f.service.flush();
+  const results = f.sent.filter(({ body }) => body.event === 'agent_turn_finished');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].body.properties.outcome, 'success');
+  assert.equal(results[0].body.properties.source, 'host');
+  assert.equal(results[0].body.properties.context.connection_id, connection_id);
+  assert.equal(f.config().telemetry!.turns!.length, 0);
+  f.service.close();
+});
+
+test('an admitted turn reserves its terminal through queue saturation and diagnostic rate limiting', async () => {
+  const f = fixture();
+  const offline = createTelemetry({ ...f.options, fetch: async () => { throw new Error('offline'); } });
+  const turn_id = crypto.randomUUID();
+  offline.capture({ event: 'agent_turn_started', runtime: 'stashbase', turn_id });
+  for (let minute = 0; minute < 6; minute++) {
+    f.advance(60_000);
+    for (let i = 0; i < 125; i++) offline.capture({ event: 'project_entry_result', outcome: 'success' });
+  }
+  offline.observeTurn(turn_id, { stage: 'tool_running' });
+  offline.observeTurn(turn_id, { outcome: 'failed', reason: 'runtime_error' });
+  offline.capture({ event: 'agent_turn_finished', runtime: 'stashbase', turn_id, outcome: 'success' });
+  const queued = f.config().telemetry!.queue!;
+  assert.ok(queued.length <= 500);
+  const terminal = queued.filter(({ event }) => event.event === 'agent_turn_finished');
+  assert.equal(terminal.length, 1);
+  assert.equal((terminal[0].event as any).last_stage, 'tool_running');
+  assert.equal(terminal[0].uuid, turn_id);
+  offline.close();
+  f.service.close();
+});
+
+test('opt-out clears pending and early turn facts and re-enable cannot backfill them', async () => {
+  const f = fixture();
+  const turn_id = crypto.randomUUID();
+  f.service.capture({ event: 'agent_turn_started', runtime: 'claude', turn_id });
+  f.service.observeTurn(crypto.randomUUID(), { outcome: 'success', reason: 'completed' });
+  f.service.update({ enabled: false });
+  assert.deepEqual(f.config().telemetry, { enabled: false });
+  f.service.update({ enabled: true });
+  f.service.observeTurn(turn_id, { outcome: 'success', reason: 'completed' });
+  f.service.close('app_shutdown');
+  const recovered = createTelemetry(f.options);
+  await recovered.flush();
+  assert.equal(f.sent.some(({ body }) => body.event === 'agent_turn_finished'), false);
+  recovered.close();
+});
+
+test('an observed update shutdown is distinct from crash recovery and survives offline restart', async () => {
+  const f = fixture();
+  const offline = createTelemetry({ ...f.options, fetch: async () => { throw new Error('offline'); } });
+  offline.capture({ event: 'agent_turn_started', runtime: 'stashbase', turn_id: crypto.randomUUID() });
+  offline.close('app_update');
+  const queued = structuredClone(f.config().telemetry!.queue!.at(-1)!);
+  const recovered = createTelemetry(f.options);
+  await recovered.flush();
+  const terminal = f.sent.find(({ body }) => body.event === 'agent_turn_finished')!.body;
+  assert.equal(terminal.properties.reason, 'app_update');
+  assert.equal(terminal.properties.source, 'host');
+  assert.equal(terminal.properties.recovered_at, undefined);
+  assert.equal(terminal.uuid, queued.uuid);
+  assert.equal(terminal.timestamp, queued.timestamp);
+  recovered.close(); f.service.close();
+});
+
+
+test('runtime exit and socket loss settle independently of the renderer with bounded process evidence', async (t) => {
+  const { EventEmitter } = await import('node:events');
+  const { spawn } = await import('node:child_process');
+  const { agentProcessExitDiagnostic } = await import('./agent-process.ts');
+  const { telemetry } = await import('./telemetry.ts');
+  const { attachAgentDiagnostics, beginAgentDiagnosticTurn, reportAgentRuntimeError } = await import('./error-reporting.ts');
+  const f = fixture();
+  t.mock.method(telemetry, 'scoped', () => f.service.scoped());
+  t.mock.method(telemetry, 'observeTurn', f.service.observeTurn);
+  const connection = new EventEmitter();
+  const turn_id = crypto.randomUUID();
+  f.service.capture({ event: 'agent_turn_started', runtime: 'stashbase', turn_id });
+  attachAgentDiagnostics(connection as any, 'stashbase', crypto.randomUUID());
+  beginAgentDiagnosticTurn(connection, turn_id);
+  const child = spawn(process.execPath, ['-e', "process.stderr.write('native failure token=secret-value'); process.exitCode = 7"]);
+  const diagnostic = agentProcessExitDiagnostic(child);
+  const [code, signal] = await new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.once('close', (code, signal) => resolve([code, signal])));
+  reportAgentRuntimeError('stashbase', { t: 'error', message: 'Runtime exited' }, connection, diagnostic('Runtime exited', code, signal));
+  connection.emit('close', 1006);
+  await f.service.flush();
+  const terminal = f.sent.filter(({ body }) => body.event === 'agent_turn_finished');
+  assert.equal(terminal.length, 1);
+  assert.equal(terminal[0].body.properties.outcome, 'failed');
+  const failure = f.sent.find(({ body }) => body.event === 'application_error')!.body;
+  assert.equal(failure.properties.turn_id, turn_id);
+  assert.equal(failure.properties.diagnostic.causes[0].exit_code, 7);
+  assert.match(failure.properties.diagnostic.causes[0].stderr, /native failure/);
+  assert.doesNotMatch(JSON.stringify(f.sent), /secret-value/);
+  const second = new EventEmitter();
+  const secondId = crypto.randomUUID();
+  f.service.capture({ event: 'agent_turn_started', runtime: 'stashbase', turn_id: secondId });
+  attachAgentDiagnostics(second as any, 'stashbase');
+  beginAgentDiagnosticTurn(second, secondId);
+  second.emit('close', 1006);
+  await f.service.flush();
+  assert.equal(f.sent.find(({ body }) => body.event === 'agent_turn_finished' && body.properties.turn_id === secondId)!.body.properties.outcome, 'interrupted');
+  f.service.close();
+});
+
+test('tool failure can recover and interrupt acknowledgement remains cancellation', async (t) => {
+  const { EventEmitter } = await import('node:events');
+  const { telemetry } = await import('./telemetry.ts');
+  const { attachAgentDiagnostics, beginAgentDiagnosticTurn, reportAgentRuntimeError } = await import('./error-reporting.ts');
+  const f = fixture();
+  t.mock.method(telemetry, 'scoped', () => f.service.scoped());
+  t.mock.method(telemetry, 'observeTurn', f.service.observeTurn);
+  const connection = new EventEmitter();
+  attachAgentDiagnostics(connection as any, 'claude');
+  const start = () => {
+    const id = crypto.randomUUID();
+    f.service.capture({ event: 'agent_turn_started', runtime: 'claude', turn_id: id });
+    beginAgentDiagnosticTurn(connection, id);
+    return id;
+  };
+  const first = start();
+  reportAgentRuntimeError('claude', { t: 'tool', id: 'tool-1', name: 'Read', input: { private: 'PRIVATE INPUT' } }, connection);
+  reportAgentRuntimeError('claude', { t: 'tool-result', id: 'tool-1', content: 'PRIVATE OUTPUT', isError: true }, connection);
+  reportAgentRuntimeError('claude', { t: 'turn-end', isError: false }, connection);
+  const second = start();
+  connection.emit('message', Buffer.from('{"t":"interrupt"}'));
+  reportAgentRuntimeError('claude', { t: 'turn-end', isError: false }, connection);
+  await f.service.flush();
+  const outcomes = f.sent.filter(({ body }) => body.event === 'agent_turn_finished');
+  assert.deepEqual(outcomes.map(({ body }) => [body.properties.turn_id, body.properties.outcome]), [[first, 'success'], [second, 'cancelled']]);
+  assert.equal(f.sent.find(({ body }) => body.properties.operation === 'tool')!.body.properties.context.tool_category, 'read');
+  assert.doesNotMatch(JSON.stringify(f.sent), /PRIVATE/);
+  f.service.close();
+});
+
+
+test('a refused context request carries only its explicitly supplied turn ID', async () => {
+  const { httpErrorReporting } = await import('./error-reporting.ts');
+  const f = fixture();
+  const app = express(); app.use(httpErrorReporting(f.service));
+  app.get('/api/project/agent-context-file', (_req, res) => res.status(415).json({ error: 'unsupported format' }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>(resolve => server.once('listening', resolve));
+  const address = server.address(); assert.ok(address && typeof address === 'object');
+  const id = crypto.randomUUID();
+  try {
+    const url = `http://127.0.0.1:${address.port}/api/project/agent-context-file`;
+    await fetch(url, { headers: { 'x-stashbase-agent-turn-id': id } });
+    await fetch(url);
+    await f.service.flush();
+    const failures = f.sent.filter(({ body }) => body.event === 'application_warning');
+    assert.equal(failures.length, 2);
+    assert.equal(failures[0].body.properties.turn_id, id);
+    assert.equal(failures[1].body.properties.turn_id, undefined);
+    assert.equal(failures[0].body.properties.diagnostic.http_status, 415);
+  } finally { f.service.close(); server.closeAllConnections(); server.close(); }
 });

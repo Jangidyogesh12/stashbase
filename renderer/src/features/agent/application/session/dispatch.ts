@@ -57,6 +57,7 @@ export function unavailableContextPort(): AgentContextPort {
 }
 
 export interface AgentPromptDispatcherOptions {
+  telemetryTurnId?(): string | undefined;
   contextPort: AgentContextPort;
   disposed(): boolean;
   environment(): AgentSessionEnvironment | null;
@@ -79,6 +80,7 @@ export interface AgentPromptDispatcher {
 }
 
 export function createPromptDispatcher({
+  telemetryTurnId,
   contextPort,
   disposed,
   environment,
@@ -103,7 +105,10 @@ export function createPromptDispatcher({
     const results = await Promise.allSettled(
       context.map(async (item): Promise<ResolvedContextLine> => {
         if (item.kind !== 'source') return { item, resolved: null };
-        return { item, resolved: await contextPort.resolve(item.source, signal) };
+        return {
+          item,
+          resolved: await contextPort.resolve(item.source, signal, telemetryTurnId?.()),
+        };
       }),
     );
     const lines: ResolvedContextLine[] = [];

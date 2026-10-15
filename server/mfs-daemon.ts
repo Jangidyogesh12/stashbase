@@ -28,6 +28,7 @@ import { filesystemPath } from './filesystem-path.ts';
 import { isDevelopmentRuntime } from './development-runtime.ts';
 import { nativeComponentUnavailable } from './native-component-support.ts';
 import type { EmbedderProvider } from '../shared/embedding.ts';
+import { diagnosticText } from '../shared/protocols/diagnostics.ts';
 
 const log = logger('mfs');
 
@@ -265,8 +266,11 @@ export class MfsDaemon extends EventEmitter {
       const lines = readline.createInterface({ input: proc.stdout });
       lines.on('line', (line) => this.onLine(line, onReady));
 
+      let stderr = '';
       proc.stderr.on('data', (chunk: Buffer) => {
-        process.stderr.write(`[mfs/py] ${chunk.toString()}`);
+        const text = chunk.toString();
+        stderr = (stderr + text).slice(-8_000);
+        process.stderr.write(`[mfs/py] ${text}`);
       });
 
       proc.on('error', (err) => {
@@ -280,7 +284,11 @@ export class MfsDaemon extends EventEmitter {
         clearTimeout(readyTimer);
         const err = Object.assign(new Error(
           `MFS daemon exited (code=${code}, signal=${signal ?? 'null'})`,
-        ), code === null ? {} : { exitCode: code });
+        ), {
+          ...(code === null ? {} : { exitCode: code }),
+          ...(signal === null ? {} : { signal }),
+          ...(stderr ? { stderr: diagnosticText(stderr) } : {}),
+        });
         // close() detaches its child first; only an exit nobody asked for is a warning.
         if (this.proc === proc) log.warn(err);
         else log.info(err.message);

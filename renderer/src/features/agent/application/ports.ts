@@ -117,6 +117,7 @@ export interface AgentSocket {
 }
 
 export interface AgentConnectionListener {
+  telemetryTurnId?(): string | undefined;
   onEvent(event: AgentSessionEvent): void;
   onClose(): void;
   onInvalidResponse(): void;
@@ -169,7 +170,11 @@ export interface AgentUploadOutcome {
 export interface AgentContextPort {
   /** Resolves one project source to what the Agent should read. A missing
    *  file is `not-found`; a format the Agent cannot read is `unsupported`. */
-  resolve(source: SourceReference, signal: AbortSignal): Promise<ResolvedContextFile>;
+  resolve(
+    source: SourceReference,
+    signal: AbortSignal,
+    telemetryTurnId?: string,
+  ): Promise<ResolvedContextFile>;
   /** Uploads transient files outside every project folder; outcomes follow
    *  request order. */
   upload(files: File[], signal: AbortSignal, folderPath: string): Promise<AgentUploadOutcome[]>;

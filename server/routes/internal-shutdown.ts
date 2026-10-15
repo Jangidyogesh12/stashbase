@@ -3,7 +3,7 @@ import { processPrivateTokenMatches } from '../process-private-token.ts';
 
 interface InternalShutdownOptions {
   token: string;
-  shutdown: () => void;
+  shutdown: (reason: 'app_shutdown' | 'app_update') => void;
 }
 
 /** Process-private graceful-shutdown handshake for the Electron owner.
@@ -18,6 +18,7 @@ export function mountInternalShutdownRoute(
       return res.status(403).json({ error: 'forbidden' });
     }
     res.status(202).json({ ok: true });
-    setImmediate(shutdown);
+    const reason = req.header('x-stashbase-shutdown-reason') === 'app_update' ? 'app_update' : 'app_shutdown';
+    setImmediate(() => shutdown(reason));
   });
 }

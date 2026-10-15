@@ -1,4 +1,4 @@
-import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 /**
  * Structured-agent sidecar. Where `terminal.ts` bridges a raw PTY to an
  * xterm, this bridges the **Claude Agent SDK** to a WebSocket as a
@@ -782,6 +782,7 @@ export class AgentSession implements AttributedAgentSession {
         this.turnGeneration += 1;
         this.interruptRequested = false;
         this.send({ t: 'turn-start' });
+        agentDiagnosticStage(this.ws, 'runtime_dispatched');
         this.enqueuePrompt(body, skill);
         break;
       }

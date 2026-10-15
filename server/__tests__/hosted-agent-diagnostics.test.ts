@@ -1,3 +1,4 @@
+import './isolated-home.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { HostedAgentRequestDiagnostic } from '../hosted-agent-diagnostics.ts';
@@ -30,4 +31,26 @@ test('request timing distinguishes response headers, first bytes, and visible te
     values.input_tokens, values.output_tokens, values.cached_tokens, values.cache_write_tokens,
   ], [10, 20, 30, 50, 100, 5, 80, 20]);
   assert.doesNotMatch(JSON.stringify(snapshot), /PRIVATE/);
+});
+
+
+test('model stream failure reports at its source before a runtime can drop the explanation', async (t) => {
+  const { telemetry } = await import('../telemetry.ts');
+  const records: any[] = [];
+  const stages: any[] = [];
+  t.mock.method(telemetry, 'scoped', () => (event: unknown) => { records.push(event); });
+  t.mock.method(telemetry, 'observeTurn', (id: string | undefined, event: Parameters<typeof telemetry.observeTurn>[1]) => { stages.push({ id, event }); });
+  const turnId = crypto.randomUUID();
+  const callId = crypto.randomUUID();
+  const diagnostic = new HostedAgentRequestDiagnostic(callId, 2, { profile: 'fixture', turnId });
+  const response = diagnostic.response(new Response('data: {"error":{"message":"upstream failed","code":"OVERLOADED"}}\n\n', {
+    headers: { 'content-type': 'text/event-stream', 'x-request-id': 'upstream-42' },
+  }));
+  await response.text();
+  assert.equal(records.length, 1);
+  assert.equal(records[0].turn_id, turnId);
+  assert.equal(records[0].context.call_id, callId);
+  assert.equal(records[0].diagnostic.request_id, 'upstream-42');
+  assert.equal(records[0].diagnostic.causes[0].code, 'OVERLOADED');
+  assert.deepEqual(stages.map(({ event }) => event.stage), ['model_request_started', 'response_started']);
 });

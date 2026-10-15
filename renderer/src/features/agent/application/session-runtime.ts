@@ -159,6 +159,7 @@ export function createAgentSessionRuntime({
   };
 
   const transport = createAgentTransport({
+    telemetryTurnId: () => usage.correlation().telemetryTurnId,
     disposed: () => disposed,
     onEvent: (event) => applyAgentSessionEvent(eventContext, event),
     port,
@@ -181,6 +182,7 @@ export function createAgentSessionRuntime({
 
   const dispatcher = createPromptDispatcher({
     contextPort,
+    telemetryTurnId: () => usage.correlation().telemetryTurnId,
     disposed: () => disposed,
     environment,
     ledger,
@@ -254,17 +256,17 @@ export function createAgentSessionRuntime({
         }),
       );
       if (stale.length) {
+        usage.finish('blocked', 'context_invalid');
         transition({
           kind: 'set-context-issue',
           message: stale[0]?.reason ?? 'Review the request context before retrying.',
         });
         return false;
       }
-      const skill = turn?.skill ?? null;
       const sent = transport.send({
         kind: 'prompt',
         ...usage.correlation(),
-        skill,
+        skill: turn?.skill ?? null,
         ...attachmentFields(current.agent, turn?.context),
         text: failure.retryablePrompt,
       });
@@ -392,7 +394,6 @@ export function createAgentSessionRuntime({
       transition({ kind: 'dispose' });
     },
   };
-
   if (autostart) runtime.start();
   return runtime;
 }
