@@ -1734,6 +1734,9 @@ A real `agy --mode auto` run refused a StashBase MCP call outright, so Auto is
 StashBase's own rule set in the hook, and new Antigravity chats now start there
 instead of Edit; `antigravity-agent.test.ts` and `antigravity-setup.test.ts` cover
 its decisions and `isReadOnlyCommand`, but no driven pass has run it.
+Attachments now reach Antigravity as the prompt's `Attached files:` paths, as for
+Claude and Codex: given an image path, a real headless `agy` read and described
+the image itself, and replay restores the cards (`antigravity-agent.test.ts`).
 Not proven: no StashBase chat has run on a real `agy`, so the hook's payload and
 its running in a StashBase-launched stream-json process, stdio MCP startup there,
 and pseudo-terminal sign-in remain unexercised. Windows sign-in, the Windows

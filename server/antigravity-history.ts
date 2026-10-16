@@ -15,12 +15,13 @@ import { writeFileAtomic } from './atomic-write.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { appDataRoot } from './local-data.ts';
 import type { AgentHistoryActions } from './agent-contract.ts';
+import { restoreHistoryAttachments, type RestoredAttachment } from './agent-history-attachments.ts';
 import { logger } from './log.ts';
 
 const log = logger('antigravity-history');
 
 export type AntigravityHistoryBlock =
-  | { kind: 'user'; id: string; text: string; at?: number }
+  | { kind: 'user'; id: string; text: string; attachments?: RestoredAttachment[]; at?: number }
   | { kind: 'assistant'; id: string; text: string; at?: number }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
 
@@ -118,6 +119,19 @@ function bounded(block: AntigravityHistoryBlock): AntigravityHistoryBlock {
   return { ...block, input, ...(result !== undefined ? { result } : {}) };
 }
 
+/** The record keeps each prompt as sent; replay lifts its `Attached files:`
+ * and `Selected passages:` blocks back into cards, as the other runtimes'
+ * history does, so a preview link is minted at read time. */
+function replayBlocks(blocks: readonly AntigravityHistoryBlock[]): AntigravityHistoryBlock[] {
+  return blocks.map((block) => {
+    if (block.kind !== 'user') return block;
+    const restored = restoreHistoryAttachments(block.text);
+    return restored.attachments.length
+      ? { ...block, text: restored.text, attachments: restored.attachments }
+      : block;
+  });
+}
+
 /** Writes to one conversation apply in order; different conversations do
  * not wait for each other. */
 const writes = new Map<string, Promise<void>>();
@@ -180,10 +194,10 @@ export function createAntigravityHistoryStore(directoryOverride?: string): Antig
             .sort((a, b) => b.lastModified - a.lastModified);
         },
         async messages(id, folder) {
-          return scoped(id, folder).blocks;
+          return replayBlocks(scoped(id, folder).blocks);
         },
         async replay(id, folder) {
-          return { protocol: 2, messages: scoped(id, folder).blocks, effort: null };
+          return { protocol: 2, messages: replayBlocks(scoped(id, folder).blocks), effort: null };
         },
         async rename(id, title, folder) {
           scoped(id, folder);

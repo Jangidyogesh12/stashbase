@@ -59,8 +59,10 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     id: 'antigravity', label: 'Antigravity', vendor: 'Google',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
-      // Headless `agy` reads only text messages; attached files are not sent.
-      attachments: false,
+      // Headless `agy` takes text messages only, so attachments travel as the
+      // paths in the prompt's `Attached files:` block, which it reads with its
+      // own tools, as Claude and Codex do.
+      attachments: true,
       modes: ANTIGRAVITY_ACCESS_MODES,
       // Antigravity discovers the project's skills itself and offers no
       // listing to invoke one by name.

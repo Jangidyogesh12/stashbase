@@ -74,7 +74,8 @@ permissions, with current model and tool choices checked before use.
   shown by the command line itself, plus web searches and page reads whose
   address carries no query. Plan refuses changes. Anything else shows the same
   approval card the other runtimes use, and an unanswered card never becomes a
-  grant. Antigravity accepts text only, so its composer offers no attachments.
+  grant. Antigravity's messages carry text only, so attachments reach it as
+  file paths it reads with its own tools, as they do for Claude and Codex.
 - A runtime that advertises attachments accepts ordinary local files through the
   picker, drop, or paste. Images and PDFs may have visual previews; other files
   remain named file cards. Attachment acceptance does not promise that every

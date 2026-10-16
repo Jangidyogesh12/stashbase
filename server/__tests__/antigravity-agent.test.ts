@@ -154,6 +154,13 @@ test('a turn runs agy in stream-json mode with the chat\'s choices and records w
     ['user', 'Outline the essay'], ['assistant', 'Looking.'], ['tool', 'Bash'], ['assistant', ' Done.'],
   ]);
   await assert.rejects(actions.messages('conv-1', path.join(h.folder, '..')), /not found/, 'another project cannot read the chat');
+  // Attachments travel as the prompt's `Attached files:` paths and come back as cards.
+  await h.history.appendTurn('conv-2', h.folder, [
+    { kind: 'user', id: 'u2', text: `Summarize this\n\nAttached files:\n- ${path.join(h.folder, 'notes.md')}` },
+  ], 'Summarize this');
+  const [restored] = await actions.messages('conv-2', h.folder) as Array<Record<string, unknown>>;
+  assert.equal(restored?.text, 'Summarize this');
+  assert.deepEqual(restored?.attachments, [{ path: path.join(h.folder, 'notes.md'), name: 'notes.md' }]);
 
   // The next turn reuses the process; a model change restarts it on the same conversation.
   h.ws.client({ t: 'prompt', text: 'Again' });
