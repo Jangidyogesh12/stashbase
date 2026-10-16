@@ -142,6 +142,12 @@ test('Antigravity setup adds StashBase beside the reader\'s own MCP servers and 
   assert.throws(() => ensureAgentMcp('antigravity'), /leaving it untouched/);
   assert.equal(fs.readFileSync(hooks, 'utf8'), '{ "guard": ');
 
+  // An empty file left by an earlier install holds nothing to keep; a BOM is not content.
+  fs.writeFileSync(mcp, '');
+  fs.writeFileSync(hooks, '\uFEFF{"guard":' + JSON.stringify(ownHook) + '}');
+  ensureAgentMcp('antigravity');
+  assert.match(JSON.parse(fs.readFileSync(mcp, 'utf8')).mcpServers.stashbase.command, /stashbase-mcp/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(hooks, 'utf8')).guard, ownHook);
   fs.rmSync(config, { recursive: true, force: true });
 });
 

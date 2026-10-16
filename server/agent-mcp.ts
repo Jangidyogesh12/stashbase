@@ -150,7 +150,11 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
 function readJsonObject(file: string): Record<string, unknown> | null {
   if (!fs.existsSync(file)) return {};
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // An empty file holds no settings to keep (Antigravity's installers leave
+    // one behind), and editors on Windows may save a byte-order mark.
+    const text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+    if (!text.trim()) return {};
+    const parsed = JSON.parse(text);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }

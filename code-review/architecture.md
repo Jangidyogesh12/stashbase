@@ -318,7 +318,8 @@ stable status without download, retry, or a new durable demand latch.
 - Antigravity has no configuration-directory override, so its StashBase MCP and
   hook entries live in `~/.gemini/config/mcp_config.json` and
   `~/.gemini/config/hooks.json`, which its CLI, IDE, and app share. Setup replaces only the `stashbase` entry
-  in each and leaves an unparseable file untouched. The generated `PreToolUse`
+  in each and leaves an unparseable file untouched; an empty file, which an
+  earlier install can leave behind, counts as an empty configuration. The generated `PreToolUse`
   launcher (`~/.stashbase/bin/stashbase-antigravity-hook`) answers `allow` when
   no StashBase session id is in its environment, which leaves that run's own
   permission rules in charge. Inside a StashBase chat it asks the generating
