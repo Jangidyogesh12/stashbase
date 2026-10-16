@@ -66,7 +66,7 @@ proof of writing quality or user satisfaction. Agent file writes are not inferre
 from generated replies. Project entry excludes picker cancellations and acquisitions
 that never reach the open operation.
 
-Runtime values are stashbase, claude and codex. Outcomes are success, failed,
+Runtime values are stashbase, claude, codex and antigravity. Outcomes are success, failed,
 cancelled or blocked; saves use conflict. Agent turns additionally use interrupted when execution continuity was lost without a confirmed result. Durations are under 10 seconds,
 10–60 seconds, 1–5 minutes, or over 5 minutes. Diagnostic context can include
 model/runtime version, native session/connection ID, WebSocket close code/clean flag, tool call ID/category, model call ID/attempt, method and route, target
@@ -132,7 +132,7 @@ Stages are `preparing` (the initial record), `host_accepted`, `runtime_dispatche
 `model_request_started`, `response_started`, `waiting_permission`, and
 `tool_running`. Stages can repeat across model/tool calls; sequence numbers order
 observations. Response start can mean received model headers or native output,
-not a complete or useful answer. Claude/Codex expose native dispatch/output/tool
+not a complete or useful answer. Claude/Codex/Antigravity expose native dispatch/output/tool
 boundaries; only Default's owned broker exposes individual model requests.
 Stage events remain rate/capacity limited, but the pending turn's last stage is
 saved even when a stage event cannot be queued. Streamed tokens do not write

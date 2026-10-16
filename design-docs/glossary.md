@@ -54,7 +54,8 @@ from Agent permissions and document reading/editing controls.
 ## Agent Panel
 
 The Agent collaboration capability; **Chat** is its conversation surface.
-OpenQuill, Claude, and Codex are runtimes, not names for the capability.
+OpenQuill, Claude, Codex, and Antigravity are runtimes, not names for the
+capability.
 
 ## Passage
 

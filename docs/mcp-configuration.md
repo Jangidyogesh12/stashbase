@@ -1,7 +1,13 @@
 # MCP Configuration
 
-The Default Agent, Codex, and Claude connect to StashBase's tools
+The Default Agent, Codex, Claude, and Antigravity connect to StashBase's tools
 automatically when used in the built-in Chat.
+
+For Antigravity, StashBase also adds a `stashbase` approval hook to
+`~/.gemini/config/hooks.json`. Antigravity runs it before every tool call. In
+a StashBase chat it asks StashBase, which shows the approval card; in any other
+Antigravity session it answers `allow` and leaves your own permission rules in
+charge.
 
 For an external MCP client, copy the configuration from the Command tab, or
 the URL and token from the URL tab, in **Settings → Advanced → External apps
@@ -47,6 +53,20 @@ In `~/.codex/config.toml`:
 command = "/Users/YOUR_USER/.stashbase/bin/stashbase-mcp"
 # Windows:
 command = "C:\\Users\\YOUR_USER\\.stashbase\\bin\\stashbase-mcp.cmd"
+```
+
+### Antigravity CLI
+
+In `~/.gemini/config/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "stashbase": {
+      "command": "/Users/YOUR_USER/.stashbase/bin/stashbase-mcp"
+    }
+  }
+}
 ```
 
 Restart the client after changing its MCP configuration.

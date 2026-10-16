@@ -11,13 +11,18 @@ Gallery. Chat becomes available inside the project, even if it contains no
 files. An entry's **Copy prompt** copies its build request for you to paste;
 it does not start a conversation automatically.
 
-Choose Claude or Codex and sign in with your provider account.
-A missing runtime waits for **Connect Claude** or **Connect Codex** before
-installation. If Claude is too old for the model you chose, the failed turn
-offers **Update Claude**. **Settings → Agents** shows each installed runtime's
+Choose Claude, Codex, or Antigravity and sign in with your provider account.
+A missing runtime waits for **Connect Claude**, **Connect Codex**, or
+**Connect Antigravity** before installation. If Claude is too old for the model
+you chose, the failed turn offers **Update Claude**. **Settings → Agents** shows each installed runtime's
 version with an **Update** that runs the runtime's own updater in place.
 
-If you can't use either, the built-in **Default Agent** provides a fallback
+Antigravity asks before changing files or running commands the same way the
+others do, and offers Ask, Edit, and Plan. It reads text only, so its chats take
+no attachments. Its chat list lives in StashBase: removing a chat there leaves
+the conversation in Antigravity.
+
+If you can't use any of them, the built-in **Default Agent** provides a fallback
 with free credits. Sign in to StashBase from the bottom of the sidebar or
 **Settings → Agents**; no separate Agent installation or model API key is required.
 

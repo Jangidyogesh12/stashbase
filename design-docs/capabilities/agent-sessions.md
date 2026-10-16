@@ -3,8 +3,8 @@
 ## Scope
 
 Chat mode and the Agent pane in Documents share conversation identity, execution,
-and unfinished requests. Default, Codex, and Claude expose their actual
-capabilities through this common experience.
+and unfinished requests. Default, Codex, Claude, and Antigravity expose their
+actual capabilities through this common experience.
 
 ## Identity and Continuity
 
@@ -19,6 +19,11 @@ capabilities through this common experience.
   conversation; it does not transfer history.
 - Project removal stops active work, retains transcripts, and disables sending.
   A conversation never migrates to another project.
+- Antigravity keeps no history StashBase can read. StashBase therefore records
+  the Antigravity conversations its chats start: their project, title, and the
+  turns as the chat showed them. Restoring one continues the same Antigravity
+  conversation. Removing it from the chat list removes StashBase's record; the
+  conversation stays in Antigravity.
 
 ## Choice and Readiness
 
@@ -61,6 +66,14 @@ permissions, with current model and tool choices checked before use.
   file do not change what was asked about; it is refused only when its file
   leaves the project or it exceeds 6,000 characters. Reloaded history shows it
   as the same passage chip.
+- Antigravity offers Ask, Edit, and Plan. Running for StashBase, it cannot ask
+  the reader itself, so StashBase reviews each tool call before it runs. Reads
+  pass. Edit passes ordinary changes inside the project. Plan refuses changes.
+  Anything else shows the same approval card the other runtimes use, and an
+  unanswered card never becomes a grant. Auto is not offered: Antigravity's own
+  Auto decides inside the runtime, where StashBase can no longer stand in for
+  the reader. Antigravity accepts text only, so its composer offers no
+  attachments.
 - A runtime that advertises attachments accepts ordinary local files through the
   picker, drop, or paste. Images and PDFs may have visual previews; other files
   remain named file cards. Attachment acceptance does not promise that every
@@ -90,7 +103,9 @@ permissions, with current model and tool choices checked before use.
   not import global or ancestor skills. This is its default behavior, without a
   setting. Skill bodies load on native invocation. Project instruction files
   remain available, preferring `AGENTS.md`, then `CLAUDE.md`, then `CONTEXT.md`.
-  Codex and Claude retain their own native discovery rules.
+  Codex, Claude, and Antigravity retain their own native discovery rules.
+  Antigravity offers no list of its skills, so its composer has no skill picker;
+  its model still uses the project's skills on its own.
 - Default's main agent handles general conversation, research, and writing on the
   service's default model. The composer offers **Crew**, with optional Writer,
   Reviewer, Reader, and Humanizer members from the service catalog. Initially all

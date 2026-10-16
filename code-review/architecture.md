@@ -313,6 +313,22 @@ stable status without download, retry, or a new durable demand latch.
   `server/agent-config-paths.ts` owns configuration identity for setup and Claude
   model metadata; MCP writes respect the same `CODEX_HOME` / `CLAUDE_CONFIG_DIR`
   inherited by provider processes.
+- Antigravity has no configuration-directory override, so its StashBase MCP and
+  hook entries live in `~/.gemini/config/mcp_config.json` and
+  `~/.gemini/config/hooks.json`, which its CLI, IDE, and app share. Setup replaces only the `stashbase` entry
+  in each and leaves an unparseable file untouched. The generated `PreToolUse`
+  launcher (`~/.stashbase/bin/stashbase-antigravity-hook`) answers `allow` when
+  no StashBase session id is in its environment, which leaves that run's own
+  permission rules in charge. Inside a StashBase chat it asks the generating
+  host and denies when the host cannot answer.
+- `server/native-agents.ts` owns each bring-your-own CLI's names, executable
+  overrides, npm package, official installer, and Windows bin directory.
+  Discovery, installation, readiness, and the CLI listing read them there.
+  Antigravity readiness runs `agy --output-format json -p /usage`, which needs
+  the cached sign-in but starts no turn. `agy` has no login command, so its
+  sign-in gives an interactive `agy` a pseudo-terminal (`script`) or, on Windows,
+  its own console, polls readiness, and retires that run after success,
+  cancellation, or the shared ten-minute deadline.
 - Each OpenQuill chat owns an authenticated loopback OpenCode process; each Codex
   chat owns its app-server/thread. After a Default turn, the host may prepare one
   unused OpenCode process and its MCP connection for the next chat. Claiming that
@@ -330,6 +346,13 @@ stable status without download, retry, or a new durable demand latch.
   Process death settles pending RPCs/turns, and generation guards reject late
   messages. An ambiguous timed-out start retires its generation before retry.
   Claude replacement waits for native iterator/query cleanup after verifying scope.
+- Each Antigravity chat owns one `agy` stream-json process, started by its
+  first prompt with the chat's mode, model, and effort as launch flags. A change
+  to any of them, Stop, or process exit retires it, and the next prompt resumes
+  the same conversation with `--conversation`. `agy` accepts no caller system
+  prompt, so the routing policy and persona ride ahead of each process's first
+  message. A `SUCCESS` result with no text, response, or tool fails the turn;
+  `AGY_ERROR` and `error:` stderr lines supply a failed turn's message.
 - Claude requests native session-state events and ends a turn at `idle`, using
   its latest result for success/failure. Intermediate results while background
   agents run do not release the turn or its queue. Native runtimes that emit no
@@ -376,7 +399,10 @@ stable status without download, retry, or a new durable demand latch.
   Mounted titles carry a manual-rename flag; first submissions supply a fallback
   title hint. Rename mutations serialize before publishing confirmed titles.
 - Native history is authoritative. Native cwd determines project ownership; no
-  override store or live session migration exists. History and WebSocket startup
+  override store or live session migration exists. Antigravity is the exception:
+  it exposes no history interface, so `server/antigravity-history.ts` records the
+  conversations StashBase chats start, keyed by native conversation id and scoped
+  by project. Remove deletes only that record. History and WebSocket startup
   require a registered project; no aggregate history endpoint is exposed.
   A missing Codex executable reports `412 AGENT_NOT_INSTALLED` at its process
   owner; history reads and mutations preserve that prerequisite instead of
@@ -442,12 +468,23 @@ stable status without download, retry, or a new durable demand latch.
   MCP Edit-mode approval predicate with Codex in `server/agent-file-permissions.ts`; OpenQuill denies the
   native edit permission shared by edit/write/patch. Codex has no independently
   verified native-edit disable switch in the current app-server integration, so
-  its routing remains guidance. Shells and subagents are not a filesystem
+  its routing remains guidance, as it does for Antigravity's native writes. Shells and subagents are not a filesystem
   isolation guarantee. Turn review therefore continues to detect all scanned
   Markdown changes regardless of the writing tool. External MCP clients have no
   app-owned turn socket and do not receive Chat turn-review cards.
 - Codex modes use on-request approval with mode-specific sandbox/review policy;
-  Claude maps native modes. Default maps Ask/Edit/Plan to OpenCode profiles;
+  Claude maps native modes. Headless `agy` cannot ask the reader, so Antigravity
+  runs with `--dangerously-skip-permissions` and every tool call passes the
+  approval hook. `server/routes/antigravity-hook.ts` reviews a call only for the
+  live Antigravity session named by the private attribution id its process
+  inherited, from that session's conversation, during its running turn; an
+  unknown or retired id is denied, and another runtime's id is left to that
+  run's own rules. `server/antigravity-protocol.ts` owns the policy: reads pass,
+  Edit passes ordinary writes inside the bound project through
+  `agent-file-permissions.ts`, Plan denies anything that could change the
+  project, and the rest becomes an approval card. A card withdrawn by the hook,
+  Stop, turn end, or disposal denies. Auto is not offered, because native Auto
+  approves inside the CLI past the hook. Default maps Ask/Edit/Plan to OpenCode profiles;
   Auto uses the Edit profile with host-owned review. Edit and Auto share
   `agent-file-permissions.ts` with the other adapters, granting only
   ordinary StashBase document writes inside the bound project (including

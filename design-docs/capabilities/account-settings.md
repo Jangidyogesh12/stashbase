@@ -9,7 +9,7 @@ no account.
 | Capability | Access source |
 |---|---|
 | Default Agent | StashBase account with free or subscribed Agent credits |
-| Codex / Claude | The native runtime's installation and authentication |
+| Codex / Claude / Antigravity | The native runtime's installation and authentication |
 | Search by meaning | User-supplied embedding key in Settings, billed independently |
 | External HTTP MCP | Current Settings token; separate opt-in for Docker access |
 
@@ -48,15 +48,18 @@ Settings owns lasting preferences and connection configuration:
   Custom colors, custom CSS, imported editor themes, and per-project
   appearance are out of scope.
 - **Agents:** group account, credit balance/refill, and connection state under
-  Default, with the account's subscription and the plans it can buy; manage Codex and Claude individually. An installed runtime shows its
+  Default, with the account's subscription and the plans it can buy; manage Codex, Claude, and Antigravity individually. An installed runtime shows its
   version and offers Update when StashBase can select the resulting installation.
   Install and Update both use the provider's official native installer, without
   an installation-method choice. Updating an npm installation selects the
   verified native copy for subsequent sessions and leaves the npm copy intact.
   Explicit executable overrides remain authoritative; an override outside the
   native installation must be removed before updating through StashBase.
-  Both native Agents check their own sign-in status before readiness and offer
-  their provider's browser sign-in when needed. An expired sign-in reported by
+  Each native Agent checks its own sign-in status before readiness and offers
+  its provider's browser sign-in when needed. Antigravity has no separate
+  sign-in command: its sign-in opens the browser from a terminal session
+  StashBase starts, a pseudo-terminal on macOS and Linux and a console window on
+  Windows, and closes it once Antigravity reports a signed-in account. An expired sign-in reported by
   a running conversation restores that action without clearing credentials.
   Setup and update failures show the failed operation, stage, and available
   diagnostic in place, including service refusals and download errors.
@@ -188,7 +191,7 @@ reader is where the banner first found them. The sidebar account row
 remains the account's only home, and the banner starts the same sign-in.
 
 Plus and Pro add hosted Default Agent capacity; local files, writing tools,
-Claude/Codex access, and BYOK search remain independent. Settings → Agents shows
+Claude, Codex, and Antigravity access, and BYOK search remain independent. Settings → Agents shows
 the signed-in account's plan, beside its credits; Plans and billing in the
 sidebar account menu opens it there. A Free account sees each tier with its price and
 Subscribe; a subscribed account sees its plan, paid-through or end date, and

@@ -47,7 +47,7 @@ If the selected Agent is unavailable, Send presents its access prompt before
 starting login, installation, or a session:
 
 - Default offers Sign in for free Agent credits.
-- A native Agent offers Connect Codex or Connect Claude.
+- A native Agent offers Connect Codex, Connect Claude, or Connect Antigravity.
 - Not now keeps the request. Another Agent can be selected from the draft.
 
 The prompt is about the selected Agent. On explicit confirmation, keep the request
@@ -58,8 +58,9 @@ If preparation fails, the same prompt shows the failed step and the service's
 specific explanation, including any supplied error code or file location. Keep
 the diagnostic visible as wrapping plain text alongside draft retention and
 retry guidance; users do not need to visit Settings to explain the failure.
-Both Claude and Codex continue from installation into their provider's browser
-sign-in when needed, and resume the retained submission only after readiness.
+Claude, Codex, and Antigravity continue from installation into their provider's
+browser sign-in when needed, and resume the retained submission only after
+readiness.
 
 ## Failure and Return
 

@@ -34,7 +34,7 @@ Both share the project and preserve unfinished work when switching.
 - **Preserve continuity.** Mode changes and background work retain documents,
   conversations, and drafts. Failures offer recovery without silently losing work.
 
-OpenQuill, Claude, and Codex use the same project/file model. Preparation,
+OpenQuill, Claude, Codex, and Antigravity use the same project/file model. Preparation,
 retrieval, MCP, and Gallery support that work without creating a separate store.
 
 ## Feature Status

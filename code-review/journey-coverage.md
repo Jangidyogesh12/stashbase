@@ -1684,6 +1684,44 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   official installer downloads, and packaged cross-platform shutdown remain
   release checks, not established by these local fixtures.
 
+**Antigravity runtime (2026-10-17):** `server/native-agents.ts` declares
+Antigravity (`agy`) beside Claude and Codex. `server/antigravity-setup.ts` owns its
+readiness check and terminal-hosted sign-in, `server/agent-runtime-installer.ts`
+its official installer, and `server/agent-mcp.ts` its MCP entry and `PreToolUse`
+hook launcher. `server/antigravity-session-runtime.ts` runs a chat's `agy`
+stream-json process, `server/antigravity-protocol.ts` parses its events and
+owns the approval policy, `server/routes/antigravity-hook.ts` answers the hook,
+and `server/antigravity-history.ts` records the conversations StashBase chats
+start. `antigravity-agent.test.ts` covers launch flags and instructions,
+streamed text and tool rows, the history record and its project scope, process
+reuse and restart on a model change, read/write/command decisions per mode,
+always-answers, withdrawn and post-Stop approvals, Stop and resume, empty
+`SUCCESS`, a crash with `AGY_ERROR`, and the hook route's refusal of unknown
+sessions. `antigravity-setup.test.ts` covers sign-in classification, the sign-in
+loop's retirement, cancellation and early exit, model-variant grouping, nested
+and flat event forms, setup that keeps the reader's own MCP servers and hooks,
+and the generated POSIX hook launcher against a real local server.
+A driven pass through the built app (2026-10-17, macOS, scratch HOME, port 8097)
+used a fake `agy` in `~/.local/bin` that answers `--version`, `/usage` and
+`models`, speaks stream-json, and runs the real configured `PreToolUse` hooks
+before its tools. Startup readiness reached Ready · 1.4.0 and wrote the
+`stashbase` entries to Antigravity's MCP and hook configuration; the
+picker grouped the low/high variants into one model. The composer offered
+Antigravity, settled the chat on Edit, and showed no attachment control. The
+generated hook launcher reached the host with the chat's session id: the write
+inside the project passed in Edit, the command raised the approval card, Allow
+ran it, and Reject in a later turn denied it. Changed in this turn listed the
+written note. After relaunch the chat list restored the conversation from the
+StashBase record, and a follow-up resumed it with `--conversation` and fresh
+instructions. That pass found tool rows of a resumed turn attaching to an earlier
+turn's rows, since step numbers restart per process; tool ids now carry the
+turn (`antigravity-agent.test.ts`).
+Not proven: no real `agy` ran. Event shapes, tool names, the hook's payload and
+`allow` neutrality, the hook running in stream-json mode, stdio MCP startup in
+that mode, `agy models` output, and pseudo-terminal sign-in come from the CLI's
+documentation and issue reports, not a live turn. Windows sign-in, the Windows
+hook launcher, and a signed-in provider turn remain release checks.
+
 **Document context (2026-09-25):** a passage is a context kind in
 `renderer/src/features/agent/domain/context.ts`, rendered into the prompt as a
 `Selected passages:` block by `domain/prompt-context.ts` and validated only
