@@ -72,7 +72,7 @@ async function until(condition: () => boolean, label: string): Promise<void> {
   assert.fail(`timed out waiting for ${label}`);
 }
 
-function harness(t: test.TestContext, options: { access?: string; model?: string; effort?: string; resume?: string } = {}) {
+function harness(t: test.TestContext, options: { access?: string; model?: string; effort?: string; resume?: string; remembered?: Array<{ id: string; label: string }> } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-antigravity-'));
   const folder = path.join(root, 'project');
   fs.mkdirSync(folder);
@@ -94,7 +94,10 @@ function harness(t: test.TestContext, options: { access?: string; model?: string
       return proc as unknown as ChildProcessWithoutNullStreams;
     },
     history,
-    async () => [{ id: 'gemini-pro', label: 'Gemini Pro' }, { id: 'gemini-flash', label: 'Gemini Flash' }],
+    {
+      remembered: () => options.remembered ?? [],
+      fresh: async () => [{ id: 'gemini-pro', label: 'Gemini Pro' }, { id: 'gemini-flash', label: 'Gemini Flash' }],
+    },
   );
   t.after(() => {
     session.dispose();
@@ -176,6 +179,18 @@ test('a turn runs agy in stream-json mode with the chat\'s choices and records w
   await until(() => h.processes.length === 2, 'restart');
   assert.deepEqual(h.processes[1]!.args.slice(-6), ['--model', 'gemini-pro', '--effort', 'high', '--conversation', 'conv-1']);
   assert.ok(proc.stdin.writableEnded, 'the replaced process is retired');
+});
+
+test('a chat opens on the remembered models at once and takes the runtime\'s current list when it lands', async (t) => {
+  const h = harness(t, { remembered: [{ id: 'gemini-old', label: 'Gemini Old' }] });
+  h.session.begin();
+  await until(() => h.ws.events('ready').length === 1, 'ready');
+  assert.deepEqual(h.ws.events('models')[0], { t: 'models', models: [{ id: 'gemini-old', label: 'Gemini Old' }] });
+  await until(() => h.ws.events('models').length === 2, 'fresh models');
+  assert.deepEqual(
+    (h.ws.events('models')[1]!.models as Array<{ id: string }>).map((model) => model.id),
+    ['gemini-pro', 'gemini-flash'],
+  );
 });
 
 test('the approval hook passes reads, asks the reader before changes, and refuses them in Plan', async (t) => {

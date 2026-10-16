@@ -35,7 +35,7 @@ import {
   type AgentSessionTermination,
 } from './agent-contract.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
-import { ensureAgentModelCatalog, rememberAgentDefaultModel } from './agent-model-catalog.ts';
+import { ensureAgentModelCatalog, recallAgentModels, rememberAgentDefaultModel } from './agent-model-catalog.ts';
 import {
   ANTIGRAVITY_ACCESS_MODES,
   antigravityApprovalTitle,
@@ -171,7 +171,7 @@ export class AntigravitySession implements AttributedAgentSession {
     private onDispose?: (session: AntigravitySession) => void,
     private spawnProcess: AntigravityProcessSpawner = spawnAntigravityProcess,
     private history: AntigravityHistoryStore = antigravityHistory,
-    private readCatalog: () => Promise<AgentModel[]> = async () => (await ensureAgentModelCatalog('antigravity'))?.models ?? [],
+    private catalog: AntigravityCatalogSource = rememberedThenFreshCatalog,
   ) {
     this.windowId = normalizeWindowId(windowId);
     this.accessMode = antigravityAccessMode(access);
@@ -204,30 +204,50 @@ export class AntigravitySession implements AttributedAgentSession {
       this.finish(errorMessage(error), error);
       return;
     }
-    await this.publishModels();
-    if (this.closed) return;
+    this.publishRememberedModels();
     if (this.conversationId) this.send({ t: 'session-id', id: this.conversationId });
     this.ready = true;
     this.send({ t: 'ready' });
+    void this.refreshModels();
   }
 
-  /** The runtime-level catalog seeds the picker; a catalog that cannot be
-   * read leaves the CLI's own default in charge. */
-  private async publishModels(): Promise<void> {
-    try {
-      this.models = await this.readCatalog();
-    } catch (error) {
-      log.debug(`could not read Antigravity models: ${errorMessage(error)}`);
-      this.models = [];
-    }
-    if (this.closed) return;
+  /** Like a Claude session, each chat reads the runtime's current models when
+   * it starts. One `agy` read takes 10–20 seconds, so the chat opens on the
+   * remembered list and the fresh one replaces it when it lands. */
+  private publishRememberedModels(): void {
+    this.models = this.catalog.remembered();
     const requested = this.resumed ? undefined : this.requestedModel;
-    this.selectedModel = requested && this.models.some((model) => model.id === requested) ? requested : undefined;
+    // A pick the remembered list cannot confirm yet waits for the fresh one.
+    this.selectedModel = requested && (!this.models.length || this.models.some((model) => model.id === requested))
+      ? requested
+      : undefined;
     this.send({
       t: 'models',
       models: this.models,
-      ...(this.activeModel ? { activeModel: this.activeModel } : {}),
       ...(requested && !this.selectedModel ? { fallback: 'That model is no longer available; using the runtime default.' } : {}),
+    });
+  }
+
+  private async refreshModels(): Promise<void> {
+    let models: AgentModel[];
+    try {
+      models = await this.catalog.fresh();
+    } catch (error) {
+      log.debug(`could not read Antigravity models: ${errorMessage(error)}`);
+      return;
+    }
+    if (this.closed || models.length === 0) return;
+    const changed = JSON.stringify(models) !== JSON.stringify(this.models);
+    this.models = models;
+    // A process already running on the model keeps it; the next one cannot.
+    const withdrawn = !!this.selectedModel && !this.busy && !models.some((model) => model.id === this.selectedModel);
+    if (withdrawn) this.selectedModel = undefined;
+    if (!changed && !withdrawn) return;
+    this.send({
+      t: 'models',
+      models,
+      ...(this.activeModel ? { activeModel: this.activeModel } : {}),
+      ...(withdrawn ? { fallback: 'That model is no longer available; using the runtime default.' } : {}),
     });
   }
 
@@ -725,6 +745,21 @@ function isModelSelectionError(message: string): boolean {
 function lastLines(text: string): string {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(-3).join('\n').slice(-1_000);
 }
+
+/** Where a chat's model list comes from: what the runtime listing remembers,
+ * and a read of `agy` itself. */
+export interface AntigravityCatalogSource {
+  remembered(): AgentModel[];
+  fresh(): Promise<AgentModel[]>;
+}
+
+/** Chats opened within a minute of each other share one `agy` read. */
+const CATALOG_REFRESH_MS = 60_000;
+
+const rememberedThenFreshCatalog: AntigravityCatalogSource = {
+  remembered: () => recallAgentModels('antigravity')?.models ?? [],
+  fresh: async () => (await ensureAgentModelCatalog('antigravity', { maxAgeMs: CATALOG_REFRESH_MS }))?.models ?? [],
+};
 
 const sessions = liveSessionSet<AntigravitySession>();
 const antigravitySessions = new Map<string, AntigravitySession>();

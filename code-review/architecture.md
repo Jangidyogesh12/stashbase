@@ -354,7 +354,10 @@ stable status without download, retry, or a new durable demand latch.
   to any of them, Stop, or process exit retires it, and the next prompt resumes
   the same conversation with `--conversation`. `agy` accepts no caller system
   prompt, so the routing policy and persona ride ahead of each process's first
-  message. A `SUCCESS` result with no text, response, or tool fails the turn;
+  message. Like a Claude session, each chat reads the runtime's current models
+  when it starts; because one `agy` read takes 10–20 seconds, it opens on the
+  remembered list and replaces it when the read lands, and chats opened within
+  a minute share one read. A `SUCCESS` result with no text, response, or tool fails the turn;
   `AGY_ERROR` and `error:` stderr lines supply a failed turn's message.
 - Claude requests native session-state events and ends a turn at `idle`, using
   its latest result for success/failure. Intermediate results while background

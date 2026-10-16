@@ -63,8 +63,9 @@ function persisted(id: AgentId): id is PersistedAgentId {
   return isNativeAgentId(id);
 }
 
-function stale(id: AgentId, catalog: AgentModelCatalog, now: number): boolean {
-  return id === 'stashbase' && !(now - Date.parse(catalog.readAt) < HOSTED_CATALOG_TTL_MS);
+function stale(id: AgentId, catalog: AgentModelCatalog, now: number, maxAgeMs?: number): boolean {
+  const limit = maxAgeMs ?? (id === 'stashbase' ? HOSTED_CATALOG_TTL_MS : undefined);
+  return limit !== undefined && !(now - Date.parse(catalog.readAt) < limit);
 }
 
 function load(): void {
@@ -170,11 +171,17 @@ const CATALOG_READERS: Record<AgentId, () => Promise<CatalogReading>> = {
  * passed or a session reads a catalog of its own. */
 export function ensureAgentModelCatalog(
   id: AgentId,
-  options: { read?: () => Promise<CatalogReading>; now?: () => number } = {},
+  options: {
+    read?: () => Promise<CatalogReading>;
+    now?: () => number;
+    /** Read again once the memory is this old, for a session that refreshes
+     *  the runtime's catalog when it starts. */
+    maxAgeMs?: number;
+  } = {},
 ): Promise<AgentModelCatalog | undefined> {
   const known = recallAgentModels(id);
   const now = options.now ?? Date.now;
-  if (known && !incomplete(known) && !stale(id, known, now())) return Promise.resolve(known);
+  if (known && !incomplete(known) && !stale(id, known, now(), options.maxAgeMs)) return Promise.resolve(known);
   const lastAttempt = attemptedAt.get(id);
   if (lastAttempt !== undefined && now() - lastAttempt < READ_RETRY_MS) return Promise.resolve(known);
   const pending = inFlight.get(id);
