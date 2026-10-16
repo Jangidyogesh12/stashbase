@@ -63,6 +63,9 @@ export interface Agent {
 export interface AgentSetupFailure {
   readonly stage: 'discovery' | 'installation' | 'authentication' | 'mcp';
   readonly message: string;
+  /** Signed in, but the provider refuses the account, so signing in again
+   *  is not the way forward. */
+  readonly accountRefused?: boolean;
 }
 
 /** A model an installed runtime cannot run yet, named by that runtime. */

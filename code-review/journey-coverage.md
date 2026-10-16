@@ -1716,9 +1716,16 @@ StashBase record, and a follow-up resumed it with `--conversation` and fresh
 instructions. That pass found tool rows of a resumed turn attaching to an earlier
 turn's rows, since step numbers restart per process; tool ids now carry the
 turn (`antigravity-agent.test.ts`).
-Not proven: no real `agy` ran. Event shapes, tool names, the hook's payload and
-`allow` neutrality, the hook running in stream-json mode, stdio MCP startup in
-that mode, `agy models` output, and pseudo-terminal sign-in come from the CLI's
+A signed-in `agy` 1.4.0 on macOS (2026-10-17) confirmed the `models` envelope
+the catalog reads. Outside the available regions, `-p /usage` and a headless
+turn both returned Google's 403 eligibility refusal with an `AGY_ERROR` line;
+setup had reported it as a failed sign-in check, and now reports Account not
+accepted with that sentence (`antigravity-setup.test.ts`,
+`failure-messages.test.ts`, `agent-runtime-status.test.ts`). Later the same
+account passed `/usage` and answered a headless turn.
+Not proven: no StashBase chat has run on a real `agy`. Event shapes, tool names,
+the hook's payload and `allow` neutrality, the hook running in stream-json mode,
+stdio MCP startup in that mode, and pseudo-terminal sign-in come from the CLI's
 documentation and issue reports, not a live turn. Windows sign-in, the Windows
 hook launcher, and a signed-in provider turn remain release checks.
 

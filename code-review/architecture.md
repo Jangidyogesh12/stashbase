@@ -283,7 +283,9 @@ stable status without download, retry, or a new durable demand latch.
   share the per-executable/file-version result.
   Both providers' status commands gate readiness and their login commands own
   browser sign-in. Native authentication refusals restore the sign-in action;
-  they never delete credentials. Setup errors retain bounded stdout/stderr and
+  they never delete credentials. A provider that refuses a signed-in account
+  (`AgentAccountRefusedError`, code `account-refused`) offers a recheck
+  instead, because signing in again cannot change its answer. Setup errors retain bounded stdout/stderr and
   nested network causes, with Agent/action/stage context. Settings and chat
   update surfaces preserve HTTP diagnostics as well as bootstrap failures.
 - User-installed CLIs keep their native account/history ownership. StashBase discovers provider-owned

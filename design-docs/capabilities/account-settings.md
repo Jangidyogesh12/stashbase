@@ -59,7 +59,10 @@ Settings owns lasting preferences and connection configuration:
   its provider's browser sign-in when needed. Antigravity has no separate
   sign-in command: its sign-in opens the browser from a terminal session
   StashBase starts, a pseudo-terminal on macOS and Linux and a console window on
-  Windows, and closes it once Antigravity reports a signed-in account. An expired sign-in reported by
+  Windows, and closes it once Antigravity reports a signed-in account.
+  A signed-in account the provider refuses, for example outside its available
+  regions, reads as Account not accepted with the provider's own sentence. It
+  offers a recheck, not another sign-in. An expired sign-in reported by
   a running conversation restores that action without clearing credentials.
   Setup and update failures show the failed operation, stage, and available
   diagnostic in place, including service refusals and download errors.

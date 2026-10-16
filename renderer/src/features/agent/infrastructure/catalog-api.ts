@@ -72,6 +72,7 @@ function toAgent(wire: AgentWire): Agent {
           setupFailure: {
             stage: wire.bootstrap.failure.stage,
             message: wire.bootstrap.failure.message,
+            ...(wire.bootstrap.failure.code === 'account-refused' ? { accountRefused: true } : {}),
           },
         }
       : {}),

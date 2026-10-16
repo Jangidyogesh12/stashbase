@@ -26,7 +26,9 @@ export type AgentBootstrapFailureCode =
   | 'runtime-unavailable'
   | 'account-required'
   | 'authentication-required'
-  | 'authentication-check-failed';
+  | 'authentication-check-failed'
+  /** Signed in, but the provider refuses the account (region, eligibility). */
+  | 'account-refused';
 
 export type AgentBootstrapManualRecovery = 'install-command' | 'mcp-settings';
 export type AgentBootstrapAction = 'bootstrap' | 'login' | 'update';

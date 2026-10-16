@@ -15,34 +15,60 @@ import os from 'node:os';
 import { probeAgentCommand } from './agent-probe.ts';
 import { agentCliEnv, commandDir } from './agent-cli.ts';
 import { terminateExtractorTree, waitForExtractorTree } from './extractor-process.ts';
+import { AgentAccountRefusedError } from './agent-setup-diagnostic.ts';
 
 type ProbeResult = { status: number | null; stdout: string; stderr: string };
 
 const SIGNED_OUT = /authentication required|not (?:signed|logged) in|sign[- ]?in (?:is )?required|unauthenticated|no saved (?:session|credentials)|please (?:sign|log) in/i;
+/** Google answering a signed-in account with an eligibility rule, such as an
+ * unsupported region, rather than a sign-in problem. */
+const REFUSED = /PERMISSION_DENIED|not eligible|ineligible|not (?:currently )?available in your (?:location|country|region)/i;
+
+export type AntigravityAuthState =
+  | { state: 'signed-in' }
+  | { state: 'signed-out' }
+  | { state: 'refused'; reason: string }
+  | { state: 'unknown' };
 
 /** Classify one `agy --output-format json -p /usage` run. A refusal that
- * names missing sign-in is signed out; any other failure is not evidence
+ * names missing sign-in is signed out; an eligibility refusal means the
+ * account signed in but cannot be used; any other failure is not evidence
  * either way and stays a failed check. */
-export function antigravityAuthState(result: ProbeResult): 'signed-in' | 'signed-out' | 'unknown' {
+export function antigravityAuthState(result: ProbeResult): AntigravityAuthState {
   const output = `${result.stdout}\n${result.stderr}`;
-  if (SIGNED_OUT.test(output)) return 'signed-out';
-  if (result.status !== 0) return 'unknown';
   const envelope = lastJsonObject(result.stdout);
+  const error = typeof envelope?.error === 'string' ? envelope.error : '';
+  if (REFUSED.test(output)) return { state: 'refused', reason: providerSentence(error || output) };
+  if (SIGNED_OUT.test(output)) return { state: 'signed-out' };
+  if (result.status !== 0) return { state: 'unknown' };
   const status = typeof envelope?.status === 'string' ? envelope.status.toUpperCase() : '';
-  return status && status !== 'SUCCESS' ? 'unknown' : 'signed-in';
+  return status && status !== 'SUCCESS' ? { state: 'unknown' } : { state: 'signed-in' };
 }
 
 export async function antigravityIsAuthenticated(executable: string, signal?: AbortSignal): Promise<boolean> {
+  // `agy` starts its own backend for every run, so this check alone takes
+  // 10–20 seconds on an ordinary connection.
   const result = await probeAgentCommand(executable, ['--output-format', 'json', '-p', '/usage'], {
-    timeoutMs: 30_000,
+    timeoutMs: 60_000,
     signal,
     env: agentCliEnv({}, [commandDir(executable)]),
   });
-  const state = antigravityAuthState(result);
-  if (state === 'signed-in') return true;
-  if (state === 'signed-out') return false;
+  const auth = antigravityAuthState(result);
+  if (auth.state === 'signed-in') return true;
+  if (auth.state === 'signed-out') return false;
+  if (auth.state === 'refused') {
+    throw new AgentAccountRefusedError(`Antigravity is signed in, but Google refused this account: ${auth.reason}`);
+  }
   const output = `${result.stdout}\n${result.stderr}`.replace(/\s+/g, ' ').trim().slice(-800);
   throw new Error(`Could not check Antigravity sign-in using ${executable} (exit ${result.status ?? 'unknown'}${output ? `: ${output}` : ''}).`);
+}
+
+/** The provider's own sentence, without the CLI's call chain
+ * (`/usage failed: retrieving quota summary: … PERMISSION_DENIED (code 403): `). */
+function providerSentence(text: string): string {
+  const line = text.split(/\r?\n/).map((entry) => entry.trim()).find((entry) => REFUSED.test(entry)) ?? text.trim();
+  const sentence = line.replace(/^.*\(code \d+\):\s*/, '').replace(/^error:\s*/i, '').trim();
+  return (sentence || line).slice(0, 600);
 }
 
 export interface AntigravityLoginDependencies {
@@ -84,6 +110,8 @@ export async function loginToAntigravity(
         lastCheckError = undefined;
       } catch (error) {
         signal.throwIfAborted();
+        // A refused account stays refused; waiting longer cannot sign it in.
+        if (error instanceof AgentAccountRefusedError) throw error;
         lastCheckError = error;
       }
       if (exited) {

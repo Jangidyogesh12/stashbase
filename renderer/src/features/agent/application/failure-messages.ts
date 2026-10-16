@@ -70,6 +70,9 @@ const SETUP_FAILURE_MESSAGES: Readonly<Record<AgentSetupFailure['stage'], string
   mcp: 'MCP connection failed.',
 };
 
+/** The account signed in, and the provider still will not serve it. */
+const ACCOUNT_REFUSED = 'Account not accepted.';
+
 /** Keep the failed step and diagnostic visible where setup was requested.
  * Error messages are plain text; stack traces and error objects are not rendered. */
 export function agentAccessFailure(error: unknown): string {
@@ -77,7 +80,9 @@ export function agentAccessFailure(error: unknown): string {
   const summary =
     error instanceof AgentSetupRefused
       ? setup
-        ? SETUP_FAILURE_MESSAGES[setup.stage]
+        ? setup.accountRefused
+          ? ACCOUNT_REFUSED
+          : SETUP_FAILURE_MESSAGES[setup.stage]
         : 'Could not connect.'
       : isFeatureError(error)
         ? agentFailure(error).message

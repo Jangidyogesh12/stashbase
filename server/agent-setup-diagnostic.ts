@@ -1,3 +1,8 @@
+/** The runtime is signed in, but its provider refuses the account (a region
+ * or eligibility rule). Signing in again cannot help, so readiness reports it
+ * apart from a missing or unreadable sign-in. The message is the provider's. */
+export class AgentAccountRefusedError extends Error {}
+
 /** Preserve bounded, plain-text setup diagnostics, including Node fetch causes. */
 export function agentSetupDiagnostic(error: unknown): string {
   const seen = new Set<unknown>();

@@ -49,9 +49,10 @@ export function describeRuntime(
     if (failure.refusal === 'account-required') {
       return { description: 'Needs sign-in', stage: failure.stage, action: null };
     }
+    // A refused account is already signed in; another sign-in changes nothing.
     const action: AgentRuntimeAction | null = busy
       ? null
-      : failure.stage === 'authenticate'
+      : failure.stage === 'authenticate' && failure.refusal !== 'account-refused'
         ? { kind: 'login', label: 'Sign in' }
         : {
             kind: failure.stage === 'configure' ? 'retry' : (failure.retryAction ?? 'retry'),

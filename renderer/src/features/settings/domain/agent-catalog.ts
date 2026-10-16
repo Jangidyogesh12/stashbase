@@ -36,7 +36,8 @@ type AgentPreparationRefusal =
   | 'runtime-unavailable'
   | 'account-required'
   | 'authentication-required'
-  | 'authentication-check-failed';
+  | 'authentication-check-failed'
+  | 'account-refused';
 
 export interface AgentPreparationFailure {
   /** Which stage stopped. */

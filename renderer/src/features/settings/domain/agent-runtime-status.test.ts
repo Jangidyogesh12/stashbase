@@ -95,6 +95,26 @@ describe('describeRuntime', () => {
     expect(display.stage).toBe('authenticate');
   });
 
+  it('offers a recheck, not sign-in, for an account the provider refused', () => {
+    const display = describeRuntime(
+      codex({
+        installed: true,
+        preparation: {
+          kind: 'failed',
+          failure: {
+            note: 'Signed in, but the provider refused this account.',
+            refusal: 'account-refused',
+            retryAction: 'install',
+            stage: 'authenticate',
+          },
+        },
+      }),
+      false,
+    );
+    expect(display.action).toEqual({ kind: 'install', label: 'Retry' });
+    expect(display.description).toBe('Signed in, but the provider refused this account.');
+  });
+
   it('labels a configure-stage failure as a connection retry', () => {
     const display = describeRuntime(
       codex({

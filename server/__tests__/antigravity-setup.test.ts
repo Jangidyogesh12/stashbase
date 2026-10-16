@@ -7,16 +7,43 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { antigravityAuthState, loginToAntigravity } from '../antigravity-setup.ts';
+import { AgentAccountRefusedError } from '../agent-setup-diagnostic.ts';
+import { AgentBootstrapCoordinator } from '../agent-runtime-installer.ts';
 import { antigravityModelsFromListing } from '../antigravity-model-catalog.ts';
 import { antigravityErrorFromStderr, parseAntigravityLine } from '../antigravity-protocol.ts';
 import { antigravityHookLauncher, ensureAgentMcp } from '../agent-mcp.ts';
 
-test('the sign-in check reads a refusal as signed out and any other failure as unknown', () => {
-  assert.equal(antigravityAuthState({ status: 0, stdout: '{"status":"SUCCESS","command":{"name":"usage"}}', stderr: '' }), 'signed-in');
-  assert.equal(antigravityAuthState({ status: 1, stdout: '', stderr: 'error: authentication required' }), 'signed-out');
-  assert.equal(antigravityAuthState({ status: 0, stdout: '{"status":"ERROR","error":"Not signed in"}', stderr: '' }), 'signed-out');
-  assert.equal(antigravityAuthState({ status: 3, stdout: '', stderr: 'AGY_ERROR: {"short_error":"deadline exceeded"}' }), 'unknown');
-  assert.equal(antigravityAuthState({ status: 0, stdout: '{"status":"ERROR","error":"backend unavailable"}', stderr: '' }), 'unknown');
+test('the sign-in check tells signed out, refused, and unknown apart', () => {
+  assert.deepEqual(antigravityAuthState({ status: 0, stdout: '{"status":"SUCCESS","command":{"name":"usage"}}', stderr: '' }), { state: 'signed-in' });
+  assert.deepEqual(antigravityAuthState({ status: 1, stdout: '', stderr: 'error: authentication required' }), { state: 'signed-out' });
+  assert.deepEqual(antigravityAuthState({ status: 0, stdout: '{"status":"ERROR","error":"Not signed in"}', stderr: '' }), { state: 'signed-out' });
+  assert.deepEqual(antigravityAuthState({ status: 3, stdout: '', stderr: 'AGY_ERROR: {"short_error":"deadline exceeded"}' }), { state: 'unknown' });
+  assert.deepEqual(antigravityAuthState({ status: 0, stdout: '{"status":"ERROR","error":"backend unavailable"}', stderr: '' }), { state: 'unknown' });
+  // Recorded from agy 1.4.0 for a signed-in account outside the available regions.
+  const refusal = 'Your current account is not eligible for Gemini Code Assist for individuals because it is not currently available in your location.';
+  const chain = `/usage failed: retrieving quota summary: failed to retrieve user quota summary: PERMISSION_DENIED (code 403): ${refusal}`;
+  assert.deepEqual(antigravityAuthState({
+    status: 1,
+    stdout: JSON.stringify({ conversation_id: '', status: 'ERROR', response: '', error: chain }),
+    stderr: `error: ${chain}`,
+  }), { state: 'refused', reason: refusal });
+});
+
+test('a refused account fails setup as refused, not as a failed sign-in check', async () => {
+  const coordinator = new AgentBootstrapCoordinator({
+    resolveExecutable: () => '/native/agy',
+    resolveNativeExecutable: () => '/native/agy',
+    installRuntime: async () => {},
+    isAuthenticated: () => { throw new AgentAccountRefusedError('Antigravity is signed in, but Google refused this account: not available in your location.'); },
+    login: async () => {},
+    configureMcp: () => {},
+    consumeFailure: () => false,
+  });
+  coordinator.begin('antigravity');
+  const status = await coordinator.wait('antigravity');
+  assert.equal(status.failure?.stage, 'authentication');
+  assert.equal(status.failure?.code, 'account-refused');
+  assert.match(status.failure?.message ?? '', /Google refused this account: not available in your location\./);
 });
 
 test('sign-in keeps the interactive run until the check passes, then retires it', { skip: process.platform === 'win32' }, async () => {
@@ -29,6 +56,13 @@ test('sign-in keeps the interactive run until the check passes, then retires it'
   });
   assert.equal(checks, 3);
   assert.ok(child!.exitCode !== null || child!.signalCode !== null, 'the interactive run is retired once signed in');
+
+  await assert.rejects(loginToAntigravity('/unused/agy', new AbortController().signal, {
+    pollMs: 5,
+    timeoutMs: 60_000,
+    spawnSignIn: () => spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: ['pipe', 'pipe', 'pipe'] }),
+    isAuthenticated: async () => { throw new AgentAccountRefusedError('refused'); },
+  }), AgentAccountRefusedError, 'a refused account ends sign-in at once');
 
   await assert.rejects(loginToAntigravity('/unused/agy', new AbortController().signal, {
     pollMs: 20,
@@ -107,6 +141,7 @@ test('Antigravity setup adds StashBase beside the reader\'s own MCP servers and 
   fs.writeFileSync(hooks, '{ "guard": ');
   assert.throws(() => ensureAgentMcp('antigravity'), /leaving it untouched/);
   assert.equal(fs.readFileSync(hooks, 'utf8'), '{ "guard": ');
+
   fs.rmSync(config, { recursive: true, force: true });
 });
 

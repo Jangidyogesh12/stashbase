@@ -18,6 +18,20 @@ describe('agent failure messages', () => {
     );
   });
 
+  it("names a refused account rather than a failed sign-in, with the provider's sentence", () => {
+    const text = agentAccessFailure(
+      new AgentSetupRefused({
+        stage: 'authentication',
+        message:
+          'Antigravity is signed in, but Google refused this account: not available in your location.',
+        accountRefused: true,
+      }),
+    );
+    expect(text.startsWith('Account not accepted.')).toBe(true);
+    expect(text).toContain('Google refused this account');
+    expect(text).not.toContain('Sign-in failed.');
+  });
+
   it('keeps recovery readable when no detail was supplied, without repeating a mapped sentence', () => {
     const fallback = 'Could not connect.\n\nYour message was kept. Try again.';
     expect(agentAccessFailure(null)).toBe(fallback);

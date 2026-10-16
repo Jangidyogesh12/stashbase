@@ -18,7 +18,7 @@ import {
   type NativeAgentId,
 } from './agent-runtime-paths.ts';
 import { probeAgentCommand } from './agent-probe.ts';
-import { agentSetupDiagnostic } from './agent-setup-diagnostic.ts';
+import { AgentAccountRefusedError, agentSetupDiagnostic } from './agent-setup-diagnostic.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import {
   agentCliEnv,
@@ -214,7 +214,8 @@ export class AgentBootstrapCoordinator {
         this.configure(id, action);
         if (this.status(id).phase === 'ready') reportStage(stage, 'success');
       } catch (error) {
-        this.fail(id, action, stage, 'operation-failed', signal.aborted ? signal.reason : error, stage === 'installation' ? 'install-command' : undefined);
+        const code = !signal.aborted && error instanceof AgentAccountRefusedError ? 'account-refused' : 'operation-failed';
+        this.fail(id, action, stage, code, signal.aborted ? signal.reason : error, stage === 'installation' ? 'install-command' : undefined);
       }
     }).finally(() => {
       const status = this.status(id);
@@ -247,7 +248,8 @@ export class AgentBootstrapCoordinator {
       this.fail(id, action, 'authentication', 'authentication-required',
         new Error(`${agentLabel(id)} is installed, but it is not signed in.`));
     } catch (error) {
-      this.fail(id, action, 'authentication', 'authentication-check-failed', error);
+      this.fail(id, action, 'authentication',
+        error instanceof AgentAccountRefusedError ? 'account-refused' : 'authentication-check-failed', error);
     }
     return false;
   }

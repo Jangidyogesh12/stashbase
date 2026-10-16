@@ -27,6 +27,7 @@ const agentBootstrapFailureCodeSchema = z.enum([
   'account-required',
   'authentication-required',
   'authentication-check-failed',
+  'account-refused',
 ]);
 
 const agentBootstrapManualRecoverySchema = z.enum(['install-command', 'mcp-settings']);
