@@ -128,7 +128,11 @@ reader to current credits rather than claiming all credits are spent.
 - Automatic update checks run throughout an open application, every 15 minutes
   and on foreground return or system wake, with a shared five-minute activity
   throttle. Disabling automatic checks still permits a manual check at any time.
-  Update installation is explicit and waits for affected document saves. Failure
+  A check that finds a release, automatic or manual, downloads it in the
+  background without a notice. The sidebar speaks up only when the download is
+  ready, offering Restart to update. A finished download never restarts the
+  application by itself: installation is that explicit click, or the same action
+  in Settings, and waits for affected document saves. Failure
   leaves the current application and downloaded update recoverable. Relaunch waits
   for the previous local service to release its port before opening the replacement.
   Development notification previews have no authority to invoke the updater.

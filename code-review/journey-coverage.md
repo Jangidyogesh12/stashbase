@@ -266,10 +266,15 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
   `update-preview.test.tsx` covers selecting a state before starting the preview.
   An isolated Electron/Vite pass (2026-09-15) opens the developer controls,
   starts the default ready-to-install preview, and visually verifies the card
-  above Gallery in the expanded sidebar with Settings closed. Clicking Install
-  and restart leaves the window running; the close icon removes the preview.
-  Controlled updater passes cover dismissed notices, Settings actions, native
-  input locking, save barriers, and handoff failure rollback, not replacement.
+  above Gallery in the expanded sidebar with Settings closed. Clicking the
+  preview's restart action leaves the window running; the close icon removes the preview.
+  Controlled updater passes cover a found release downloading in the background
+  and waiting at ready until an explicit restart, dismissed notices, Settings
+  actions, native input locking, save barriers, and handoff failure rollback,
+  not replacement. A built-app pass (2026-10-17) set main's development update
+  simulation through the window's preload bridge: available and downloading left
+  the sidebar footer empty, ready showed Restart to update above Gallery, and
+  clicking it left the unpackaged window running.
 - **AI Eval:** first-discussion quality belongs to J10; retrieval quality to J05.
 - **Release Check:** signed/notarized first launch, offline startup, actual
   native picker, first-session-to-returning-session flow, and N→N+1 updates on

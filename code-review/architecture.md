@@ -886,8 +886,10 @@ exited during main's quit sequence.
   preserving the first report and counted repeats. Replay follows occurrence
   time, and shutdown drains the spool before flushing repeat counts. Collection
   suppression and opt-out apply to both initial reports and rollups.
-- Renderer requests never choose feed, path, or phase. Automatic checks do not
-  authorize downloads/install. Production exposes no development simulator.
+- Renderer requests never choose feed, path, or phase. A check that finds a
+  release starts its download in main; only an explicit restart from the ready
+  phase installs, and a completed download never installs or relaunches on its
+  own. Production exposes no development simulator.
   Update offers render in the sidebar footer. The separate development tools
   ask app composition to close their dialog, expand the sidebar, and render an
   Updates-owned visual override in that same slot. Preview state belongs to the

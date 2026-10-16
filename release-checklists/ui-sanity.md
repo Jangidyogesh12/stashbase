@@ -64,8 +64,10 @@ Never use production PostHog as the test event sink.
   results with the release evidence.
 - [ ] **J01** — On each platform, start from the previous published version N,
   point it at the ordinary stable release channel, and update to this candidate
-  N+1. Leave a harmless edit open, click **Update** once, and confirm download,
-  save-barrier handling, installation, automatic relaunch, the N+1 version, and
+  N+1. Leave a harmless edit open and run **Check for updates** in Settings.
+  Confirm the download finishes in the background and the application keeps
+  running until **Restart to update** appears in the sidebar. Click it once and
+  confirm save-barrier handling, installation, relaunch, the N+1 version, and
   exactly one running instance. Exercise macOS from the installed DMG app,
   Windows from NSIS, and Linux from AppImage; also exercise deb when it is a
   supported distribution path and record the expected administrator prompt.
