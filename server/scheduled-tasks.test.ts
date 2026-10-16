@@ -108,7 +108,7 @@ function memoryStore(start = '2026-10-16T09:00:00.000Z') {
 test('one occurrence is claimed at most once, and never one from before the switch was turned on', () => {
   const { store, advance } = memoryStore();
   const root = '/projects/brief';
-  const claim = (occurrence: string) => store.claim(root, 'brief', { occurrence, trigger: 'schedule' });
+  const claim = (occurrence: string) => store.claim(root, 'brief', { occurrence, time: '08:00', trigger: 'schedule' });
 
   assert.deepEqual(claim('2026-10-16T08:00:00.000Z'), { ok: false, refusal: 'disabled' });
   store.setEnabled(root, 'brief', true);
@@ -166,7 +166,7 @@ test('a scheduled run keeps the days it missed in history as one entry', () => {
   const { store } = memoryStore(local(10, 12).toISOString());
   const root = '/projects/brief';
   const sent = { agent: 'claude' as const, reason: null, sessionId: 'native', status: 'sent' as const, title: 'Brief' };
-  const claim = (day: number) => store.claim(root, 'brief', { occurrence: local(day, 8).toISOString(), trigger: 'schedule' });
+  const claim = (day: number) => store.claim(root, 'brief', { occurrence: local(day, 8).toISOString(), time: '08:00', trigger: 'schedule' });
   store.setEnabled(root, 'brief', true);
 
   assert.deepEqual(claim(11), { ok: true, runId: 'run-1' });
@@ -183,6 +183,40 @@ test('a scheduled run keeps the days it missed in history as one entry', () => {
   assert.deepEqual(claim(16), { ok: true, runId: 'run-4' });
   runs = store.states(root)('brief').runs;
   assert.deepEqual(runs.map((run) => run.status), ['running', 'sent', 'missed', 'sent']);
+});
+
+test('a spring-forward day records the missed days the list showed, at the task\'s own time', () => {
+  // 02:30 does not exist in New York on 2026-03-08; Date moves it to 03:30.
+  // The zone is set here, so the clock change happens on every host.
+  const zone = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const at = (month: number, day: number, hours: number, minutes = 0) => new Date(2026, month - 1, day, hours, minutes);
+    // Switched on at 03:00 on the 6th, after that day's 02:30; closed until 04:00 on the 8th.
+    const { store } = memoryStore(at(3, 6, 3).toISOString());
+    const root = '/projects/brief';
+    store.setEnabled(root, 'brief', true);
+    const task = timing({ enabledAt: at(3, 6, 3).toISOString(), time: '02:30' });
+    const now = at(3, 8, 4);
+    const due = dueOccurrence(task, now);
+    assert.ok(due);
+    assert.equal(due.getHours(), 3);
+
+    // What the list shows before today's run starts.
+    const pending = missedRuns(task, now);
+    assert.deepEqual(pending, { count: 1, first: at(3, 7, 2, 30), last: at(3, 7, 2, 30) });
+
+    // What the server records when it claims today's moved run.
+    assert.equal(store.claim(root, 'brief', { occurrence: due.toISOString(), time: task.time, trigger: 'schedule' }).ok, true);
+    const recorded = store.states(root)('brief').runs.find((run) => run.status === 'missed');
+    assert.deepEqual(
+      [recorded?.missedCount, recorded?.startedAt, recorded?.occurrence],
+      [pending.count, pending.first.toISOString(), pending.last.toISOString()],
+    );
+  } finally {
+    if (zone === undefined) delete process.env.TZ;
+    else process.env.TZ = zone;
+  }
 });
 
 test('a sent run takes its first turn\'s outcome once, and history keeps the newest runs', () => {

@@ -70,6 +70,35 @@ describe('scheduled tasks adapter', () => {
     });
   });
 
+  it('keeps a Run now started after missed days as the task’s latest run', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(local(16, 7));
+    // Missed the 15th; Run now at 06:50 on the 16th, before today's 08:00.
+    const runNow = {
+      ...ranOn14th,
+      finishedAt: null,
+      occurrence: null,
+      runId: 'run-2',
+      sessionId: 'native-2',
+      startedAt: new Date(2026, 9, 16, 6, 50).toISOString(),
+      status: 'sent',
+      summary: null,
+      trigger: 'manual',
+    };
+    const [task] = (
+      await adapter({
+        ...schedule,
+        tasks: [{ ...schedule.tasks[0], runs: [runNow, ranOn14th] }],
+      }).api.read('/project/Brief', signal())
+    ).tasks;
+
+    expect(task?.runs.map((run) => [run.status, run.trigger])).toEqual([
+      ['sent', 'manual'],
+      ['missed', 'schedule'],
+      ['completed', 'schedule'],
+    ]);
+  });
+
   it('reports a first turn’s end with the start of its last reply', async () => {
     const { api, request } = adapter({ recorded: true });
     await api.settle(

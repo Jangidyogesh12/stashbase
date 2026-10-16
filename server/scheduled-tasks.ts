@@ -454,10 +454,15 @@ export function createScheduledTaskStore(io: ScheduledTaskStoreIo) {
       });
     },
 
+    /** A scheduled claim names its occurrence and the task's time as the file
+     *  states it: an occurrence a clock change moved (02:30 that became
+     *  03:30) does not say what time the task runs on other days. */
     claim(
       root: string,
       taskId: string,
-      request: { trigger: 'schedule' | 'manual'; occurrence?: string | undefined },
+      request:
+        | { trigger: 'manual' }
+        | { trigger: 'schedule'; occurrence?: string | undefined; time: string },
     ): { ok: true; runId: string } | { ok: false; refusal: ClaimRefusal } {
       return mutate(root, taskId, (state) => {
         const current = stateView(state);
@@ -477,11 +482,7 @@ export function createScheduledTaskStore(io: ScheduledTaskStoreIo) {
           // Days skipped since the last run are kept in history as one entry
           // before this run moves the last occurrence past them.
           const claimed = new Date(at);
-          const skipped = missedRuns({
-            ...current,
-            problem: null,
-            time: `${String(claimed.getHours()).padStart(2, '0')}:${String(claimed.getMinutes()).padStart(2, '0')}`,
-          }, claimed);
+          const skipped = missedRuns({ ...current, problem: null, time: request.time }, claimed);
           if (skipped) {
             missed = {
               agent: null,

@@ -96,24 +96,36 @@ function toRun(run: ScheduledTaskRunWire): ScheduledTaskRun {
 
 /** Days missed since the last run, by the rule the server records them
  *  with when today's run starts; until then the list shows them from here. */
-function pendingMissed(wire: ScheduledTaskWire, now: Date): ScheduledTaskRun[] {
+function pendingMissed(wire: ScheduledTaskWire, now: Date): ScheduledTaskRun | null {
   const missed = missedRuns(wire, now);
-  if (!missed) return [];
-  return [
-    {
-      agent: null,
-      missedCount: missed.count,
-      occurrence: missed.last.getTime(),
-      reason: null,
-      runId: `missed-${missed.last.toISOString()}`,
-      sessionId: null,
-      startedAt: missed.first.getTime(),
-      status: 'missed',
-      summary: null,
-      title: null,
-      trigger: 'schedule',
-    },
-  ];
+  if (!missed) return null;
+  return {
+    agent: null,
+    missedCount: missed.count,
+    occurrence: missed.last.getTime(),
+    reason: null,
+    runId: `missed-${missed.last.toISOString()}`,
+    sessionId: null,
+    startedAt: missed.first.getTime(),
+    status: 'missed',
+    summary: null,
+    title: null,
+    trigger: 'schedule',
+  };
+}
+
+/** When a run happened, for ordering; missed days by the last one missed. */
+function runAt(run: ScheduledTaskRun): number {
+  return run.status === 'missed' && run.occurrence !== null ? run.occurrence : run.startedAt;
+}
+
+/** The recorded runs, newest first, with the pending missed entry in its
+ *  place in time: a Run now started after the missed days stays the latest,
+ *  so the task's own row keeps showing how today's run is going. */
+function withPendingMissed(runs: ScheduledTaskRun[], missed: ScheduledTaskRun | null) {
+  if (!missed) return runs;
+  const at = runs.findIndex((run) => runAt(run) < runAt(missed));
+  return at < 0 ? [...runs, missed] : [...runs.slice(0, at), missed, ...runs.slice(at)];
 }
 
 /** The next run is read when the list is, by the rule main's clock follows. */
@@ -127,7 +139,7 @@ function toTask(wire: ScheduledTaskWire, now: Date): ScheduledTask {
     nextRunAt: nextRun(wire, now)?.getTime() ?? null,
     problem: wire.problem,
     prompt: wire.prompt,
-    runs: [...pendingMissed(wire, now), ...wire.runs.map(toRun)],
+    runs: withPendingMissed(wire.runs.map(toRun), pendingMissed(wire, now)),
     time: wire.time,
   };
 }
