@@ -79,22 +79,66 @@ function labelWithoutEffort(label: string): string {
     .trim() || label;
 }
 
-export async function readAntigravityModelCatalog(timeoutMs = 30_000): Promise<{ models: AgentModel[]; defaultModel?: string }> {
+/** The model `agy` runs when none is chosen, as `-p /model` names it:
+ * `command.data` carries its slug and effort. `agy` reports no model when a
+ * session starts, so this is how the picker learns what an unchosen turn
+ * runs on. */
+export function antigravityCurrentModel(output: string): { id: string; effort?: string } | null {
+  let parsed: unknown;
+  try { parsed = JSON.parse(output.trim()); } catch { return null; }
+  const data = object(object(object(parsed).command).data);
+  const id = text(data.id);
+  const effort = text(data.effort).toLowerCase();
+  return id ? { id, ...(effort ? { effort } : {}) } : null;
+}
+
+/** Name the current model as the catalog's default: its own row, or the row
+ * its effort variant was grouped into, with that effort as the row's default. */
+export function withCurrentModel(
+  reading: { models: AgentModel[]; defaultModel?: string },
+  current: { id: string; effort?: string } | null,
+): { models: AgentModel[]; defaultModel?: string } {
+  if (!current) return reading;
+  const base = current.id.replace(EFFORT_SUFFIX, '');
+  const match = reading.models.find((model) => model.id === current.id)
+    ?? reading.models.find((model) => model.id === base && !!model.supportedEfforts?.length);
+  if (!match) return reading;
+  const effort = current.effort ?? EFFORT_SUFFIX.exec(current.id)?.[1]?.toLowerCase();
+  const models = reading.models.map((model) => {
+    const { isDefault: _isDefault, ...rest } = model;
+    if (model !== match) return rest;
+    return {
+      ...rest,
+      isDefault: true,
+      ...(effort && model.supportedEfforts?.includes(effort) ? { defaultEffort: effort } : {}),
+    };
+  });
+  return { models, defaultModel: match.id };
+}
+
+export async function readAntigravityModelCatalog(timeoutMs = 60_000): Promise<{ models: AgentModel[]; defaultModel?: string }> {
   const executable = resolveAgentCli(nativeAgentCliSpec('antigravity'));
   if (!executable) throw new Error('Antigravity CLI not found.');
-  // `--output-format` must come before the subcommand.
-  const result = await probeAgentCommand(executable, ['--output-format', 'json', 'models'], {
+  const run = (args: string[]) => probeAgentCommand(executable, args, {
     timeoutMs,
     shell: agentCliNeedsShell(executable),
     env: agentCliEnv({}, [commandDir(executable)]),
   });
-  if (result.status !== 0) {
-    const detail = `${result.stderr}\n${result.stdout}`.replace(/\s+/g, ' ').trim().slice(-400);
-    throw new Error(`agy models exited with code ${result.status ?? 'unknown'}${detail ? `: ${detail}` : ''}`);
+  // Each `agy` run starts its own backend, so the two reads go side by side.
+  // `--output-format` must come before the subcommand.
+  const [listing, current] = await Promise.all([
+    run(['--output-format', 'json', 'models']),
+    run(['--output-format', 'json', '-p', '/model']).catch(() => null),
+  ]);
+  if (listing.status !== 0) {
+    const detail = `${listing.stderr}\n${listing.stdout}`.replace(/\s+/g, ' ').trim().slice(-400);
+    throw new Error(`agy models exited with code ${listing.status ?? 'unknown'}${detail ? `: ${detail}` : ''}`);
   }
-  const reading = antigravityModelsFromListing(result.stdout);
+  const reading = antigravityModelsFromListing(listing.stdout);
   if (!reading.models.length) throw new Error('agy models listed no models.');
-  return reading;
+  // Without the current model the list still offers every model; only the
+  // name of an unchosen turn's model is missing.
+  return withCurrentModel(reading, current?.status === 0 ? antigravityCurrentModel(current.stdout) : null);
 }
 
 function object(value: unknown): Record<string, unknown> {

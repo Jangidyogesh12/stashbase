@@ -9,7 +9,7 @@ import test from 'node:test';
 import { antigravityAuthState, loginToAntigravity } from '../antigravity-setup.ts';
 import { AgentAccountRefusedError } from '../agent-setup-diagnostic.ts';
 import { AgentBootstrapCoordinator } from '../agent-runtime-installer.ts';
-import { antigravityModelsFromListing } from '../antigravity-model-catalog.ts';
+import { antigravityCurrentModel, antigravityModelsFromListing, withCurrentModel } from '../antigravity-model-catalog.ts';
 import { antigravityErrorFromStderr, parseAntigravityLine } from '../antigravity-protocol.ts';
 import { antigravityHookLauncher, ensureAgentMcp } from '../agent-mcp.ts';
 
@@ -103,6 +103,28 @@ test('model variants that differ only by effort become one model with those effo
   assert.deepEqual(antigravityModelsFromListing('not json').models, []);
 });
 
+test('the model agy runs unchosen is the catalog default, with its effort', () => {
+  // Recorded from agy 1.4.0: `--output-format json models` and `-p /model`.
+  const listing = antigravityModelsFromListing(JSON.stringify({ status: 'SUCCESS', command: { name: 'models', data: { models: [
+    { id: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'gemini-3.8-flash-medium', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'gemini-3.8-flash-low', label: 'Gemini 3.8 Flash (Low)' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Thinking)' },
+    { id: 'gpt-oss-120b-medium', label: 'GPT-OSS 120B (Medium)' },
+  ] } } }));
+  assert.equal(listing.defaultModel, undefined, 'the listing alone names no default');
+  const current = antigravityCurrentModel('{"status":"SUCCESS","command":{"name":"model","data":{"id":"gemini-3.8-flash-high","label":"Gemini 3.8 Flash (High)","effort":"high","is_default":false}}}');
+  assert.deepEqual(current, { id: 'gemini-3.8-flash-high', effort: 'high' });
+  const reading = withCurrentModel(listing, current);
+  assert.equal(reading.defaultModel, 'gemini-3.8-flash');
+  assert.deepEqual(reading.models[0], {
+    id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', supportedEfforts: ['low', 'medium', 'high'], isDefault: true, defaultEffort: 'high',
+  });
+  assert.equal(reading.models.filter((model) => model.isDefault).length, 1);
+  assert.deepEqual(withCurrentModel(listing, { id: 'retired-model' }), listing, 'an unlisted current model is not invented');
+  assert.deepEqual(withCurrentModel(listing, null), listing);
+});
+
 test('stream-json events read in their nested and flat forms, and failures carry the CLI\'s own words', () => {
   assert.deepEqual(parseAntigravityLine('{"event":"step_update","conversation_id":"c","step_index":2,"state":"DONE","step_type":"TOOL","tool_name":"view_file","tool_info":{"parameters":"{\\"AbsolutePath\\":\\"/a\\"}","output":"text"}}'), {
     kind: 'step', conversationId: 'c', index: 2, state: 'done', type: 'tool', textDelta: '',
@@ -112,6 +134,13 @@ test('stream-json events read in their nested and flat forms, and failures carry
     kind: 'result', conversationId: '', status: 'ERROR', response: '', error: 'bad model', deniedActions: ['Run rm'],
   });
   assert.equal(parseAntigravityLine('jetski: no output produced'), null);
+  // Recorded from agy 1.4.0: a refused tool ends in ERROR, not DONE.
+  const failed = parseAntigravityLine(JSON.stringify({ event: 'step_update', step_update: {
+    conversation_id: 'c', step_index: 2, state: 'ERROR', step_type: 'tool', tool_name: 'call_mcp_tool',
+    tool_info: { name: 'call_mcp_tool', parameters: { Arguments: {}, ServerName: 'stashbase', ToolName: 'list_projects' }, error: { type: 'TOOL_ERROR', message: 'permission check failed' } },
+  } }));
+  assert.equal(failed?.kind === 'step' && failed.state, 'done');
+  assert.equal(failed?.kind === 'step' && failed.tool?.error, 'permission check failed');
   assert.equal(antigravityErrorFromStderr('noise\nAGY_ERROR: {"short_error":"429 rate limited","retryable":true}\n'), '429 rate limited');
   assert.equal(antigravityErrorFromStderr('error: unknown model "x"'), 'unknown model "x"');
 });

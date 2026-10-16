@@ -1723,10 +1723,16 @@ setup had reported it as a failed sign-in check, and now reports Account not
 accepted with that sentence (`antigravity-setup.test.ts`,
 `failure-messages.test.ts`, `agent-runtime-status.test.ts`). Later the same
 account passed `/usage` and answered a headless turn.
-Not proven: no StashBase chat has run on a real `agy`. Event shapes, tool names,
-the hook's payload and `allow` neutrality, the hook running in stream-json mode,
-stdio MCP startup in that mode, and pseudo-terminal sign-in come from the CLI's
-documentation and issue reports, not a live turn. Windows sign-in, the Windows
+Headless stream-json runs on that `agy` confirmed the `init`, `step_update`
+(text deltas) and `result` shapes. They also showed that `init` names no model,
+so the catalog reads the current one from `-p /model`, and that a failed tool
+ends in `ERROR` rather than `DONE`. MCP calls arrive as `call_mcp_tool` with
+`ServerName`/`ToolName`/`Arguments`, and the tool names now come from its tool
+list. With the StashBase hook installed, a terminal run outside StashBase kept
+`agy`'s own refusal of an unapproved MCP call, as the hook's `allow` intends.
+Not proven: no StashBase chat has run on a real `agy`, so the hook's payload and
+its running in a StashBase-launched stream-json process, stdio MCP startup there,
+and pseudo-terminal sign-in remain unexercised. Windows sign-in, the Windows
 hook launcher, and a signed-in provider turn remain release checks.
 
 **Document context (2026-09-25):** a passage is a context kind in

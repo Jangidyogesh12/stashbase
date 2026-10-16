@@ -100,11 +100,13 @@ export function parseAntigravityLine(line: string): AntigravityEvent | null {
     const type = (stringValue(step.step_type) || stringValue(step.stepType)).toLowerCase();
     const toolName = stringValue(info.name) || stringValue(step.tool_name) || stringValue(step.toolName);
     const isTool = type === 'tool' || (!!toolName && type !== 'agent_response');
+    // `ACTIVE` is the only running state: a tool also ends in `ERROR`.
+    const state = (stringValue(step.state) || 'ACTIVE').toUpperCase();
     return {
       kind: 'step',
       conversationId: conversationIdOf(step),
       index: numberValue(step.step_index ?? step.stepIndex),
-      state: (stringValue(step.state) || 'ACTIVE').toUpperCase() === 'DONE' ? 'done' : 'active',
+      state: state === 'ACTIVE' ? 'active' : 'done',
       type,
       textDelta: stringValue(step.text_delta ?? step.textDelta),
       tool: isTool
@@ -112,7 +114,7 @@ export function parseAntigravityLine(line: string): AntigravityEvent | null {
             name: toolName || 'tool',
             parameters: jsonObjectValue(info.parameters ?? info.args ?? info.arguments),
             output: textOf(info.output),
-            error: errorText(info.error),
+            error: errorText(info.error) || (state === 'ERROR' ? 'The tool failed.' : ''),
           }
         : null,
     };
@@ -163,14 +165,20 @@ const STASHBASE_TOOLS = new Set([
 const STASHBASE_READ_TOOLS = new Set(['list_projects', 'list_directory', 'read_file', 'search_project', 'reindex']);
 const STASHBASE_WRITE_TOOLS = new Set(['write_file', 'edit_file']);
 
-/** Native tools that only read the filesystem or report progress. */
+/** Native tools that only read the filesystem, report progress, or end the
+ * turn. Names as `agy` 1.4.0 lists them in its `init` event. */
 const NATIVE_READ_TOOLS = new Set([
   'view_file', 'view_file_outline', 'view_code_item', 'view_content_chunk',
   'list_dir', 'find_by_name', 'grep_search', 'codebase_search', 'code_search',
   'read_resource', 'list_resources', 'command_status', 'read_terminal',
-  'task_boundary', 'notify_user', 'update_plan',
+  'list_permissions', 'list_plugin_accounts',
+  'task_boundary', 'notify_user', 'update_plan', 'finish', 'wait', 'wait_5_seconds',
+  // Questions to the reader: headless runs answer them without the reader.
+  'ask_question', 'ask_permission', 'ask_custom_permission',
 ]);
-const NATIVE_WRITE_TOOLS = new Set(['write_to_file', 'replace_file_content', 'multi_replace_file_content']);
+const NATIVE_WRITE_TOOLS = new Set([
+  'write_to_file', 'replace_file_content', 'multi_replace_file_content', 'sed_file', 'notebook_edit',
+]);
 const NATIVE_COMMAND_TOOLS = new Set(['run_command', 'send_command_input']);
 const NATIVE_NETWORK_TOOLS = new Set(['read_url_content', 'search_web']);
 
