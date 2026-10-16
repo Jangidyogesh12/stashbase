@@ -145,7 +145,8 @@ export function scheduledRunPrompt(prompt: string, files: readonly string[]): st
 /** "Every day at 8:00 AM", in the reader's own clock, the way the list
  *  reads a task's time; a time the file states badly is quoted as written. */
 export function scheduleLabel(time: string, locale: Intl.LocalesArgument = []): string {
-  const match = time.match(/^(\d{2}):(\d{2})$/u);
+  // Same rule as the form: `25:00` would otherwise roll over to 1:00 AM.
+  const match = time.match(/^([01]\d|2[0-3]):([0-5]\d)$/u);
   if (!match) return `Every day at ${time}`;
   const at = new Date(2000, 0, 1, Number(match[1]), Number(match[2]));
   return `Every day at ${at.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}`;

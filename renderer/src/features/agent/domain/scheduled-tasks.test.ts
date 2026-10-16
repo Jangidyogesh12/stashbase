@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { scheduledRunPrompt, taskDraft, type ScheduledTask } from './scheduled-tasks';
+import {
+  scheduledRunPrompt,
+  scheduleLabel,
+  taskDraft,
+  type ScheduledTask,
+} from './scheduled-tasks';
 
 const task = (prompt: string, files: string[]): ScheduledTask => ({
   agent: null,
@@ -32,5 +37,11 @@ describe('scheduled task requests', () => {
       'Pull topics. @a.md @b.md',
     );
     expect(taskDraft(task('Use @a.md.', ['a.md'])).prompt).toBe('Use @a.md.');
+  });
+
+  it('quotes a time the file states badly instead of reading another time into it', () => {
+    expect(scheduleLabel('08:05', 'en-US')).toBe('Every day at 8:05 AM');
+    expect(scheduleLabel('25:00', 'en-US')).toBe('Every day at 25:00');
+    expect(scheduleLabel('08:60', 'en-US')).toBe('Every day at 08:60');
   });
 });

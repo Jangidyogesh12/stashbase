@@ -183,7 +183,10 @@ test('the routes read, save, switch, claim and finish one registered project, an
       const config = await import('./server/app-config.ts');
       const { mount } = await import('./server/routes/scheduled-tasks.ts');
       const { removeRecentAsync } = await import('./server/folder.ts');
+      const { filesystemPath } = await import('./server/filesystem-path.ts');
       const project = path.join(os.homedir(), 'project');
+      // The routes answer with the server's own spelling (C:/... on Windows).
+      const root = filesystemPath.absolute(project);
       fs.mkdirSync(project, { recursive: true });
       config.writeAppConfigStrict({ recentFolders: [{ path: project, openedAt: new Date().toISOString() }] });
       const app = express(); app.use(express.json()); mount(app);
@@ -194,7 +197,7 @@ test('the routes read, save, switch, claim and finish one registered project, an
       const read = async () => (await fetch(base + '?folder=' + encodeURIComponent(project))).json();
 
       let schedule = await read();
-      assert.deepEqual(schedule, { folderPath: project, problem: null, tasks: [], version: null });
+      assert.deepEqual(schedule, { folderPath: root, problem: null, tasks: [], version: null });
       assert.equal((await fetch(base + '?folder=/unregistered')).status, 404);
 
       const draft = { agent: 'claude', files: ['brief.md'], name: 'Daily brief', prompt: '', time: '08:00' };
@@ -230,7 +233,7 @@ test('the routes read, save, switch, claim and finish one registered project, an
       response = await send('/enabled', 'PUT', { enabled: true, folderPath: project, taskId: 'daily-brief' });
       assert.equal((await response.json()).tasks[0].enabled, true);
       const listed = await (await fetch(base + '/projects')).json();
-      assert.deepEqual(listed.projects.map(entry => entry.folderPath), [project]);
+      assert.deepEqual(listed.projects.map(entry => entry.folderPath), [root]);
 
       const claim = { folderPath: project, occurrence: new Date(Date.now() - 86_400_000).toISOString(), taskId: 'daily-brief', trigger: 'schedule' };
       assert.equal((await send('/runs', 'POST', claim)).status, 409);
