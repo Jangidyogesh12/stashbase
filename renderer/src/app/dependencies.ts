@@ -17,11 +17,15 @@ import {
   createAgentToolsAdapter,
   createAgentContextAdapter,
   createAgentSessionAdapter,
+  createScheduledRunsAdapter,
+  createScheduledTasksAdapter,
   type AgentCatalogPort,
   type AgentPersonaPort,
   type AgentToolsPort,
   type AgentContextPort,
   type AgentSessionPort,
+  type ScheduledRunsPort,
+  type ScheduledTasksPort,
 } from '@/features/agent/public';
 import { createDocumentAdapters, type DocumentAdapters } from '@/features/documents/public';
 import { createGalleryIndexAdapter, type GalleryPort } from '@/features/gallery/public';
@@ -96,6 +100,10 @@ export interface AppDependencies {
     /** Default's optional model tools. */
     tools: AgentToolsPort;
     session: AgentSessionPort;
+    /** The project's scheduled tasks, for its task list. */
+    scheduledTasks?: ScheduledTasksPort;
+    /** The runs main hands this window, in the desktop shell only. */
+    scheduledRuns?: ScheduledRunsPort;
   };
   /** Opens the bug-report review for this window; null outside Electron. */
   documents: {
@@ -159,6 +167,10 @@ export function createDependencies(): AppDependencies {
       tools: createAgentToolsAdapter(http),
       context: createAgentContextAdapter(http, bridge.runtime.serverOrigin),
       session: createAgentSessionAdapter(http, bridge.runtime.serverOrigin),
+      scheduledTasks: createScheduledTasksAdapter(http, bridge.scheduledTasks),
+      ...(bridge.scheduledTasks
+        ? { scheduledRuns: createScheduledRunsAdapter(bridge.scheduledTasks) }
+        : {}),
     },
     documents: {
       adapters: createDocumentAdapters({

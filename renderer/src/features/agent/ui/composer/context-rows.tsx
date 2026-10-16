@@ -18,7 +18,12 @@ import { agentSkills, type AgentSkillCatalog } from '@/features/agent/domain/ses
 import { basePathName } from '@/shared/utils/file-path';
 
 import type { MentionEditorHandle } from './mention-editor';
-import { mentionOptionId, type MentionListboxBinding, type MentionRow } from './mention-listbox';
+import {
+  MentionListbox,
+  mentionOptionId,
+  type MentionListboxBinding,
+  type MentionRow,
+} from './mention-listbox';
 
 const MAX_SKILL_ROWS = 8;
 const ROW_ICON_CLASS = 'mt-0.5 size-3.5 shrink-0 text-muted-foreground';
@@ -184,4 +189,21 @@ export function useMentionRows({
     open,
     rows,
   };
+}
+
+/** The panel's suggestion list while a query is open, for any field the
+ *  rows serve. */
+export function MentionRowsListbox({ id, panel }: { id: string; panel: MentionRowsView }) {
+  if (!panel.open) return null;
+  return (
+    <MentionListbox
+      activeIndex={panel.activeRow}
+      id={id}
+      label={panel.label}
+      notice={panel.notice}
+      onHover={panel.onHover}
+      onPick={panel.onPick}
+      rows={panel.rows}
+    />
+  );
 }

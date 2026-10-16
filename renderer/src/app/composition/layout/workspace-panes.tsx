@@ -89,6 +89,7 @@ export function WorkspacePanes({
           accountSignedIn={account.account?.signedIn ?? false}
           header={mode === 'documents'}
           persona={dependencies.agent.persona}
+          scheduledTasks={dependencies.agent.scheduledTasks}
           tools={dependencies.agent.tools}
           onBrowsePersonas={onBrowsePersonas}
           onOpenAgentSettings={() => settings.openSettings('agents')}

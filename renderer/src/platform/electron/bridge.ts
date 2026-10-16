@@ -6,6 +6,7 @@ import {
 import type { ExternalNavigationBridge } from './external-navigation';
 import type { ProjectBridge } from './folder-picker';
 import type { ProjectLifecycleBridge } from './project-lifecycle';
+import { isScheduledTasksBridge, type ScheduledTasksBridge } from './scheduled-tasks';
 import type { TextServicesBridge } from './text-services';
 import { isUpdatesBridge, type UpdatesBridge } from './updates';
 import type { WindowLifecycleBridge } from './window-lifecycle';
@@ -22,6 +23,8 @@ interface DesktopBridge {
   externalNavigation: ExternalNavigationBridge;
   project: DesktopProjectBridge;
   runtime: RendererRuntimeConfig;
+  /** Optional: scheduled tasks run only in the desktop shell. */
+  scheduledTasks?: ScheduledTasksBridge;
   textServices: TextServicesBridge;
   /** Optional: keeping this build current exists only in the desktop shell. */
   updates?: UpdatesBridge;
@@ -36,6 +39,7 @@ declare global {
       externalNavigation?: ExternalNavigationBridge;
       project?: DesktopProjectBridge;
       runtime?: unknown;
+      scheduledTasks?: unknown;
       textServices?: TextServicesBridge;
       updates?: unknown;
       workspaceSession?: DesktopWorkspaceSessionBridge;
@@ -90,8 +94,10 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
     throw new Error('Text services are unavailable.');
   }
   const updates = globalWindow.stashbase?.updates;
+  const scheduledTasks = globalWindow.stashbase?.scheduledTasks;
   return {
     ...(isUpdatesBridge(updates) ? { updates } : {}),
+    ...(isScheduledTasksBridge(scheduledTasks) ? { scheduledTasks } : {}),
     externalNavigation,
     project,
     runtime,

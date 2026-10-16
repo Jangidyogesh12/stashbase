@@ -177,6 +177,9 @@ test('show-hidden listings surface eligible dot-directories while protecting VCS
   try {
     fs.writeFileSync(path.join(tempDir, 'note.md'), '# Visible note');
     fs.writeFileSync(path.join(tempDir, '.env'), 'TOKEN=local');
+    // The task list is the view of this file; the tree shows it only with
+    // the other hidden files.
+    fs.writeFileSync(path.join(tempDir, '.schedules.json'), '{"tasks":[]}');
 
     // Eligible user-owned hidden directory with nested content.
     fs.mkdirSync(path.join(tempDir, '.custom', 'workflows'), { recursive: true });
@@ -223,6 +226,7 @@ test('show-hidden listings surface eligible dot-directories while protecting VCS
     assert.ok(onFiles.includes('.custom/README.md'));
     assert.ok(onFiles.includes('.custom/workflows/ci.yml'));
     assert.ok(onFiles.includes('.env'), 'ordinary dotfiles keep their current behavior');
+    assert.ok(onFiles.includes('.schedules.json'), 'the task file joins the other hidden files');
     assert.equal(hiddenOn.files.find((f) => f.name === '.custom/workflows/ci.yml')?.format, 'generic');
 
     // Protected internals stay invisible and untraversed.

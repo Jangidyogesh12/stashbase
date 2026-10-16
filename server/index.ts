@@ -72,6 +72,7 @@ import { createMcpHttpService } from './mcp-http-service.ts';
 import { runShutdownCleanup } from './shutdown-cleanup.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
 import { mount as mountAgentPreferencesRoutes } from './routes/agent-preferences.ts';
+import { mount as mountScheduledTaskRoutes } from './routes/scheduled-tasks.ts';
 import { mount as mountAgentToolRoutes } from './routes/agent-tools.ts';
 import { mount as mountAgentPersonaRoutes } from './routes/agent-persona.ts';
 import { isAgentPersonaId } from '../shared/agent-persona.ts';
@@ -322,6 +323,7 @@ mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in
 mountAgentSessionsRoutes(app); // shared contract history surface for the built-in panel
 mountAgentPersonaRoutes(app);
 mountAgentPreferencesRoutes(app); // global + explicit member-folder Chat guidance
+mountScheduledTaskRoutes(app); // project task files, their switches and last runs
 
 // Renderer error sink. The root `ErrorBoundary` POSTs render-time
 // exceptions here so they appear in the same server log developers

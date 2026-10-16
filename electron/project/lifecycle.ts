@@ -90,7 +90,13 @@ export function createFolderRemovalCoordinator({
   };
 }
 
-export function registerLifecycle(dependencies: LifecycleDependencies): void {
+export interface ProjectLifecycle {
+  /** Enters `folderPath` in a window main opened itself, through the same
+   *  acknowledged handoff as every other entry. */
+  enterFolder(window: BrowserWindow, folderPath: string, signal?: AbortSignal): Promise<void>;
+}
+
+export function registerLifecycle(dependencies: LifecycleDependencies): ProjectLifecycle {
   const coordinator = createFolderRemovalCoordinator();
   const entries = createProjectEntryCoordinator();
   const requests = new Map<string, AbortController>();
@@ -209,6 +215,10 @@ export function registerLifecycle(dependencies: LifecycleDependencies): void {
     }
     return projectLifecycleResponseSchema.parse({ ok: true });
   });
+
+  return {
+    enterFolder: (window, folderPath, signal) => entries.request(window, folderPath, signal),
+  };
 }
 
 /** A request remains claimable until acknowledged: a newly created renderer

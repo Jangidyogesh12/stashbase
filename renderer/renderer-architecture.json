@@ -46,7 +46,8 @@
     "shared/file-formats.ts",
     "shared/folder-name.ts",
     "shared/github-import.ts",
-    "shared/html-sanitization.ts"
+    "shared/html-sanitization.ts",
+    "shared/scheduled-task-timing.ts"
   ],
   "wireSchemaModules": [
     "shared/protocols/agent-model.ts",
@@ -54,6 +55,7 @@
     "shared/protocols/electron/external-navigation.ts",
     "shared/protocols/electron/project.ts",
     "shared/protocols/electron/runtime.ts",
+    "shared/protocols/electron/scheduled-tasks.ts",
     "shared/protocols/electron/text-services.ts",
     "shared/protocols/electron/updates.ts",
     "shared/protocols/electron/window-lifecycle.ts",
@@ -73,6 +75,7 @@
     "shared/protocols/http/github-import.ts",
     "shared/protocols/http/index-status.ts",
     "shared/protocols/http/project.ts",
+    "shared/protocols/http/scheduled-tasks.ts",
     "shared/protocols/http/mcp.ts",
     "shared/protocols/http/local-components.ts",
     "shared/protocols/http/preparation.ts",

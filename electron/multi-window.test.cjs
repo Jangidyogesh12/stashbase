@@ -21,6 +21,7 @@ const {
   focusWindow,
   isOAuthReturnUrl,
   isStashBaseProtocolUrl,
+  openFolderInBackground,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -466,6 +467,55 @@ test('folder entry focuses a matching window, including its initiating window', 
   });
   assert.equal(opened.action, 'focused');
   assert.deepEqual(created, []);
+});
+
+test('a scheduled run reaches its project window without showing, focusing or reusing one', async () => {
+  const registry = createWindowRegistry({ platform: 'linux' });
+  const calls = [];
+  const notes = {
+    isDestroyed: () => false,
+    show: () => calls.push('show'),
+    focus: () => calls.push('focus'),
+  };
+  const welcome = { isDestroyed: () => false };
+  registry.add('window-notes', notes, '/work/notes');
+  registry.add('window-welcome', welcome);
+
+  const existing = await openFolderInBackground({
+    registry,
+    folder: '/work/notes',
+    createWindow: async () => { throw new Error('must not create'); },
+    enterFolder: async () => { throw new Error('must not enter'); },
+  });
+  assert.equal(existing.win, notes);
+  assert.deepEqual(calls, []);
+
+  const created = { isDestroyed: () => false, close: () => calls.push('close') };
+  const opened = await openFolderInBackground({
+    registry,
+    folder: '/work/research',
+    createWindow: async () => {
+      registry.add('window-created', created);
+      return created;
+    },
+    enterFolder: async (win, folder) => calls.push(['enter', win === created, folder]),
+  });
+  assert.equal(opened.win, created);
+  assert.equal(registry.folderForWindow(created), '/work/research');
+  assert.equal(registry.folderForWindow(welcome), null, 'the Welcome window is left alone');
+  assert.deepEqual(calls, [['enter', true, '/work/research']]);
+
+  const failing = { isDestroyed: () => false, close: () => calls.push('closed failing') };
+  await assert.rejects(openFolderInBackground({
+    registry,
+    folder: '/work/archive',
+    createWindow: async () => {
+      registry.add('window-failing', failing);
+      return failing;
+    },
+    enterFolder: async () => { throw new Error('The project did not become ready.'); },
+  }), /did not become ready/);
+  assert.equal(calls.at(-1), 'closed failing');
 });
 
 test('window context cleanup retries transient transport failures', async () => {

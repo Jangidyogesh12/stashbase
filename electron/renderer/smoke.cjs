@@ -91,6 +91,9 @@ app
     const updates = require(
       path.join(repositoryRoot, 'dist', 'electron', 'updates', 'ipc.cjs'),
     );
+    const scheduledTasks = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'scheduled-tasks', 'ipc.cjs'),
+    );
     const windowLifecycle = require(
       path.join(repositoryRoot, 'dist', 'electron', 'window', 'lifecycle.cjs'),
     );
@@ -106,6 +109,7 @@ app
         capability === lifecycle.PROJECT_LIFECYCLE_CAPABILITY ||
         capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY ||
         capability === updates.UPDATES_CAPABILITY ||
+        capability === scheduledTasks.SCHEDULED_TASKS_CAPABILITY ||
         capability === windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY);
     const windowLifecycleService = windowLifecycle.registerWindowLifecycle({
       BrowserWindow, ipcMain, expectedOrigins: new Set([APP_ORIGIN]),
@@ -193,6 +197,16 @@ app
       },
       setAutoCheck: async () => {},
       windows: () => authorizedWindows,
+    });
+    // No scheduler runs here; the window still finds the channels it pulls on.
+    scheduledTasks.registerScheduledTasksIpc({
+      BrowserWindow,
+      ipcMain,
+      expectedOrigins: new Set([APP_ORIGIN]),
+      isLiveWindow,
+      hasCapability,
+      runNow: async () => ({ reason: 'No scheduler runs in this smoke.', status: 'failed' }),
+      showsFolder: async () => false,
     });
     const sessionFile = path.join(smokeRoot, 'workspace-session.json');
     const sessionStore = workspaceSession.createWorkspaceSessionStore({ filePath: sessionFile });
@@ -303,6 +317,7 @@ app
         'externalNavigation',
         'runtime',
         'project',
+        'scheduledTasks',
         'textServices',
         'workspaceSession',
         'windowLifecycle',

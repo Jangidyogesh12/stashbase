@@ -48,6 +48,10 @@ export default defineConfig({
         find: '@/contracts/appearance-themes',
         replacement: fileURLToPath(new URL('../shared/appearance-themes.ts', import.meta.url)),
       },
+      {
+        find: '@/contracts/scheduled-task-timing',
+        replacement: fileURLToPath(new URL('../shared/scheduled-task-timing.ts', import.meta.url)),
+      },
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
     ],
   },

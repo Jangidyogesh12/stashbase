@@ -7,6 +7,13 @@ import type { AgentCatalog } from '@/features/agent/domain/agent-catalog';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import type { ResolvedContextFile as ResolvedContextText } from '@/features/agent/domain/prompt-context';
 import type {
+  ProjectSchedule,
+  ScheduledRunOutcome,
+  ScheduledRunRequest,
+  ScheduledTaskDraft,
+  ScheduledTurnOutcome,
+} from '@/features/agent/domain/scheduled-tasks';
+import type {
   AgentId,
   AgentScope,
   AgentSessionEvent,
@@ -197,4 +204,57 @@ export interface AgentPreferencesPort {
     signal: AbortSignal,
     change?: { effort?: string | null; persona?: string | null },
   ): Promise<void>;
+}
+
+/** `conflict`: the task file changed since it was read. `invalid-file`: the
+ *  file cannot be read as tasks, so the form will not write it. `invalid-task`:
+ *  the task itself was refused. `not-found`: the task left the file. */
+export type ScheduledTasksExtra = 'conflict' | 'invalid-file' | 'invalid-task' | 'not-found';
+export type ScheduledTasksError = FeatureError<ScheduledTasksExtra>;
+export const ScheduledTasksError = featureErrorClass<ScheduledTasksExtra>('ScheduledTasksError');
+
+/** Run now's answer: how the run went, or why it could not be asked for. */
+export type ScheduledRunNowResult =
+  | { readonly ok: true; readonly outcome: ScheduledRunOutcome }
+  | { readonly ok: false; readonly message: string };
+
+/** A project's task list: read and edited through the server, which owns the
+ *  task file and this computer's switches; Run now goes through main, which
+ *  owns every run. */
+export interface ScheduledTasksPort {
+  read(folderPath: string, signal: AbortSignal): Promise<ProjectSchedule>;
+  save(
+    folderPath: string,
+    baseVersion: string | null,
+    draft: ScheduledTaskDraft,
+    signal: AbortSignal,
+  ): Promise<{ schedule: ProjectSchedule; taskId: string }>;
+  remove(
+    folderPath: string,
+    baseVersion: string | null,
+    taskId: string,
+    signal: AbortSignal,
+  ): Promise<ProjectSchedule>;
+  setEnabled(
+    folderPath: string,
+    taskId: string,
+    enabled: boolean,
+    signal: AbortSignal,
+  ): Promise<ProjectSchedule>;
+  runNow(folderPath: string, taskId: string): Promise<ScheduledRunNowResult>;
+  /** Reports how a sent run's first turn ended, so the list keeps it. */
+  settle(
+    folderPath: string,
+    taskId: string,
+    runId: string,
+    outcome: ScheduledTurnOutcome,
+    signal: AbortSignal,
+  ): Promise<void>;
+}
+
+/** The runs main asks this window to start. */
+export interface ScheduledRunsPort {
+  onRunRequested(
+    handler: (request: ScheduledRunRequest) => Promise<ScheduledRunOutcome>,
+  ): () => void;
 }

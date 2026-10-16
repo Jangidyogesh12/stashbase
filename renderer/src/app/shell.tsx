@@ -11,6 +11,7 @@ import {
   askAbout,
   useAgentPersonaLibrary,
   useAgentWorkspaceRuntime,
+  useScheduledRunReceiver,
 } from '@/features/agent/public';
 import {
   RevisionPreview,
@@ -203,6 +204,15 @@ function WorkspaceWindow() {
     workspaceDeps.adapters.lifecycle,
     documents ? folderPath : null,
   );
+  // A scheduled run starts its chat here once this window's project is the
+  // one main entered it into, as entry acknowledges.
+  useScheduledRunReceiver({
+    catalog: dependencies.agent.catalog,
+    folderPath: documents ? folderPath : null,
+    runs: dependencies.agent.scheduledRuns,
+    runtime,
+    tasks: dependencies.agent.scheduledTasks,
+  });
   const personaLibrary = useAgentPersonaLibrary(dependencies.agent.persona);
   const addedPersonas = useMemo(
     () =>

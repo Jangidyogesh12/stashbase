@@ -20,3 +20,10 @@ export type { AgentWorkspaceRuntime } from './application/workspace-runtime';
 
 export { createAgentPreferencesAdapter } from './infrastructure/agent-preferences-api';
 export type { AgentPreferencesPort } from './application/ports';
+
+export {
+  createScheduledRunsAdapter,
+  createScheduledTasksAdapter,
+} from './infrastructure/scheduled-tasks-api';
+export { useScheduledRunReceiver } from './hooks/use-scheduled-run-receiver';
+export type { ScheduledRunsPort, ScheduledTasksPort } from './application/ports';

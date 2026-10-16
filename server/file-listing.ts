@@ -1,4 +1,5 @@
 import { isRetrievableViewerFormat } from '../shared/file-formats.ts';
+import { SCHEDULE_FILE_NAME } from '../shared/protocols/http/scheduled-tasks.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -134,6 +135,9 @@ function workspaceDirectoryEntries(entries: fs.Dirent[], opts: FolderListingOpti
       if (!opts.showHidden && !VISIBLE_PROJECT_CONFIG_DIRS.has(entry.name)) return false;
     }
     if (entry.isFile() && HIDDEN_DOT_FILES.has(entry.name)) return false;
+    // The task list is the reader's view of this file; it joins the tree
+    // only with the other hidden files.
+    if (entry.isFile() && entry.name === SCHEDULE_FILE_NAME && !opts.showHidden) return false;
     if (entry.isFile() && entry.name.startsWith('.')) {
       // Dot-notes are part of the established hidden-note namespace. Keep
       // them out even when they are user-owned; ordinary dotfiles such as
