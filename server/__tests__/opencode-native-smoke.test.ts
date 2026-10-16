@@ -721,7 +721,7 @@ test('prewarmed native chats retain exclusive attribution and refresh changed mo
     await stopOpenCodeRuntime();
     setHostedAccountSession(undefined);
     setDefaultAgentTool(toolCatalog, 'writer', { enabled: false });
-    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   });
   const context = { windowId: 'warm-window', directory: root, persona: undefined };
   const first = createOpenCodeSessionRuntime(context);

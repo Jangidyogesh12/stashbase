@@ -99,7 +99,10 @@ test('Antigravity setup adds StashBase beside the reader\'s own MCP servers and 
   const [entry] = written.stashbase.PreToolUse;
   assert.equal(entry.matcher, '*');
   assert.match(entry.hooks[0].command, /stashbase-antigravity-hook/);
-  assert.ok(fs.statSync(entry.hooks[0].command).mode & 0o100, 'the hook launcher is executable');
+  assert.ok(fs.existsSync(entry.hooks[0].command), 'the hook launcher exists');
+  if (process.platform !== 'win32') {
+    assert.ok(fs.statSync(entry.hooks[0].command).mode & 0o100, 'the hook launcher is executable');
+  }
 
   fs.writeFileSync(hooks, '{ "guard": ');
   assert.throws(() => ensureAgentMcp('antigravity'), /leaving it untouched/);
