@@ -650,7 +650,7 @@ function updateBarrierFixture({ installUpdate = () => {} } = {}) {
 test('one refused save cancels the update install and leaves every window unapproved', async () => {
   const setup = updateBarrierFixture();
   await setup.manager.start();
-  setup.updater.emit('update-available', { version: '2.1.0' });
+  setup.updater.emit('update-downloaded', { version: '2.1.0' });
 
   const acting = setup.manager.primaryAction();
   await new Promise((resolve) => setImmediate(resolve));
@@ -685,7 +685,7 @@ test('an install that fails after every window approved stops pre-approving thei
     },
   });
   await setup.manager.start();
-  setup.updater.emit('update-available', { version: '2.1.0' });
+  setup.updater.emit('update-downloaded', { version: '2.1.0' });
 
   const acting = setup.manager.primaryAction();
   await new Promise((resolve) => setImmediate(resolve));

@@ -14,9 +14,9 @@ import { UpdateNotice } from './update-notice';
 
 afterEach(cleanup);
 
-const AVAILABLE: UpdateNoticeOffer = {
-  actionLabel: 'Update and restart',
-  message: 'StashBase 1.5.0 is available.',
+const READY: UpdateNoticeOffer = {
+  actionLabel: 'Restart to update',
+  message: 'StashBase 1.5.0 is ready to install.',
 };
 
 const UNREACHABLE: FailureView = {
@@ -48,13 +48,13 @@ describe('UpdateNotice', () => {
   });
 
   it('reads an offer as a status and routes each control it carries', async () => {
-    const notice = mount({ failure: null, offer: AVAILABLE });
+    const notice = mount({ failure: null, offer: READY });
 
-    expect(screen.getByRole('status').textContent).toContain(AVAILABLE.message);
-    expect(controls()).toEqual(['Dismiss update notification', 'Update and restart']);
+    expect(screen.getByRole('status').textContent).toContain(READY.message);
+    expect(controls()).toEqual(['Dismiss update notification', 'Restart to update']);
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Update and restart' }));
+    await user.click(screen.getByRole('button', { name: 'Restart to update' }));
     await user.click(screen.getByRole('button', { name: 'Dismiss update notification' }));
 
     expect(notice.act).toHaveBeenCalledOnce();
@@ -66,21 +66,23 @@ describe('UpdateNotice', () => {
       failure: null,
       offer: {
         actionLabel: null,
-        message: 'Downloading StashBase 1.5.0… 64%',
+        message: 'Installing the update. StashBase will restart.',
       },
     });
-    expect(screen.getByRole('status').textContent).toContain('Downloading StashBase 1.5.0… 64%');
+    expect(screen.getByRole('status').textContent).toContain(
+      'Installing the update. StashBase will restart.',
+    );
     expect(controls()).toEqual(['Dismiss update notification']);
   });
 
   it('says an unreachable updater quietly, in place of the offer sentence', () => {
-    mount({ failure: UNREACHABLE, offer: AVAILABLE });
+    mount({ failure: UNREACHABLE, offer: READY });
 
     const row = screen.getByRole('status');
     expect(row.textContent).toContain(UNREACHABLE.message);
-    expect(row.textContent).not.toContain(AVAILABLE.message);
+    expect(row.textContent).not.toContain(READY.message);
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(controls()).toEqual(['Dismiss update notification', 'Update and restart']);
+    expect(controls()).toEqual(['Dismiss update notification', 'Restart to update']);
   });
 
   it('allows dismissal of a refusal without offering an update action', () => {

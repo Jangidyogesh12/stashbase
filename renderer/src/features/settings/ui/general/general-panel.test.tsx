@@ -61,12 +61,9 @@ describe('GeneralPanel', () => {
   });
 });
 
-it.each(['Update and restart', 'Install and restart'])(
-  'offers %s in Settings',
-  async (actionLabel) => {
-    const row = updateRow({ actionLabel });
-    renderPanel(row);
-    await userEvent.setup().click(screen.getByRole('button', { name: actionLabel }));
-    expect(row.act).toHaveBeenCalledTimes(1);
-  },
-);
+it('offers the restart in Settings', async () => {
+  const row = updateRow({ actionLabel: 'Restart to update' });
+  renderPanel(row);
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Restart to update' }));
+  expect(row.act).toHaveBeenCalledTimes(1);
+});

@@ -33,33 +33,23 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The available-update card with a close icon and primary action. */
-export const Available: Story = {
+/** The update downloaded in the background. Restarting is the reader's call. */
+export const ReadyToInstall: Story = {
   args: {
     notice: offered({
-      actionLabel: 'Update and restart',
-      message: 'StashBase 1.5.0 is available.',
+      actionLabel: 'Restart to update',
+      message: 'StashBase 1.5.0 is ready to install.',
     }),
   },
 };
 
 /** Work already under way. Nothing to press, so the row is a sentence and the
  *  one way to stop hearing about it. */
-export const Downloading: Story = {
+export const Installing: Story = {
   args: {
     notice: offered({
       actionLabel: null,
-      message: 'Downloading StashBase 1.5.0… 64%',
-    }),
-  },
-};
-
-/** The downloaded update offers installation and restart. */
-export const ReadyToInstall: Story = {
-  args: {
-    notice: offered({
-      actionLabel: 'Install and restart',
-      message: 'StashBase 1.5.0 is ready to install.',
+      message: 'Installing the update. StashBase will restart.',
     }),
   },
 };

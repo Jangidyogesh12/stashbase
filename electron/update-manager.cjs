@@ -190,6 +190,9 @@ function createUpdateManager(options) {
     if (startPromise) return startPromise;
     if (disposed) return Promise.resolve(snapshot());
     started = true;
+    // check() starts each download itself: electron-updater's own autoDownload
+    // hands back a download promise nobody awaits, so a failure would escape
+    // onError as an unhandled rejection.
     updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
     updater.allowPrerelease = false;
@@ -239,6 +242,9 @@ function createUpdateManager(options) {
     const work = Promise.resolve().then(async () => {
       try {
         await updater.checkForUpdates();
+        // A found release downloads in the background. The check itself
+        // ends here; the download reports through its own phases.
+        void download();
       } catch (error) {
         onError(error);
       } finally {
@@ -283,24 +289,22 @@ function createUpdateManager(options) {
     return snapshot();
   }
 
-  async function primaryAction() {
-    await start();
-    if (checking) await checking;
-    if (disposed) return snapshot();
-    if (state.phase === 'ready') return installReadyUpdate();
-    if (!state.availableVersion) return snapshot();
-    if (state.phase === 'downloading' || state.phase === 'installing') return snapshot();
+  async function download() {
+    if (state.phase !== 'available') return;
     publish({ phase: 'downloading', percent: 0, message: undefined });
     try {
       await updater.downloadUpdate();
-      // electron-updater emits update-downloaded before downloadUpdate()
-      // resolves. One explicit click therefore grants consent for this whole
-      // download/install/relaunch operation.
-      if (state.phase === 'ready') await installReadyUpdate();
     } catch (error) {
       onError(error);
     }
-    return snapshot();
+  }
+
+  async function primaryAction() {
+    await start();
+    if (disposed) return snapshot();
+    // A finished download only waits. Restarting is always the reader's own
+    // click, never a consequence of the download completing.
+    return installReadyUpdate();
   }
 
   async function openDownloadPage() {

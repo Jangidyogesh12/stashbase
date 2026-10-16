@@ -14,7 +14,7 @@ const read: UpdatesPort['read'] = async () => ({
   state: {
     autoCheckEnabled: true,
     currentVersion: '2.8.0',
-    status: { phase: 'available', version: '2.8.1' },
+    status: { phase: 'ready', version: '2.8.1' },
   },
 });
 
@@ -51,12 +51,12 @@ it('closes Developer tools and previews installation in the sidebar without invo
   expect(footer).not.toBeNull();
   if (!footer) throw new Error('Preview is not in the sidebar footer');
   expect(within(footer).getByText('StashBase 9.9.9 is ready to install.')).not.toBeNull();
-  await user.click(screen.getByRole('button', { name: 'Install and restart' }));
+  await user.click(screen.getByRole('button', { name: 'Restart to update' }));
   expect(primary).not.toHaveBeenCalled();
   expect(release).not.toHaveBeenCalled();
   await user.click(screen.getByRole('button', { name: 'Dismiss update notification' }));
   expect(screen.queryByText('Update preview')).toBeNull();
-  expect(screen.getByText('StashBase 2.8.1 is available.')).not.toBeNull();
-  await user.click(screen.getByRole('button', { name: 'Update and restart' }));
+  expect(screen.getByText('StashBase 2.8.1 is ready to install.')).not.toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Restart to update' }));
   await waitFor(() => expect(primary).toHaveBeenCalledOnce());
 }, 20_000);

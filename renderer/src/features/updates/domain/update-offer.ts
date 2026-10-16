@@ -55,21 +55,23 @@ const UPDATE_OFFERS: { readonly [Phase in UpdatePhaseName]: UpdateOfferFor<Phase
     announce: false,
     sentence: () => 'StashBase is up to date.',
   },
+  // Main downloads a found release on its own, so the window stays quiet
+  // until there is something to restart into. Settings still answers.
   available: {
-    action: { kind: 'primary', label: 'Update and restart' },
-    announce: true,
+    action: null,
+    announce: false,
     sentence: (status) => `StashBase ${status.version} is available.`,
   },
   downloading: {
     action: null,
-    announce: true,
+    announce: false,
     sentence: (status) =>
       status.percent === null
         ? `Downloading StashBase ${status.version}…`
         : `Downloading StashBase ${status.version}… ${status.percent}%`,
   },
   ready: {
-    action: { kind: 'primary', label: 'Install and restart' },
+    action: { kind: 'primary', label: 'Restart to update' },
     announce: true,
     sentence: (status) => `StashBase ${status.version} is ready to install.`,
   },
