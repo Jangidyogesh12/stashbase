@@ -44,6 +44,7 @@ The map is navigation, not proof that every caller has been reviewed.
 | [J10 Core loop](#j10-core-loop) | [Project Entry](../design-docs/capabilities/project-entry.md), [Agent Sessions](../design-docs/capabilities/agent-sessions.md), [Project Files](../design-docs/capabilities/project-files.md), [Project Context](../design-docs/capabilities/project-context.md) | [Ownership](architecture.md#runtime-ownership), [Agent sessions](architecture.md#agent-sessions-and-permissions), [Source transactions](architecture.md#source-transactions) |
 | [J11 Conversation to project](#j11-conversation-to-project) | [Project Entry](../design-docs/capabilities/project-entry.md), [Agent Sessions](../design-docs/capabilities/agent-sessions.md) | [Projects](architecture.md#project-scope-and-paths), [Session ownership](architecture.md#agent-sessions-and-permissions) |
 | [J12 Build Wiki Pages](#j12-build-wiki-pages) | [Agent Sessions](../design-docs/capabilities/agent-sessions.md), [Project Files](../design-docs/capabilities/project-files.md), [Project Context](../design-docs/capabilities/project-context.md) | [Agent permissions](architecture.md#agent-sessions-and-permissions), [Preparation](architecture.md#preparation-and-retrieval) |
+| [J14 Scheduled tasks](#j14-scheduled-tasks) | [Scheduled Tasks](../design-docs/capabilities/scheduled-tasks.md), [Agent Sessions](../design-docs/capabilities/agent-sessions.md), [Project Files](../design-docs/capabilities/project-files.md), [Project Entry](../design-docs/capabilities/project-entry.md) | [Scheduled tasks](architecture.md#scheduled-tasks), [Agent sessions](architecture.md#agent-sessions-and-permissions), [Native lifecycle](architecture.md#native-lifecycle-and-updates) |
 | [J13 Gallery download](#j13-gallery-download) | [Project Entry](../design-docs/capabilities/project-entry.md) | [Gallery](architecture.md#gallery), [Import](architecture.md#import-publication) |
 
 ## J01: Onboarding
@@ -2026,6 +2027,48 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
   description rising over the picture without changing card height, and the
   full cover on the entry page. The proxied CDN path was not exercised before
   publication.
+
+## J14: Scheduled tasks
+
+**Intent:** [J14](../design-docs/journeys/README.md#j14-run-a-scheduled-task-in-a-project).
+
+**Implementation:** Renderer: `renderer/src/features/agent/application/scheduled-run.ts`,
+`renderer/src/features/agent/ui/scheduled/scheduled-tasks-view.tsx`,
+`renderer/src/features/agent/hooks/use-scheduled-run-receiver.ts`. Main:
+`electron/scheduled-tasks/scheduler.ts`, `electron/scheduled-tasks/ipc.ts`,
+`electron/multi-window.cjs`. Host: `server/scheduled-tasks.ts`,
+`server/routes/scheduled-tasks.ts`.
+
+**Status:** Partial.
+
+- **Contract Test:** `server/scheduled-tasks.test.ts` covers lenient parsing,
+  single-task edits that keep unknown fields, version conflicts, unreadable files left
+  untouched, at-most-once claims, enabled-time cutoff, bounded run history, forward-only
+  run reports, stale running runs, and removal.
+  Electron suites cover the due rule with catch-up, one run per day, Run now, the run
+  coordinator's late-subscriber pull and deadlines, preload de-duplication, and the
+  no-focus window rule. Renderer suites drive a run through the real session runtime
+  over a fake port (sent in the background with its title and file, its first-turn
+  outcome reported, refused for a missing file or an unready Agent), the surface that
+  stands in the chat's place, and the list page: next run, latest-run states including
+  a held chat's live approval wait, the run history with late runs, the empty list,
+  and the in-page form.
+- **Driven Runtime Pass:** 2026-10-16, built app under an isolated HOME and port: a
+  due task was claimed about 20 seconds after launch, its project window opened hidden
+  and unfocused, the run failed with the Agent-readiness reason (no Agent set up in
+  that HOME), and the run was recorded with its occurrence and the task file
+  untouched; focusing the other window revealed it without taking focus. The chat
+  pane's header beside Documents showed the list page in the chat's place and toggled
+  back; the Chats sidebar row showed the same page with each task's next run, its
+  latest run and the run history. The page followed an external file edit within one
+  refresh, recorded Run now in the history, and edited a task in the page with its
+  named file as a chip. No live Agent turn was driven.
+- **AI Eval:** Not applicable; a run's quality is the workflow's and the Agent's.
+- **Release Check:** packaged macOS, Windows, and Linux runs with a signed-in Agent,
+  including sleep/wake catch-up and the hidden-window reveal on each platform.
+- **Gap:** a sent run with a real runtime, its later approval wait, and the persisted
+  title on each runtime are unproven in the app; a turn that fails after its request
+  was accepted is visible in its chat, not in the task's last result.
 
 ## Maintenance Rule
 

@@ -56,6 +56,13 @@ from Agent permissions and document reading/editing controls.
 The Agent collaboration capability; **Chat** is its conversation surface.
 OpenQuill, Claude, and Codex are runtimes, not names for the capability.
 
+## Scheduled task
+
+A request a project makes of its Agent every day at a set time: a new chat, sent as if
+the reader had sent it, while StashBase is open. It lives in the project's
+`.schedules.json`; whether it is switched on belongs to each computer. See
+[Scheduled Tasks](capabilities/scheduled-tasks.md).
+
 ## Passage
 
 Selected document text bound to an Agent request with **Ask Agent**. Its words

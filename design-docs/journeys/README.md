@@ -281,3 +281,34 @@ downloading again.
 **Capabilities:** [Project Entry](../capabilities/project-entry.md).
 
 **Evidence:** [J13](../../code-review/journey-coverage.md#j13-gallery-download).
+
+## J14: Run a scheduled task in a project
+
+### Flow
+
+Open the project's Scheduled tasks list → write a task (name, daily time, Agent, and
+what to do, optionally mentioning a workflow file) or keep one a template ships → switch
+it on → at its time a new chat starts in the project → see in the list that it ran and
+how it went → read the result in that chat.
+
+### Required Results
+
+A run is a new chat sent the way the reader sends one: same Agent, model, permission
+mode, approvals, and questions, titled with the task's name and the day. It never takes
+focus or the chat the reader is writing in; a project with no window gets one opened out
+of sight. A task runs at most once a day, and a run missed while StashBase was closed or
+asleep catches up once. Copying a template or syncing the folder to another computer
+never switches a task on. The list never leaves the reader guessing: each task says
+when it runs next, and every recent run says when it ran, what became of it, and why it
+was late or failed.
+
+### Failure and Recovery
+
+A run that cannot start (Agent not ready, a named file gone, the window closed) records
+why beside the task and is not retried automatically; Run now repeats it deliberately.
+Approvals and questions wait in the run's chat. A task file the list cannot read is
+never overwritten from it.
+
+**Capabilities:** [Scheduled Tasks](../capabilities/scheduled-tasks.md), [Agent Sessions](../capabilities/agent-sessions.md), [Project Files](../capabilities/project-files.md), [Project Entry](../capabilities/project-entry.md).
+
+**Evidence:** [J14](../../code-review/journey-coverage.md#j14-scheduled-tasks).

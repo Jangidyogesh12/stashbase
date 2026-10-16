@@ -14,6 +14,10 @@ usable; Agent setup and indexing are independent.
   reuse the initiating Welcome window; otherwise open another window.
 - Repeated or superseded requests cannot create duplicate copies or windows.
   Existing work remains available until a replacement entry succeeds.
+- A [scheduled run](scheduled-tasks.md#quiet-by-design) is not an entry request and
+  never takes focus. It uses the project's existing window; otherwise it opens one out
+  of sight, never reusing Welcome, and shows it, still without focus, the next time the
+  reader comes back to StashBase.
 - Startup reaches Welcome without seeding projects or native instruction files.
   Explicit entry restores saved work. Only explicit removal forgets registration.
 - An occupied window keeps its project. Its sidebar's project name opens a
@@ -57,7 +61,8 @@ using submodules or Git LFS remain unsupported.
 [J02](../journeys/README.md#j02-add-and-open-a-folder),
 [J10](../journeys/README.md#j10-turn-a-local-project-into-durable-agent-assisted-work),
 [J11](../journeys/README.md#j11-turn-a-conversation-into-a-project),
-[J13](../journeys/README.md#j13-download-a-ready-made-wiki-from-the-gallery).
+[J13](../journeys/README.md#j13-download-a-ready-made-wiki-from-the-gallery),
+[J14](../journeys/README.md#j14-run-a-scheduled-task-in-a-project).
 
 Work preservation: [files](project-files.md#saving-and-release) and
 [sessions](agent-sessions.md). Implementation ownership:

@@ -48,6 +48,10 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
 - Agent writes follow runtime permissions and produce ordinary files, whether
   made through a file tool, a shell command, or a subagent. File refreshes do
   not steal focus or imply a universal accept/reject gate.
+- A project's scheduled tasks live in its root `.schedules.json`, user-owned content
+  that Agents write with the ordinary file tools. It joins Files only with hidden files
+  shown and is never retrieval-eligible. [Scheduled Tasks](scheduled-tasks.md#the-file-is-the-source-the-list-is-its-view)
+  owns how the task list reads and edits it.
 - Returning focus to StashBase refreshes the open project's Files tree and
   reconciles external additions, renames, and deletions. Browsing those changes
   does not wait for search indexing, and the refresh preserves open documents.
@@ -148,7 +152,8 @@ conversation reopened from history does not show its earlier turns' changes.
 [J07](../journeys/README.md#j07-converge-chat-into-a-document),
 [J08](../journeys/README.md#j08-connect-an-external-agent-through-mcp),
 [J10](../journeys/README.md#j10-turn-a-local-project-into-durable-agent-assisted-work),
-[J12](../journeys/README.md#j12-build-wiki-pages-from-a-local-folder).
+[J12](../journeys/README.md#j12-build-wiki-pages-from-a-local-folder),
+[J14](../journeys/README.md#j14-run-a-scheduled-task-in-a-project).
 
 [Documents journey](../journeys/documents.md) owns navigation and conflict choices.
 [Source transactions](../../code-review/architecture.md#source-transactions)

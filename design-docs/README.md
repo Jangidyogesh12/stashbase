@@ -9,7 +9,7 @@ Planned behavior stays in its owning design, clearly separate from current behav
 Describe how a user completes a task: entry, meaningful steps, result, and recovery.
 Link to shared capabilities instead of restating their rules.
 
-- [User Journeys](journeys/README.md): stable J01–J13 task definitions and dependencies.
+- [User Journeys](journeys/README.md): stable J01–J14 task definitions and dependencies.
 - [Working in Documents](journeys/documents.md): navigation, editing, and conflict decisions.
 - [Working in Chat](journeys/chat.md): conversation, first send, and return to work.
 
@@ -26,6 +26,7 @@ helper; these documents state product contracts, not implementation inventories.
 | [Agent Sessions](capabilities/agent-sessions.md) | Conversation identity, readiness, submissions, execution, continuity and recovery |
 | [Project Context](capabilities/project-context.md) | Preparation, indexing readiness, retrieval, and source evidence |
 | [Account and Settings](capabilities/account-settings.md) | Access prerequisites, configuration scope, credentials, and shared settings decisions |
+| [Scheduled Tasks](capabilities/scheduled-tasks.md) | Recurring Agent requests: their file, switches, runs, and what the reader sees of them |
 
 ## Reading and Maintenance
 
