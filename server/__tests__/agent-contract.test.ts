@@ -24,6 +24,7 @@ test('every built-in runtime declares the fundamental Shared Agent Contract beha
   assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => [adapter.id, adapter.label]), [
     ['codex', 'Codex'],
     ['claude', 'Claude'],
+    ['antigravity', 'Antigravity'],
     ['stashbase', 'Default'],
   ]);
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
@@ -49,6 +50,9 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.deepEqual(capabilities.stashbase!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.deepEqual(capabilities.claude!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.deepEqual(capabilities.codex!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
+  // Antigravity's own Auto approves inside the CLI, past StashBase's approval hook.
+  assert.deepEqual(capabilities.antigravity!.modes, ['default', 'acceptEdits', 'plan']);
+  assert.equal(capabilities.antigravity!.attachments, false);
   assert.equal(capabilities.stashbase!.models, false);
   assert.equal(capabilities.stashbase!.effort, false);
   assert.equal(capabilities.stashbase!.skills, false);
@@ -101,6 +105,9 @@ test('capability discovery reports installed and unavailable native runtimes wit
     codex: process.platform === 'win32'
       ? 'irm https://chatgpt.com/codex/install.ps1 | iex'
       : 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
+    antigravity: process.platform === 'win32'
+      ? 'irm https://antigravity.google/cli/install.ps1 | iex'
+      : 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
   } as const;
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
     if (adapter.id === 'stashbase') continue;
@@ -109,7 +116,7 @@ test('capability discovery reports installed and unavailable native runtimes wit
     assert.equal(available.source, 'system');
     assert.equal(available.bootstrap.phase, 'idle');
     assert.equal(available.version, null, 'an executable that cannot report a version is still discovered');
-    assert.equal(available.updatable, true, 'both native runtimes support the official native installer');
+    assert.equal(available.updatable, true, 'every native runtime supports the official native installer');
     const unavailable = runtimeDescriptorFor(adapter, null);
     assert.equal(unavailable.state, 'unavailable');
     assert.equal(unavailable.source, null);
@@ -122,7 +129,7 @@ test('capability discovery reports installed and unavailable native runtimes wit
 test('capability discovery publishes the registered adapter catalog', async () => {
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) registerAgentAdapter(adapter);
   const discovered = await discoverAgentRuntimes();
-  assert.deepEqual(discovered.map((runtime) => runtime.id), ['codex', 'claude', 'stashbase']);
+  assert.deepEqual(discovered.map((runtime) => runtime.id), ['codex', 'claude', 'antigravity', 'stashbase']);
   for (const runtime of discovered) {
     const adapter = BUILT_IN_AGENT_ADAPTERS.find((candidate) => candidate.id === runtime.id)!;
     assert.equal(runtime.endpoint, '/ws/agent');

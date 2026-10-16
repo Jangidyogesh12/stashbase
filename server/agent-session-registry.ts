@@ -7,7 +7,7 @@ import { filesystemPath } from './filesystem-path.ts';
 
 export const AGENT_SESSION_ID_HEADER = 'x-stashbase-agent-session-id';
 
-export type AttributedAgentId = 'stashbase' | 'claude' | 'codex';
+export type AttributedAgentId = 'stashbase' | 'claude' | 'codex' | 'antigravity';
 
 /** The narrow live-session surface attributed host operations need. */
 export interface AttributedAgentSession {

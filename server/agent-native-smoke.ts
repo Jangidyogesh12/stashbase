@@ -44,9 +44,23 @@ export function smokeNativeAgentCli(
 }
 
 /** Exercise each native protocol boundary without a prompt, account fixture,
- * or workspace mutation. Claude must retain SDK stream flags; Codex must
- * complete the app-server initialization RPC. */
+ * or workspace mutation. Claude must retain SDK stream flags; Antigravity must
+ * offer stream-json input and output; Codex must complete the app-server
+ * initialization RPC. */
 export async function smokeNativeAgentProtocol(id: AgentId, executable: string): Promise<NativeAgentSmokeResult> {
+  if (id === 'antigravity') {
+    const probe = spawnSync(executable, ['--help'], {
+      encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'], ...nativeCliSpawnOptions(executable),
+    });
+    const output = `${probe.stdout ?? ''}\n${probe.stderr ?? ''}`;
+    if (probe.error || probe.status !== 0) {
+      return { id, executable, ok: false, message: `Antigravity CLI help probe failed: ${probe.error?.message ?? `exit code ${probe.status ?? 'unknown'}`}` };
+    }
+    if (!/--input-format/.test(output) || !/--output-format/.test(output)) {
+      return { id, executable, ok: false, message: 'Antigravity CLI lacks the stream-json flags the StashBase bridge needs; update Antigravity.' };
+    }
+    return { id, executable, ok: true, message: `antigravity native protocol smoke passed (${executable}).` };
+  }
   if (id === 'claude') {
     const probe = spawnSync(executable, ['--help'], {
       encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'], ...nativeCliSpawnOptions(executable),

@@ -20,6 +20,8 @@ import type { AgentId, AgentModel } from '../shared/agent-protocol.ts';
 import type { AgentModelCatalog } from '../shared/agent-runtime.ts';
 import { readAppConfig, readAppConfigStrict, writeAppConfigStrict } from './app-config.ts';
 import { readClaudeModelCatalog } from './claude-model-catalog.ts';
+import { readAntigravityModelCatalog } from './antigravity-model-catalog.ts';
+import { isNativeAgentId, NATIVE_AGENT_IDS } from './native-agents.ts';
 import { spawnCodexAppServerProcess } from './codex-app-server-process.ts';
 import { loadCodexModelCatalog } from './codex-model-catalog.ts';
 import { fetchHostedAgentProfiles, hostedAgentCatalogModels } from './hosted-agent-models.ts';
@@ -58,7 +60,7 @@ function incomplete(catalog: AgentModelCatalog): boolean {
 let loaded = false;
 
 function persisted(id: AgentId): id is PersistedAgentId {
-  return id === 'claude' || id === 'codex';
+  return isNativeAgentId(id);
 }
 
 function stale(id: AgentId, catalog: AgentModelCatalog, now: number): boolean {
@@ -69,7 +71,7 @@ function load(): void {
   if (loaded) return;
   loaded = true;
   const stored = readAppConfig().agentModelCatalogs;
-  for (const id of ['claude', 'codex'] as const) {
+  for (const id of NATIVE_AGENT_IDS) {
     const entry = stored?.[id];
     if (!entry || !Array.isArray(entry.models) || typeof entry.readAt !== 'string') continue;
     memory.set(id, {
@@ -154,6 +156,13 @@ export async function readHostedAgentModelCatalog(): Promise<CatalogReading> {
   return { models: hostedAgentCatalogModels(await fetchHostedAgentProfiles()) };
 }
 
+const CATALOG_READERS: Record<AgentId, () => Promise<CatalogReading>> = {
+  stashbase: readHostedAgentModelCatalog,
+  codex: () => readCodexModelCatalog(),
+  claude: () => readClaudeModelCatalog(),
+  antigravity: () => readAntigravityModelCatalog(),
+};
+
 /** The runtime's catalog for the listing: what is remembered, or with nothing
  * complete (or, for the hosted list, nothing recent) remembered yet, one runtime-level read shared by every caller
  * waiting on it. A read that fails, or that still names no default, leaves
@@ -170,8 +179,7 @@ export function ensureAgentModelCatalog(
   if (lastAttempt !== undefined && now() - lastAttempt < READ_RETRY_MS) return Promise.resolve(known);
   const pending = inFlight.get(id);
   if (pending) return pending;
-  const read = options.read ?? (id === 'stashbase' ? readHostedAgentModelCatalog
-    : id === 'codex' ? readCodexModelCatalog : readClaudeModelCatalog);
+  const read = options.read ?? CATALOG_READERS[id];
   const reading = read()
     .then((result) => {
       rememberAgentModels(id, result.models);

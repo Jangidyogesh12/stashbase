@@ -90,8 +90,8 @@ export function isEmbedderProvider(value: unknown): value is EmbedderProvider {
 export interface AppConfigFile {
   agentPreferences?: Array<{
     scope: string;
-    agent: 'stashbase' | 'codex' | 'claude';
-    efforts?: Partial<Record<'stashbase' | 'codex' | 'claude', string | null>>;
+    agent: 'stashbase' | 'codex' | 'claude' | 'antigravity';
+    efforts?: Partial<Record<'stashbase' | 'codex' | 'claude' | 'antigravity', string | null>>;
     /** The library persona this project's next new Chat starts with. */
     persona?: string | null;
   }>;
@@ -134,7 +134,7 @@ export interface AppConfigFile {
    * with nothing chosen. A memory rather than a preference: losing it costs
    * one runtime-level read, and no route accepts it from a request body. See
    * `agent-model-catalog.ts`. */
-  agentModelCatalogs?: Partial<Record<'claude' | 'codex', AgentModelCatalog>>;
+  agentModelCatalogs?: Partial<Record<'claude' | 'codex' | 'antigravity', AgentModelCatalog>>;
   /** The Default Agent tools the reader attached, each with its hosted
    * profile. Read through `default-agent-tools.ts`, which ignores a profile
    * outside a tool's own list. */

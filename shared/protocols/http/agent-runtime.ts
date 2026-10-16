@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { agentModelSchema } from '../agent-model';
 
-export const agentIdSchema = z.enum(['stashbase', 'claude', 'codex']);
+export const agentIdSchema = z.enum(['stashbase', 'claude', 'codex', 'antigravity']);
 
 const agentBootstrapPhaseSchema = z.enum([
   'idle',

@@ -30,9 +30,9 @@ export type { AgentTurnFailure, AgentTurnFailureKind } from '../shared/agent-pro
  * provider vocabulary over broad words so an unmatched message stays a plain
  * error instead of wearing the wrong recovery. */
 const RUNTIME_OUTDATED_PATTERN =
-  /does not support this model;? version [\d.]+ or newer is required|run ['"`]?(claude|codex) (update|upgrade)|(claude code|codex)( cli)? (version )?[\d.]+ is (too old|out of date|outdated)/i;
+  /does not support this model;? version [\d.]+ or newer is required|run ['"`]?(claude|codex|agy) (update|upgrade)|(claude code|codex)( cli)? (version )?[\d.]+ is (too old|out of date|outdated)/i;
 const AUTH_PATTERN =
-  /authentication_error|invalid api key|api key.{0,20}invalid|please run \/login|not logged in|logged out|login required|unauthorized|\b401\b|token.{0,30}(expired|revoked|invalid)|oauth.{0,20}(expired|error|revoked)|sign in again|re-?authenticate/i;
+  /authentication_error|authentication required|not signed in|invalid api key|api key.{0,20}invalid|please run \/login|not logged in|logged out|login required|unauthorized|\b401\b|token.{0,30}(expired|revoked|invalid)|oauth.{0,20}(expired|error|revoked)|sign in again|re-?authenticate/i;
 const QUOTA_PATTERN =
   /usage limit|quota|credit balance|out of credits|usage cap|spending (limit|cap|budget)|plan limit|(weekly|monthly|5-hour) limit|insufficient_quota/i;
 const RATE_LIMIT_PATTERN =

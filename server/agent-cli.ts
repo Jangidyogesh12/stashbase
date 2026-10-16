@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { probeAgentCommand } from './agent-probe.ts';
+import { NATIVE_AGENTS, nativeAgentForBin } from './native-agents.ts';
 export interface AgentCliSpec {
   name: string;
   envNames: string[];
@@ -56,7 +57,9 @@ export function agentCliSearchDirs(
     const appData = environmentValue(env, 'APPDATA');
     const localAppData = environmentValue(env, 'LOCALAPPDATA');
     return unique([
-      localAppData ? join(localAppData, 'Programs', 'OpenAI', 'Codex', 'bin') : '',
+      ...Object.values(NATIVE_AGENTS).map((spec) => localAppData && spec.windowsLocalAppDataBin
+        ? join(localAppData, ...spec.windowsLocalAppDataBin)
+        : ''),
       ...dirs,
       appData ? join(appData, 'npm') : '',
       localAppData ? join(localAppData, 'npm') : '',
@@ -93,7 +96,7 @@ export function agentCliExecutableCandidates(name: string, platform: NodeJS.Plat
  * Homebrew and npm can both publish commands into /usr/local/bin. Windows npm
  * shims are small scripts rather than symlinks. Never execute a CLI to classify it. */
 function isNpmAgentCli(executable: string, name: string): boolean {
-  const packageName = name === 'claude' ? '@anthropic-ai/claude-code' : name === 'codex' ? '@openai/codex' : null;
+  const packageName = nativeAgentForBin(name)?.npmPackage;
   if (!packageName) return false;
   try {
     const target = fs.realpathSync(executable).replaceAll('\\', '/');
@@ -110,8 +113,9 @@ function isNpmAgentCli(executable: string, name: string): boolean {
 export function resolveNativeAgentCli(name: string): string | null {
   const dirs = [path.join(os.homedir(), '.local', 'bin')];
   const localAppData = environmentValue(process.env, 'LOCALAPPDATA');
-  if (process.platform === 'win32' && name === 'codex' && localAppData) {
-    dirs.unshift(path.join(localAppData, 'Programs', 'OpenAI', 'Codex', 'bin'));
+  const windowsBin = nativeAgentForBin(name)?.windowsLocalAppDataBin;
+  if (process.platform === 'win32' && windowsBin && localAppData) {
+    dirs.unshift(path.join(localAppData, ...windowsBin));
   }
   for (const dir of dirs) {
     const candidate = path.join(dir, process.platform === 'win32' ? `${name}.exe` : name);

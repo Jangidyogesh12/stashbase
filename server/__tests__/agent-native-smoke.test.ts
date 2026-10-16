@@ -11,3 +11,10 @@ for (const id of ['claude', 'codex'] as const satisfies readonly AgentId[]) {
     assert.equal(result.ok, true, result.message);
   });
 }
+
+// Antigravity is optional on development machines: the check runs where `agy` is installed.
+test('installed antigravity CLI exposes the native adapter protocol', { skip: agentExecutableFor('antigravity') ? false : 'agy is not installed' }, async () => {
+  const executable = agentExecutableFor('antigravity')!;
+  const result = await smokeNativeAgentProtocol('antigravity', executable);
+  assert.equal(result.ok, true, result.message);
+});

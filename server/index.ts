@@ -71,6 +71,7 @@ import { mount as mountMcpRoutes } from './routes/mcp.ts';
 import { createMcpHttpService } from './mcp-http-service.ts';
 import { runShutdownCleanup } from './shutdown-cleanup.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
+import { mount as mountAntigravityHookRoutes } from './routes/antigravity-hook.ts';
 import { mount as mountAgentPreferencesRoutes } from './routes/agent-preferences.ts';
 import { mount as mountAgentToolRoutes } from './routes/agent-tools.ts';
 import { mount as mountAgentPersonaRoutes } from './routes/agent-persona.ts';
@@ -320,6 +321,7 @@ mountTerminalRoutes(app);
 mountMcpRoutes(app, mcpHttpService);
 mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in and MCP-only
 mountAgentSessionsRoutes(app); // shared contract history surface for the built-in panel
+mountAntigravityHookRoutes(app); // approval for each tool call a StashBase Antigravity chat makes
 mountAgentPersonaRoutes(app);
 mountAgentPreferencesRoutes(app); // global + explicit member-folder Chat guidance
 
@@ -544,6 +546,7 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 onClose((_oldRoot, windowId) => {
   stopAgentRuntime('claude', windowId);
   stopAgentRuntime('codex', windowId);
+  stopAgentRuntime('antigravity', windowId);
   stopAgentRuntime('stashbase', windowId);
 });
 server.on('upgrade', createWebSocketUpgradeHandler({
@@ -576,6 +579,7 @@ async function shutdown(reason: string): Promise<void> {
   try { server.close(); } catch { /* already gone */ }
   try { stopAgentRuntime('claude'); } catch { /* swallow */ }
   try { stopAgentRuntime('codex'); } catch { /* swallow */ }
+  try { stopAgentRuntime('antigravity'); } catch { /* swallow */ }
   try { stopAgentRuntime('stashbase'); } catch { /* swallow */ }
   // Hard ceiling: conversion cancellation may spend up to 2.5 s waiting for
   // extractor process groups to exit, and the daemon close ladder can spend

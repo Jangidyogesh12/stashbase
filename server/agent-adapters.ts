@@ -7,6 +7,13 @@
 import { attachAgentWebSocket, killActiveAgent, killAgentSessionsForFolder } from './agent.ts';
 import { AGENT_ACCESS_MODES, type AgentAdapter } from './agent-contract.ts';
 import { attachCodexWebSocket, killActiveCodex, killCodexSessionsForFolder } from './codex-session-runtime.ts';
+import {
+  attachAntigravityWebSocket,
+  killActiveAntigravity,
+  killAntigravitySessionsForFolder,
+} from './antigravity-session-runtime.ts';
+import { antigravityHistory } from './antigravity-history.ts';
+import { ANTIGRAVITY_ACCESS_MODES } from './antigravity-protocol.ts';
 import { claudeHistoryActions } from './claude-history.ts';
 import { codexHistoryActions } from './codex-history-adapter.ts';
 import {
@@ -47,6 +54,24 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     stop: killActiveAgent,
     stopFolder: killAgentSessionsForFolder,
     history: claudeHistoryActions(),
+  },
+  {
+    id: 'antigravity', label: 'Antigravity', vendor: 'Google',
+    capabilities: {
+      ...SHARED_PANEL_CAPABILITIES,
+      // Headless `agy` reads only text messages; attached files are not sent.
+      attachments: false,
+      modes: ANTIGRAVITY_ACCESS_MODES,
+      // Antigravity discovers the project's skills itself and offers no
+      // listing to invoke one by name.
+      skills: false,
+      steering: false,
+      titleHint: true,
+    },
+    attach: attachAntigravityWebSocket,
+    stop: killActiveAntigravity,
+    stopFolder: killAntigravitySessionsForFolder,
+    history: antigravityHistory.actions(),
   },
   {
     id: 'stashbase', label: 'Default', vendor: 'StashBase · OpenCode',

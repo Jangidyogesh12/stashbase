@@ -26,7 +26,7 @@ const queuedSchema = identitySchema.extend({
 export type QueuedUsage = z.infer<typeof queuedSchema>;
 
 const turnSchema = identitySchema.extend({
-  turnId: id, runtime: z.enum(['stashbase', 'claude', 'codex']),
+  turnId: id, runtime: z.enum(['stashbase', 'claude', 'codex', 'antigravity']),
   version: z.string().max(80), os: z.string().max(20), sessionId: id.optional(),
   startedAt: timestamp, observedAt: timestamp, stage: agentTurnStageSchema,
   sequence: z.number().int().nonnegative(),

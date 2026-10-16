@@ -1,3 +1,4 @@
+import antigravityMark from '@lobehub/icons-static-svg/icons/antigravity.svg?raw';
 import claudeMark from '@lobehub/icons-static-svg/icons/claude-color.svg?raw';
 import openAiMark from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 
@@ -37,6 +38,10 @@ export const ClaudeIcon = brandIcon(claudeMark, 'ClaudeIcon');
 /** Codex is OpenAI's coding Agent. Use the familiar OpenAI/ChatGPT knot
  * instead of the Codex terminal badge so readers can recognize its provider. */
 export const CodexIcon = brandIcon(openAiMark, 'CodexIcon');
+/** Antigravity is Google's coding Agent. Its single-path mark takes the ink
+ *  colour; the multicolour mark's masks and filters carry fixed ids that
+ *  collide when several marks share a page. */
+export const AntigravityIcon = brandIcon(antigravityMark, 'AntigravityIcon');
 
 /** The bundled Agent wears StashBase's own mark: it is the runtime the app
  *  ships rather than a vendor's, so the app's mark is what names it.

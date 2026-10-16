@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const runtime = z.enum(['stashbase', 'claude', 'codex']);
+const runtime = z.enum(['stashbase', 'claude', 'codex', 'antigravity']);
 export const agentTurnStageSchema = z.enum(['preparing', 'host_accepted', 'runtime_dispatched', 'model_request_started', 'response_started', 'waiting_permission', 'tool_running']);
 export const agentTurnReasonSchema = z.enum(['completed', 'runtime_error', 'user_cancelled', 'context_invalid', 'connection_lost', 'session_closed', 'scope_removed', 'app_shutdown', 'host_shutdown', 'app_update', 'host_restarted']);
 export type AgentTurnStage = z.infer<typeof agentTurnStageSchema>;

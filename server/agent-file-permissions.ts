@@ -20,7 +20,8 @@ export function isStashbaseWorkspaceEdit(
     && isPathWithinWorkspace(typeof args?.path === 'string' ? args.path : '', cwd);
 }
 
-function isPathWithinWorkspace(candidate: string, cwd: string | null): boolean {
+/** Whether `candidate` resolves inside the opened folder, following links. */
+export function isPathWithinWorkspace(candidate: string, cwd: string | null): boolean {
   if (!cwd || !candidate) return false;
   const workspace = resolvedExistingPath(cwd);
   const target = resolvedExistingPath(candidate);

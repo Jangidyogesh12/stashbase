@@ -10,6 +10,7 @@ import { telemetry } from './telemetry.ts';
 import type { WebSocket } from 'ws';
 import { CLIS } from './terminal.ts';
 import { agentCliVersion, resolveAgentCli } from './agent-cli.ts';
+import { isNativeAgentId, nativeAgentCliSpec } from './native-agents.ts';
 import { agentSupportsInAppUpdate, agentBootstrapStatus } from './agent-runtime-installer.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import { rememberedCatalogFor } from './agent-model-catalog.ts';
@@ -208,10 +209,7 @@ export interface AgentRuntimeDescriptor {
 const adapters = new Map<AgentId, AgentAdapter>();
 
 export function agentExecutableFor(id: Exclude<AgentId, 'stashbase'>): string | null {
-  const config = id === 'claude'
-    ? { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude' }
-    : { name: 'codex', envNames: ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'], logLabel: 'Codex' };
-  return resolveAgentCli(config, () => {});
+  return resolveAgentCli(nativeAgentCliSpec(id), () => {});
 }
 
 export function registerAgentAdapter(adapter: AgentAdapter): void {
@@ -255,7 +253,7 @@ export function runtimeDescriptorFor(
 }
 
 export function agentAdapter(id: string): AgentAdapter | null {
-  return id === 'stashbase' || id === 'claude' || id === 'codex' ? adapters.get(id) ?? null : null;
+  return id === 'stashbase' || isNativeAgentId(id) ? adapters.get(id) ?? null : null;
 }
 
 /** Native discovery is performed at request time so a CLI installed or

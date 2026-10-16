@@ -94,6 +94,7 @@ const BUILT_IN: AgentRuntimeEntry = { id: 'stashbase', label: 'Default' };
 const AGENT_RUNTIMES: readonly AgentRuntimeEntry[] = [
   { id: 'codex', label: 'Codex' },
   { id: 'claude', label: 'Claude' },
+  { id: 'antigravity', label: 'Antigravity' },
   BUILT_IN,
 ];
 

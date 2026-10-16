@@ -70,7 +70,7 @@ test('removing a parent preserves nested project preparation, failures, namespac
   assert.equal(response.status, 200);
   const registry = await response.json() as { recent: Array<{ path: string }> };
   assert.deepEqual(registry.recent.map((row) => row.path).sort(), [child, absent].sort());
-  assert.deepEqual(stops.map(([id]) => id).sort(), ['claude', 'codex', 'stashbase']);
+  assert.deepEqual(stops.map(([id]) => id).sort(), ['antigravity', 'claude', 'codex', 'stashbase']);
   assert.ok(stops.every(([, folder]) => folder === parent));
   assert.equal(fs.existsSync(prepared.get(parent)!), false);
   for (const retained of [child, absent]) {

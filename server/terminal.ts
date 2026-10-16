@@ -1,25 +1,17 @@
 /**
- * Agent CLI registry. The supported CLIs (Claude, Codex) are
- * enumerated here with their install hints; the chat panel surfaces
- * them via `/api/terminal/clis`.
+ * Agent CLI registry. The supported CLIs (Claude, Codex, Antigravity) are
+ * enumerated in `native-agents.ts`; this listing carries their install
+ * hints, and the chat panel surfaces them via `/api/terminal/clis`.
  *
  * The CLIs themselves run through structured agent bridges (Claude Agent
- * SDK in server/agent.ts, Codex app-server in server/codex-session-runtime.ts),
- * not a PTY — this module no longer bridges a shell.
+ * SDK in server/agent.ts, Codex app-server in server/codex-session-runtime.ts,
+ * Antigravity stream-json in server/antigravity-session-runtime.ts), not a
+ * PTY — this module no longer bridges a shell.
  */
+import { NATIVE_AGENT_IDS, NATIVE_AGENTS, nativeAgentInstallHint } from './native-agents.ts';
 
-function codexInstallHint(): string {
-  if (process.platform === 'win32') return 'irm https://chatgpt.com/codex/install.ps1 | iex';
-  return 'curl -fsSL https://chatgpt.com/codex/install.sh | sh';
-}
-
-function claudeInstallHint(): string {
-  if (process.platform === 'win32') return 'irm https://claude.ai/install.ps1 | iex';
-  return 'curl -fsSL https://claude.ai/install.sh | bash';
-}
-
-/** Registry of supported AI CLIs. Adding a new one = one entry here +
- *  it surfaces in the renderer's launchers automatically. `installHint`
+/** Registry of supported AI CLIs. Adding a new one = one entry in
+ *  `native-agents.ts`. `installHint`
  *  is the copy-paste command shown when the binary is missing; `bin` is
  *  what we probe on PATH. */
 export interface CliDef {
@@ -30,19 +22,12 @@ export interface CliDef {
   installHint: string;   // human-readable install command
 }
 
-export const CLIS: Record<string, CliDef> = {
-  claude: {
-    id: 'claude',
-    label: 'Claude',
-    vendor: 'Anthropic',
-    bin: 'claude',
-    installHint: claudeInstallHint(),
-  },
-  codex: {
-    id: 'codex',
-    label: 'Codex',
-    vendor: 'OpenAI',
-    bin: 'codex',
-    installHint: codexInstallHint(),
-  },
-};
+export const CLIS: Record<string, CliDef> = Object.fromEntries(
+  NATIVE_AGENT_IDS.map((id) => [id, {
+    id,
+    label: NATIVE_AGENTS[id].label,
+    vendor: NATIVE_AGENTS[id].vendor,
+    bin: NATIVE_AGENTS[id].bin,
+    installHint: nativeAgentInstallHint(id),
+  }]),
+);
