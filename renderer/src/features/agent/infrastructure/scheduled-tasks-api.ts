@@ -3,7 +3,7 @@
  * form, and the preload bridge for Run now and for the runs main hands this
  * window. The only module in the feature that sees either wire shape.
  */
-import { nextRun } from '@/contracts/scheduled-task-timing';
+import { missedRuns, nextRun } from '@/contracts/scheduled-task-timing';
 import {
   ScheduledTasksError,
   type ScheduledRunNowResult,
@@ -81,15 +81,39 @@ function call(
 function toRun(run: ScheduledTaskRunWire): ScheduledTaskRun {
   return {
     agent: run.agent,
+    missedCount: run.missedCount,
     occurrence: run.occurrence === null ? null : Date.parse(run.occurrence),
     reason: run.reason,
     runId: run.runId,
     sessionId: run.sessionId,
     startedAt: Date.parse(run.startedAt),
     status: run.status,
+    summary: run.summary,
     title: run.title,
     trigger: run.trigger,
   };
+}
+
+/** Days missed since the last run, by the rule the server records them
+ *  with when today's run starts; until then the list shows them from here. */
+function pendingMissed(wire: ScheduledTaskWire, now: Date): ScheduledTaskRun[] {
+  const missed = missedRuns(wire, now);
+  if (!missed) return [];
+  return [
+    {
+      agent: null,
+      missedCount: missed.count,
+      occurrence: missed.last.getTime(),
+      reason: null,
+      runId: `missed-${missed.last.toISOString()}`,
+      sessionId: null,
+      startedAt: missed.first.getTime(),
+      status: 'missed',
+      summary: null,
+      title: null,
+      trigger: 'schedule',
+    },
+  ];
 }
 
 /** The next run is read when the list is, by the rule main's clock follows. */
@@ -103,7 +127,7 @@ function toTask(wire: ScheduledTaskWire, now: Date): ScheduledTask {
     nextRunAt: nextRun(wire, now)?.getTime() ?? null,
     problem: wire.problem,
     prompt: wire.prompt,
-    runs: wire.runs.map(toRun),
+    runs: [...pendingMissed(wire, now), ...wire.runs.map(toRun)],
     time: wire.time,
   };
 }
@@ -157,6 +181,7 @@ export function createScheduledTasksAdapter(
           reason: outcome.status === 'failed' ? outcome.reason.slice(0, 500) : null,
           runId,
           status: outcome.status,
+          summary: outcome.summary,
           taskId,
         }),
       });
