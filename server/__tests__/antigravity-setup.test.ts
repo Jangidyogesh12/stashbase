@@ -10,7 +10,7 @@ import { antigravityAuthState, loginToAntigravity } from '../antigravity-setup.t
 import { AgentAccountRefusedError } from '../agent-setup-diagnostic.ts';
 import { AgentBootstrapCoordinator } from '../agent-runtime-installer.ts';
 import { antigravityCurrentModel, antigravityModelsFromListing, withCurrentModel } from '../antigravity-model-catalog.ts';
-import { antigravityErrorFromStderr, parseAntigravityLine } from '../antigravity-protocol.ts';
+import { antigravityErrorFromStderr, isReadOnlyCommand, parseAntigravityLine } from '../antigravity-protocol.ts';
 import { antigravityHookLauncher, ensureAgentMcp } from '../agent-mcp.ts';
 
 test('the sign-in check tells signed out, refused, and unknown apart', () => {
@@ -101,6 +101,16 @@ test('model variants that differ only by effort become one model with those effo
     defaultModel: 'gemini-4-pro',
   });
   assert.deepEqual(antigravityModelsFromListing('not json').models, []);
+});
+
+test('Auto runs a command unasked only when the line itself shows it only reads', () => {
+  for (const command of ['ls -la', 'git log --oneline -5', 'grep -rn TODO .', 'cat notes.md | head -20', 'find . -name "*.md"']) {
+    assert.equal(isReadOnlyCommand(command), true, command);
+  }
+  for (const command of ['rm -rf drafts', 'ls; rm x', 'ls && pwd', 'ls > out.txt', 'echo $(whoami)', 'find . -delete',
+    'git push', 'git -C . status', 'sort -o x y', 'rg --pre=sh x', 'npm install', 'python script.py', '']) {
+    assert.equal(isReadOnlyCommand(command), false, command);
+  }
 });
 
 test('the model agy runs unchosen is the catalog default, with its effort', () => {

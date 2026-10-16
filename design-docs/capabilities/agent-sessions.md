@@ -66,14 +66,15 @@ permissions, with current model and tool choices checked before use.
   file do not change what was asked about; it is refused only when its file
   leaves the project or it exceeds 6,000 characters. Reloaded history shows it
   as the same passage chip.
-- Antigravity offers Ask, Edit, and Plan. Running for StashBase, it cannot ask
-  the reader itself, so StashBase reviews each tool call before it runs. Reads
-  pass. Edit passes ordinary changes inside the project. Plan refuses changes.
-  Anything else shows the same approval card the other runtimes use, and an
-  unanswered card never becomes a grant. Auto is not offered: Antigravity's own
-  Auto decides inside the runtime, where StashBase can no longer stand in for
-  the reader. Antigravity accepts text only, so its composer offers no
-  attachments.
+- Antigravity offers Auto, Ask, Edit, and Plan. Running for StashBase, it
+  cannot ask the reader itself, so StashBase reviews each tool call before it
+  runs. Reads pass. Edit passes ordinary changes inside the project. Auto is
+  StashBase's own rule set rather than Antigravity's, whose Auto refuses
+  StashBase's tools and asks no one: it also passes commands that only read,
+  shown by the command line itself, plus web searches and page reads whose
+  address carries no query. Plan refuses changes. Anything else shows the same
+  approval card the other runtimes use, and an unanswered card never becomes a
+  grant. Antigravity accepts text only, so its composer offers no attachments.
 - A runtime that advertises attachments accepts ordinary local files through the
   picker, drop, or paste. Images and PDFs may have visual previews; other files
   remain named file cards. Attachment acceptance does not promise that every

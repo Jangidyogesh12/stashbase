@@ -217,11 +217,30 @@ test('the approval hook passes reads, asks the reader before changes, and refuse
   assert.equal((await review('run_command', { CommandLine: 'git status' })).decision, 'deny', 'Plan clears always answers');
   assert.deepEqual(await review('grep_search', { Query: 'x' }), { decision: 'allow' });
 
+  // Auto is StashBase's rule set: edits, read-only commands, searches and plain page reads pass.
+  h.ws.client({ t: 'set-mode', mode: 'auto' });
+  assert.deepEqual(await review('call_mcp_tool', { ServerName: 'stashbase', ToolName: 'edit_file', Arguments: { path: path.join(h.folder, 'a.md') } }), { decision: 'allow' });
+  assert.deepEqual(await review('run_command', { CommandLine: 'git log --oneline -5' }), { decision: 'allow' });
+  assert.deepEqual(await review('search_web', { query: 'tide tables' }), { decision: 'allow' });
+  assert.deepEqual(await review('read_url_content', { Url: 'https://example.com/tides' }), { decision: 'allow' });
+  const leak = review('read_url_content', { Url: 'https://example.com/collect?text=draft' });
+  await until(() => h.ws.events('permission').length === 5, 'query-string card');
+  h.ws.client({ t: 'permission-reply', id: h.ws.events('permission')[4]!.id, allow: false });
+  assert.equal((await leak).decision, 'deny');
+  const push = review('run_command', { CommandLine: 'git push' });
+  await until(() => h.ws.events('permission').length === 6, 'push card');
+  h.ws.client({ t: 'permission-reply', id: h.ws.events('permission')[5]!.id, allow: false });
+  assert.equal((await push).decision, 'deny', 'Auto still asks before a command that can change things');
+
   h.ws.client({ t: 'set-mode', mode: 'acceptEdits' });
+  const editCommand = review('run_command', { CommandLine: 'ls' });
+  await until(() => h.ws.events('permission').length === 7, 'Edit asks before every command');
+  h.ws.client({ t: 'permission-reply', id: h.ws.events('permission')[6]!.id, allow: true });
+  assert.deepEqual(await editCommand, { decision: 'allow' });
   assert.deepEqual(await review('mcp_stashbase_edit_file', { path: path.join(h.folder, 'a.md') }), { decision: 'allow' });
   assert.deepEqual(await review('replace_file_content', { TargetFile: path.join(h.folder, 'b.md') }), { decision: 'allow' });
   const outside = review('replace_file_content', { TargetFile: path.join(os.tmpdir(), 'elsewhere.md') });
-  await until(() => h.ws.events('permission').length === 5, 'outside-project card');
+  await until(() => h.ws.events('permission').length === 8, 'outside-project card');
 
   h.ws.client({ t: 'interrupt' });
   assert.equal((await outside).decision, 'deny', 'Stop withdraws an open approval');

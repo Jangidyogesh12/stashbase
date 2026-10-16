@@ -484,10 +484,13 @@ stable status without download, retry, or a new durable demand latch.
   unknown or retired id is denied, and another runtime's id is left to that
   run's own rules. `server/antigravity-protocol.ts` owns the policy: reads pass,
   Edit passes ordinary writes inside the bound project through
-  `agent-file-permissions.ts`, Plan denies anything that could change the
-  project, and the rest becomes an approval card. A card withdrawn by the hook,
-  Stop, turn end, or disposal denies. Auto is not offered, because native Auto
-  approves inside the CLI past the hook. Default maps Ask/Edit/Plan to OpenCode profiles;
+  `agent-file-permissions.ts`, Auto adds read-only command lines
+  (`isReadOnlyCommand`: known programs, pipes only, no chaining, substitution
+  or redirection), web searches and query-free page reads, Plan denies anything
+  that could change the project, and the rest becomes an approval card. A card
+  withdrawn by the hook, Stop, turn end, or disposal denies. Auto launches
+  `agy` like Edit; native Auto is never used, because it decides inside the CLI
+  past the hook and refuses StashBase's MCP tools. Default maps Ask/Edit/Plan to OpenCode profiles;
   Auto uses the Edit profile with host-owned review. Edit and Auto share
   `agent-file-permissions.ts` with the other adapters, granting only
   ordinary StashBase document writes inside the bound project (including

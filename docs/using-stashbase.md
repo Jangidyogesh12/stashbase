@@ -18,9 +18,11 @@ you chose, the failed turn offers **Update Claude**. **Settings → Agents** sho
 version with an **Update** that runs the runtime's own updater in place.
 
 Antigravity asks before changing files or running commands the same way the
-others do, and offers Ask, Edit, and Plan. It reads text only, so its chats take
-no attachments. Its chat list lives in StashBase: removing a chat there leaves
-the conversation in Antigravity.
+others do, and offers Auto, Ask, Edit, and Plan. Its Auto is StashBase's: it
+also runs commands that only read, searches the web, and reads pages, and still
+asks before other commands. It reads text only, so its chats take no
+attachments. Its chat list lives in StashBase: removing a chat there leaves the
+conversation in Antigravity.
 
 If you can't use any of them, the built-in **Default Agent** provides a fallback
 with free credits. Sign in to StashBase from the bottom of the sidebar or

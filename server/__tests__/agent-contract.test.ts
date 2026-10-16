@@ -50,8 +50,7 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.deepEqual(capabilities.stashbase!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.deepEqual(capabilities.claude!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.deepEqual(capabilities.codex!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
-  // Antigravity's own Auto approves inside the CLI, past StashBase's approval hook.
-  assert.deepEqual(capabilities.antigravity!.modes, ['default', 'acceptEdits', 'plan']);
+  assert.deepEqual(capabilities.antigravity!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.equal(capabilities.antigravity!.attachments, false);
   assert.equal(capabilities.stashbase!.models, false);
   assert.equal(capabilities.stashbase!.effort, false);

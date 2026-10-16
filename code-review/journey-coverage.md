@@ -1730,6 +1730,10 @@ ends in `ERROR` rather than `DONE`. MCP calls arrive as `call_mcp_tool` with
 `ServerName`/`ToolName`/`Arguments`, and the tool names now come from its tool
 list. With the StashBase hook installed, a terminal run outside StashBase kept
 `agy`'s own refusal of an unapproved MCP call, as the hook's `allow` intends.
+A real `agy --mode auto` run refused a StashBase MCP call outright, so Auto is
+StashBase's own rule set in the hook, and new Antigravity chats now start there
+instead of Edit; `antigravity-agent.test.ts` and `antigravity-setup.test.ts` cover
+its decisions and `isReadOnlyCommand`, but no driven pass has run it.
 Not proven: no StashBase chat has run on a real `agy`, so the hook's payload and
 its running in a StashBase-launched stream-json process, stdio MCP startup there,
 and pseudo-terminal sign-in remain unexercised. Windows sign-in, the Windows

@@ -17,10 +17,10 @@ import { isPathWithinWorkspace, isStashbaseWorkspaceEdit } from './agent-file-pe
 
 export type JsonObject = Record<string, unknown>;
 
-/** The permission promises this adapter keeps. Auto is absent: Antigravity's
- * own Auto mode approves inside the CLI, where the approval hook can no
- * longer stand in for the reader. */
-export const ANTIGRAVITY_ACCESS_MODES = ['default', 'acceptEdits', 'plan'] as const satisfies readonly AgentAccessMode[];
+/** The permission promises this adapter keeps. Auto is StashBase's own rule
+ * set, applied in the approval hook: Antigravity's native Auto decides inside
+ * the CLI, where it refuses StashBase's MCP tools and asks no one. */
+export const ANTIGRAVITY_ACCESS_MODES = ['default', 'acceptEdits', 'plan', 'auto'] as const satisfies readonly AgentAccessMode[];
 
 export interface AntigravityLaunch {
   mode?: AgentAccessMode;
@@ -30,7 +30,9 @@ export interface AntigravityLaunch {
 }
 
 export function antigravityArgs(launch: AntigravityLaunch): string[] {
-  const nativeMode = launch.mode === 'plan' ? 'plan' : launch.mode === 'acceptEdits' ? 'accept-edits' : undefined;
+  const nativeMode = launch.mode === 'plan'
+    ? 'plan'
+    : launch.mode === 'acceptEdits' || launch.mode === 'auto' ? 'accept-edits' : undefined;
   return [
     '--input-format', 'stream-json',
     '--output-format', 'stream-json',
@@ -203,6 +205,10 @@ export interface ClassifiedTool {
   stashbase?: { tool: string; arguments: JsonObject };
   /** The file a native write targets. */
   path?: string;
+  /** The command line a shell tool runs. */
+  command?: string;
+  /** What a web tool does, and the address it reads. */
+  web?: { kind: 'search' | 'url' | 'browser'; url?: string };
 }
 
 export function classifyAntigravityTool(call: AntigravityToolCall): ClassifiedTool {
@@ -219,39 +225,96 @@ export function classifyAntigravityTool(call: AntigravityToolCall): ClassifiedTo
     const target = nativeTargetPath(call.args);
     return { kind: 'file-write', ...(target ? { path: target } : {}) };
   }
+  if (name === 'run_command') {
+    return { kind: 'command', command: stringValue(call.args.CommandLine ?? call.args.commandLine ?? call.args.command) };
+  }
   if (NATIVE_COMMAND_TOOLS.has(name)) return { kind: 'command' };
-  if (NATIVE_NETWORK_TOOLS.has(name) || name.startsWith('browser_')) return { kind: 'network' };
+  if (name === 'search_web') return { kind: 'network', web: { kind: 'search' } };
+  if (name === 'read_url_content') {
+    const url = stringValue(call.args.Url ?? call.args.url ?? call.args.URL);
+    return { kind: 'network', web: { kind: 'url', ...(url ? { url } : {}) } };
+  }
+  if (NATIVE_NETWORK_TOOLS.has(name) || name.startsWith('browser_')) return { kind: 'network', web: { kind: 'browser' } };
   return { kind: 'other' };
 }
 
 export type AntigravityHookDecision = 'allow' | 'ask' | 'deny';
 
 /** What the chat's mode lets a tool call do without the reader. Reads always
- * pass; Edit passes ordinary writes inside the bound project; Plan refuses
+ * pass; Edit passes ordinary writes inside the bound project; Auto also
+ * passes read-only commands, web searches and plain page reads; Plan refuses
  * anything that could change the project; everything else asks. */
 export function antigravityToolDecision(
   mode: AgentAccessMode,
   tool: ClassifiedTool,
   cwd: string | null,
 ): AntigravityHookDecision {
+  const edits = mode === 'acceptEdits' || mode === 'auto';
   switch (tool.kind) {
     case 'read':
     case 'stashbase-read':
       return 'allow';
     case 'network':
-      return 'ask';
+      return mode === 'auto' && isRoutineWebRead(tool.web) ? 'allow' : 'ask';
+    case 'command':
+      if (mode === 'plan') return 'deny';
+      return mode === 'auto' && isReadOnlyCommand(tool.command ?? '') ? 'allow' : 'ask';
     case 'stashbase-write':
       if (mode === 'plan') return 'deny';
-      return mode === 'acceptEdits' && isStashbaseWorkspaceEdit(
+      return edits && isStashbaseWorkspaceEdit(
         { input: { server: 'stashbase', tool: tool.stashbase?.tool, arguments: tool.stashbase?.arguments } },
         cwd,
       ) ? 'allow' : 'ask';
     case 'file-write':
       if (mode === 'plan') return 'deny';
-      return mode === 'acceptEdits' && !!tool.path && !!cwd
+      return edits && !!tool.path && !!cwd
         && isPathWithinWorkspace(path.resolve(cwd, tool.path), cwd) ? 'allow' : 'ask';
     default:
       return mode === 'plan' ? 'deny' : 'ask';
+  }
+}
+
+/** Programs whose every use below only prints. Anything that can write,
+ * install, run other programs, or reach the network is absent. */
+const READ_ONLY_PROGRAMS = new Set([
+  'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'rg', 'find', 'pwd', 'echo', 'date',
+  'which', 'stat', 'du', 'df', 'sort', 'cut', 'nl', 'diff', 'cmp',
+  'basename', 'dirname', 'realpath', 'readlink',
+]);
+const READ_ONLY_GIT = new Set(['status', 'log', 'diff', 'show', 'blame', 'ls-files', 'rev-parse', 'describe', 'shortlog']);
+/** Options that make an otherwise read-only program write or run something. */
+const WRITING_OPTIONS: Readonly<Record<string, RegExp>> = {
+  find: /^-(?:delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)$/,
+  sort: /^(?:-o|--output)/,
+  rg: /^--pre/,
+  git: /^--output/,
+};
+
+/** Auto runs a shell command unasked only when the line itself shows it reads:
+ * known programs, optionally piped into each other, with no chaining,
+ * substitution, redirection, escapes, or backgrounding. */
+export function isReadOnlyCommand(command: string): boolean {
+  const line = command.trim();
+  if (!line || /[;&<>`$(){}\n\r\\]/.test(line) || line.includes('||')) return false;
+  return line.split('|').every((segment) => {
+    const [program, ...args] = segment.trim().split(/\s+/).filter(Boolean);
+    if (!program) return false;
+    if (WRITING_OPTIONS[program] && args.some((arg) => WRITING_OPTIONS[program]!.test(arg))) return false;
+    if (program === 'git') return READ_ONLY_GIT.has(args[0] ?? '');
+    return READ_ONLY_PROGRAMS.has(program);
+  });
+}
+
+/** A web search, or reading a public page whose address carries no query
+ * that could take local text out with it. Browsing stays with the reader. */
+function isRoutineWebRead(web: ClassifiedTool['web']): boolean {
+  if (web?.kind === 'search') return true;
+  if (web?.kind !== 'url' || !web.url) return false;
+  try {
+    const url = new URL(web.url);
+    return (url.protocol === 'https:' || url.protocol === 'http:') && !url.search && !url.username && !url.password;
+  } catch {
+    return false;
   }
 }
 
