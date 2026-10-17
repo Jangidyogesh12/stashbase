@@ -510,6 +510,27 @@ stable status without download, retry, or a new durable demand latch.
   an open capability; Settings contains no OS branches. Electron's common API
   cannot read notification authorization, so this flow never claims granted or
   denied status. Unsupported desktops and launch failures retain manual recovery.
+- `agent/application/desktop-sessions.ts` projects existing session selectors
+  into bounded activity snapshots through the existing notification platform
+  adapter. It deduplicates summary-equivalent streaming updates and validates
+  session/request identity again on activation. Main stores activity per owning
+  window and retires it on navigation, renderer loss and close. Activity has its
+  own typed channel, independent of notification eligibility and unread state;
+  callbacks carry only session identity and cannot approve work.
+  `notifications/center.ts` owns the background attention count: pending items
+  remain until resolved, while owner focus acknowledges outcome items. Opt-out
+  and retirement clear counts without replay. `indicators.ts` projects these
+  counts and ordered host-owned sections into native menus and badges. Sections
+  have stable IDs and identity-bearing rows; the presenter omits empty sections,
+  bounds visible rows and re-resolves section/row identity before activation.
+  IPC currently composes only Running from live session activity. Future producers
+  (for example a scheduler) must own their data, ordering and live activation;
+  add their section at composition rather than teaching the native presenter
+  scheduling rules or introducing arbitrary renderer actions. No scheduler or
+  upcoming-task IPC exists yet. All OS branches remain in the native notification
+  boundary. Tray loss must not fail Agent work or alter window-close semantics.
+  Tray images derive from the application mark through `scripts/icons/status.mjs`
+  and ship inside `electron/notifications/icons`; macOS uses Retina templates.
 - Pending approvals require the exact request id; abort/disposal denies them.
   Read/orientation/reindex may use the low-risk path. Document writes remain
   permissioned and Review never grants a write in advance. Edit policy grants only its

@@ -915,6 +915,35 @@ failure and manual fallback were exercised, and light/dark layouts inspected.
 System permission was not changed or inferred. Packaged Windows/Linux settings
 navigation and denied-to-allowed recovery remain release-checklist checks.
 
+**Session menu and attention badges (2026-10-17):** `desktop-sessions.ts`
+projects retained session selectors through the existing platform adapter into
+the native menu-bar/tray. Running contains working, waiting and stopping sessions,
+including work in inactive chats; completed, failed and stopped work is removed.
+Notification switches do not affect this list. The native presenter accepts
+ordered sections with stable row identities; Upcoming presentation is specified
+but there is no scheduling owner or next-run data in the current application.
+A controlled second section exercises section-scoped activation and removal;
+it does not establish scheduled-task integration. The notification center separately
+tracks background attention for Dock/taskbar marks. Renderer tests cover inactive
+sessions, deduplicated updates, request focus and stale session retirement; host
+tests cover multiple owners, notification opt-out, badge clearing, stale menu
+callbacks and missing tray support on Linux. The 26 notification host tests,
+protocol suite, host boundary types, icon/package-input checks and built Electron
+smoke passed. The renderer gate passed after correcting the adapter placement
+and rerunning lint plus coverage; one existing workspace test timed out on the
+first coverage run and passed on retry. The later section-menu refinement passed
+all 12 renderer gates without retries. An isolated macOS Electron pass used
+the production session projection, platform adapter, preload, IPC, Tray and
+badge driver. It observed a real Dock dot and waiting menu, invoked the native
+menu callback, verified the owning chat and request-heading focus, and confirmed
+Stop cleared the dot. A second isolated pass with the section-based menu verified
+that a finished session leaves Running and the empty state appears; the existing
+production adapter and native menu callback still focus the pending card.
+Template and colored tray assets were inspected at normal and enlarged sizes;
+colored attention uses the app's fixed badge-red with a transparent separation
+around the dot, while macOS retains native template contrast. Physical menu clicks, packaged Windows overlays and Linux
+tray/launcher availability remain explicit release checks.
+
 **Closed startup and duplicate diagnostics (2026-10-16):** Codex regressions close
 the socket during model/skill discovery and verify no subsequent requests,
 readiness or failure diagnostics. OpenCode's error/exit pair still reaches the UI

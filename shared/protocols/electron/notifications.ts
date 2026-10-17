@@ -4,11 +4,25 @@ export const NOTIFICATIONS_CAPABILITY = 'notifications';
 export const NOTIFICATIONS_SYNC = 'notifications:sync';
 export const NOTIFICATIONS_READ = 'notifications:read';
 export const NOTIFICATIONS_OPEN_SETTINGS = 'notifications:open-settings';
+export const NOTIFICATIONS_ACTIVITY = 'notifications:activity';
+export const NOTIFICATIONS_OPEN_SESSION = 'notifications:open-session';
 export const NOTIFICATIONS_SET_ENABLED = 'notifications:set-enabled';
 export const NOTIFICATIONS_CHANGED = 'notifications:changed';
 export const NOTIFICATIONS_ACTIVATE = 'notifications:activate';
 
 const identifier = z.string().min(1).max(1200);
+export const sessionActivitySchema = z.object({
+  id: identifier,
+  project: z.string().max(160),
+  conversation: z.string().max(160),
+  state: z.enum(['working', 'waiting']),
+  detail: z.string().max(80),
+}).strict();
+export const sessionActivitiesSchema = z.array(sessionActivitySchema).max(256).superRefine((items, ctx) => {
+  if (new Set(items.map((item) => item.id)).size !== items.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Session identities must be unique.' });
+});
+export const sessionActivationSchema = z.object({ id: identifier }).strict();
+export type SessionActivity = z.infer<typeof sessionActivitySchema>;
 export const notificationKindSchema = z.enum(['agent-confirmation', 'agent-completed', 'agent-failed']);
 /** Register each new producer here with its own bounded data, then supply its
  * presentation in the main-process catalog. No arbitrary URLs or actions cross. */

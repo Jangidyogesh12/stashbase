@@ -171,6 +171,11 @@ permissions, with current model and tool choices checked before use.
   General settings provides a user-wide opt-out, enabled by default. This behavior
   applies to macOS, Windows and Linux desktops. Delivery depends on system
   notification settings; app availability is not OS permission.
+  The system menu-bar/tray entry lists running sessions, including work in
+  inactive chats, startup, waiting for confirmation and stopping. Completion,
+  failure or a confirmed stop removes the row. This is independent of notification
+  switches. Opening a waiting chat focuses its pending request; normal session
+  state remains the authority for progress and lifecycle.
 - Completed turns and failed submissions/turns also notify while the app is in
   the background. Unexpected connection loss asks the reader to inspect the
   conversation; it does not imply that work was rolled back. A user-requested

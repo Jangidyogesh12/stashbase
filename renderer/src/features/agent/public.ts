@@ -30,3 +30,4 @@ export {
 export { attentionId } from './domain/attention';
 
 export { observeAgentOutcomes } from './application/outcome-notifications';
+export { subscribeDesktopSessions, focusDesktopSession } from './application/desktop-sessions';

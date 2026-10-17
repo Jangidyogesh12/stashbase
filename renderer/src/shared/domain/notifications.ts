@@ -31,6 +31,15 @@ export interface NotificationPreferencesPort {
   onChanged(handler: (status: NotificationStatus) => void): () => void;
 }
 export interface DesktopNotificationsPort {
+  syncActivity(sessions: DesktopSessionActivity[]): Promise<void>;
+  onOpenSession(handler: (target: { id: string }) => void): () => void;
   sync(batch: NotificationBatch): Promise<void>;
   onActivate(handler: (activation: NotificationActivation) => void): () => void;
+}
+export interface DesktopSessionActivity {
+  id: string;
+  project: string;
+  conversation: string;
+  state: 'working' | 'waiting';
+  detail: string;
 }

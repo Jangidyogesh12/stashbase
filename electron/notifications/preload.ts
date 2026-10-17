@@ -2,6 +2,7 @@ import {
   NOTIFICATIONS_ACTIVATE, NOTIFICATIONS_CHANGED, NOTIFICATIONS_READ,
   NOTIFICATIONS_SET_ENABLED, NOTIFICATIONS_SYNC,
   NOTIFICATIONS_OPEN_SETTINGS,
+  NOTIFICATIONS_ACTIVITY, NOTIFICATIONS_OPEN_SESSION, sessionActivitiesSchema, sessionActivationSchema, type SessionActivity,
   notificationBatchSchema, notificationActivationSchema, notificationUpdateSchema,
   notificationStatusSchema, type NotificationBatch, type NotificationActivation,
   type NotificationStatus, type NotificationKind,
@@ -23,6 +24,15 @@ export function createNotificationsPreload(ipc: IpcRenderer) {
     return () => { ipc.removeListener(channel, listener); };
   }
   return Object.freeze({
+    async syncActivity(sessions: SessionActivity[]) {
+      await ipc.invoke(NOTIFICATIONS_ACTIVITY, sessionActivitiesSchema.parse(sessions));
+    },
+    onOpenSession(handler: (target: { id: string }) => void) {
+      return subscribe(NOTIFICATIONS_OPEN_SESSION, (value) => {
+        const parsed = sessionActivationSchema.safeParse(value);
+        return parsed.success ? parsed.data : null;
+      }, handler);
+    },
     async sync(batch: NotificationBatch) {
       await ipc.invoke(NOTIFICATIONS_SYNC, notificationBatchSchema.parse(batch));
     },

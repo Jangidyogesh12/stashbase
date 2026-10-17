@@ -105,6 +105,18 @@ Never use production PostHog as the test event sink.
   Windows, Linux GNOME and KDE. On an unsupported Linux desktop or with its settings
   app missing, verify manual instructions. A failed launch must offer quiet recovery
   and retain those instructions. Confirm a new background task can then notify.
+- [ ] **J06** — Check the menu-bar/tray while two windows contain working,
+  waiting, stopped, completed and failed chats. Only work still in progress is
+  listed under Running; completed/failed/stopped chats leave the menu. Titles
+  stay stable through working/waiting transitions; duplicate titles show project names;
+  physically select an inactive chat and confirm its window and pending request
+  receive focus without approval. Closing a chat, renderer or window revokes its
+  menu entry. Notifications off must still show work state. Check macOS template
+  images in light/dark menu bars and Retina scale, Windows tray and taskbar
+  overlays, and Linux with/without a tray host and LauncherEntry integration.
+  Background attention shows a Dock/taskbar mark; resolved requests, owner focus
+  for outcomes, opt-out and quit clear it. Verify existing last-window-close and
+  unsaved-work-on-Quit behavior. A denied OS badge permission must not break work.
 - [ ] **J06** — Background the app for a successful turn and a failed turn; confirm
   the matching notification opens its result/error. Stop during startup and during
   a running turn; neither should notify, even if cancellation later fails. Disable

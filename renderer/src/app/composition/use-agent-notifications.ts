@@ -10,11 +10,14 @@ import {
 } from '@/features/agent/public';
 import type { DesktopNotificationsPort } from '@/shared/domain/notifications';
 
+import { useDesktopSessions } from './use-desktop-sessions';
+
 export function useAgentNotifications(
   runtime: AgentWorkspaceRuntime,
   port: DesktopNotificationsPort | undefined,
   showChat: () => void,
 ) {
+  useDesktopSessions(runtime, port, showChat);
   const show = useRef(showChat);
   show.current = showChat;
   useEffect(() => {

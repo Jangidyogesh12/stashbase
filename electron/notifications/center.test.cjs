@@ -16,6 +16,7 @@ function fixture(t) {
     },
     activate: (...args) => activations.push(args),
     delivery: (value) => delivery.push(value),
+    unreadChanged: () => {},
   });
   t.after(() => center.dispose());
   return { center, notices, activations, delivery, tick: () => t.mock.timers.tick(350) };

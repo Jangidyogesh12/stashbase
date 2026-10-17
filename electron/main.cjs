@@ -9,7 +9,7 @@
  * bundled, typed preload bridge.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, nativeTheme, net, powerMonitor, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, Tray, nativeImage, nativeTheme, net, powerMonitor, protocol, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -271,6 +271,14 @@ function installReplacementBoundary() {
     supported: nativeNotifications.supported,
     settingsTarget: nativeNotifications.settingsTarget,
     openSettings: nativeNotifications.openSettings,
+    indicators: require(path.join(PROJECT_ROOT, 'dist/electron/notifications/indicators.cjs')).createDesktopIndicators({
+      platform: process.platform, app, Tray, Menu,
+      image: (file) => nativeImage.createFromPath(file),
+      iconDirectory: path.join(PROJECT_ROOT, 'electron/notifications/icons'),
+      windows: () => [...mainWindows],
+      openApp: () => { if (!focusLastMainWindow()) void initialWindowFlight.run(); },
+      report: (error) => console.warn('[electron] Desktop status indicator unavailable', error),
+    }),
     isAppFocused: () => BrowserWindow.getFocusedWindow() !== null,
     createNotification: nativeNotifications.create,
   });

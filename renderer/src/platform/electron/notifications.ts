@@ -2,6 +2,8 @@ import {
   notificationBatchSchema,
   notificationActivationSchema,
   notificationStatusSchema,
+  sessionActivitiesSchema,
+  sessionActivationSchema,
 } from '@/protocols/electron/notifications';
 import type {
   DesktopNotificationsPort,
@@ -11,6 +13,8 @@ import type {
 } from '@/shared/domain/notifications';
 
 export interface NotificationsBridge {
+  syncActivity(sessions: unknown): Promise<void>;
+  onOpenSession(handler: (target: unknown) => void): () => void;
   sync(batch: unknown): Promise<unknown>;
   read(): Promise<unknown>;
   openSettings(): Promise<void>;
@@ -45,6 +49,15 @@ export function createNotificationsAdapter(
   bridge: NotificationsBridge,
 ): DesktopNotificationsPort & NotificationPreferencesPort {
   return {
+    async syncActivity(sessions) {
+      await bridge.syncActivity(sessionActivitiesSchema.parse(sessions));
+    },
+    onOpenSession(handler) {
+      return bridge.onOpenSession((value) => {
+        const parsed = sessionActivationSchema.safeParse(value);
+        if (parsed.success) handler(parsed.data);
+      });
+    },
     async sync(batch) {
       await bridge.sync(notificationBatchSchema.parse(batch));
     },

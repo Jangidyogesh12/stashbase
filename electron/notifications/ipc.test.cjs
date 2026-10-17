@@ -7,7 +7,7 @@ const path = require('node:path');
 const { registerNotifications } = require('../../dist/electron/notifications/ipc.cjs');
 
 const request = (id = 'one') => ({ kind: 'agent-confirmation', id: JSON.stringify(['chat', id]), project: 'Research', conversation: 'Draft' });
-function harness(t, { corrupt = false, openSettings = async () => {}, supported = () => true } = {}) {
+function harness(t, { corrupt = false, openSettings = async () => {}, supported = () => true, indicators } = {}) {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-notifications-'));
   const filePath = path.join(directory, 'notifications.json');
@@ -25,6 +25,7 @@ function harness(t, { corrupt = false, openSettings = async () => {}, supported 
     supported,
     settingsTarget: () => 'macos',
     openSettings,
+    indicators,
     isAppFocused: () => focused,
     createNotification: (options) => {
       const notice = new EventEmitter();
@@ -39,7 +40,7 @@ function harness(t, { corrupt = false, openSettings = async () => {}, supported 
     const frame = { url: 'app://renderer/' };
     Object.assign(contents, { mainFrame: frame, send: (channel, value) => win.sent.push([channel, value]) });
     Object.assign(win, {
-      capable: true, destroyed: false, sent: [], webContents: contents,
+      id: windows.length + 1, capable: true, destroyed: false, sent: [], webContents: contents,
       isDestroyed: () => win.destroyed, isMinimized: () => true,
       restore: () => { win.restored = true; }, show: () => { win.shown = true; },
       focus: () => { focused = true; win.emit('focus'); },
@@ -228,4 +229,36 @@ test('settings launch is authorized, takes no destination, and focus refreshes a
     supported: false, settingsTarget: 'macos', delivery: 'unknown',
   }]);
   assert.equal(h.notices.length, 0, 'returning to the app never sends a notification or replays an outcome');
+});
+
+test('tray sessions stay live with alerts off; badge state follows background notices and owner focus', (t) => {
+  let latest;
+  const h = harness(t, { indicators: { update: (snapshot) => { latest = snapshot; }, dispose() {} } });
+  const peer = h.addWindow();
+  const session = { id: 'chat', project: 'Research', conversation: 'Draft', state: 'working', detail: 'Working…' };
+  h.invoke('activity', [session]);
+  h.invoke('activity', [{ ...session, state: 'waiting', detail: 'Waiting for approval' }], peer);
+  assert.equal(latest.sections[0].items.length, 2);
+  assert.notEqual(latest.sections[0].items[0].id, latest.sections[0].items[1].id);
+  h.invoke('set-enabled', { enabled: false });
+  assert.equal(latest.sections[0].items.length, 2, 'notification opt-out must not hide session activity');
+  h.invoke('set-enabled', { enabled: true });
+  h.invoke('sync', [request()]);
+  h.invoke('sync', { kind: 'agent-completed', events: [{ ...request('done'), kind: 'agent-completed' }] }, peer);
+  h.tick(); assert.equal(latest.unread, 2);
+  h.win.emit('focus');
+  assert.equal(latest.unread, 2, 'pending request remains and another window cannot read a result');
+  latest.sections[0].items.find((entry) => entry.id === JSON.stringify([peer.id, 'chat'])).open();
+  assert.equal(latest.unread, 1, 'opening the result window acknowledges its background outcome');
+  assert.deepEqual(peer.sent.at(-1), ['notifications:open-session', { id: 'chat' }]);
+  const stale = latest.sections[0].items[0];
+  h.invoke('activity', []);
+  stale.open();
+  assert.equal(h.win.shown, undefined);
+  h.invoke('sync', []);
+  assert.equal(latest.unread, 0);
+  h.win.capable = false;
+  assert.throws(() => h.invoke('activity', [session]));
+  peer.webContents.emit('render-process-gone');
+  assert.equal(latest.sections[0].items.length, 0);
 });

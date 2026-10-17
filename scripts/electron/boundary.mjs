@@ -23,6 +23,7 @@ await build({
     'renderer/preload': 'electron/renderer/preload.ts',
     'renderer/runtime': 'electron/renderer/runtime.ts',
     'notifications/center': 'electron/notifications/center.ts',
+    'notifications/indicators': 'electron/notifications/indicators.ts',
     'notifications/system-settings': 'electron/notifications/system-settings.ts',
     'notifications/native': 'electron/notifications/native.ts',
     'notifications/ipc': 'electron/notifications/ipc.ts',
