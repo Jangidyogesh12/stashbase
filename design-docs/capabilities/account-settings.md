@@ -21,7 +21,7 @@ Agent history; supplied environment variables do not configure BYOK access.
 
 Settings owns lasting preferences and connection configuration:
 
-- **General:** appearance, updates, and usage statistics, in that order. Appearance is user-wide
+- **General:** appearance, notifications, updates, and usage statistics, in that order. Appearance is user-wide
   and grouped as:
   - **Theme:** a mode (match system, light, dark) plus a light theme and a dark
     theme chosen separately from published palettes (StashBase, Catppuccin,
@@ -47,6 +47,44 @@ Settings owns lasting preferences and connection configuration:
   the included default. The installed-font list never leaves the device.
   Custom colors, custom CSS, imported editor themes, and per-project
   appearance are out of scope.
+  Notifications has a persisted "Enable desktop notifications" switch
+  shared across desktop windows, enabled by default. Separate "Needs confirmation",
+  "Task completed" and "Task failed" switches also default on. The master switch
+  preserves these choices when turned off. Changing one category preserves other
+  windows' category changes. Notifications cover pending Agent approvals/questions
+  and submitted task outcomes while the app is in the background; user-requested
+  stops stay quiet. Disabled outcome notifications are not replayed later.
+  The status explains
+  unsupported systems and failed delivery; it does not equate API support with OS
+  authorization. System settings and Focus/Do Not Disturb remain authoritative.
+  An always-available system permission row explains how to allow notifications
+  after declining. Its button opens the notification settings on macOS, Windows,
+  GNOME or KDE; other Linux desktops or missing settings applications receive
+  manual instructions. Launch failures retain those steps and offer Retry.
+  Returning to the app refreshes notification-service availability and the
+  settings entry point. OS authorization remains explicitly unknown: opening
+  settings or delivering a notification does not establish permission. Recovery
+  neither changes the app's switches nor replays old task outcomes.
+  While StashBase runs, its system menu-bar/tray entry has an Open StashBase
+  action, a Running section and Quit. Running shows only sessions with work still
+  in progress, including startup, pending confirmation and stopping. Completed,
+  failed and stopped work leaves the list. Rows show conversation titles; duplicate
+  titles include the project. Selecting a session opens its window and chat;
+  a pending confirmation receives focus but is never approved. Counts live in
+  the tray tooltip, keeping the menu quiet. Empty sections are omitted; without
+  work the menu says No running sessions. Notification opt-out does not hide work.
+  The menu does not change the platform's existing last-window-close behavior.
+  Upcoming scheduled tasks belong in a separate Upcoming section, ordered by
+  next execution time and labelled with that time. This is an agreed presentation
+  requirement, not an implemented scheduler: until a scheduling owner supplies
+  live tasks and activation identities, no empty or fabricated task list appears.
+  Background notifications mark the Dock/taskbar icon: a dot on macOS, an overlay
+  on Windows, and a count where Linux launcher integration supports it. Pending
+  confirmations retain the mark until resolved; background outcomes are
+  acknowledged when their owning window is opened. Opt-out, retirement and
+  application shutdown clear the corresponding marks. System permissions may
+  suppress OS badges, and Linux desktops without a tray/launcher host may omit
+  these surfaces without interrupting work.
 - **Agents:** group account, credit balance/refill, and connection state under
   Default, with the account's subscription and the plans it can buy; manage Codex, Claude, and Antigravity individually. An installed runtime shows its
   version and offers Update when StashBase can select the resulting installation.

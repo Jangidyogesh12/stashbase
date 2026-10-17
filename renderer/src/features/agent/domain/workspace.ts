@@ -1,3 +1,4 @@
+import type { AttentionTarget } from '@/features/agent/domain/attention';
 import type { AgentScopeEnvironment } from '@/features/agent/domain/context';
 
 import { agentScopesEqual, type AgentId, type AgentScope, type AgentSessionPhase } from './session';
@@ -17,6 +18,7 @@ export interface AgentTabState {
 }
 
 export interface AgentWorkspaceState {
+  attentionTarget?: AttentionTarget | null;
   activeId: string;
   visits: string[];
   visitIndex: number;

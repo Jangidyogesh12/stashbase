@@ -39,7 +39,7 @@ import { TurnFailure } from './turn-failure';
 
 export { closingReplies } from './transcript-order';
 
-const TRANSCRIPT_PAGE_SIZE = 200;
+import { useTranscriptPage } from './use-transcript-page';
 
 /** Copies the untouched source text; the glyph confirms for a moment. */
 function CopyAction({ label, text }: { label: string; text: string }) {
@@ -233,15 +233,21 @@ const TranscriptBlock = memo(function TranscriptBlock({
     );
   }
   const questions = agentQuestions(block.name, block.input);
-  if (questions) {
-    return <AgentQuestionCard onReply={onPermission} questions={questions} tool={block} />;
-  }
-  return <AgentPermissionCard onReply={onPermission} tool={block} />;
+  return (
+    <div data-permission-id={block.status === 'awaiting' ? block.permissionId : undefined}>
+      {questions ? (
+        <AgentQuestionCard onReply={onPermission} questions={questions} tool={block} />
+      ) : (
+        <AgentPermissionCard onReply={onPermission} tool={block} />
+      )}
+    </div>
+  );
 });
 
 export const AgentTranscript = memo(function AgentTranscript({
   activeTurn,
   blocks,
+  focusBlockId,
   modelRefresh,
   onEditPrompt,
   onOpenExternal,
@@ -255,6 +261,7 @@ export const AgentTranscript = memo(function AgentTranscript({
 }: {
   activeTurn: boolean;
   blocks: AgentTranscriptBlock[];
+  focusBlockId?: string | undefined;
   /** Reads the hosted models again, offered on a turn refused because the
    *  chosen model's configuration changed. Absent where no hosted list exists. */
   modelRefresh?: AgentModelRefreshView | undefined;
@@ -282,7 +289,7 @@ export const AgentTranscript = memo(function AgentTranscript({
   /** The File behind a sent upload, when this session still holds it. */
   transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
-  const [visibleCount, setVisibleCount] = useState(TRANSCRIPT_PAGE_SIZE);
+  const { hiddenCount, showEarlier } = useTranscriptPage(blocks, focusBlockId);
   // The ask's card leaves the transcript on decision, so focus follows the
   // decided tool into the activity group that now holds it.
   const [decidedToolId, setDecidedToolId] = useState<string | null>(null);
@@ -294,7 +301,6 @@ export const AgentTranscript = memo(function AgentTranscript({
     },
     [onPermission],
   );
-  const hiddenCount = Math.max(0, blocks.length - visibleCount);
   const visibleBlocks = blocks.slice(hiddenCount);
   const groups = useMemo(() => transcriptGroups(visibleBlocks), [visibleBlocks]);
   const closing = useMemo(() => closingReplies(blocks, activeTurn), [activeTurn, blocks]);
@@ -327,12 +333,7 @@ export const AgentTranscript = memo(function AgentTranscript({
   return (
     <>
       {hiddenCount > 0 && (
-        <Button
-          className="mx-auto"
-          onClick={() => setVisibleCount((count) => count + TRANSCRIPT_PAGE_SIZE)}
-          size="compact"
-          variant="ghost"
-        >
+        <Button className="mx-auto" onClick={showEarlier} size="compact" variant="ghost">
           Show earlier messages
         </Button>
       )}
@@ -357,23 +358,29 @@ export const AgentTranscript = memo(function AgentTranscript({
             {group.kind === 'user' && group.at !== undefined && dayBreaks.has(group.id) && (
               <DayDivider at={group.at} now={now} />
             )}
-            <TranscriptBlock
-              block={group}
-              closing={closing.has(group.id)}
-              editable={group.id === editableId}
-              modelRefresh={modelRefresh}
-              now={now}
-              onEditPrompt={onEditPrompt}
-              onOpenExternal={onOpenExternal}
-              onOpenSource={onOpenSource}
-              onReviewTurnChange={onReviewTurnChange}
-              sourceFor={sourceFor}
-              onPermission={decide}
-              onRetry={onRetry}
-              promptAt={closing.get(group.id)}
-              runtimeUpdate={runtimeUpdate}
-              transientFile={transientFile}
-            />
+            <div
+              className="flex min-w-0 flex-col"
+              data-notification-block-id={group.id}
+              tabIndex={-1}
+            >
+              <TranscriptBlock
+                block={group}
+                closing={closing.has(group.id)}
+                editable={group.id === editableId}
+                modelRefresh={modelRefresh}
+                now={now}
+                onEditPrompt={onEditPrompt}
+                onOpenExternal={onOpenExternal}
+                onOpenSource={onOpenSource}
+                onReviewTurnChange={onReviewTurnChange}
+                sourceFor={sourceFor}
+                onPermission={decide}
+                onRetry={onRetry}
+                promptAt={closing.get(group.id)}
+                runtimeUpdate={runtimeUpdate}
+                transientFile={transientFile}
+              />
+            </div>
           </Fragment>
         ),
       )}

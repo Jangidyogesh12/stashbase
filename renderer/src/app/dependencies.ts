@@ -68,11 +68,16 @@ import { readBridge } from '@/platform/electron/bridge';
 import { createExternalNavigation } from '@/platform/electron/external-navigation';
 import { fileManagerLabel } from '@/platform/electron/file-manager';
 import { createFolderPicker } from '@/platform/electron/folder-picker';
+import { createNotificationsAdapter } from '@/platform/electron/notifications';
 import type { WindowLifecycleBridge } from '@/platform/electron/window-lifecycle';
 import { createErrorReporter, type ErrorReporter } from '@/platform/error-reporting';
 import { createHttpClient } from '@/platform/http/client';
 import { createUsageRecorder } from '@/platform/telemetry';
 import type { AppearanceSurface } from '@/shared/domain/appearance';
+import type {
+  DesktopNotificationsPort,
+  NotificationPreferencesPort,
+} from '@/shared/domain/notifications';
 
 /** The folder chrome's dependencies, as the welcome screen declares them;
  *  the folder window's sidebar takes only the project port from the set. */
@@ -81,6 +86,7 @@ type ProjectChrome = Pick<ComponentProps<typeof ProjectWelcome>, 'api' | 'lifecy
 };
 
 export interface AppDependencies {
+  notifications?: DesktopNotificationsPort & NotificationPreferencesPort;
   reportError?: ErrorReporter | undefined;
   /** The appearance the desktop remembered for this window's first paint;
    *  null on a first launch. */
@@ -149,6 +155,9 @@ export function createDependencies(): AppDependencies {
     workspaceSession: bridge.workspaceSession,
   });
   return {
+    ...(bridge.notifications
+      ? { notifications: createNotificationsAdapter(bridge.notifications) }
+      : {}),
     reportError,
     initialAppearance: bridge.runtime.appearance ?? null,
     recordUsage: createUsageRecorder(http),

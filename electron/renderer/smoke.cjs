@@ -94,6 +94,7 @@ app
     const windowLifecycle = require(
       path.join(repositoryRoot, 'dist', 'electron', 'window', 'lifecycle.cjs'),
     );
+    const notifications = require(path.join(repositoryRoot, 'dist', 'electron', 'notifications', 'ipc.cjs'));
     const authorizedWindows = new Set();
     const openedExternalUrls = [];
     const activeFolders = new WeakMap();
@@ -106,7 +107,19 @@ app
         capability === lifecycle.PROJECT_LIFECYCLE_CAPABILITY ||
         capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY ||
         capability === updates.UPDATES_CAPABILITY ||
+        capability === notifications.NOTIFICATIONS_CAPABILITY ||
         capability === windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY);
+    const notificationService = notifications.registerNotifications({
+      BrowserWindow, ipcMain, expectedOrigins: new Set([APP_ORIGIN]),
+      isLiveWindow, hasCapability,
+      filePath: path.join(smokeRoot, 'notifications.json'),
+      supported: () => false,
+      settingsTarget: () => 'manual',
+      openSettings: async () => { throw new Error('No settings launcher in smoke'); },
+      isAppFocused: () => BrowserWindow.getFocusedWindow() !== null,
+      createNotification: () => { throw new Error('This smoke has no native notification provider'); },
+    });
+    app.once('will-quit', () => notificationService.dispose());
     const windowLifecycleService = windowLifecycle.registerWindowLifecycle({
       BrowserWindow, ipcMain, expectedOrigins: new Set([APP_ORIGIN]),
       isLiveWindow, hasCapability,
@@ -291,6 +304,8 @@ app
         updatesFrozen: Object.isFrozen(window.stashbase.updates),
         updatesKeys: Object.keys(window.stashbase.updates).sort(),
         updatesRead: await window.stashbase.updates.read(),
+        notificationsFrozen: Object.isFrozen(window.stashbase.notifications),
+        notificationsRead: await window.stashbase.notifications.read(),
       };
     })()
   `);
@@ -298,9 +313,12 @@ app
     assert.deepEqual(result, {
       externalNavigation: { ok: true },
       externalNavigationFrozen: true,
+      notificationsFrozen: true,
+      notificationsRead: { enabled: true, categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true }, supported: false, settingsTarget: 'manual', delivery: 'unknown' },
       folderResult: { ok: true, folderPath: null },
       globalKeys: [
         'externalNavigation',
+        'notifications',
         'runtime',
         'project',
         'textServices',

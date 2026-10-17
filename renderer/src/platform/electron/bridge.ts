@@ -5,6 +5,7 @@ import {
 
 import type { ExternalNavigationBridge } from './external-navigation';
 import type { ProjectBridge } from './folder-picker';
+import type { NotificationsBridge } from './notifications';
 import type { ProjectLifecycleBridge } from './project-lifecycle';
 import type { TextServicesBridge } from './text-services';
 import { isUpdatesBridge, type UpdatesBridge } from './updates';
@@ -18,6 +19,7 @@ interface DesktopWorkspaceSessionBridge {
 interface DesktopProjectBridge extends ProjectBridge, ProjectLifecycleBridge {}
 
 interface DesktopBridge {
+  notifications?: NotificationsBridge;
   /** Optional: opening the bug-report review exists only in the desktop shell. */
   externalNavigation: ExternalNavigationBridge;
   project: DesktopProjectBridge;
@@ -32,6 +34,7 @@ interface DesktopBridge {
 declare global {
   interface Window {
     stashbase?: {
+      notifications?: NotificationsBridge;
       bugReportReview?: unknown;
       externalNavigation?: ExternalNavigationBridge;
       project?: DesktopProjectBridge;
@@ -91,6 +94,9 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   }
   const updates = globalWindow.stashbase?.updates;
   return {
+    ...(globalWindow.stashbase?.notifications
+      ? { notifications: globalWindow.stashbase.notifications }
+      : {}),
     ...(isUpdatesBridge(updates) ? { updates } : {}),
     externalNavigation,
     project,

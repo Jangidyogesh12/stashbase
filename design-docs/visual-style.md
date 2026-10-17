@@ -19,6 +19,11 @@ Keep documents and conversation readable; navigation and controls stay secondary
   background, and CJK text keeps the platform sans under Serif or Sans.
 - Support light/dark themes, text sizes, keyboard use, visible focus, and reduced
   motion, whether the system or Settings asks for it.
+- Native status menus use the OS menu surface and typography, compact section
+  labels and conversation titles. Status marks stay small and still: a hollow
+  neutral ring for work, a solid dot for attention, separated from the brand mark
+  by clear space. Colored tray/taskbar marks use the fixed badge-red token;
+  macOS menu-bar templates keep native contrast and Dock badges keep system styling.
 - Motion explains change without taking attention or reading position from work.
 - Text a reader may need to copy stays selectable even when its row is a
   control: names, paths, and the commands an agent ran. Navigation chrome —

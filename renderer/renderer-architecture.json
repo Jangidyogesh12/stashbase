@@ -55,6 +55,7 @@
     "shared/protocols/electron/project.ts",
     "shared/protocols/electron/runtime.ts",
     "shared/protocols/electron/text-services.ts",
+    "shared/protocols/electron/notifications.ts",
     "shared/protocols/electron/updates.ts",
     "shared/protocols/electron/window-lifecycle.ts",
     "shared/protocols/electron/workspace-session.ts",

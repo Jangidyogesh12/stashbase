@@ -833,6 +833,129 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Background confirmation notifications (2026-10-17):** The Agent attention
+projection observes inactive sessions as well as the visible chat. Electron owns
+background detection, coalescing, durable opt-out, and notification lifetime via
+the product-independent notification center. The protocol/catalog register event
+kinds; Agent composition maps opaque IDs back to live pending targets. Click
+navigation rechecks the pending request and focuses its decision card.
+`electron/notifications/*.test.cjs` covers sender isolation, foreground suppression,
+coalescing, stale clicks, cancellation, navigation/crash/close, opt-out and delivery
+failure. Center tests exercise independent producers with overlapping IDs and
+window-wide retirement. Native adapter contract tests exercise macOS, Windows and
+Linux branches, Windows installed shortcut identity, and unavailable desktop
+services; these mocks do not establish native behavior on those platforms.
+Renderer attention tests cover inactive chats, subsequent requests,
+historical requests and stopping; Settings tests cover opt-out, peer updates and
+failed persistence. The transcript focus regression includes a pending card older
+than its normal 200-block page. The full renderer gate passed architecture,
+coverage, accessibility, size, duplication, lint, format, types and both builds;
+the initial unused-export and rejection-comment failures were corrected, with
+unused-code, conventions, format, lint and types rerun successfully. Host types,
+Electron contracts, docs, inventory and the built Electron smoke passed.
+
+An isolated macOS Electron pass used the production native adapter, notification
+IPC/preload, attention composition, Settings group and transcript with controlled sessions. It
+reported two native `show` events, verified foreground suppression, injected the
+native click event to select an inactive chat and focus its approval, clicked Allow
+through the rendered card, and verified cancellation and durable opt-out. The focused
+card and Settings layout were inspected by eye. This establishes local integration,
+not a real-provider turn or a physical notification-center click. OS notification
+permission is not exposed reliably by Electron; support does not establish that
+banners are permitted. Packaged notification presentation on macOS, Windows and
+Linux remains unverified.
+
+**Task outcome notifications and category controls (2026-10-17):** The same
+notification center, renderer platform adapter and native driver now carry
+`agent-completed` and `agent-failed` events. `outcome-notifications.test.ts`
+exercises real session transitions for successful turns, failed turns, retries,
+automatic queue continuation, unexpected exit, startup failure, startup stop and
+stop timeout followed by a failure. History and repeated terminal signals do not
+announce results. UI focus coverage includes a result before the ordinary
+transcript page and keeps that page exposed after focus is consumed. IPC tests
+exercise category isolation, durable preference fields, peer-window updates,
+revocation and the absence of foreground/disabled outcome replay. Settings tests
+exercise independent category controls, master opt-out and persistence failure.
+These controlled tests do not establish provider or packaged OS behavior.
+The renderer's full gate passed coverage, accessibility, architecture and both
+builds; its size/lint failures were corrected by extracting transcript pagination
+and removing unsafe test assertions. All ten affected gates then passed again.
+Host types, Electron contracts, docs/inventory and the final built Electron smoke
+also passed. A macOS Electron pass reused the production platform adapter,
+notification center, outcome composition, Settings and transcript with controlled
+session events. It observed three native `show` events; simulated native clicks
+opened the correct completion/error blocks, whose layouts were inspected by eye.
+It also exercised foreground suppression without later replay, active stop,
+independent category controls, re-enable without replay and master opt-out through
+the rendered controls. Physical notification-center clicks and packaged Windows,
+Linux and macOS delivery remain release-checklist evidence gaps.
+
+Notification settings reuse the shared Settings groups, rows, switches and quiet
+retry messages; OS guidance sits below the list and disabled categories recede.
+An isolated macOS Electron pass rendered the production General panel alongside
+Software updates and inspected light, dark, disabled and persistence-failure
+states. It exercised the real platform adapter and preference IPC, with a
+controlled save failure. Native notification titles identify the event while the
+body names the project and chat; OS chrome supplies the application identity.
+The notification host tests and renderer gate cover this presentation change.
+
+**Notification permission recovery (2026-10-17):** General settings now retains
+platform-specific instructions and a system-settings action even when app
+notifications are disabled. The existing platform adapter maps host-owned
+macOS/Windows/GNOME/KDE destinations; unknown Linux desktops and missing launchers
+fall back to manual steps. Host tests exercise fixed destinations, launch failure,
+sender rejection and focus-driven availability refresh without notification
+replay. Settings tests exercise launch retry, unchanged preferences and refreshed
+manual guidance. The full renderer gate, 21 notification host tests, 96 protocol
+tests, host boundary types and built Electron smoke passed. An isolated macOS
+Electron pass used the production General panel, adapter, preload, IPC and native
+settings launcher: clicking opened the OS Notifications page, verified through
+its accessibility tree. Returning refreshed availability; controlled launch
+failure and manual fallback were exercised, and light/dark layouts inspected.
+System permission was not changed or inferred. Packaged Windows/Linux settings
+navigation and denied-to-allowed recovery remain release-checklist checks.
+
+**Message alignment (2026-10-17):** The notification focus wrapper in
+`ui/transcript/transcript.tsx` now preserves the column flex layout required by
+right-aligned user bubbles. An isolated Electron render of the production
+transcript and built CSS reproduced a 268px right-edge gap at a 1000px window
+(and 106px at 420px); changing only the wrapper layout removed the gap. Short
+and wrapping prompts retain the 72% width cap without horizontal overflow.
+This geometry check uses the actual browser layout; DOM-only transcript tests
+do not establish visual alignment. The renderer gate passed its other 11 checks;
+coverage initially hit widespread test and worker-start timeouts. Repeating only
+coverage with two workers passed all 341 files and 1,695 tests without relaxing
+assertions or timeout limits.
+
+**Session menu and attention badges (2026-10-17):** `desktop-sessions.ts`
+projects retained session selectors through the existing platform adapter into
+the native menu-bar/tray. Running contains working, waiting and stopping sessions,
+including work in inactive chats; completed, failed and stopped work is removed.
+Notification switches do not affect this list. The native presenter accepts
+ordered sections with stable row identities; Upcoming presentation is specified
+but there is no scheduling owner or next-run data in the current application.
+A controlled second section exercises section-scoped activation and removal;
+it does not establish scheduled-task integration. The notification center separately
+tracks background attention for Dock/taskbar marks. Renderer tests cover inactive
+sessions, deduplicated updates, request focus and stale session retirement; host
+tests cover multiple owners, notification opt-out, badge clearing, stale menu
+callbacks and missing tray support on Linux. The 26 notification host tests,
+protocol suite, host boundary types, icon/package-input checks and built Electron
+smoke passed. The renderer gate passed after correcting the adapter placement
+and rerunning lint plus coverage; one existing workspace test timed out on the
+first coverage run and passed on retry. The later section-menu refinement passed
+all 12 renderer gates without retries. An isolated macOS Electron pass used
+the production session projection, platform adapter, preload, IPC, Tray and
+badge driver. It observed a real Dock dot and waiting menu, invoked the native
+menu callback, verified the owning chat and request-heading focus, and confirmed
+Stop cleared the dot. A second isolated pass with the section-based menu verified
+that a finished session leaves Running and the empty state appears; the existing
+production adapter and native menu callback still focus the pending card.
+Template and colored tray assets were inspected at normal and enlarged sizes;
+colored attention uses the app's fixed badge-red with a transparent separation
+around the dot, while macOS retains native template contrast. Physical menu clicks, packaged Windows overlays and Linux
+tray/launcher availability remain explicit release checks.
+
 **Closed startup and duplicate diagnostics (2026-10-16):** Codex regressions close
 the socket during model/skill discovery and verify no subsequent requests,
 readiness or failure diagnostics. OpenCode's error/exit pair still reaches the UI

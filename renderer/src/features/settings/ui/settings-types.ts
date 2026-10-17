@@ -8,6 +8,7 @@ import type {
   SystemTextPort,
 } from '@/features/settings/application/ports';
 import type { TelemetryPort } from '@/features/settings/application/telemetry-port';
+import type { NotificationPreferencesPort } from '@/shared/domain/notifications';
 import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 
 /** Every section the Settings shell registers, in nav order. A section id
@@ -24,6 +25,7 @@ export interface SettingsProps {
   revisionPreview?: ReactNode;
   telemetryApi?: TelemetryPort;
   agentRuntimeApi: AgentRuntimePort;
+  notifications?: NotificationPreferencesPort | undefined;
   appearanceApi?: AppearancePort;
   systemTextApi?: SystemTextPort;
   embedderApi?: EmbedderPort;

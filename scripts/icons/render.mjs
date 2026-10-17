@@ -12,6 +12,7 @@ import { app, BrowserWindow } from "electron";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderStatusIcons } from './status.mjs';
 
 import {
   encodeIcns,
@@ -101,6 +102,7 @@ async function main() {
   const icnsEntries = [];
   for (const [type, size] of ICNS_ENTRIES) icnsEntries.push({ png: await pngAt(size), type });
   await writeFile(path.join(buildDirectory, "icon.icns"), encodeIcns(icnsEntries));
+  await renderStatusIcons();
 
   const masterEdge = masters.values().next().value.getSize().width;
   return `icons: rendered ${masters.size} masters at ${masterEdge} px; wrote build/icon.png, build/icons/{${PNG_SIZES.join(",")}}, build/icon.ico (${ICO_SIZES.length} frames), build/icon.icns (${ICNS_ENTRIES.length} entries)`;
