@@ -33,7 +33,7 @@ describe('the changed-in-this-turn card', () => {
       />,
     );
 
-    expect(screen.getByRole('region', { name: 'Changed in this turn' })).not.toBeNull();
+    expect(screen.getByRole('region', { name: 'Changed 3 files' })).not.toBeNull();
     expect(
       screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')),
     ).toEqual(['Review changes to plan.md', 'Open summary.md']);
@@ -47,6 +47,40 @@ describe('the changed-in-this-turn card', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Open summary.md' }));
     expect(onOpenSource).toHaveBeenCalledWith({ folderPath, path: 'summary.md' }, null);
+  });
+
+  it('previews three files, expands the remaining files, and collapses without losing actions', async () => {
+    const onReviewTurnChange = vi.fn();
+    render(
+      <AgentTurnChangesCard
+        files={[
+          ...files,
+          { additions: 7, change: 'edited', deletions: 2, path: `${folderPath}/fourth.md` },
+          { additions: 1, change: 'created', deletions: 0, path: `${folderPath}/fifth.md` },
+        ]}
+        onReviewTurnChange={onReviewTurnChange}
+        sourceFor={sourceFor}
+        turnId="turn-2"
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Changed 5 files' })).not.toBeNull();
+    expect(screen.getByLabelText('16 added, 7 removed')).not.toBeNull();
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.queryByText('fourth.md')).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Show 2 more files', expanded: false });
+    await userEvent.click(toggle);
+    expect(screen.getAllByRole('listitem')).toHaveLength(5);
+    expect(screen.getByRole('button', { name: 'Collapse files', expanded: true })).toBe(toggle);
+    await userEvent.click(screen.getByRole('button', { name: 'Review changes to fourth.md' }));
+    expect(onReviewTurnChange).toHaveBeenCalledWith({
+      source: { folderPath, path: 'fourth.md' },
+      turnId: 'turn-2',
+    });
+    await userEvent.click(toggle);
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.queryByText('fourth.md')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show 2 more files', expanded: false })).toBe(toggle);
   });
 
   it('offers no control for a file outside the chat folder', () => {

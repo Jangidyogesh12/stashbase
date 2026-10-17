@@ -1829,6 +1829,13 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   same turn again refused the now-stale source. This establishes the removed
   proposal path is unnecessary for the Claude flow. It does not establish
   packaged or other-runtime behavior.
+- **Compact turn results (2026-10-17):** `turn-changes-card.tsx` owns the
+  three-file preview, total file/line summary, and Show N more files / Collapse
+  files control. Its component test exercises expansion, collapse, and Review
+  on a previously hidden file; the ManyFiles Story supplies the long-path case.
+  A built Storybook pass in Electron verified 3 → 9 → 3 files, both themes,
+  and a 311px-wide card without horizontal overflow. This exercises the real
+  card with controlled turn data, not a live provider or packaged application.
 - **Turn review (2026-10-04):** every turn on a folder-bound Agent socket is
   bracketed by a Markdown baseline taken before the prompt reaches the runtime
   and a rescan at `turn-end`; the Chat card offers Review per edited file, which

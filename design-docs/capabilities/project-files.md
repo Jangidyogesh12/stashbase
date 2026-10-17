@@ -120,8 +120,11 @@ flows. Other editable formats currently have no inline revision surface.
 ### Turn Review
 
 After an Agent turn changes Markdown files, the conversation shows what changed
-in that turn: each file with its added and removed line counts. Nothing opens on
-its own. An edited file offers **Review**, which opens it with the turn's
+in that turn. The summary shows the total file count and added/removed lines
+across all files. Each completed turn starts collapsed to at most three files,
+with per-file line counts. A bottom **Show N more files** button reveals the
+remaining files and becomes **Collapse files**, which restores the three-file
+preview. Lists of three or fewer files need no toggle. Nothing opens on its own. An edited file offers **Review**, which opens it with the turn's
 changes marked in the prose, against the text the file held before the turn.
 Each change has Undo and Keep; Undo all and Keep all resolve the remaining set.
 Undo restores the earlier text through the document's ordinary versioned save;

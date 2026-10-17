@@ -2,8 +2,8 @@
  *  under the turn: each file once, with its line counts and the one thing
  *  the reader can do with it. Nothing opens on its own; Review is the reader
  *  choosing to see the turn's changes inside the document. */
-import { FileDiff } from 'lucide-react';
-import { useId } from 'react';
+import { ChevronDown, ChevronUp, FileDiff } from 'lucide-react';
+import { useId, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { AgentTurnChangedFile } from '@/features/agent/domain/session';
@@ -26,6 +26,8 @@ const CHANGE_LABEL: Record<AgentTurnChangedFile['change'], string> = {
   deleted: 'Deleted',
   edited: 'Edited',
 };
+
+const COLLAPSED_FILE_COUNT = 3;
 
 function FileAction({
   file,
@@ -84,23 +86,40 @@ export function AgentTurnChangesCard({
 }) {
   const shape = useShape();
   const headingId = useId();
+  const listId = useId();
+  const [expanded, setExpanded] = useState(false);
+  const visibleFiles = expanded ? files : files.slice(0, COLLAPSED_FILE_COUNT);
+  const hiddenCount = Math.max(0, files.length - COLLAPSED_FILE_COUNT);
+  const additions = files.reduce((total, file) => total + file.additions, 0);
+  const deletions = files.reduce((total, file) => total + file.deletions, 0);
   const onReview = onReviewTurnChange
     ? (source: SourceReference) => onReviewTurnChange({ source, turnId })
     : undefined;
   return (
     <section
       aria-labelledby={headingId}
-      className={cn('border border-border bg-surface-2 px-3 pt-2.5 pb-1', shape.panel)}
+      className={cn('border border-border bg-surface-2', shape.panel)}
     >
-      <h3
-        className="flex items-center gap-2 pb-1 text-ui-12 font-medium text-muted-foreground"
-        id={headingId}
-      >
-        <FileDiff aria-hidden className="size-3.5 shrink-0" strokeWidth={1.5} />
-        Changed in this turn
-      </h3>
-      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
-        {files.map((file) => {
+      <div className="flex items-center gap-3 border-b border-border px-3 py-3">
+        <span
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center bg-surface-3',
+            shape.mark,
+          )}
+        >
+          <FileDiff aria-hidden className="size-5 text-muted-foreground" strokeWidth={1.5} />
+        </span>
+        <div className="flex flex-col items-start gap-1">
+          <h3 className="text-ui-13 font-medium text-foreground" id={headingId}>
+            Changed {files.length} {files.length === 1 ? 'file' : 'files'}
+          </h3>
+          <div className="flex">
+            <Counts additions={additions} deletions={deletions} />
+          </div>
+        </div>
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-1 px-3 py-2" id={listId}>
+        {visibleFiles.map((file) => {
           const name = basePathName(file.path);
           const source = sourceFor?.(file.path) ?? null;
           return (
@@ -108,7 +127,12 @@ export function AgentTurnChangesCard({
               className={cn('flex min-h-7 items-center gap-2 text-ui-12', shape.item)}
               key={file.path}
             >
-              <ChangedFileLabel iconSize={14} path={file.path} shownPath={source?.path} />
+              <ChangedFileLabel
+                iconSize={14}
+                layout="path-first"
+                path={file.path}
+                shownPath={source?.path}
+              />
               <Counts additions={file.additions} deletions={file.deletions} />
               <span
                 className={cn(
@@ -129,6 +153,21 @@ export function AgentTurnChangesCard({
           );
         })}
       </ul>
+      {hiddenCount > 0 && (
+        <Button
+          aria-controls={listId}
+          aria-expanded={expanded}
+          className="mx-1 mb-2 text-ui-12"
+          onClick={() => setExpanded((value) => !value)}
+          size="compact"
+          trailingIcon={expanded ? ChevronUp : ChevronDown}
+          variant="ghost"
+        >
+          {expanded
+            ? 'Collapse files'
+            : `Show ${hiddenCount} more ${hiddenCount === 1 ? 'file' : 'files'}`}
+        </Button>
+      )}
     </section>
   );
 }

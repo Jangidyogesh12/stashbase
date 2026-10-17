@@ -28,7 +28,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="w-[34rem]">
+      <div className="w-full max-w-[34rem]">
         <Story />
       </div>
     ),
@@ -46,5 +46,20 @@ export const Standard: Story = {};
 export const SingleEdit: Story = {
   args: {
     files: [{ additions: 3, change: 'edited', deletions: 1, path: `${folderPath}/plan.md` }],
+  },
+};
+
+/** A settled turn starts with a three-file preview, even after many edits. */
+export const ManyFiles: Story = {
+  args: {
+    files: [
+      ...meta.args.files,
+      ...Array.from({ length: 6 }, (_, index) => ({
+        additions: index + 1,
+        change: 'edited' as const,
+        deletions: index,
+        path: `${folderPath}/research/architecture/platform/background-material-${index + 1}.md`,
+      })),
+    ],
   },
 };
