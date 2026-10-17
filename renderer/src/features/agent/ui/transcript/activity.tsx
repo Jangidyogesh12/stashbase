@@ -246,7 +246,9 @@ export function AgentActivityGroup({
   useEffect(() => {
     if (!holdsFocusTool || focusedFor.current === focusToolId) return;
     focusedFor.current = focusToolId;
-    headerRef.current?.focus();
+    // The group can begin far above the decision card. Keep keyboard focus
+    // reachable without scrolling the reader back to the start of the turn.
+    headerRef.current?.focus({ preventScroll: true });
   }, [focusToolId, holdsFocusTool]);
   // Thinking alone has no step to name, so the header says what it is and
   // carries the same unfinished mark the summaries do.

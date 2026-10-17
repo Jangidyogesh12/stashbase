@@ -21,7 +21,8 @@ import type { AgentAccessMode } from '../../shared/agent-runtime.ts';
 function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart = true, abortFailure = false) {
   const ws = new FakeWebSocket();
   const feed = new EventEmitter();
-  const prompts: Array<{ agent: string }> = [];
+  const prompts: Array<{ agent: string; model: { modelID: string } }> = [];
+  const profiles: Array<string | undefined> = [];
   const replies: Array<{ path: { permissionID: string }; body: { response: string } }> = [];
   const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
     windowId: 'mode-window', folder, access,
@@ -35,7 +36,7 @@ function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart
         }) },
         session: {
           create: async () => ({ data: { id: 'mode-session', title: 'New Chat', directory } }),
-          promptAsync: async ({ body }: { body: { agent: string } }) => {
+          promptAsync: async ({ body }: { body: { agent: string; model: { modelID: string } } }) => {
             prompts.push(body);
             if (nativeStart) feed.emit('event', { type: 'session.status', properties: { sessionID: 'mode-session', status: { type: 'busy' } } });
             return { data: true };
@@ -45,9 +46,10 @@ function modeHarness(access: AgentAccessMode, folder = '/workspace', nativeStart
         postSessionIdPermissionsPermissionId: async (reply: typeof replies[number]) => { replies.push(reply); return { data: true }; },
       } as never;
     },
-    beginTurn: () => {}, endTurn: () => {}, onExit: () => () => {}, close: async () => {},
+    models: () => [{ id: 'stashbase-agent-default', version: 1, label: 'Gemini', isDefault: true, contextTokenLimit: 1000000, outputTokenLimit: 16384, reasoningEnabled: true }, { id: 'second-model', version: 1, label: 'Other model', isDefault: false, contextTokenLimit: 200000, outputTokenLimit: 4096, reasoningEnabled: false }],
+    beginTurn: (_turnId, profile) => { profiles.push(profile); }, endTurn: () => {}, onExit: () => () => {}, close: async () => {},
   });
-  return { ws, feed, session, prompts, replies,
+  return { ws, feed, session, prompts, replies, profiles,
     send: (event: unknown) => ws.emit('message', Buffer.from(JSON.stringify(event))),
     events: () => ws.sent.map(value => JSON.parse(value)),
   };
@@ -310,6 +312,7 @@ test('the Default Agent publishes scope retirement once before closing its trans
     windowId: 'retire-window', folder: '/workspace',
   }, {
     client: async () => new Promise<never>(() => {}),
+    models: () => [{ id: 'stashbase-agent-default', version: 1, label: 'Gemini', isDefault: true, contextTokenLimit: 1000000, outputTokenLimit: 16384, reasoningEnabled: true }],
     beginTurn: () => {}, endTurn: () => {}, onExit: () => () => {},
     close: async () => { closed += 1; },
   });
@@ -416,6 +419,7 @@ test('an unexpected bundled runtime exit terminates the panel instead of leaving
         },
       } as never;
     },
+    models: () => [{ id: 'stashbase-agent-default', version: 1, label: 'Gemini', isDefault: true, contextTokenLimit: 1000000, outputTokenLimit: 16384, reasoningEnabled: true }],
     beginTurn: () => {},
     endTurn: () => {},
     onExit(listener) {
@@ -648,4 +652,62 @@ test('Default streamed provider errors retain status, request ID and bounded res
     h.session.dispose();
   }
   assert.equal(safeOpenCodeInheritedEnvironment({ STASHBASE_TELEMETRY_DISABLED: '1' }).STASHBASE_TELEMETRY_DISABLED, '1');
+});
+
+
+test('Default preserves a model selected during startup and pins it until the turn ends', async t => {
+  const harness = modeHarness('acceptEdits');
+  t.after(() => harness.session.dispose());
+  harness.send({ t: 'set-model', model: 'second-model' });
+  await settle();
+  assert.equal(harness.events().find(event => event.t === 'models').activeModel, 'second-model');
+  harness.send({ t: 'prompt', text: 'Hello' });
+  await settle();
+  assert.deepEqual(harness.profiles, ['second-model']);
+  assert.equal(harness.prompts[0]?.model.modelID, 'second-model');
+  harness.send({ t: 'set-model', model: 'stashbase-agent-default' });
+  harness.send({ t: 'interrupt' });
+  await settle();
+  harness.send({ t: 'prompt', text: 'Continue' });
+  await settle();
+  assert.deepEqual(harness.profiles, ['second-model', 'second-model']);
+  harness.send({ t: 'interrupt' });
+  await settle();
+  harness.send({ t: 'set-model', model: 'stashbase-agent-default' });
+  harness.send({ t: 'prompt', text: 'Use Gemini' });
+  await settle();
+  assert.equal(harness.profiles.at(-1), 'stashbase-agent-default');
+  assert.equal(harness.prompts.at(-1)?.model.modelID, 'stashbase-agent-default');
+});
+
+
+test('only a structured model-version refusal retires the runtime for explicit reconnection', async t => {
+  for (const [type, nativeStart] of [['session.error', true], ['message.updated', true], ['session.error', false]] as const) {
+    const h = modeHarness('default', '/workspace', nativeStart);
+    t.after(() => h.session.dispose());
+    await settle();
+    h.send({ t: 'prompt', text: 'Retain this request' });
+    await settle();
+    const error = { name: 'APIError', data: { message: 'Reconnect to refresh models.', statusCode: 422,
+      responseBody: JSON.stringify({ error: { code: 'agent_model_configuration_changed' } }) } };
+    // Other sessions cannot retire this session's catalog.
+    h.feed.emit('event', { type: 'session.error', properties: { sessionID: 'other-session', error } });
+    await settle();
+    assert.equal(h.ws.readyState, h.ws.OPEN);
+    h.feed.emit('event', { type, properties: type === 'session.error' ? { sessionID: 'mode-session', error }
+      : { info: { id: 'obsolete-model', sessionID: 'mode-session', role: 'assistant', error } } });
+    await settle();
+    assert.deepEqual(h.events().slice(-3).map(event => event.t), ['error', 'turn-end', 'exit']);
+    assert.equal(h.ws.readyState, 3);
+    h.send({ t: 'prompt', text: 'Must not replay' });
+    assert.equal(h.prompts.length, 1);
+  }
+  const ordinary = modeHarness('default');
+  t.after(() => ordinary.session.dispose());
+  await settle();
+  ordinary.feed.emit('event', { type: 'session.error', properties: { sessionID: 'mode-session', error: {
+    name: 'APIError', data: { message: 'agent_model_configuration_changed', statusCode: 422, responseBody: 'invalid JSON' },
+  } } });
+  await settle();
+  assert.equal(ordinary.ws.readyState, ordinary.ws.OPEN);
 });

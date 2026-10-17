@@ -7,6 +7,7 @@
  * the renderer on StashBase's stable Agent protocol.
  */
 import fs from 'node:fs';
+import { readHostedAgentModels, type HostedAgentModel } from './hosted-agent-models.ts';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
@@ -137,8 +138,10 @@ export function buildOpenCodeConfig(
   mcp: string,
   mcpEnvironment: Record<string, string> = {},
   persona?: string,
+  catalog: HostedAgentModel[] = [],
 ): Config {
   const runtimeInstructions = composeAgentRuntimeInstructions(persona);
+  const defaultModel = catalog.find(entry => entry.isDefault)?.id ?? model.model;
   const permission = {
     // Native edit/write/patch tools share this permission; MCP writes stay explicit.
     edit: 'deny',
@@ -156,8 +159,8 @@ export function buildOpenCodeConfig(
     autoupdate: false,
     share: 'disabled',
     enabled_providers: ['stashbase'],
-    model: `stashbase/${model.model}`,
-    small_model: `stashbase/${model.model}`,
+    model: `stashbase/${defaultModel}`,
+    small_model: `stashbase/${defaultModel}`,
     provider: {
       stashbase: {
         name: 'StashBase',
@@ -167,15 +170,17 @@ export function buildOpenCodeConfig(
           baseURL: model.baseUrl,
           timeout: false,
         },
-        models: {
-          [model.model]: {
-            name: 'Gemini 3.8 Flash',
-            attachment: true,
-            modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
-            tool_call: true,
-            reasoning: true,
-          },
-        },
+        models: Object.fromEntries((catalog.length ? catalog : [{
+          id: model.model, label: 'Hosted model', reasoningEnabled: true,
+          contextTokenLimit: 1_000_000, outputTokenLimit: 16_384,
+        }]).map(entry => [entry.id, {
+          name: entry.label,
+          attachment: true,
+          modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
+          tool_call: true,
+          reasoning: entry.reasoningEnabled,
+          limit: { context: entry.contextTokenLimit, output: entry.outputTokenLimit },
+        }])),
       },
     },
     mcp: {
@@ -219,11 +224,13 @@ function openCodeConfig(
   model: { apiKey: string; baseUrl: string; model: string },
   mcpEnvironment: Record<string, string>,
   persona?: string,
+  catalog: HostedAgentModel[] = [],
 ): Config {
-  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, persona);
+  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, persona, catalog);
 }
 
 class OpenCodeRuntime {
+  models: HostedAgentModel[] = [];
   private running: RunningOpenCode | null = null;
   private starting: Promise<RunningOpenCode> | null = null;
   private startingProcess: RunningOpenCode['process'] | null = null;
@@ -341,6 +348,7 @@ class OpenCodeRuntime {
     if (this.requireAccount && !getHostedAccountSession()) {
       throw new Error('Sign in to StashBase to use the Default Agent.');
     }
+    if (this.requireAccount) this.models = await readHostedAgentModels();
     await startHostedAgentBroker();
     if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
     const port = await availablePort();
@@ -357,7 +365,7 @@ class OpenCodeRuntime {
       '--pure',
       '--log-level=WARN',
     ], {
-      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona), username, password),
+      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona, this.models), username, password),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -429,6 +437,7 @@ const runtimes = new Set<OpenCodeRuntime>();
 const historyRuntime = new OpenCodeRuntime({}, undefined, false);
 
 export interface OpenCodeSessionRuntime {
+  models(): HostedAgentModel[];
   client(directory: string): Promise<OpencodeClient>;
   beginTurn(turnId: string, profile?: string): void;
   endTurn(): void;
@@ -452,8 +461,9 @@ export function createOpenCodeSessionRuntime(
     STASHBASE_AGENT_SESSION_ID: context.agentSessionId,
   }, resolveAgentPersona(context.persona), true, context.agentSessionId);
   return {
+    models: () => sessionRuntime.models,
     client: (directory) => sessionRuntime.client(directory),
-    beginTurn: (turnId, profile) => beginHostedAgentTurn(context.agentSessionId, turnId, profile),
+    beginTurn: (turnId, profile) => beginHostedAgentTurn(context.agentSessionId, turnId, profile, sessionRuntime.models.find(model => model.id === profile)?.version),
     endTurn: () => endHostedAgentTurn(context.agentSessionId),
     onExit: (listener) => sessionRuntime.onExit(listener),
     close: () => sessionRuntime.close(),

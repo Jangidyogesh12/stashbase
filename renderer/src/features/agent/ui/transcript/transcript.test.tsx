@@ -200,50 +200,64 @@ describe('Agent transcript time cues', () => {
 });
 
 describe('Agent transcript permission decisions', () => {
-  it('folds a decided ask into the activity group and moves focus to its summary', async () => {
-    const onPermission = vi.fn(() => true);
-    const ask: AgentTranscriptBlock = {
-      id: 'tool-2',
-      input: { content: '# Plan', file_path: '/project/Research/plan.md' },
-      kind: 'tool',
-      name: 'Write',
-      permissionId: 'permission-1',
-      permissionRequested: true,
-      permissionTitle: null,
-      status: 'awaiting',
-    };
-    const { rerender } = render(
-      <AgentTranscript
-        activeTurn
-        blocks={[...turn.slice(0, 4), ask]}
-        onOpenExternal={vi.fn()}
-        onPermission={onPermission}
-        onRetry={vi.fn(() => true)}
-      />,
-    );
-    expect(screen.getByRole('heading', { name: 'Apply these changes?' })).not.toBeNull();
+  it.each(['Allow', 'Reject'] as const)(
+    'folds %s into its summary without scrolling to the start of the turn',
+    async (decision) => {
+      const onPermission = vi.fn(() => true);
+      const ask: AgentTranscriptBlock = {
+        id: 'tool-2',
+        input: { content: '# Plan', file_path: '/project/Research/plan.md' },
+        kind: 'tool',
+        name: 'Write',
+        permissionId: 'permission-1',
+        permissionRequested: true,
+        permissionTitle: null,
+        status: 'awaiting',
+      };
+      const { rerender } = render(
+        <AgentTranscript
+          activeTurn
+          blocks={[...turn, ask]}
+          onOpenExternal={vi.fn()}
+          onPermission={onPermission}
+          onRetry={vi.fn(() => true)}
+        />,
+      );
+      expect(screen.getByRole('heading', { name: 'Apply these changes?' })).not.toBeNull();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Reject' }));
-    expect(onPermission).toHaveBeenCalledWith('tool-2', 'permission-1', false);
-    rerender(
-      <AgentTranscript
-        activeTurn
-        blocks={[...turn.slice(0, 4), { ...ask, permissionId: undefined, status: 'denied' }]}
-        onOpenExternal={vi.fn()}
-        onPermission={onPermission}
-        onRetry={vi.fn(() => true)}
-      />,
-    );
+      const summary = screen.getByRole('button', { name: 'Ran command', expanded: false });
+      const focus = vi.spyOn(summary, 'focus');
+      await userEvent.click(screen.getByRole('button', { name: decision }));
+      expect(onPermission).toHaveBeenCalledWith('tool-2', 'permission-1', decision === 'Allow');
+      rerender(
+        <AgentTranscript
+          activeTurn
+          blocks={[
+            ...turn,
+            {
+              ...ask,
+              permissionId: undefined,
+              status: decision === 'Allow' ? 'running' : 'denied',
+            },
+          ]}
+          onOpenExternal={vi.fn()}
+          onPermission={onPermission}
+          onRetry={vi.fn(() => true)}
+        />,
+      );
 
-    expect(screen.queryByRole('heading', { name: 'Apply these changes?' })).toBeNull();
-    // The refused write is not the step in hand, so the header names the last
-    // call that actually ran while the turn carries on.
-    const summary = screen.getByRole('button', { name: 'Ran ls…', expanded: false });
-    expectFocused(summary);
-    await userEvent.click(summary);
-    expect(screen.getByRole('button', { name: /Wrote.*plan\.md.*Denied/u })).not.toBeNull();
-    expect(screen.queryByRole('list', { name: 'Changed files' })).toBeNull();
-  });
+      expect(screen.queryByRole('heading', { name: 'Apply these changes?' })).toBeNull();
+      // The group precedes the intervening reply, so focusing its summary must
+      // not pull the viewport away from the decision the reader just made.
+      expectFocused(summary);
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+      await userEvent.click(summary);
+      expect(
+        screen.getByRole('button', { name: /Wrote.*plan\.md.*(Running|Denied)/u }),
+      ).not.toBeNull();
+      expect(screen.queryByRole('list', { name: 'Changed files' })).toBeNull();
+    },
+  );
 });
 
 describe('Agent transcript copy affordance', () => {

@@ -1,3 +1,4 @@
+import { publicHostedModels } from './hosted-agent-models.ts';
 import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 /** OpenCode implementation of StashBase's Shared Agent Contract. */
 import { prepareAgentAttachments } from './agent-attachments.ts';
@@ -78,6 +79,18 @@ function providerErrorDiagnostic(error: unknown): unknown {
   return { name: record.name, code: record.name, message: data.message,
     status: data.statusCode, response_body: data.responseBody,
     request_id: headers?.['x-request-id'] ?? headers?.['request-id'] ?? headers?.['x-amzn-requestid'] };
+}
+
+/** Only the gateway's structured refusal retires an obsolete catalog. Ordinary
+ * provider failures and prose mentioning models must keep the session usable. */
+function isStaleHostedModel(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const data = (error as { data?: { statusCode?: unknown; responseBody?: unknown } }).data;
+  if (data?.statusCode !== 422 || typeof data.responseBody !== 'string') return false;
+  try {
+    const body = JSON.parse(data.responseBody);
+    return body?.error?.code === 'agent_model_configuration_changed';
+  } catch { return false; }
 }
 
 function eventErrorMessage(event: Extract<Event, { type: 'session.error' }>): string {
@@ -289,6 +302,9 @@ export class OpenCodePanelSession {
   readonly windowId: string;
   private readonly runtime: OpenCodeSessionRuntime;
   private sessionId: string | null = null;
+  private selectedModel: string | undefined;
+  private catalogReady = false;
+  private modelChoiceRevision = 0;
   private client: Awaited<ReturnType<typeof openCodeClient>> | null = null;
   private disposed = false;
   private interrupted = false;
@@ -312,6 +328,7 @@ export class OpenCodePanelSession {
       currentFolder: getCurrentFolder(),
     }));
     this.cwd = binding.cwd;
+    this.selectedModel = options.model;
     // Auto is not offered here; a new chat asks for it before the renderer
     // settles, and Edit is where it settles.
     this.access = options.access === 'auto' ? 'acceptEdits'
@@ -377,11 +394,28 @@ export class OpenCodePanelSession {
       this.translator.bindSession(native.id);
       send(this.ws, { t: 'session-id', id: native.id });
       if (native.title) send(this.ws, { t: 'session-title', title: native.title });
+      if (this.options.resume && this.selectedModel === undefined) {
+        const revision = this.modelChoiceRevision;
+        const history = await this.client.session.messages({ ...DATA_REQUEST, path: { id: native.id } });
+        const lastUser = history.data.filter(entry => entry.info.role === 'user').at(-1)?.info;
+        if (revision === this.modelChoiceRevision && lastUser?.role === 'user' && lastUser.model.providerID === 'stashbase') this.selectedModel = lastUser.model.modelID;
+      }
+      if (this.disposed) return;
+      this.catalogReady = true;
+      this.publishModels();
       send(this.ws, { t: 'skills', skills: [], state: 'empty' });
       send(this.ws, { t: 'ready' });
     } catch (error) {
       this.fail(error, true);
     }
+  }
+
+  private publishModels(): void {
+    const models = publicHostedModels(this.runtime.models());
+    const activeModel = this.selectedModel ?? models.find(model => model.isDefault)?.id;
+    const unavailable = activeModel && !models.some(model => model.id === activeModel);
+    send(this.ws, { t: 'models', models, ...(activeModel ? { activeModel } : {}),
+      ...(unavailable ? { fallback: 'The selected model is unavailable. Choose another model before sending.' } : {}) });
   }
 
   private async consume(stream: AsyncGenerator<Event>): Promise<void> {
@@ -406,6 +440,15 @@ export class OpenCodePanelSession {
           const nativeError = event.type === 'session.error' ? event.properties.error
             : event.type === 'message.updated' && event.properties.info.role === 'assistant' ? event.properties.info.error : undefined;
           send(this.ws, item, item.t === 'error' ? providerErrorDiagnostic(nativeError) : undefined);
+          if (item.t === 'error' && isStaleHostedModel(nativeError)) {
+            // End the failed turn before the terminal event, so reconnect keeps
+            // its known failure rather than marking delivery as uncertain.
+            const ending = translated.filter(event => event.t === 'turn-end');
+            for (const ended of ending.length ? ending : this.translator.endTurnWithError()) send(this.ws, ended);
+            send(this.ws, { t: 'exit', message: item.message });
+            this.dispose();
+            return;
+          }
           if (item.t === 'tool') {
             for (const permission of this.waitingToolPermissions.values()) {
               if (permission.toolUseId !== item.id) continue;
@@ -443,15 +486,29 @@ export class OpenCodePanelSession {
       }
       return;
     }
-    if (!this.client || !this.sessionId) return;
+    if (event.t === 'set-model') {
+      if (this.turnInFlight()) return;
+      const requested = event.model || undefined;
+      if (!this.catalogReady || !requested || this.runtime.models().some(model => model.id === requested)) {
+        this.modelChoiceRevision++;
+        this.selectedModel = requested;
+      }
+      if (this.catalogReady) this.publishModels();
+      return;
+    }
+    if (!this.client || !this.sessionId || !this.catalogReady) return;
     let preparationSignal: AbortSignal | undefined;
     try {
       switch (event.t) {
         case 'prompt': {
           if (this.turnInFlight()) return;
+          const model = this.selectedModel ?? this.runtime.models().find(model => model.isDefault)?.id;
+          if (!model || !this.runtime.models().some(entry => entry.id === model)) {
+            throw new Error('The selected model is unavailable. Choose another model before sending.');
+          }
           this.interrupted = false;
-          beginAgentDiagnosticTurn(this.ws, event.telemetryTurnId, { model: 'stashbase-agent-default', native_session_id: this.sessionId });
-          this.runtime.beginTurn(event.telemetryTurnId ?? randomUUID());
+          beginAgentDiagnosticTurn(this.ws, event.telemetryTurnId, { model, native_session_id: this.sessionId });
+          this.runtime.beginTurn(event.telemetryTurnId ?? randomUUID(), model);
           for (const translated of this.translator.beginTurn()) send(this.ws, translated);
           if (event.titleHint) {
             void this.client.session.update({
@@ -478,7 +535,7 @@ export class OpenCodePanelSession {
             ...DATA_REQUEST,
             path: { id: this.sessionId },
             body: {
-              model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
+              model: { providerID: 'stashbase', modelID: model },
               agent: this.access === 'plan' ? 'stashbase-plan' : this.access === 'acceptEdits' ? 'stashbase-edit' : 'stashbase-folder',
               parts: [{ type: 'text', text: event.text }, ...attachments],
             },

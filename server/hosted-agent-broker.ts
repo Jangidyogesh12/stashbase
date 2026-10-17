@@ -4,7 +4,7 @@
  * OpenCode receives only a random process-local credential. The StashBase
  * account token is added here immediately before the request leaves the
  * machine, so neither the renderer nor OpenCode's config/history stores can
- * persist it. The hosted service remains the owner of Gemini routing,
+ * persist it. The hosted service remains the owner of model routing,
  * token accounting, and allowance enforcement.
  */
 import crypto from 'node:crypto';
@@ -173,6 +173,7 @@ export class HostedAgentBroker {
     turnId: string | null;
     turnAbort: AbortController;
     profile: string;
+    profileVersion?: number;
   }>();
   private readonly channelBySession = new Map<string, string>();
 
@@ -246,7 +247,7 @@ export class HostedAgentBroker {
     };
   }
 
-  beginTurn(agentSessionId: string, turnId: string, profile = 'stashbase-agent-default'): void {
+  beginTurn(agentSessionId: string, turnId: string, profile = 'stashbase-agent-default', profileVersion?: number): void {
     const apiKey = this.channelBySession.get(agentSessionId);
     const channel = apiKey ? this.channels.get(apiKey) : undefined;
     if (!channel) throw new Error('The hosted Agent broker channel is unavailable.');
@@ -257,6 +258,7 @@ export class HostedAgentBroker {
     channel.turnAbort = new AbortController();
     channel.turnId = turnId;
     channel.profile = profile;
+    channel.profileVersion = profileVersion;
   }
 
   endTurn(agentSessionId: string): void {
@@ -315,6 +317,7 @@ export class HostedAgentBroker {
     }
     const turnId = channel.turnId;
     const profile = channel.profile;
+    const profileVersion = channel.profileVersion;
 
     const abort = new AbortController();
     const signal = AbortSignal.any([abort.signal, channel.turnAbort.signal]);
@@ -342,6 +345,7 @@ export class HostedAgentBroker {
             'idempotency-key': idempotencyKey,
             'x-stashbase-agent-turn-id': turnId,
             'x-stashbase-agent-profile': profile,
+            ...(profileVersion === undefined ? {} : { 'x-stashbase-agent-profile-version': String(profileVersion) }),
             'x-stashbase-client-version': this.dependencies.clientVersion(),
           },
           body,
@@ -417,7 +421,7 @@ const broker = new HostedAgentBroker();
 export const startHostedAgentBroker = (): Promise<void> => broker.start();
 export const stopHostedAgentBroker = (): Promise<void> => broker.close();
 export const hostedAgentRuntime = (agentSessionId?: string) => broker.runtime(agentSessionId);
-export const beginHostedAgentTurn = (agentSessionId: string, turnId: string, profile?: string) =>
-  broker.beginTurn(agentSessionId, turnId, profile);
+export const beginHostedAgentTurn = (agentSessionId: string, turnId: string, profile?: string, profileVersion?: number) =>
+  broker.beginTurn(agentSessionId, turnId, profile, profileVersion);
 export const endHostedAgentTurn = (agentSessionId: string) => broker.endTurn(agentSessionId);
 export const releaseHostedAgentChannel = (agentSessionId: string) => broker.releaseChannel(agentSessionId);

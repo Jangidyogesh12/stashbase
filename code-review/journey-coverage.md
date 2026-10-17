@@ -722,6 +722,38 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**OpenRouter hosted routing (2026-10-12):** `stashbase-api` now routes the default
+Gemini 3.8 Flash profile through OpenRouter; the desktop protocol and alias stay
+the same. The hosted adapter owns explicit model IDs, routing/price limits, native
+PDF normalization, and Gemini tool-history compatibility. Gateway tests cover
+fragmented SSE, actual-cost settlement, private cost/error removal, and missing
+cost recovery. PostgreSQL integration verifies migration preserves active turns
+and balances, additional profiles, and exactly-once charging. The administrator
+form supports OpenRouter with USD price fields. The host reads the authenticated
+model catalog into the existing Default picker, routes selected profile IDs, and
+restores the native history's model. Startup picks and turn locking have focused
+coverage; the pinned OpenCode smoke verifies switching and history restoration.
+A built picker fixture was driven in the browser: Gemini to GPT-4.1 mini retained
+the draft, updated the label, and disabled selection while running; composition
+was reviewed by eye. This is a focused component pass, not a packaged chat journey.
+The API persists generation IDs before forwarding frames and retries estimated
+charges from scheduler/Cron. Real PostgreSQL tests cover concurrent claims,
+restart/retry, refunds, additional charges, reservation caps, and account reset.
+Regression coverage also checks spending between estimate and reconciliation,
+including paid-month holds. Broker and HTTP tests carry catalog versions; gateway
+and PostgreSQL tests reject stale versions and publication races before dispatch
+while allowing the pinned turn's tool continuation. The native smoke verifies
+that selected-model calls carry the version and stale-configuration failures
+retire the obsolete runtime without native retries. The workspace regression
+clicks Reconnect, retains history/draft/paused queue, and verifies no automatic
+resend; the native smoke resumes the same history and sends a fresh catalog
+version only after an explicit prompt.
+Real OpenRouter probes verified Gemini text, tool continuation, native PDF and
+image input, GPT-4.1 mini text, and cancelled-stream accounting recovery against
+metadata. Cache-hit pricing, other models' tool/media behavior, and production
+rollout remain unverified. Missing generation IDs or unavailable metadata remain
+explicitly estimated.
+
 - **Low-credit calls (2026-10-11):** the hosted API's account-locked reservation
   reduces output to fit account/monthly and turn capacity while retaining input
   cost. API ledger tests cover positive remaining balance, concurrent last-credit
@@ -1293,6 +1325,16 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   show Running and Denied respectively, and return focus to the heading. This
   verifies the rendered card and its controlled reply callback, not native
   Agent execution.
+  Approval scroll regression (2026-10-17): an isolated Electron renderer
+  harness with the real transcript and bottom-follow hook reproduced Allow
+  jumping from scrollTop 1773 to 0 when the decided tool joined an activity
+  group above an intervening long reply. Focus transfer now prevents scrolling;
+  the same pass remains at the new bottom (1682) after the card folds.
+  Allow and Reject both keep bottom-follow, and preserve the visible paragraph
+  when the reader has scrolled up (including anchoring across the denied row).
+  `transcript.test.tsx` covers Allow and Reject retaining summary focus without
+  requesting browser scrolling. This is controlled renderer evidence, not a
+  live-provider or packaged-app pass.
   Clarifying questions (2026-09-18): focused renderer tests cover the question
   card's answers keyed by question text, multi-select and typed answers joined
   as the runtime reads them, Answer held until every question has one, Skip

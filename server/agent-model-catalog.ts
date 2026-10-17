@@ -1,3 +1,5 @@
+import { getHostedAccountSession } from './app-config.ts';
+import { readHostedAgentModels, publicHostedModels } from './hosted-agent-models.ts';
 import { retireAgentProcess } from './agent-process.ts';
 /** What a runtime offers to run on, read at the runtime level.
  *
@@ -49,6 +51,8 @@ const attemptedAt = new Map<RememberedAgentId, number>();
 function incomplete(catalog: AgentModelCatalog): boolean {
   return !catalog.defaultModel && !catalog.models.some((model) => model.isDefault === true);
 }
+let hostedReadRevision = 0;
+let hostedCatalog: { userId: string; catalog: AgentModelCatalog } | undefined;
 let loaded = false;
 
 function remembered(id: AgentId): id is RememberedAgentId {
@@ -83,6 +87,7 @@ function persist(): void {
 }
 
 export function recallAgentModels(id: AgentId): AgentModelCatalog | undefined {
+  if (id === 'stashbase') return getHostedAccountSession()?.userId === hostedCatalog?.userId ? hostedCatalog?.catalog : undefined;
   if (!remembered(id)) return undefined;
   load();
   return memory.get(id);
@@ -163,6 +168,20 @@ export function ensureAgentModelCatalog(
   id: AgentId,
   options: { read?: () => Promise<CatalogReading>; now?: () => number } = {},
 ): Promise<AgentModelCatalog | undefined> {
+  if (id === 'stashbase') {
+    const userId = getHostedAccountSession()?.userId;
+    const revision = ++hostedReadRevision;
+    if (!userId) { hostedCatalog = undefined; return Promise.resolve(undefined); }
+    return readHostedAgentModels().then(models => {
+      if (getHostedAccountSession()?.userId !== userId || revision !== hostedReadRevision) return undefined;
+      const catalog = { models: publicHostedModels(models), readAt: new Date().toISOString() };
+      hostedCatalog = { userId, catalog };
+      return catalog;
+    }).catch(() => {
+      if (revision === hostedReadRevision) hostedCatalog = undefined;
+      return undefined;
+    });
+  }
   const known = recallAgentModels(id);
   if (!remembered(id) || (known && !incomplete(known))) return Promise.resolve(known);
   const now = options.now ?? Date.now;

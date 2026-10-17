@@ -370,7 +370,15 @@ stable status without download, retry, or a new durable demand latch.
   Stop and disposal retire preparation before another model request can be sent.
   The local hosted broker maps inline PDF file parts to Gemini-compatible
   `image_url` data parts; it does not fetch URLs, store cloud files, or change
-  accounting. Native history retains content for follow-ups, while replay hides
+  accounting. The hosted API's OpenRouter adapter normalizes that PDF shape back
+  to native file input, owns provider routing and price ceilings, and meters
+  OpenRouter's actual charge in the existing allowance ledger. Credentials and
+  commercial cost fields never enter the desktop. `hosted-agent-models.ts` reads
+  authenticated catalog metadata; the OpenCode adapter publishes it through the
+  shared model protocol and sends the selected profile to the broker for each
+  turn. Native model IDs preserve that selection in history. Catalogs are never
+  persisted with account tokens, and stale account reads cannot replace another
+  account's displayed catalog. Native history retains content for follow-ups, while replay hides
   synthetic extraction text and recovers the original attachment cards.
 - Attachment age cleanup excludes batches created by the active server process;
   drafts, queues, and retries may retain them until process exit. They remain
@@ -472,6 +480,14 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   retires both prefix buffering and recovery before another upstream call.
   The hosted ledger sizes output under its account lock against available
   account and turn budgets, preserving the conservative input reservation.
+  Estimated settlement releases concurrency but retains unresolved spending
+  capacity across account, turn, minute, provider-day, and paid-month budgets.
+  The broker carries the catalog profile version on every request; the gateway
+  refuses stale versions before reservation/dispatch, including publication races.
+  Existing turns keep their pinned version. A structured stale-model refusal
+  ends the failed turn and retires its native runtime with a terminal exit.
+  The existing Reconnect action refreshes the catalog and native context/output
+  configuration, preserving history/draft/paused queue without replaying work.
   Its approved output limit travels to the provider; the desktop never computes
   a budget from the displayed percentage. Hosted quota failures distinguish
   insufficient request credits from insufficient turn budget and preserve their

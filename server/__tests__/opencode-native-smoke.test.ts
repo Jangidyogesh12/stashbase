@@ -111,13 +111,27 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   fs.writeFileSync(externalFile, 'EXPLICIT_EXTERNAL_READ_OK');
   t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
   const gatewayRequests: Array<Record<string, unknown>> = [];
+  const gatewayProfiles: unknown[] = [];
+  const gatewayVersions: unknown[] = [];
+  const catalog = [
+    { id: 'stashbase-agent-default', version: 1, label: 'Gemini', isDefault: true, contextTokenLimit: 1000000, outputTokenLimit: 16384, reasoningEnabled: true },
+    { id: 'second-model', version: 1, label: 'Other model', isDefault: false, contextTokenLimit: 200000, outputTokenLimit: 4096, reasoningEnabled: false },
+  ];
   let nextTool: { name: string; arguments: string } | undefined;
   let emptyResponses = 0;
   let emptyAfterTool = false;
+  let rejectConfiguration = false;
   const gateway = http.createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    gatewayProfiles.push(request.headers['x-stashbase-agent-profile']);
+    gatewayVersions.push(request.headers['x-stashbase-agent-profile-version']);
     gatewayRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>);
+    if (rejectConfiguration) {
+      response.writeHead(422, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ code: 'agent_model_configuration_changed', message: 'The selected model configuration has changed. Reconnect to refresh the available models, then review and send again.' }));
+      return;
+    }
     const tool = nextTool ?? (gatewayRequests.length === 1
       ? { name: 'read', arguments: JSON.stringify({ filePath: externalFile }) }
       : gatewayRequests.length === 3
@@ -185,7 +199,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const serverPort = await unusedPort();
   const username = 'stashbase';
   const password = 'native-smoke-secret';
-  const config = buildOpenCodeConfig(model, '/unused/stashbase-mcp');
+  const config = buildOpenCodeConfig(model, '/unused/stashbase-mcp', {}, undefined, catalog);
   config.mcp = {
     stashbase: {
       type: 'local',
@@ -377,8 +391,9 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   panel = new OpenCodePanelSession(socket as unknown as WebSocket, {
     windowId: 'native-modes', folder: temporaryRoot, access: 'acceptEdits',
   }, {
+    models: () => catalog,
     client: async () => client,
-    beginTurn: turnId => broker.beginTurn('native-smoke', turnId),
+    beginTurn: (turnId, profile) => broker.beginTurn('native-smoke', turnId, profile, catalog.find(model => model.id === profile)?.version),
     endTurn: () => broker.endTurn('native-smoke'),
     onExit: () => () => {}, close: async () => {},
   });
@@ -434,6 +449,46 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.deepEqual(failureEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
   stage = 'follow-up after failure';
   await runPanelTurn(); // The same native session remains usable after the failure.
+  stage = 'switch hosted model in the same conversation';
+  socket.request({ t: 'set-model', model: 'second-model' });
+  await runPanelTurn();
+  assert.equal(gatewayProfiles.at(-1), 'second-model');
+  assert.equal(gatewayVersions.at(-1), '1');
+  assert.equal(gatewayRequests.at(-1)?.model, 'second-model');
+  stage = 'stale configuration fails visibly without native retry';
+  const staleStart = socket.events.length;
+  const callsBeforeStale = gatewayRequests.length;
+  rejectConfiguration = true;
+  await runPanelTurn(true);
+  assert.equal(gatewayRequests.length - callsBeforeStale, 1);
+  assert.ok(socket.events.slice(staleStart).some(event => event.t === 'error' && 'message' in event && String(event.message).includes('Reconnect to refresh')));
+  assert.ok(socket.events.slice(staleStart).some(event => event.t === 'exit'));
+  rejectConfiguration = false;
+  catalog[1] = { ...catalog[1]!, version: 2, label: 'Updated model' };
+  const nativeSessionId = socket.events.find(event => event.t === 'session-id')?.id;
+  assert.ok(nativeSessionId);
+  const selectedHistory = await client.session.messages({ throwOnError: true, path: { id: nativeSessionId } });
+  const lastUser = selectedHistory.data.filter(entry => entry.info.role === 'user').at(-1)?.info;
+  assert.equal(lastUser?.role === 'user' && lastUser.model.modelID, 'second-model');
+  panel.dispose();
+  const restoredSocket = new PanelSocket();
+  panel = new OpenCodePanelSession(restoredSocket as unknown as WebSocket, {
+    windowId: 'native-modes', folder: temporaryRoot, resume: nativeSessionId,
+  }, {
+    models: () => catalog,
+    client: async () => client,
+    beginTurn: (turnId, profile) => broker.beginTurn('native-smoke', turnId, profile, catalog.find(model => model.id === profile)?.version),
+    endTurn: () => broker.endTurn('native-smoke'),
+    onExit: () => () => {}, close: async () => {},
+  });
+  await restoredSocket.waitFor('ready');
+  assert.ok(restoredSocket.events.some(event => event.t === 'models' && 'activeModel' in event && event.activeModel === 'second-model'));
+  assert.equal(gatewayRequests.length, callsBeforeStale + 1, 'reconnection must not resend the refused turn');
+  const resumedTurn = restoredSocket.waitFor('turn-end');
+  restoredSocket.request({ t: 'prompt', text: 'Explicitly resume after refreshing models.' });
+  await resumedTurn;
+  assert.equal(gatewayVersions.at(-1), '2');
+  assert.equal(gatewayProfiles.at(-1), 'second-model');
   panel.dispose();
 
   const toolNames = (request: Record<string, unknown>) => (

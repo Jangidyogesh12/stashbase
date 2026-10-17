@@ -49,13 +49,13 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     history: claudeHistoryActions(),
   },
   {
-    id: 'stashbase', label: 'Default', vendor: 'StashBase · OpenCode · Gemini',
+    id: 'stashbase', label: 'Default', vendor: 'StashBase · OpenCode · OpenRouter',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
       // OpenCode has no native risk reviewer for the product's Auto promise.
       modes: ['default', 'acceptEdits', 'plan'],
       effort: false,
-      models: false,
+      models: true,
       skills: false,
       steering: false,
       titleHint: true,

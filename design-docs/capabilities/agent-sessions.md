@@ -6,6 +6,21 @@ Chat mode and the Agent pane in Documents share conversation identity, execution
 and unfinished requests. Default, Codex, and Claude expose their actual
 capabilities through this common experience.
 
+Default's hosted model calls use OpenRouter, initially with Gemini as the default.
+StashBase owns account allowance and approved model choices; provider routing must
+stay within that choice. Default's model picker lists the service's approved
+models and configured default. Selection applies between turns, survives native
+history restoration, and never silently falls back when a selected model becomes
+unavailable. If the service republishes the selected model configuration, an old
+session offers **Reconnect** to refresh its model configuration before another turn; it must
+not run a different release under the old name or context limits. An admitted
+turn keeps its original configuration. Reconnection preserves the conversation,
+draft, and paused queue without automatically resending the failed request. Model costs consume the existing allowance, and uncertain
+usage must remain distinguishable from confirmed settlement. Pending accounting
+continues to occupy its spending reservation until confirmed, without keeping
+a finished request in the concurrency limit. Original attachment
+media must not silently move to a different paid processing service.
+
 ## Identity and Continuity
 
 - A conversation belongs to a project, Agent, and native session. Restore it once;

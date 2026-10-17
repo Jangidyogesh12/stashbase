@@ -5,7 +5,7 @@ import { OpenCodeEventTranslator } from '../opencode-agent.ts';
 
 test('hosted Agent broker keeps the account credential upstream and streams an OpenAI-compatible response', async (t) => {
   const accessCalls: boolean[] = [];
-  const upstream: Array<{ url: string; authorization: string | null; idempotencyKey: string | null; turnId: string | null; profile: string | null; body: string }> = [];
+  const upstream: Array<{ url: string; authorization: string | null; idempotencyKey: string | null; turnId: string | null; profile: string | null; version: string | null; body: string }> = [];
   const broker = new HostedAgentBroker({
     accessToken: async ({ forceRefresh = false } = {}) => {
       accessCalls.push(forceRefresh);
@@ -18,6 +18,7 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
         idempotencyKey: new Headers(init?.headers).get('idempotency-key'),
         turnId: new Headers(init?.headers).get('x-stashbase-agent-turn-id'),
         profile: new Headers(init?.headers).get('x-stashbase-agent-profile'),
+        version: new Headers(init?.headers).get('x-stashbase-agent-profile-version'),
         body: String(init?.body),
       });
       if (upstream.length === 1) return new Response('{}', { status: 401 });
@@ -31,7 +32,7 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   await broker.start();
   t.after(() => broker.close());
   const runtime = broker.runtime('agent-session-1')!;
-  broker.beginTurn('agent-session-1', '00000000-0000-4000-8000-000000000001');
+  broker.beginTurn('agent-session-1', '00000000-0000-4000-8000-000000000001', 'stashbase-agent-default', 7);
 
   const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -50,6 +51,7 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   assert.equal(upstream[0].turnId, '00000000-0000-4000-8000-000000000001');
   assert.equal(upstream[1].turnId, upstream[0].turnId);
   assert.equal(upstream[0].profile, 'stashbase-agent-default');
+  assert.deepEqual(upstream.map(call => call.version), ['7', '7']);
   assert.equal(runtime.model, 'stashbase-agent-default');
   assert.equal(upstream[0].url, 'https://gateway.invalid/v1/agent/chat/completions');
   assert.doesNotMatch(upstream[0].body, /account-token/);
