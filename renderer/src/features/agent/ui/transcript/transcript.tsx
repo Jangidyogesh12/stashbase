@@ -358,7 +358,11 @@ export const AgentTranscript = memo(function AgentTranscript({
             {group.kind === 'user' && group.at !== undefined && dayBreaks.has(group.id) && (
               <DayDivider at={group.at} now={now} />
             )}
-            <div data-notification-block-id={group.id} tabIndex={-1}>
+            <div
+              className="flex min-w-0 flex-col"
+              data-notification-block-id={group.id}
+              tabIndex={-1}
+            >
               <TranscriptBlock
                 block={group}
                 closing={closing.has(group.id)}

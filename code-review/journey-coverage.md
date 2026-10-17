@@ -915,6 +915,18 @@ failure and manual fallback were exercised, and light/dark layouts inspected.
 System permission was not changed or inferred. Packaged Windows/Linux settings
 navigation and denied-to-allowed recovery remain release-checklist checks.
 
+**Message alignment (2026-10-17):** The notification focus wrapper in
+`ui/transcript/transcript.tsx` now preserves the column flex layout required by
+right-aligned user bubbles. An isolated Electron render of the production
+transcript and built CSS reproduced a 268px right-edge gap at a 1000px window
+(and 106px at 420px); changing only the wrapper layout removed the gap. Short
+and wrapping prompts retain the 72% width cap without horizontal overflow.
+This geometry check uses the actual browser layout; DOM-only transcript tests
+do not establish visual alignment. The renderer gate passed its other 11 checks;
+coverage initially hit widespread test and worker-start timeouts. Repeating only
+coverage with two workers passed all 341 files and 1,695 tests without relaxing
+assertions or timeout limits.
+
 **Session menu and attention badges (2026-10-17):** `desktop-sessions.ts`
 projects retained session selectors through the existing platform adapter into
 the native menu-bar/tray. Running contains working, waiting and stopping sessions,
