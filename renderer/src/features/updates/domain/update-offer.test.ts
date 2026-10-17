@@ -51,9 +51,9 @@ describe('updateOffer', () => {
   });
 
   it('volunteers only the phases worth interrupting a reader for', () => {
+    // A found release downloads on its own, so the reader first hears of it
+    // when there is something to restart into.
     expect(phasesWhere((status) => updateOffer(status).announce)).toEqual([
-      'available',
-      'downloading',
       'error',
       'installing',
       'ready',
@@ -61,19 +61,14 @@ describe('updateOffer', () => {
   });
 
   it('names what each phase invites, and invites nothing in the rest', () => {
-    expect(updateOffer(STATUS.available).action).toEqual({
-      kind: 'primary',
-      label: 'Update and restart',
-    });
     expect(updateOffer(STATUS.ready).action).toEqual({
       kind: 'primary',
-      label: 'Install and restart',
+      label: 'Restart to update',
     });
     // A failed check and a failed install reach the same phase, and asking
     // again is the one recovery that fits both.
     expect(updateOffer(STATUS.error).action).toEqual({ kind: 'check', label: 'Try again' });
     expect(phasesWhere((status) => updateOffer(status).action !== null)).toEqual([
-      'available',
       'error',
       'ready',
     ]);

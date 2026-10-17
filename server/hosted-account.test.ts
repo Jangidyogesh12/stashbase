@@ -28,7 +28,11 @@ test('OAuth callback renders a safe centered card with delayed app return and fa
   assert.match(html, /fetch\(returnIntentUrl, \{ method: 'POST'/);
   assert.match(html, /result\.appReturned === true/);
   assert.doesNotMatch(html, /addEventListener\('blur'/);
-  assert.match(html, /Didn’t return automatically\?/);
+  // A missed automatic return says so once and offers the button; only a
+  // pressed button is told to try once more.
+  assert.match(html, /StashBase didn’t open on its own\./);
+  assert.match(html, /Still not open\. Try once more\./);
+  assert.doesNotMatch(html, /Try the button again/);
   assert.match(html, /Signed in &lt;now&gt;/);
   assert.match(html, /Ready &amp; returning/);
   assert.doesNotMatch(html, /Signed in <now>/);
@@ -83,20 +87,6 @@ test('a data-free native return focuses the window attached to the browser retur
   assert.equal(output.second.appReturned, undefined);
 });
 
-test('OAuth flows retain their account purpose', () => {
-  const result = runIsolated(`
-    const account = await import('./server/hosted-account.ts');
-    const identity = account.beginHostedOAuth('google', 'http://127.0.0.1:8090');
-    process.stdout.write(JSON.stringify({
-      identity: { start: identity, purpose: account.hostedOAuthPurpose(identity.flowId) },
-    }));
-  `);
-  assert.equal(result.status, 0, result.stderr);
-  const output = JSON.parse(result.stdout);
-  assert.equal(output.identity.start.purpose, 'account');
-  assert.equal(output.identity.purpose, 'account');
-});
-
 function runIsolated(source: string) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-hosted-account-test-'));
   try {
@@ -118,7 +108,7 @@ function runIsolated(source: string) {
   }
 }
 
-test('the sign-in banner persists per installation: sign-in answers it, sign-out keeps it answered, reset restores it', () => {
+test('the sign-in banner: sign-in answers it, sign-out brings it back, Not now holds until the next sign-out', () => {
   const result = runIsolated(`
     globalThis.fetch = async (url) => {
       if (String(url).endsWith('/auth/v1/token?grant_type=pkce')) return Response.json({
@@ -136,15 +126,22 @@ test('the sign-in banner persists per installation: sign-in answers it, sign-out
     const signedIn = await account.hostedAccountState();
     await account.signOutHostedAccount();
     const signedOut = await account.hostedAccountState();
+    config.markAccountOfferSeen('sign-in');
+    const declined = await account.hostedAccountState();
+    // Not signed in, a sign-out call is not a sign-out: the Not now stands.
+    await account.signOutHostedAccount();
+    const stillDeclined = await account.hostedAccountState();
     config.resetAccountOffers();
     const reset = await account.hostedAccountState();
-    process.stdout.write(JSON.stringify({ first, signedIn, signedOut, reset }));
+    process.stdout.write(JSON.stringify({ first, signedIn, signedOut, declined, stillDeclined, reset }));
   `);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.deepEqual(output.first, { signedIn: false, offers: ['sign-in'] });
   assert.deepEqual(output.signedIn.offers, []);
-  assert.deepEqual(output.signedOut, { signedIn: false, offers: [] });
+  assert.deepEqual(output.signedOut, { signedIn: false, offers: ['sign-in'] });
+  assert.deepEqual(output.declined.offers, []);
+  assert.deepEqual(output.stillDeclined.offers, []);
   assert.deepEqual(output.reset.offers, ['sign-in']);
 });
 
@@ -223,8 +220,8 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
           full_name: 'Ada Lovelace', avatar_url: 'https://lh3.googleusercontent.com/a/profile-photo',
         } },
       });
-      if (String(url).endsWith('/v1/agent/usage')) return Response.json({
-        profile: 'stashbase-agent-default', remainingPercent: 75,
+      if (String(url).endsWith('/v1/agent/usage?include=reservations')) return Response.json({
+        profile: 'stashbase-agent-default', remainingPercent: 75, reservedPercent: 10,
         inputTokens: 100, outputTokens: 25, cacheReadTokens: 10,
         windowStartedAt: '2026-08-01T00:00:00.000Z', windowEndsAt: '2026-08-08T00:00:00.000Z',
       });
@@ -256,6 +253,7 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
   assert.equal(output.calls[1].authorization, 'Bearer access-1');
   assert.equal(output.calls[1].authorization, 'Bearer access-1');
   assert.equal(output.agentAllowance.remainingPercent, 75);
+  assert.equal(output.agentAllowance.reservedPercent, 10);
   assert.equal(output.session.refreshToken, 'refresh-1');
   assert.equal(output.source, 'openai');
   assert.equal(output.state.email, 'person@example.com');
@@ -265,6 +263,52 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
   assert.equal('accessToken' in output.state, false);
   assert.equal('refreshToken' in output.state, false);
   assert.equal('user_metadata' in output.state, false);
+});
+
+test('allowance HTTP failures preserve upstream metadata and network causes only in diagnostics', () => {
+  const result = runIsolated(`
+    const express = (await import('express')).default;
+    const { httpErrorReporting } = await import('./server/error-reporting.ts');
+    const { errorDiagnostic } = await import('./server/error-diagnostics.ts');
+    const { mount } = await import('./server/routes/account.ts');
+    const config = await import('./server/app-config.ts');
+    config.setHostedAccountSession({ userId: 'account-test', email: 'account@example.test', accessToken: 'private-access', refreshToken: 'private-refresh', expiresAt: 4102444800000 });
+    const localFetch = globalThis.fetch;
+    let networkFailure = false;
+    globalThis.fetch = async () => {
+      if (networkFailure) throw new TypeError('fetch failed', { cause: Object.assign(new Error('socket closed token=private-token'), { code: 'ECONNRESET' }) });
+      return new Response('<html>private-response-body</html>', { status: 404, headers: { 'x-request-id': 'upstream-request-42', 'content-type': 'text/html' } });
+    };
+    const captured = [];
+    const app = express();
+    app.use(httpErrorReporting({ captureError: (error, context) => captured.push({ diagnostic: errorDiagnostic(error), ...context }) }));
+    mount(app, { appReturnToken: 'test' });
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise(resolve => server.once('listening', resolve));
+    const replies = [];
+    try {
+      for (const network of [false, true]) {
+        networkFailure = network;
+        const response = await localFetch('http://127.0.0.1:' + server.address().port + '/api/account/agent-usage');
+        replies.push({ status: response.status, body: await response.json() });
+      }
+      process.stdout.write(JSON.stringify({ replies, captured }));
+    } finally { server.closeAllConnections(); server.close(); }
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(output.replies, [
+    { status: 502, body: { error: 'The Agent credits service failed (HTTP 404).' } },
+    { status: 502, body: { error: 'fetch failed' } },
+  ]);
+  assert.equal(output.captured.length, 2);
+  const upstream = output.captured[0].diagnostic;
+  assert.equal(upstream.http_status, 502);
+  assert.equal(upstream.causes[0].http_status, 404);
+  assert.equal(upstream.causes[0].request_id, 'upstream-request-42');
+  assert.equal(upstream.causes[0].content_type, 'text/html');
+  assert.ok(output.captured[1].diagnostic.causes.some((cause: { code?: string }) => cause.code === 'ECONNRESET'));
+  assert.doesNotMatch(JSON.stringify(output), /private-access|private-refresh|private-token|private-response-body/);
 });
 
 test('Google profile normalization accepts display-safe metadata and rejects unsafe avatars', () => {

@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 import { agentModelSchema } from '../agent-model';
 
-export const agentIdSchema = z.enum(['stashbase', 'claude', 'codex']);
+export const agentIdSchema = z.enum(['stashbase', 'claude', 'codex', 'antigravity']);
 
-export const agentBootstrapPhaseSchema = z.enum([
+const agentBootstrapPhaseSchema = z.enum([
   'idle',
   'installing',
   'authenticating',
@@ -13,25 +13,26 @@ export const agentBootstrapPhaseSchema = z.enum([
   'failed',
 ]);
 
-export const agentBootstrapFailureStageSchema = z.enum([
+const agentBootstrapFailureStageSchema = z.enum([
   'discovery',
   'installation',
   'authentication',
   'mcp',
 ]);
 
-export const agentBootstrapFailureCodeSchema = z.enum([
+const agentBootstrapFailureCodeSchema = z.enum([
   'simulated',
   'operation-failed',
   'runtime-unavailable',
   'account-required',
   'authentication-required',
   'authentication-check-failed',
+  'account-refused',
 ]);
 
-export const agentBootstrapManualRecoverySchema = z.enum(['install-command', 'mcp-settings']);
+const agentBootstrapManualRecoverySchema = z.enum(['install-command', 'mcp-settings']);
 
-export const agentBootstrapFailureSchema = z
+const agentBootstrapFailureSchema = z
   .object({
     stage: agentBootstrapFailureStageSchema,
     code: agentBootstrapFailureCodeSchema,
@@ -42,7 +43,7 @@ export const agentBootstrapFailureSchema = z
   })
   .strict();
 
-export const agentBootstrapStatusSchema = z
+const agentBootstrapStatusSchema = z
   .object({
     phase: agentBootstrapPhaseSchema,
     progress: z.number().finite().optional(),
@@ -52,14 +53,14 @@ export const agentBootstrapStatusSchema = z
   .strict();
 
 
-export const agentSetupFailureSimulationSchema = z.enum([
+const agentSetupFailureSimulationSchema = z.enum([
   'none',
   'installation',
   'authentication',
   'mcp',
 ]);
 
-export const agentTurnFailureSimulationSchema = z.enum([
+const agentTurnFailureSimulationSchema = z.enum([
   'none',
   'rate-limit',
   'quota',
@@ -68,7 +69,7 @@ export const agentTurnFailureSimulationSchema = z.enum([
   'crash',
 ]);
 
-export const agentRuntimeDebugStateSchema = z
+const agentRuntimeDebugStateSchema = z
   .object({
     enabled: z.boolean(),
     nextFailure: agentSetupFailureSimulationSchema,
@@ -83,9 +84,9 @@ export const agentRuntimeDebugPatchRequestSchema = z
   })
   .strict();
 
-export const agentSourceSchema = z.enum(['bundled', 'system']);
+const agentSourceSchema = z.enum(['bundled', 'system']);
 
-export const agentCapabilitiesSchema = z
+const agentCapabilitiesSchema = z
   .object({
     connection: z.literal(true),
     prompts: z.literal(true),
@@ -106,7 +107,7 @@ export const agentCapabilitiesSchema = z
 
 /** What the service remembers a runtime offering, so a fresh chat can name
  * the model and level it will run on before any session exists. */
-export const agentModelCatalogSchema = z
+const agentModelCatalogSchema = z
   .object({
     models: z.array(agentModelSchema).max(256),
     /** The model the runtime last ran when nothing was chosen. */
@@ -118,14 +119,14 @@ export const agentModelCatalogSchema = z
 /** A model the runtime says it is too old to run, named and explained by the
  * runtime itself. An offer, never a requirement: absent is the normal state,
  * and a runtime that says nothing is absent too. */
-export const agentUpgradeOfferSchema = z
+const agentUpgradeOfferSchema = z
   .object({
     model: z.string().min(1).max(200),
     note: z.string().min(1).max(500),
   })
   .strict();
 
-export const agentSchema = z
+const agentSchema = z
   .object({
     id: agentIdSchema,
     label: z.string().min(1).max(200),
@@ -157,6 +158,7 @@ export const hostedAgentAllowanceSchema = z
   .object({
     profile: z.string().min(1).max(200),
     remainingPercent: z.number().finite(),
+    reservedPercent: z.number().min(0).max(100).optional(),
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),
     cacheReadTokens: z.number().int().nonnegative(),
@@ -166,7 +168,7 @@ export const hostedAgentAllowanceSchema = z
   .strict();
 
 /** `GET /api/account/billing/plans`: the hosted Stripe catalog. */
-export const hostedBillingPlanSchema = z
+const hostedBillingPlanSchema = z
   .object({
     priceId: z.string().regex(/^price_[A-Za-z0-9]+$/),
     planKey: z.string().min(1).max(64),
@@ -209,12 +211,9 @@ export const agentRuntimeFailureSchema = z
   })
   .passthrough();
 
-export type AgentBootstrapPhaseWire = z.infer<typeof agentBootstrapPhaseSchema>;
 export type AgentBootstrapFailureWire = z.infer<typeof agentBootstrapFailureSchema>;
 export type AgentBootstrapStatusWire = z.infer<typeof agentBootstrapStatusSchema>;
 export type AgentRuntimeDebugStateWire = z.infer<typeof agentRuntimeDebugStateSchema>;
-export type AgentRuntimeDebugPatchRequestWire = z.infer<typeof agentRuntimeDebugPatchRequestSchema>;
-export type AgentUpgradeOfferWire = z.infer<typeof agentUpgradeOfferSchema>;
 export type AgentWire = z.infer<typeof agentSchema>;
 export type AgentsResponseWire = z.infer<typeof agentsResponseSchema>;
 export type HostedAgentAllowanceWire = z.infer<typeof hostedAgentAllowanceSchema>;

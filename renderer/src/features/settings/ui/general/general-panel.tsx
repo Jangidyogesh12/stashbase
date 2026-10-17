@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import type { AppearancePort, SystemTextPort } from '@/features/settings/application/ports';
@@ -35,11 +37,11 @@ export function GeneralPanel({
 }: GeneralPanelProps) {
   return (
     <SettingsPane title="General">
+      {/* Appearance leads, the thing a reader adjusts most; updates follow,
+       *  checked now and then; then Privacy, set once. Developer, which only a
+       *  development build shows, closes the page. */}
       {appearanceApi && (
         <AppearancePanel appearanceApi={appearanceApi} systemTextApi={systemTextApi} />
-      )}
-      {telemetryApi && onOpenExternal && (
-        <TelemetryGroup port={telemetryApi} onOpenExternal={onOpenExternal} />
       )}
       {softwareUpdate && (
         <SettingsGroup
@@ -50,7 +52,7 @@ export function GeneralPanel({
         >
           <SettingsList>
             <SettingsRow
-              detail="Check every 15 minutes and when returning to the app. You choose when to install."
+              detail="StashBase checks in the background. You choose when to install."
               title="Check for updates automatically"
               trail={
                 <Switch
@@ -66,7 +68,7 @@ export function GeneralPanel({
             />
             <SettingsRow
               detail={softwareUpdate.status}
-              title={`StashBase ${softwareUpdate.version}`}
+              title={`Version ${softwareUpdate.version}`}
               trail={
                 <Button
                   disabled={softwareUpdate.busy}
@@ -81,6 +83,9 @@ export function GeneralPanel({
           </SettingsList>
         </SettingsGroup>
       )}
+      {telemetryApi && onOpenExternal && (
+        <TelemetryGroup port={telemetryApi} onOpenExternal={onOpenExternal} />
+      )}
       {revisionPreview && (
         <SettingsGroup title="Developer">
           <Disclosure summary="Document revision review">{revisionPreview}</Disclosure>
@@ -89,4 +94,3 @@ export function GeneralPanel({
     </SettingsPane>
   );
 }
-import type { ReactNode } from 'react';

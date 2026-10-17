@@ -18,6 +18,7 @@ import type {
   AgentCatalogPort,
   AgentContextPort,
   AgentSessionPort,
+  AgentToolsPort,
 } from '@/features/agent/application/ports';
 import {
   createAgentWorkspaceRuntime,
@@ -27,6 +28,7 @@ import type { Agent } from '@/features/agent/domain/agent-catalog';
 import {
   agentCatalogPort,
   agentPersonaApi,
+  agentToolsApi,
   BUILT_IN_AGENT,
   CLAUDE_AGENT,
   CODEX_AGENT,
@@ -63,6 +65,7 @@ export function renderWorkspace(
   onReprocess?: (source: { folderPath: string; path: string }) => void,
   catalogOverrides: Partial<AgentCatalogPort> = {},
   onSignIn: (signal?: AbortSignal) => void | Promise<boolean> = vi.fn(),
+  tools: AgentToolsPort = agentToolsApi(),
 ) {
   let id = 0;
   const runtime = createAgentWorkspaceRuntime({
@@ -86,6 +89,7 @@ export function renderWorkspace(
       <ManagedAgentWorkspace
         catalog={catalog}
         persona={agentPersonaApi()}
+        tools={tools}
         onOpenAgentSettings={vi.fn()}
         onOpenExternal={vi.fn()}
         onSignIn={onSignIn}

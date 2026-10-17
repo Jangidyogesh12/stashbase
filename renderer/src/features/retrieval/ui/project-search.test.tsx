@@ -132,7 +132,7 @@ describe('Library Search', () => {
       expect.any(AbortSignal),
     );
     expect(within(option).getByRole('mark').textContent).toBe('answer');
-    expect(screen.getByText('notes')).not.toBeNull();
+    expect(screen.getByText('notes/')).not.toBeNull();
     expect(screen.getByText('2')).not.toBeNull();
     expect(screen.getByText(/Showing the first results from 2 matches/u)).not.toBeNull();
 

@@ -18,7 +18,7 @@ export interface ProjectSearchScope {
   /** Absolute path prefix to narrow to, or undefined. */
   pathPrefix?: string;
 }
-async function requireMemberFolderRoot(ref: string): Promise<string> {
+export async function requireMemberFolderRoot(ref: string): Promise<string> {
   if (!filesystemPath.isAbsolute(ref)) throw routeError('folder must be absolute', 400);
   const root = await resolveFolderRootAsync(ref);
   const memberRoot = await exactRegisteredFolderRootAsync(root);

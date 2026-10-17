@@ -1,11 +1,17 @@
 # MCP Configuration
 
-The Default Agent, Codex, and Claude connect to StashBase's tools
+The Default Agent, Codex, Claude, and Antigravity connect to StashBase's tools
 automatically when used in the built-in Chat.
 
-For an external MCP client, copy the configuration or URL access details from
-**Settings → Advanced → External apps (MCP)** into the client, as in the
-examples below. Keep StashBase running while using the connection.
+For Antigravity, StashBase also adds a `stashbase` approval hook to
+`~/.gemini/config/hooks.json`. Antigravity runs it before every tool call. In
+a StashBase chat it asks StashBase, which shows the approval card; in any other
+Antigravity session it answers `allow` and leaves your own permission rules in
+charge.
+
+For an external MCP client, copy the configuration from the Command tab, or
+the URL and token from the URL tab, in **Settings → Advanced → External apps
+(MCP)** into the client, as in the examples below. Keep StashBase running while using the connection.
 
 ## Manual stdio Setup
 
@@ -49,6 +55,20 @@ command = "/Users/YOUR_USER/.stashbase/bin/stashbase-mcp"
 command = "C:\\Users\\YOUR_USER\\.stashbase\\bin\\stashbase-mcp.cmd"
 ```
 
+### Antigravity CLI
+
+In `~/.gemini/config/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "stashbase": {
+      "command": "/Users/YOUR_USER/.stashbase/bin/stashbase-mcp"
+    }
+  }
+}
+```
+
 Restart the client after changing its MCP configuration.
 
 ## URL-based Clients
@@ -64,10 +84,10 @@ Authorization: Bearer <token shown in Settings>
 
 Same-machine access uses `http://127.0.0.1:8090/mcp` and stays on loopback.
 
-Docker access is disabled by default. Enabling it in Settings opens a separate,
-token-gated, MCP-only listener at
-`http://host.docker.internal:8091/mcp` by default. Disable Docker access before
-choosing another port in Settings. No other StashBase API is exposed on that
+Docker access is disabled by default. Turning on Allow containers in Settings
+opens a separate, token-gated, MCP-only listener at
+`http://host.docker.internal:8091/mcp` by default. Turn it off before choosing
+another port in Settings. No other StashBase API is exposed on that
 port.
 
 Docker Desktop or the host firewall must allow the selected port. Native Linux

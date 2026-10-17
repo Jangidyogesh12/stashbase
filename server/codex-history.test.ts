@@ -11,6 +11,37 @@ import test from 'node:test';
 import { codexThreadHasContent, codexThreadToBlocks } from './codex-history.ts';
 import { nativeTimesByUuid, transcriptToBlocks } from './claude-history.ts';
 import { codexHistoryActions } from './codex-history-adapter.ts';
+import { sendError } from './http.ts';
+
+test('missing Codex is an installation prerequisite for history, not an empty result or server failure', async (t) => {
+  t.mock.method(fs, 'accessSync', () => {
+    throw Object.assign(new Error('not installed'), { code: 'ENOENT' });
+  });
+  const spawn = t.mock.method(childProcess, 'spawn', () => { throw new Error('must not spawn'); });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const history = codexHistoryActions();
+  for (const action of [
+    () => history.list('/missing-codex-project'),
+    () => history.messages('thread', '/missing-codex-project'),
+    () => history.rename('thread', 'Title', '/missing-codex-project'),
+    () => history.remove('thread', '/missing-codex-project'),
+  ]) {
+    await assert.rejects(action, (error: unknown) => {
+      let status = 200;
+      let body: unknown;
+      sendError({
+        status(value: number) { status = value; return this; },
+        json(value: unknown) { body = value; return this; },
+      } as Parameters<typeof sendError>[0], error);
+      assert.equal(status, 412);
+      assert.equal((body as { code: string }).code, 'AGENT_NOT_INSTALLED');
+      assert.match((body as { error: string }).error, /Install Codex in Settings/);
+      return true;
+    });
+  }
+  assert.equal(spawn.mock.callCount(), 0);
+});
 
 test('Codex history validates native project ownership before renaming and deleting', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-history-'));

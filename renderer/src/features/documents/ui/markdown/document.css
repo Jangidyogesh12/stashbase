@@ -189,6 +189,11 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   --crepe-color-hover: var(--hover);
   --crepe-color-selected: var(--selected);
   --crepe-color-inline-area: var(--border);
+  /* A menu row's glyph and label at rest: a step under full ink, the way
+     the app's own menus rest, so muted never reads as disabled. */
+  --markdown-menu-rest: color-mix(in oklab, var(--foreground) 76%, var(--background));
+  /* Lighter than Crepe's inline area, which code blocks keep. */
+  --markdown-inline-code: color-mix(in oklab, var(--foreground) 4.5%, transparent);
   --crepe-font-title: var(--font-sans);
   --crepe-font-default: var(--font-sans);
   --crepe-font-code: var(--code-font, var(--font-mono));
@@ -267,9 +272,22 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
 }
 
 /* Monospace follows the reading size, scaled so it sits beside the serif's
-   smaller x-height without looking a size larger than the prose. */
+   smaller x-height without looking a size larger than the prose. Its wash is
+   lighter than Crepe's and leaves the glyphs room at each side, so a path in
+   a sentence reads as marked rather than as a grey tile. It stays inline,
+   unlike Crepe's inline block, so a long path wraps with the line; each
+   line's piece keeps its own rounded ends, and a path with no spaces may
+   break anywhere rather than run past the page. */
 .markdown-crepe .milkdown .ProseMirror code {
+  display: inline;
+  padding: 0.12em 0.3em;
+  border-radius: 5px;
+  background: var(--markdown-inline-code);
   font-size: calc(var(--reading-code-scale, 0.875) * 1em);
+  line-height: inherit;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .markdown-crepe .milkdown .milkdown-code-block .cm-editor {
@@ -356,15 +374,20 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   border-left-color: var(--focus-ring);
 }
 
+/* The editor's floating surfaces wear the app's menus' edge: the shadow step
+   menus use, whose innermost layer is itself the hairline ring. No border on
+   top of it: a border inside that ring drew two lines, which read as one
+   thick outline. */
 .markdown-crepe .milkdown-toolbar,
+.markdown-crepe .markdown-heading-menu,
 .markdown-crepe .milkdown-slash-menu,
 .markdown-crepe .milkdown-link-edit > .link-edit,
 .markdown-crepe .milkdown-link-preview > .link-preview {
   color: var(--foreground);
   background: var(--surface-3);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--shape-input-radius, 8px);
-  box-shadow: var(--shadow-5);
+  box-shadow: var(--shadow-3);
 }
 
 .markdown-crepe .milkdown :is(.toolbar-item, .milkdown-slash-menu li):hover {
@@ -376,10 +399,20 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
 }
 
 /* Crepe also uses its outline token for menu glyphs. Borders should remain
-   subtle, but controls need the app's normal foreground state ladder. */
+   subtle, but controls need the app's normal foreground state ladder. The
+   toolbar's glyphs are Lucide's stroked ones (see selection-toolbar.ts), which
+   carry their own stroke; the slash menu keeps Crepe's filled set. */
 .markdown-crepe .milkdown :is(.milkdown-toolbar .toolbar-item, .milkdown-slash-menu li) svg {
-  color: color-mix(in oklab, var(--foreground) 76%, var(--background));
+  color: var(--markdown-menu-rest);
+}
+
+.markdown-crepe .milkdown .milkdown-slash-menu li svg {
   fill: currentColor;
+}
+
+.markdown-crepe .milkdown .milkdown-toolbar .toolbar-item svg {
+  width: 16px;
+  height: 16px;
 }
 
 .markdown-crepe
@@ -401,23 +434,33 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   flex-wrap: wrap;
   align-items: center;
   max-width: calc(100cqi - 16px);
-  padding: 4px;
+  padding: 3px;
+  border-radius: 10px;
 }
 
+/* 28px squares, the app's compact control size, around 16px glyphs, instead
+   of Crepe's 32px around 24px. */
 .markdown-crepe .milkdown .milkdown-toolbar .toolbar-item {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   margin: 0;
+  padding: 0;
+  border-radius: 7px;
 }
 
 .markdown-crepe .milkdown .milkdown-toolbar .divider {
-  height: 20px;
+  height: 16px;
   margin: 0 4px;
   background: var(--border);
 }
 
-/* Too narrow for one line (it needs 401px), the spacing tightens once more and Ask Agent takes a row of its own:
-   the divider before it becomes the hairline between the rows, so the
-   formatting groups stay whole instead of wrapping mid-group. */
-@container (max-width: 416px) {
+/* Too narrow for one line (it needs 332px, plus the 16px it keeps from the
+   pane's edges), the spacing tightens once more and Ask Agent takes a row of
+   its own: the divider before it becomes the hairline between the rows, so
+   the formatting groups stay whole instead of wrapping mid-group. */
+@container (max-width: 348px) {
   .markdown-crepe .milkdown .milkdown-toolbar .divider {
     margin: 0 3px;
   }
@@ -439,14 +482,14 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   display: inline-flex;
   align-items: center;
   width: auto;
-  padding-inline: 10px;
+  padding-inline: 8px;
 }
 
 .markdown-toolbar-label {
-  color: color-mix(in oklab, var(--foreground) 76%, var(--background));
-  /* 13px holds its own beside Crepe's 24px glyphs; the caption size read faint. */
+  color: var(--markdown-menu-rest);
+  /* 13px at the regular weight sits level with the 16px stroked glyphs. */
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1;
   white-space: nowrap;
 }
@@ -464,13 +507,9 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
 }
 
 .markdown-crepe .milkdown .milkdown-toolbar .toolbar-item svg.markdown-toolbar-chevron {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
+  width: 12px;
+  height: 12px;
   stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 /* The Heading menu sits under its trigger, on the toolbar's own surface. */
@@ -481,11 +520,6 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   flex-direction: column;
   min-width: 148px;
   padding: 4px;
-  color: var(--foreground);
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-  border-radius: var(--shape-input-radius, 8px);
-  box-shadow: var(--shadow-5);
 }
 
 .markdown-crepe .markdown-heading-menu-item {
@@ -495,7 +529,7 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   gap: 12px;
   height: 32px;
   padding-inline: 10px;
-  color: color-mix(in oklab, var(--foreground) 76%, var(--background));
+  color: var(--markdown-menu-rest);
   cursor: pointer;
   border-radius: 4px;
 }
@@ -514,11 +548,7 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
 .markdown-crepe .markdown-heading-menu-check {
   width: 14px;
   height: 14px;
-  fill: none;
-  stroke: currentColor;
   stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .markdown-crepe .milkdown-link-edit > .link-edit,
@@ -527,13 +557,32 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   width: min(400px, calc(100vw - 64px));
 }
 
+/* Selected text takes a light wash of the focus colour rather than Crepe's
+   solid selected grey, which at this leading laid a heavy slab over each line
+   and hid the marks under it. A selection is where the reader is acting, the
+   same moment the focus colour marks elsewhere, so it is one of the few
+   places hue is allowed; translucent, the marks under it still show. As
+   specific as Crepe's own rule and no more, so its transparent selection
+   over a selected node or a drag still wins. */
+.markdown-crepe .ProseMirror *::selection {
+  background: color-mix(in oklab, var(--focus-ring) 24%, transparent);
+}
+
+/* Block editing is loaded for its slash menu only. Its block handle, the drag
+   grip and add button Crepe draws beside each block, never shows: at Crepe's
+   size and on the block's top edge it was heavy and hard to aim at, and cut
+   and paste already moves a block. Hidden here because the feature has no
+   working switch for it (`blockHandle.shouldShow` is typed but unused). */
+.markdown-crepe .milkdown .milkdown-block-handle {
+  display: none;
+}
+
 .markdown-crepe-readonly
   .milkdown
   :is(
     .crepe-slash-menu,
     .crepe-toolbar,
     .crepe-link-tooltip,
-    .milkdown-block-handle,
     .milkdown-slash-menu,
     .milkdown-toolbar
   ) {

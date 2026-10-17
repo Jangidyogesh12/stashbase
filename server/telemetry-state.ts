@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { telemetryEventSchema } from '../shared/protocols/http/telemetry.ts';
+import { telemetryEventSchema, agentTurnStageSchema, diagnosticContextSchema } from '../shared/protocols/http/telemetry.ts';
 import type { AppConfigFile } from './app-config.ts';
 
 export const QUEUE_LIMIT = 500;
@@ -25,6 +25,17 @@ const queuedSchema = identitySchema.extend({
 }).strict();
 export type QueuedUsage = z.infer<typeof queuedSchema>;
 
+const turnSchema = identitySchema.extend({
+  turnId: id, runtime: z.enum(['stashbase', 'claude', 'codex', 'antigravity']),
+  version: z.string().max(80), os: z.string().max(20), sessionId: id.optional(),
+  startedAt: timestamp, observedAt: timestamp, stage: agentTurnStageSchema,
+  sequence: z.number().int().nonnegative(),
+  context: diagnosticContextSchema.optional(),
+}).strict();
+export type PendingTurn = z.infer<typeof turnSchema>;
+export const TURN_LIMIT = 100;
+export const turnCapacity = (state: TelemetryState) => (state.queue?.length ?? 0) + (state.turns?.length ?? 0);
+
 export interface TelemetryState {
   enabled: boolean;
   installationId?: string;
@@ -37,6 +48,9 @@ export interface TelemetryState {
   markers?: Record<string, number>;
   subscription?: string;
   queue?: QueuedUsage[];
+  /** Every admitted turn reserves one slot in the same bounded delivery queue. */
+  turns?: PendingTurn[];
+  finishedTurns?: Record<string, number>;
 }
 
 /** Validate the disk queue just like incoming events. Only current, bounded
@@ -56,6 +70,13 @@ export function usageState(config: AppConfigFile, now: number): TelemetryState {
     markers: Object.fromEntries(Object.entries(raw.markers ?? {}).filter(([key, time]) =>
       /^(app_active:(welcome|documents|chat)|document_engaged:(read|edit):(md|txt|json|html|pdf|docx|image|audio|generic))$/.test(key)
       && Number.isFinite(time) && time > now - 60_000 && time <= now)),
+    turns: (Array.isArray(raw.turns) ? raw.turns.slice(0, TURN_LIMIT) : []).flatMap((entry) => {
+      const parsed = turnSchema.safeParse(entry);
+      return parsed.success && parsed.data.installationId === raw.installationId
+        && Date.parse(parsed.data.startedAt) > now - QUEUE_TTL ? [parsed.data] : [];
+    }),
+    finishedTurns: Object.fromEntries(Object.entries(raw.finishedTurns ?? {}).filter(([key, time]) =>
+      id.safeParse(key).success && Number.isFinite(time) && time > now - QUEUE_TTL).slice(-QUEUE_LIMIT)),
     queue: (Array.isArray(raw.queue) ? raw.queue.slice(0, QUEUE_LIMIT) : []).flatMap((entry) => {
       const parsed = queuedSchema.safeParse(entry);
       return parsed.success && Date.parse(parsed.data.timestamp) > now - QUEUE_TTL
@@ -92,7 +113,7 @@ export function usagePayload(entry: QueuedUsage) {
       installation_first_seen_at: entry.firstSeenAt,
       ...(entry.sessionId ? { $session_id: entry.sessionId } : {}),
       ...(event === '$identify' ? { $anon_distinct_id: entry.anonymousId } : {}),
-      app_version: entry.version, os: entry.os, schema_version: 4,
+      app_version: entry.version, os: entry.os, schema_version: 5,
       $process_person_profile: Boolean(entry.userId), $geoip_disable: true, $ip: null,
     },
   };

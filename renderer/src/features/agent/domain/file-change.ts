@@ -12,7 +12,6 @@ import {
 } from '@/features/agent/domain/session-transcript';
 import { agentToolKind, type AgentToolKind } from '@/features/agent/domain/tool-kind';
 import type { SourceReference } from '@/shared/domain/source-reference';
-import { basePathName } from '@/shared/utils/file-path';
 
 export type FileChangeAction = 'created' | 'wrote' | 'edited' | 'deleted' | 'changed';
 
@@ -234,8 +233,4 @@ export function changedSource(scope: AgentScope, rawPath: string): SourceReferen
     return null;
   }
   return { folderPath: scope.path, path: relative };
-}
-
-export function fileBasename(path: string): string {
-  return basePathName(path);
 }

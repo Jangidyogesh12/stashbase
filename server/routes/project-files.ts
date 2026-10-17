@@ -10,12 +10,9 @@ import fs from 'node:fs';
 import { logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
-import {
-  requireProjectStatusFolder,
-  routeError,
-} from '../project-file-access.ts';
+import { requireProjectStatusFolder } from '../project-file-access.ts';
 import { agentContextFile, parseProjectFileLineBound } from '../project-file-reader.ts';
-import { AGENT_SESSION_ID_HEADER, attributedRequestSession } from '../agent-session-registry.ts';
+import { AGENT_SESSION_ID_HEADER } from '../agent-session-registry.ts';
 import { createProjectOperations, type ProjectOperations } from '../project-operations/index.ts';
 import {
   parseSearchMode,
@@ -25,22 +22,6 @@ import {
   SEARCH_MODE_VALIDATION_ERROR,
   SEARCH_TYPES_VALIDATION_ERROR,
 } from '../../shared/search-types.ts';
-
-export {
-  normalizeProjectFilePath,
-  normalizeProjectSearchScope,
-  requireProjectStatusFolder,
-  type AgentContextFile,
-  type ProjectSearchScope,
-} from '../project-file-access.ts';
-export { agentContextFile, readProjectFile } from '../project-file-reader.ts';
-export { listProjectDirectory } from '../project-directory.ts';
-export {
-  deleteProjectFile,
-  editProjectFile,
-  moveProjectFile,
-  writeProjectFile,
-} from '../project-file-mutations.ts';
 
 const log = logger('routes/project-files');
 

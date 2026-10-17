@@ -68,7 +68,7 @@ export function notifyFolderSwitch(newRoot: string, windowId = currentWindowId()
  *  (a member of "Your Folders", which can live anywhere on disk), without
  *  changing any user window. The MCP file layer uses this so its host-side
  *  file ops resolve against the right member folder — the filesystem layer
- *  (`files.ts`) is already rooted at `getCurrentFolder()`, so setting the
+ *  (`active-file-operations.ts`) is already rooted at `getCurrentFolder()`, so setting the
  *  window's current folder to `absRoot` is all that's needed. */
 /** In-flight request count per synthetic `__folder:` binding. The binding's
  *  value is fully determined by its id, so concurrent requests share one
@@ -206,7 +206,8 @@ export async function resolveFolderRootAsync(ref: string): Promise<string> {
   throw err;
 }
 
-function normalizeWindowId(windowId: string | null | undefined): string {
+/** A request's window id: trimmed, bounded, and `default` when absent. */
+export function normalizeWindowId(windowId: string | null | undefined): string {
   const raw = typeof windowId === 'string' ? windowId.trim() : '';
   return raw ? raw.slice(0, 128) : DEFAULT_WINDOW_ID;
 }

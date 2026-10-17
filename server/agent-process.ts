@@ -1,3 +1,4 @@
+import { diagnosticText } from '../shared/protocols/diagnostics.ts';
 import type { ChildProcess } from 'node:child_process';
 import { terminateExtractorTree } from './extractor-process.ts';
 import { logger } from './log.ts';
@@ -71,4 +72,16 @@ export async function closeAgentProcesses(): Promise<void> {
   ]);
   const failed = results.find((result) => result.status === 'rejected');
   if (failed?.status === 'rejected') throw failed.reason;
+}
+
+/** Bounded process evidence; never serialize the child, environment or command. */
+export function agentProcessExitDiagnostic(child: ChildProcess) {
+  let stderr = '';
+  child.stderr?.on('data', (chunk: Buffer | string) => {
+    stderr = (stderr + String(chunk)).slice(-8_000);
+  });
+  return (message: string, code: number | null, signal: string | null) => Object.assign(new Error(message), {
+    code: 'AGENT_PROCESS_EXIT', ...(code === null ? {} : { exit_code: code }),
+    ...(signal === null ? {} : { signal }), ...(stderr ? { stderr: diagnosticText(stderr) } : {}),
+  });
 }

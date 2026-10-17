@@ -48,6 +48,18 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Diagnostic follow-up (2026-10-16):** updater regressions cover recognized network
+errors inside GitHub's latest-release/feed wrappers, while certificate, integrity
+and genuine feed errors remain errors; strings inside feed XML cannot downgrade
+them. An isolated allowance-route HTTP regression preserves local 502 separately
+from upstream 404/request ID/content type and retains nested network causes without
+adding credentials or response bodies to diagnostics or the renderer response.
+The production allowance 404/network failures still require upstream evidence.
+Validation passed `pnpm test:updates` (49 tests), `pnpm test:agent` (345),
+the allowance/indexer/telemetry/diagnostic/client-error suites (70), host types,
+documentation checks and the server build. This host/main change did not include
+a packaged UI pass or production diagnostic-delivery verification.
+
 **Intel entry (2026-09-17):** macOS build and source CI include native x64,
 with dual-architecture update metadata and Homebrew selection owned by the
 [Release Runbook](release-pipeline.md#macos-developer-id-distribution).
@@ -101,7 +113,11 @@ logout/direct account switching, delayed outcomes, offline queue replay, stable
 UUID/time/version, retryable/permanent refusals, capacity/expiry, corrupt config,
 opt-out cancellation, active days without restart, session expiry and subscription
 poll suppression. Its subprocess replaces outbound transport before importing the
-production owner and exercises Electron's packaged test-suppression environment.
+production owner and exercises Electron's packaged test-suppression environment,
+including inherited packaged flags in Node, Vitest, Jest and `NODE_ENV=test`
+processes, saved preferences, errors/warnings, and a normal packaged positive control.
+`server/telemetry-environment.ts` shares runtime admission with Electron/MCP native
+diagnostics; the isolated host-test fixture suppresses descendants as well.
 Renderer telemetry tests exercise trusted foreground input, quiet background days,
 listener disposal, bounded edit reporting and refusal of host-only facts.
 Document lifecycle tests distinguish editing from reconciliation/no-change callbacks;
@@ -136,6 +152,16 @@ context. Production PostHog receipt and every possible provider error shape are
 not established by these controlled tests. Native startup errors require a later
 healthy host; queue/rate/expiry limits still permit loss.
 
+**Response diagnosis (2026-10-13):** renderer HTTP regressions exercise an
+original JSON parse failure through the files adapter and distinguish requested
+body cancellation. Host tests join the returned request ID to its diagnostic.
+The broker's real loopback tests preserve response bytes while observing unknown
+finish, malformed framing, in-band provider errors and a reset after streaming;
+conversation content and credentials are excluded and traces reset on new turns.
+The panel regression carries native completion metadata and an upstream cause
+through turn-scoped telemetry. These controlled tests do not recover old events
+or establish production-provider root causes.
+
 The built-source macOS runtime was driven through Settings and an actual
 renderer error event with isolated configuration and collection disabled. Its
 local HTTP diagnostic retained the original code, nested provider status/request
@@ -149,6 +175,22 @@ renderer gate, affected host suites, native OpenCode fixture, Electron boundarie
 and built cross-process smoke passed. Host startup/crash diagnostics additionally
 retain the final bounded 8 KB of the Electron-managed service log when the host
 collector cannot initialize.
+
+**Update connectivity diagnostics (2026-10-14):** `electron/update-manager.cjs`
+reports recognized offline, network-change, suspended-network and DNS failures
+during checking as warnings. `server/native-diagnostics.ts` preserves severity
+and replays the spool in occurrence order; `server/telemetry.ts` counts identical
+native check warnings in hourly windows with original identity/version/time.
+Updater tests cover emit/rejection deduplication, retry/recovery and retained
+download/install/certificate/integrity errors. Native diagnostic tests exercise
+hourly aggregation, offline replay, shutdown/restart, account changes and opt-out.
+These controlled failures do not establish the cause of a user's network outage.
+A macOS Electron runtime pass used an isolated network session to trigger three
+real Chromium DNS failures, observed one immediate warning and two queued repeats,
+then recovered against a local update feed. The production update manager, built
+native spool and bundled collector ran with isolated configuration and replaced
+telemetry transport. Updated host tests, type checks, update contracts and real
+Electron lifecycle smoke passed; Windows packaged networking remains unverified.
 
 
 
@@ -195,9 +237,8 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
 - **Contract Test:** startup ownership/readiness, native activation and window
   isolation, empty-home startup/registry/restart, Settings persistence, account entry,
   Agent preparation, and update state/authorization. Entry points:
-  `pnpm test:renderer`, `pnpm test:config`, `pnpm test:project-files`,
-  `pnpm test:updates`, `pnpm test:electron`, `pnpm test:electron:smoke`,
-  and `pnpm test:agent`. Key persistence survives daemon reconfiguration
+  `pnpm test:renderer`, `pnpm test:server`,
+  `pnpm test:updates`, `pnpm test:electron`, and `pnpm test:electron:smoke`. Key persistence survives daemon reconfiguration
   failure; these tests do not prove rollback of saved configuration.
   `scripts/electron/dev.test.mjs` builds real boundary sources in an isolated
   fixture and loads them in a substitute desktop child, covering missing/stale
@@ -225,10 +266,15 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
   `update-preview.test.tsx` covers selecting a state before starting the preview.
   An isolated Electron/Vite pass (2026-09-15) opens the developer controls,
   starts the default ready-to-install preview, and visually verifies the card
-  above Gallery in the expanded sidebar with Settings closed. Clicking Install
-  and restart leaves the window running; the close icon removes the preview.
-  Controlled updater passes cover dismissed notices, Settings actions, native
-  input locking, save barriers, and handoff failure rollback, not replacement.
+  above Gallery in the expanded sidebar with Settings closed. Clicking the
+  preview's restart action leaves the window running; the close icon removes the preview.
+  Controlled updater passes cover a found release downloading in the background
+  and waiting at ready until an explicit restart, dismissed notices, Settings
+  actions, native input locking, save barriers, and handoff failure rollback,
+  not replacement. A built-app pass (2026-10-17) set main's development update
+  simulation through the window's preload bridge: available and downloading left
+  the sidebar footer empty, ready showed Restart to update above Gallery, and
+  clicking it left the unpackaged window running.
 - **AI Eval:** first-discussion quality belongs to J10; retrieval quality to J05.
 - **Release Check:** signed/notarized first launch, offline startup, actual
   native picker, first-session-to-returning-session flow, and N→N+1 updates on
@@ -275,13 +321,25 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
 
 **Intent:** [J02](../design-docs/journeys/README.md#j02-add-and-open-a-folder).
 
-**Implementation:** Renderer: `renderer/src/features/workspace/hooks/use-project-entry.ts`, `renderer/src/features/workspace/hooks/use-project-entry-receiver.ts`, `renderer/src/features/workspace/application/open-folder.ts`, `renderer/src/features/workspace/application/remove-folder.ts`.
+**Implementation:** Renderer: `renderer/src/features/workspace/hooks/use-project-entry.ts`, `renderer/src/features/workspace/hooks/use-project-entry-receiver.ts`, `renderer/src/features/workspace/ui/sidebar.tsx`, `renderer/src/features/workspace/application/open-folder.ts`, `renderer/src/features/workspace/application/remove-folder.ts`.
 Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-file-mutations.ts`.
 
 **Status:** Partial and release-dependent.
 
-- **Contract Test:** `pnpm test:renderer`, `pnpm test:project-files`,
-  `pnpm test:conversion-scheduler`, and `pnpm test:electron` cover asynchronous
+- **Sidebar project switcher (2026-10-14):** the folder header's name opens a
+  menu of recent projects plus Open, Create, and Import from GitHub, driving the
+  window's shared `useProjectEntry`; the leading folder glyph owns the fold.
+  `sidebar.test.tsx` covers the routing to entry, the current project as a
+  no-op, same-name disambiguation, and the failure line. An isolated macOS
+  built-app pass opened a seeded project, chose another recent project from the
+  switcher, and got a second window on it while the first kept its project and
+  closed the menu. Open, Create, and Import through the switcher reuse the
+  entry flow's existing evidence and were not driven again.
+- **Linux project entry (2026-10-13):** Main windows now keep the native menu
+  visible on Linux, exposing File → New Window from an occupied project. The
+  Electron menu contract covers this chrome option and the New Window action;
+  a packaged Linux desktop check remains needed to confirm the painted menu.
+- **Contract Test:** `pnpm test:renderer`, `pnpm test:server`, and `pnpm test:electron` cover asynchronous
   open/commit, cancellation, GitHub staging/publication rollback, project
   retirement, retained nested projects and preparation, and distinct path
   whitespace/case/Unicode identities. Scoped HTTP/Agent regressions now preserve
@@ -439,7 +497,7 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:renderer`, `pnpm test:project-files`,
+- **Contract Test:** `pnpm test:renderer`, `pnpm test:server`,
   `pnpm test:electron`, and `pnpm test:electron:smoke` cover format capabilities, source identity,
   hidden-file policy, tab/history behavior, save barriers, shared version
   authority, conflicts, and failure handling.
@@ -448,7 +506,7 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   listing parity, protected/derived exclusions, and unchanged index eligibility.
   `server/routes/files.test.ts` verifies preference changes through folder-explicit
   workspace requests, including project isolation and refusal of unregistered roots.
-  `pnpm test:config` covers strict durable preferences.
+  `pnpm test:server` covers strict durable preferences.
   `reading-text-menu.test.tsx`, the Appearance domain/infrastructure/surface
   suites, `shared/protocols/http/appearance.test.ts`, and
   `server/routes/appearance.test.ts` cover the reading menu's font/size writes,
@@ -613,6 +671,44 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 ## J04: Preparation
 
+**Daemon exit evidence (2026-10-16):** the host retains a bounded, credential-filtered
+stderr tail and exit code/signal for unexpected MFS exits. A real child-process
+fixture verifies startup failure evidence and a subsequent successful restart.
+The fixture uses Node, not Python/MFS; the reported production code-1 failure's
+traceback and root cause remain unknown.
+
+**PDF component probes and textless pages (2026-10-14):** `pdf-runtime.test.ts`
+covers a packaged layout with no loose extractor scripts: unavailable probes
+neither launch nor request a download, and installed probes/conversions select
+the same component. `pdf_extract_test.py` covers missing native/scanned pages,
+layout failure, empty completed OCR, source preservation, failed-OCR publication
+refusal, and timeout refusal without an unbounded OCR restart. A real macOS
+source-extractor pass reproduced the reported error with a one-page blank PDF;
+after the fix that fixture completes with only a marker, while text and scanned
+text PDFs remain readable. The reporter's PDF and Windows component execution
+remain unverified; these logs alone do not establish whether its input was blank.
+An isolated built-host HTTP pass with real Python/MFS also opened those three
+PDFs, settled preparation without failures, retrieved only the two readable PDFs
+by keyword with page locators, and verified unchanged source hashes. Validation:
+744 host tests, 31 Python tests plus daemon smoke, 19 package-input tests, host
+type checks, and documentation checks. No Windows package was built in this pass.
+
+**Windows pipe encoding (2026-10-13):** the launcher and Python daemon explicitly
+own UTF-8 stdin/stdout. A real subprocess regression starts with CP1252 encoding,
+indexes emoji and multilingual text, retrieves it, and verifies UTF-8 output.
+This exercises the encoding failure independently of the host OS; packaged
+Windows execution remains a release verification requirement.
+
+
+**Independent component reuse (2026-10-12):** the release pipeline selects a
+component identity from its build inputs instead of the desktop version.
+`scripts/packaging/extractor-release.test.mjs` covers input invalidation,
+release completeness and component hash/target rejection; the component runtime
+integration test opens a second offline owner against the same pinned installation.
+Platform packaging still exercises real PDF/OCR and offline reuse. The new
+independent prerelease publication and first cross-version hosted reuse are not
+yet established by a live release.
+
 **Intel compatibility (2026-09-17):** unsupported-system status bypasses download
 and retry, while supported Intel component installation still verifies the
 architecture-specific manifest and works offline. `extractor-runtime.test.ts`
@@ -643,10 +739,16 @@ Host/services: `server/conversion-dispatch.ts`, `server/conversion-scheduler.ts`
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:config`, `pnpm test:conversion-scheduler`,
+- **Contract Test:** `pnpm test:server`,
   `pnpm test:python`, and `pnpm test:package-inputs` cover format completion,
   freshness, checkpoints, cancellation including descendants,
   native worker wiring, and bounded component install/retry/offline reuse.
+- **Driven Runtime Pass (2026-10-13):** an isolated Node `MfsDaemon` launch
+  inherited a simulated ANSI encoding, bound a disposable Gallery-named folder
+  with emoji, indexed a Markdown filename with emoji and Chinese characters,
+  then retrieved its Chinese content through the real Python/MFS RPC channel.
+  This used source runtimes on macOS; the frozen Windows sidecar remains a
+  release check.
 - **Driven Runtime Pass:** PDF/OCR recovery (2026-09-15) covers
   failed first demand, no polling retries, one Settings retry, next-launch
   download/resume, and a later offline process with zero downloads. It uses a
@@ -687,7 +789,16 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 **Status:** Partial.
 
-- **Contract Test:** `pnpm test:retrieval`, `pnpm test:python`, and the scoped
+- **Cloud parent path fix (2026-10-14):** `MfsIndexer` now checks direct-text
+  eligibility against the owning bound folder instead of the absolute source
+  path. `semantic-index-inputs.test.ts` covers a project beneath Google Drive's
+  `.shortcut-targets-by-id` pattern, project-internal hidden exclusions, and
+  a separately bound nested project. An isolated real-daemon reconcile admitted
+  the visible Markdown, reported an index total of one, and found its `ReplaySSM`
+  keyword. An isolated built-service HTTP pass opened the project, synced it,
+  reported a total of one, and returned one keyword match. The affected user's
+  90-file project and packaged UI remain unverified.
+- **Contract Test:** `pnpm test:server`, `pnpm test:python`, and the scoped
   project/config/renderer suites cover exact filtering, hybrid mechanics,
   current-source mapping, namespace isolation including nested projects,
   missing/blank/stale identity refusal, provider-independent keyword search,
@@ -722,37 +833,183 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
-**OpenRouter hosted routing (2026-10-12):** `stashbase-api` now routes the default
-Gemini 3.8 Flash profile through OpenRouter; the desktop protocol and alias stay
-the same. The hosted adapter owns explicit model IDs, routing/price limits, native
-PDF normalization, and Gemini tool-history compatibility. Gateway tests cover
-fragmented SSE, actual-cost settlement, private cost/error removal, and missing
-cost recovery. PostgreSQL integration verifies migration preserves active turns
-and balances, additional profiles, and exactly-once charging. The administrator
-form supports OpenRouter with USD price fields. The host reads the authenticated
-model catalog into the existing Default picker, routes selected profile IDs, and
-restores the native history's model. Startup picks and turn locking have focused
-coverage; the pinned OpenCode smoke verifies switching and history restoration.
-A built picker fixture was driven in the browser: Gemini to GPT-4.1 mini retained
-the draft, updated the label, and disabled selection while running; composition
-was reviewed by eye. This is a focused component pass, not a packaged chat journey.
-The API persists generation IDs before forwarding frames and retries estimated
-charges from scheduler/Cron. Real PostgreSQL tests cover concurrent claims,
-restart/retry, refunds, additional charges, reservation caps, and account reset.
-Regression coverage also checks spending between estimate and reconciliation,
-including paid-month holds. Broker and HTTP tests carry catalog versions; gateway
-and PostgreSQL tests reject stale versions and publication races before dispatch
-while allowing the pinned turn's tool continuation. The native smoke verifies
-that selected-model calls carry the version and stale-configuration failures
-retire the obsolete runtime without native retries. The workspace regression
-clicks Reconnect, retains history/draft/paused queue, and verifies no automatic
-resend; the native smoke resumes the same history and sends a fresh catalog
-version only after an explicit prompt.
-Real OpenRouter probes verified Gemini text, tool continuation, native PDF and
-image input, GPT-4.1 mini text, and cancelled-stream accounting recovery against
-metadata. Cache-hit pricing, other models' tool/media behavior, and production
-rollout remain unverified. Missing generation IDs or unavailable metadata remain
-explicitly estimated.
+**Closed startup and duplicate diagnostics (2026-10-16):** Codex regressions close
+the socket during model/skill discovery and verify no subsequent requests,
+readiness or failure diagnostics. OpenCode's error/exit pair still reaches the UI
+but reports one original failure. Real child-process fixtures cover startup
+exit-code and signal diagnostics with credential-filtered stderr. These checks
+establish local lifecycle/diagnostic behavior, not the cause of production
+WebSocket 1006 disconnects or OpenCode startup termination.
+`pnpm test:opencode:native` also passed its three checks using the actual bundled
+runtime and a local fixture gateway, including SDK sessions and warm-runtime reuse;
+this does not establish real-provider behavior.
+
+**Auto review refunds (2026-10-15):** All ten affected production refunds aligned
+with proxy HTTP 499 and local Bash permission starts by 5.118–5.163 seconds. The
+published Auto review's five-second deadline aborted an already dispatched model
+call; the old gateway misclassified this as a provider connection failure.
+`hosted-agent-broker.test.ts` reproduced that disconnect over real local HTTP.
+The broker now separates permission decision expiry from bounded response draining,
+preserves the original accounting turn, and never lets a late ALLOW grant access.
+Focused tests cover manual fallback, credential wait cancellation, and ordinary
+turn cancellation. The bundled OpenCode smoke drives slow review, manual approval,
+a subsequent turn, and late response completion without a disconnect. A separate
+local broker/gateway/PostgreSQL pass confirms one exact settlement (363,000,000
+picodollars), matching original turn/window totals, no hold, and no waiver after
+the decision expires. Production Gemini and Haiku short-generation probes
+completed; the actual synthetic Gemini permission review took 9.52 seconds,
+exceeding the old cutoff. Three approved probes cost US$0.00071075 in total,
+outside user allowance. A later 2.16.4 Haiku request recorded
+`client_stream_interrupted` 5.353 seconds after its Bash tool part appeared;
+subsequent requests settled without account lockout. These probes do not establish
+arbitrary long-request reliability or a live packaged Auto-review billing journey.
+The [2.16.5 source CI](https://github.com/liliu-z/stashbase/actions/runs/38748865835)
+and [coordinated release](https://github.com/liliu-z/stashbase/actions/runs/38751098272)
+passed on all four native targets. All 15 public app assets, three update metadata
+files and sidecars, the separate eight-asset extractor set, and Homebrew were
+verified. The downloaded arm64 DMG matched both update metadata and the cask;
+strict/deep codesign, Gatekeeper, and stapler passed locally. On macOS 27.0.1,
+the official 2.16.5 app launched with telemetry unavailable, displayed its version,
+loaded General and Agent settings plus account/subscription state, and quit
+cleanly. This manual pass made no model call; other-platform manual UI and real
+N-to-N+1 update journeys remain unverified.
+
+**Default stream interruption recovery (2026-10-14):** Local native logs showed
+five `agent_provider_unavailable` stream errors after completed file reads.
+The bundled runtime's retry parser labels unknown errors containing `unavailable`
+as "Provider is overloaded"; this does not establish provider capacity as the
+cause. The broker now bounds recovery before output to one additional call,
+sharing the existing empty-response budget, and makes subsequent interruptions
+terminal without replaying completed tools. After output, it preserves deltas
+and emits a terminal interruption. Diagnostics retain the original gateway cause
+even when the broker cancels the failed stream. The native pass also exposed
+missing `message.part.delta` handling: the translator now delivers text and
+reasoning before completion and deduplicates final cumulative snapshots.
+Broker regressions cover fragmented UTF-8/SSE, combined output/error frames,
+large output, mixed failures, retained tool context and accounting identities;
+translator tests cover live deltas and late-turn isolation. The native fixture
+exercises failure after a real file write and after visible partial output,
+then continuation in the same session. Production SSH was unavailable, so the
+original upstream error and real-provider recovery remain unverified.
+Validation passed `pnpm test:agent` (334 tests), `pnpm test:opencode:native`
+(3 tests), `pnpm typecheck:host`, `pnpm test:docs`, and `pnpm build:server`.
+No packaged UI pass was performed for this host-only change.
+
+**Accounting recovery refusal (2026-10-14):** A production Windows 2.16.3
+diagnostic confirmed `agent_usage_recovery_limited` / HTTP 429 after native
+retries. `agent-turn-failure.ts` now classifies its message as a rate limit,
+preserving the service explanation instead of leaving the final error unclassified.
+The `opencode-agent.test.ts` regression first reproduced the missing classification;
+it covers network and accounting retry notices, the final classified error, and
+failed native-idle settlement. This does not establish which accounting threshold
+the account reached or restore its hosted admission.
+Validation passed the 77 translator/classifier/broker tests, host types, and
+documentation checks. No packaged or real-provider recovery pass was performed.
+
+**Missing Codex history prerequisite (2026-10-14):** `codex-history.test.ts`
+exercises list/read/rename/delete with no discoverable executable, no child
+launch, and the shared HTTP envelope's `412 AGENT_NOT_INSTALLED`. Existing native
+ownership checks remain covered. This does not establish real Windows CLI
+discovery or authentication.
+The same built-host pass returned that prerequisite for Codex while Claude's
+history remained HTTP 200, using controlled absent-CLI discovery and isolated
+empty native history.
+
+**Turn diagnostics (2026-10-14):** `server/telemetry.ts`, `telemetry-state.ts`
+and `telemetry-turns.ts` own durable pending turns, reserved terminal admission,
+identity/version continuity, terminal deduplication and unknown-result recovery.
+`error-reporting.ts` observes native lifecycle facts; the hosted model diagnostic
+owner emits request failures independently of native forwarding. Renderer context
+reads carry explicit turn IDs and socket errors share connection IDs, including
+later turns after a prior server error. Manual retries rejected by context
+validation now settle as blocked. `server/telemetry.test.ts` exercises restart,
+account change, offline saturation, opt-out, update shutdown, native process exit,
+socket loss and tool recovery. Renderer regressions exercise rejected retry IDs
+and second-turn disconnect correlation. Model-stream tests verify source reporting
+and upstream request IDs without content. These controlled tests do not establish
+Daniel's historical cause, production PostHog receipt, or saved alert configuration.
+
+Validation passed `pnpm check:web` (all twelve gates), `pnpm test:agent`,
+`pnpm typecheck:host`, `pnpm test:electron`, `pnpm test:electron:smoke:built`,
+`pnpm test:opencode:native`, the focused telemetry/client-error/shutdown suites,
+and `pnpm test:docs`. The built renderer's Interrupted Turn Story was inspected
+by eye: partial output, unknown-outcome explanation and explicit reconnect action
+remain visible. That static fixture does not prove reconnect execution. The native
+OpenCode run uses a local fake model gateway; desktop smoke uses isolated fixtures
+and disables collection. No test events were sent to production analytics.
+
+
+**Default skill scope (2026-10-13):** `server/opencode-runtime.ts` disables native
+external/upward config discovery and supplies project-relative skill paths plus
+the project's instruction-file path. The pinned OpenCode smoke first reproduced
+ancestor skill metadata entering a non-Git project's model request. It now uses
+the production environment builder and proves that ancestor skills are absent,
+all four project skill locations remain discoverable, project instructions reach
+the model, and a native skill invocation loads its body only when called. This
+controlled gateway test does not establish provider skill selection quality or a
+packaged desktop run. Windows source CI exposed a native skill call waiting for
+OpenCode's ripgrep lookup. The runtime now supplies the pinned Windows binary on
+PATH, and packaging stages it as an explicit resource. The source fixture checks
+native invocation; packaged smoke checks the binary and a fake-gateway turn.
+Packaged skill invocation and real-provider skill selection remain unproven.
+
+**Default short-term limit presentation (2026-10-13):** A local native log
+recorded repeated identical short-term limit errors during one model call;
+the retained assistant reply later completed. The OpenCode translator now shows
+an identical retry reason once per turn while preserving native retries, and
+the final refusal classifies as a rate limit. The hosted broker now forwards the
+gateway's `Retry-After` header on 429/503; a broker test first reproduced its
+loss. Targeted translator and classifier tests reproduce the original repetition
+and missing classification. The live gateway status/code and an end-to-end
+packaged retry were not captured.
+
+**Model failure diagnostics (2026-10-13):** `hosted-agent-diagnostics.ts`
+observes bounded SSE metadata and original stream failures; the OpenCode
+translator joins gateway request identity, native message ID, finish reason and
+token counts to the turn's error diagnostic. Broker and panel tests cover unknown
+completion, malformed/error frames, broken streams and turn isolation without
+capturing prompt or generated text. These controlled streams do not establish a
+live provider's error shape or packaged delivery.
+
+- **Default Crew (2026-10-13):** The main model comes from `/v1/agent/models`;
+  selected members come from `/v2/agent/tools`. `agent-tool-catalog.ts` owns the
+  account-scoped ETag cache; `default-agent-tools.ts` owns chat choices, new-chat
+  defaults, briefing, and catalog/turn snapshots. `/api/agent-tools` requires a
+  chat identity. `opencode-runtime.ts` registers selected members through MCP,
+  disables native sub-agents, and permits text-only Crew work in Plan. Published
+  descriptions define responsibilities; common prompt rules honor the current
+  request and avoid unsolicited rewrite cycles. `agent-crew-history.ts` persists
+  call attribution, carried by socket/history protocols to `role-call.tsx`.
+  `use-agent-tools.ts` owns optimistic per-chat choices, serialized saves,
+  rollback and visible errors; saving blocks Send.
+
+  Catalog/MCP tests cover availability, model selection, chat isolation, defaults,
+  removed members, ETag/account isolation and immutable turn snapshots. Broker
+  tests cover v2 selection headers, root budgets, sign-in retry, refusal codes,
+  and rejecting length-limited or incomplete SSE output. Panel tests cover
+  selected MCP registration, Plan, active-turn ownership and persisted attribution.
+  The reproduced Stop/version-refresh race is fixed by capturing cancellation and
+  turn identity before preparation; a regression proves no old-call retry after
+  Stop. Renderer hook tests cover failed-save rollback, retry, overlap prevention,
+  and late responses after changing chats. Transcript tests/Stories cover running,
+  successful and failed Crew cards with complete results and fixed model labels.
+  A built macOS desktop with an isolated empty project and the live deployed
+  gateway was driven through discussion (no member call), one Writer draft
+  (Opus: 563 input/757 output tokens), and Plan review of that unsaved draft
+  (one Reviewer call, GPT-6.1 Sol: 443 input/460 output tokens; no rewrite).
+  Writer and Reviewer cards and complete results were inspected by eye.
+  A subsequent live Writer call was stopped: the card showed Stopped, history
+  reopening retained its model/status, and the next turn replied successfully.
+  Changing a new chat to Reviewer alone left the old chat's Writer/Reviewer
+  choice intact. Native abort events now settle as cancellation after the abort
+  acknowledgement, with a focused regression for the error/idle ordering.
+  This pass also exposed and fixed the MCP launcher's lost custom host port;
+  the live round trip succeeded on port 8196 after the fix. The live gateway
+  still served catalog 1; service migration 23 for responsibility-only member
+  descriptions is committed separately but deployment remains unverified.
+  These examples establish the exercised routing and handoff, not general
+  writing quality, pricing, or provider cache efficiency.
+  A root snapshot lives only for its turn; process restart does not resume a turn.
 
 - **Low-credit calls (2026-10-11):** the hosted API's account-locked reservation
   reduces output to fit account/monthly and turn capacity while retaining input
@@ -799,11 +1056,42 @@ executable: its login failure displayed the step, auth host, and ECONNREFUSED
 in the same prompt; Not now preserved the draft. This proves error propagation
 and UI recovery, not the original reporter's underlying Codex failure.
 
-**Default permissions and desktop commands (2026-10-08):** Default now declares
+**Default Auto and connection latency (2026-10-13):** Default now exposes all
+four access modes. `default-agent-permissions.ts` owns the bounded hosted review
+for Auto; `opencode-agent.test.ts` covers exact-action grants, manual fallback
+for uncertain/failed answers, frozen in-turn options, and Stop rejecting a late
+answer across turns. `default-agent-permissions.test.ts` covers the deadline
+while credentials remain pending and actions that must still ask. Broker tests
+prove cancellation prevents forwarding after a pending token arrives. The
+driven pinned-native smoke executes a reviewed `pwd` through the real panel,
+broker, and OpenCode process without a permission card, using a controlled
+gateway. A separate live-default-model check allowed a synthetic `pwd` request
+in 2,513 ms; a synthetic destructive shell command returned to manual approval
+at the five-second deadline. Neither check executed a destructive action. These
+limited cases do not establish general model risk judgment.
+
+`opencode-runtime.ts` now prepares one unused process and MCP connection after
+each turn, with exclusive claim, fresh model/tool comparison, a two-minute
+expiry, and window/project/shutdown cleanup. `opencode-warm-slot.test.ts` covers
+claim, replacement, refreshed idle expiry, and awaited cleanup. The native smoke proves unique
+MCP identities, independent chat disposal, changed model/tool configuration,
+and project binding. The repeatable `profile:default-session` scenario measured
+three runs per label with the real runtime and local catalog fixtures: baseline
+`73aaa4c1` cold 1,160–1,406 ms / next chat 1,115–2,792 ms; current code cold
+1,123–1,508 ms / next chat 14–16 ms after a fixed five-second idle interval. These exclude real catalog
+network and model latency; the first chat and an expired/mismatched spare still
+start cold. Per-call diagnostic tests distinguish headers, first byte, first
+visible text, and cached token counts without retaining conversation content.
+The native smoke also confirms the production `New Chat` title causes no extra
+title model call. Built desktop composition and limited live-provider cases are
+recorded above; representative network latency, cache reuse, and hosted Auto
+reviewer quality remain unproven for this change.
+
+**Default permissions and desktop commands (2026-10-08):** Default then declared
 Ask/Edit/Plan and maps each turn to an OpenCode profile. Edit uses the shared
 realpath-aware project-write predicate; commands, deletion, and broader access
-still need approval. Plan denies mutating and delegated tools. Auto remains
-unavailable because OpenCode has no native risk reviewer. MCP approvals wait
+still need approval. Plan denies mutating and delegated tools. Auto was
+unavailable until the host-owned reviewer above. MCP approvals wait
 for the same call's running arguments, which the real runtime can emit after
 its permission request. Grants apply once to a pending id; Stop rejects late
 grants. A reproduced duplicate idle event could finish the next optimistic
@@ -893,6 +1181,28 @@ retain their existing terminal behavior. Validation passed 226 Agent tests,
 host types, Electron boundary tests and built smoke, and documentation checks.
 The live probe exercised the SDK protocol, not the application UI; the changed
 journey through the built desktop and packaged behavior remain unverified.
+
+**Credit freshness and reservations (2026-10-15):** the account menu refetches on
+opening and window focus; its shared query polls every thirty seconds. App
+composition invalidates credits after every Default turn outcome, including
+failure, independently of telemetry delivery. Settings and the menu show reserved
+capacity separately, and failed refreshes do not leave a stale numeric balance
+presented as current. A renderer regression reproduces 78% becoming 15% on menu
+open and a failed refresh becoming Unavailable; a composition test covers a
+failed Default turn. API contract coverage preserves legacy payloads and exposes
+reservation percentages only to opted-in clients. Database recovery tests cover
+refusals with outstanding holds and the five-minute, exactly-once waiver from
+first uncertainty, including absent provider generation IDs. Real-provider
+unknown-cost recovery still depends on provider evidence or that deadline. The built
+ReservedCredits Story was inspected at the 28rem Settings width, showing 15%
+available and 25% reserved without clipping; this fixture is not a production
+settlement or packaged-release pass. A built Electron pass against the deployed
+API on 2026-10-15 opened the current account menu and Settings -> Agents: both
+showed 40% available after automatic recovery, matching the production ledger
+(39.680695% available, no held user credits). Telemetry reported unavailable.
+Renderer gates, host types, 323 Agent tests, 22 hosted-account tests, Electron
+boundary tests and the real Electron smoke passed on the current main baseline.
+A fresh packaged pass remains part of the release verification.
 
 **Default Agent billing:** Settings -> Agents shows the subscription, reached also
 from the sidebar account menu, through
@@ -1121,8 +1431,8 @@ once. The signal offers an update attempt, not a claimed minimum version or
 guaranteed account access. Not proven: a real Codex update and successful provider
 turn through the packaged application for this failure.
 
-**Model-picker update entry (2026-10-04):** `ui/composer/thinking.tsx` also
-offers the native updater in the model list before a turn fails, using the
+**Model-picker update entry (2026-10-04):** `ui/composer/thinking-models.tsx`
+also offers the native updater in the model list before a turn fails, using the
 host's `updatable` capability and `use-agent-runtime-update.ts`. The mounted
 workspace regression starts with only an older model, invokes Update Codex,
 then verifies reconnection publishes the replacement catalog and keeps the
@@ -1260,8 +1570,8 @@ an image preview, and a text-file card; history tests keep unknown-extension fil
 inside transient attachment storage as name-only cards while leaving arbitrary
 external paths in the transcript. Runtime interpretation of binary formats remains
 provider-dependent and is not established by local upload acceptance.
-Validation: `pnpm check:web` passed all 12 renderer gates; `pnpm test:agent`
-passed 204 tests; the attachment route test, host typecheck, and documentation
+Validation: `pnpm check:web` passed all 12 renderer gates; the Agent server
+tests (now in `pnpm test:server`) passed 204 tests; the attachment route test, host typecheck, and documentation
 checks passed.
 
 **Intent:** [J06](../design-docs/journeys/README.md#j06-start-and-continue-an-agent-chat).
@@ -1274,7 +1584,7 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:agent`, renderer, project-operation, MCP, and
+- **Contract Test:** `pnpm test:server`, renderer, project-operation, MCP, and
   config suites cover setup/consent, authentication, scope, permissions,
   queue/turn/history ownership, stop/retirement, failure classification,
   persona, and transcript/layout state. Automatic grep/hybrid selection
@@ -1384,6 +1694,64 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   official installer downloads, and packaged cross-platform shutdown remain
   release checks, not established by these local fixtures.
 
+**Antigravity runtime (2026-10-17):** `server/native-agents.ts` declares
+Antigravity (`agy`) beside Claude and Codex. `server/antigravity-setup.ts` owns its
+readiness check and terminal-hosted sign-in, `server/agent-runtime-installer.ts`
+its official installer, and `server/agent-mcp.ts` its MCP entry and `PreToolUse`
+hook launcher. `server/antigravity-session-runtime.ts` runs a chat's `agy`
+stream-json process, `server/antigravity-protocol.ts` parses its events and
+owns the approval policy, `server/routes/antigravity-hook.ts` answers the hook,
+and `server/antigravity-history.ts` records the conversations StashBase chats
+start. `antigravity-agent.test.ts` covers launch flags and instructions,
+streamed text and tool rows, the history record and its project scope, process
+reuse and restart on a model change, read/write/command decisions per mode,
+always-answers, withdrawn and post-Stop approvals, Stop and resume, empty
+`SUCCESS`, a crash with `AGY_ERROR`, and the hook route's refusal of unknown
+sessions. `antigravity-setup.test.ts` covers sign-in classification, the sign-in
+loop's retirement, cancellation and early exit, model-variant grouping, nested
+and flat event forms, setup that keeps the reader's own MCP servers and hooks,
+and the generated POSIX hook launcher against a real local server.
+A driven pass through the built app (2026-10-17, macOS, scratch HOME, port 8097)
+used a fake `agy` in `~/.local/bin` that answers `--version`, `/usage` and
+`models`, speaks stream-json, and runs the real configured `PreToolUse` hooks
+before its tools. Startup readiness reached Ready · 1.4.0 and wrote the
+`stashbase` entries to Antigravity's MCP and hook configuration; the
+picker grouped the low/high variants into one model. The composer offered
+Antigravity, settled the chat on Edit, and showed no attachment control. The
+generated hook launcher reached the host with the chat's session id: the write
+inside the project passed in Edit, the command raised the approval card, Allow
+ran it, and Reject in a later turn denied it. Changed in this turn listed the
+written note. After relaunch the chat list restored the conversation from the
+StashBase record, and a follow-up resumed it with `--conversation` and fresh
+instructions. That pass found tool rows of a resumed turn attaching to an earlier
+turn's rows, since step numbers restart per process; tool ids now carry the
+turn (`antigravity-agent.test.ts`).
+A signed-in `agy` 1.4.0 on macOS (2026-10-17) confirmed the `models` envelope
+the catalog reads. Outside the available regions, `-p /usage` and a headless
+turn both returned Google's 403 eligibility refusal with an `AGY_ERROR` line;
+setup had reported it as a failed sign-in check, and now reports Account not
+accepted with that sentence (`antigravity-setup.test.ts`,
+`failure-messages.test.ts`, `agent-runtime-status.test.ts`). Later the same
+account passed `/usage` and answered a headless turn.
+Headless stream-json runs on that `agy` confirmed the `init`, `step_update`
+(text deltas) and `result` shapes. They also showed that `init` names no model,
+so the catalog reads the current one from `-p /model`, and that a failed tool
+ends in `ERROR` rather than `DONE`. MCP calls arrive as `call_mcp_tool` with
+`ServerName`/`ToolName`/`Arguments`, and the tool names now come from its tool
+list. With the StashBase hook installed, a terminal run outside StashBase kept
+`agy`'s own refusal of an unapproved MCP call, as the hook's `allow` intends.
+A real `agy --mode auto` run refused a StashBase MCP call outright, so Auto is
+StashBase's own rule set in the hook, and new Antigravity chats now start there
+instead of Edit; `antigravity-agent.test.ts` and `antigravity-setup.test.ts` cover
+its decisions and `isReadOnlyCommand`, but no driven pass has run it.
+Attachments now reach Antigravity as the prompt's `Attached files:` paths, as for
+Claude and Codex: given an image path, a real headless `agy` read and described
+the image itself, and replay restores the cards (`antigravity-agent.test.ts`).
+Not proven: no StashBase chat has run on a real `agy`, so the hook's payload and
+its running in a StashBase-launched stream-json process, stdio MCP startup there,
+and pseudo-terminal sign-in remain unexercised. Windows sign-in, the Windows
+hook launcher, and a signed-in provider turn remain release checks.
+
 **Document context (2026-09-25):** a passage is a context kind in
 `renderer/src/features/agent/domain/context.ts`, rendered into the prompt as a
 `Selected passages:` block by `domain/prompt-context.ts` and validated only
@@ -1413,6 +1781,14 @@ reply's, and `OpenCodeEventTranslator` forwarded every text part. It now drops
 parts of messages OpenCode announced as the user's; `opencode-agent.test.ts`
 owns that rule and the history restore.
 
+Additional hosted accounting evidence (API repository):
+*agent-credit-admission.test.ts* reproduces the long-context/remaining-credit
+refusal and verifies concurrent admission with separate user/provider ceilings,
+refund and late-result races, and request-to-window/turn/minute/provider totals.
+*agent-usage-waiver.test.ts* covers paid-month and reset isolation. The five-minute
+refund begins at first uncertainty; this evidence does not prove live-provider
+pricing or a newly packaged desktop journey.
+
 ## J07: Converge
 
 **Intent:** [J07](../design-docs/journeys/README.md#j07-converge-chat-into-a-document).
@@ -1425,8 +1801,7 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:agent`, `pnpm test:mcp`,
-  `pnpm test:project-files`, and `pnpm test:renderer` establish permission, version, and write boundaries, including literal
+- **Contract Test:** `pnpm test:server` and `pnpm test:renderer` establish permission, version, and write boundaries, including literal
   dollar-sequence replacement.
 - **Composition Test:** `agent-convergence.test.tsx` exercises both a Chat file
   result's Open action and a reply's local file link: each selects Documents,
@@ -1503,8 +1878,7 @@ Agent turn and is not promised for standalone external MCP clients.
 
 **Status:** Partial and release-dependent.
 
-- **Contract Test:** `pnpm test:mcp`, `pnpm test:project-files`, and
-  `pnpm test:retrieval` cover transport/operation parity, authorization, scoped
+- **Contract Test:** `pnpm test:server` covers transport/operation parity, authorization, scoped
   direct/prepared reads, bounded windows, format/encoding restrictions, mutations,
   and reconcile. Current/stale/cancelled/orphaned prepared evidence is covered.
 - **Driven Runtime Pass:** a 2026-09-16 isolated source HTTP client initializes
@@ -1548,6 +1922,19 @@ Host/services: `electron/bug-report-service.cjs`, `electron/bug-report-handoff.c
 - **Release Check:** packaged native capture, review, Downloads copy, browser handoff.
 
 ## J10: Core loop
+
+**Release source pass (2026-10-16):** The merged 2.16.6 candidate passed the
+complete `pnpm check`, including all twelve renderer gates, 773 host tests,
+three bundled OpenCode checks, host types, service builds and Electron smoke.
+A separate native window loaded those built renderer/services with isolated
+configuration and collection disabled (`available: false`). The driven pass
+cancelled the native folder picker, opened a disposable project, inspected
+General/Agents/Advanced settings and Gallery covers, retained an unsent chat
+while opening a document, attached the document as context, saved an edit,
+and found that durable text through keyword search. The window quit cleanly.
+This source harness does not establish signed-package delivery, real-provider
+model quality, or N-to-N+1 updates. Native Codex discovery reported a missing
+local executable behind its npm launcher; no installation or login was attempted.
 
 **Intent:** [J10](../design-docs/journeys/README.md#j10-turn-a-local-project-into-durable-agent-assisted-work).
 
@@ -1621,7 +2008,7 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
 **Status:** Partial.
 
 - **Contract Test:** `pnpm test:protocols`, `pnpm test:renderer`, and
-  `pnpm test:project-files` cover bounded whole-index
+  `pnpm test:server` cover bounded whole-index
   parsing/fallback, image-host and redirect restrictions, cached browsing, copy
   serialization, and shared GitHub acquisition/publication rollback.
   `github-snapshot.test.ts` covers anonymous default-branch archive redirects,
@@ -1698,6 +2085,15 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
   permission failures. The standard Electron smoke also passed cover, hero,
   thumbnail decoding and selection with production CSP. Installed delivery
   remains a release check.
+- **Gallery cover frame runtime pass (2026-10-15):** covers are drawn at 16:9
+  without the project's name, and the shelf card prints the name in a band
+  below the picture instead of over it. A native window of the built renderer
+  loaded an unpublished local index of redrawn covers through
+  `STASHBASE_GALLERY_INDEX_URL`, with relative screenshot paths served from
+  `app://renderer`. It showed the full cover in every Welcome card, the hover
+  description rising over the picture without changing card height, and the
+  full cover on the entry page. The proxied CDN path was not exercised before
+  publication.
 
 ## Maintenance Rule
 
@@ -1716,7 +2112,7 @@ not the truth of a test's claims or intent metadata.
   `forcefullyCrashRenderer` pass confirms Close destroys the crashed window.
   Text that had not reached its source file remains unrecoverable.
 - **Remaining-area follow-up (2026-09-16):** Agent preferences and embedder
-  route tests now belong to `test:config`; obsolete manual file-order storage,
+  route tests now run under `test:server`; obsolete manual file-order storage,
   synchronous upload naming, and unwired legacy smoke scripts were removed.
   Node owns atomic MCP launcher generation at startup and readiness/Settings.
   The root linter remains required by architecture fixtures and current lint

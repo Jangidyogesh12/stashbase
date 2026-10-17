@@ -148,7 +148,7 @@ describe('exact search rows', () => {
     renderRows(rows);
 
     const group = screen.getByRole('group', { name: 'plan.md 2' });
-    expect(within(group).getByText('docs')).not.toBeNull();
+    expect(within(group).getByText('docs/')).not.toBeNull();
     expect(rows.count).toBe(2);
     expect(
       screen.getByRole('option', { name: 'plan.md, docs, Line 12, the alpha ray' }),

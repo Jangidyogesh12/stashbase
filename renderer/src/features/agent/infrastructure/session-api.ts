@@ -158,7 +158,13 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
         models: event.models.map(toModel),
       };
     case 'tool':
-      return { id: event.id, input: event.input, kind: 'tool-started', name: event.name };
+      return {
+        id: event.id,
+        input: event.input,
+        kind: 'tool-started',
+        name: event.name,
+        ...(event.crew ? { crew: event.crew } : {}),
+      };
     case 'tool-delta':
       return { delta: event.delta, id: event.id, kind: 'tool-output' };
     case 'tool-result':
@@ -211,26 +217,30 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
   }
 }
 
-function history(path: string, signal: AbortSignal, invalid: string): TransportRequest {
+function history(path: string, signal: AbortSignal): TransportRequest {
   return {
     error: AgentSessionError,
     failureSchema: agentSessionFailureSchema,
-    messages: { 'invalid-response': invalid, unavailable: 'Agent session service is unavailable.' },
     path,
-    serverMessage: true,
     signal,
   };
 }
 
-function socketUrl(serverOrigin: string, request: AgentConnectRequest): string {
+function socketUrl(
+  serverOrigin: string,
+  request: AgentConnectRequest,
+  connectionId: string,
+): string {
   const url = new URL('/ws/agent', serverOrigin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   const wire = agentSessionConnectSchema.parse({
     agent: request.agent,
+    telemetryConnectionId: connectionId,
     access: ACCESS_MODE_WIRE[request.access ?? 'auto'],
     effort: request.effort,
     model: request.model,
     persona: request.persona,
+    crew: request.crew,
     resume: request.resume,
     folder: request.scope.path,
   });
@@ -247,9 +257,19 @@ export function createAgentSessionAdapter(
 ): AgentSessionPort {
   return {
     connect(request, listener: AgentConnectionListener) {
-      const connectionError = (message: string) =>
-        client.reportError?.(new Error(message), 'agent-connection');
-      const socket = createSocket(socketUrl(serverOrigin, request));
+      const connectionId = crypto.randomUUID();
+      let activeTurnId: string | undefined;
+      const connectionError = (message: string, close?: Pick<CloseEvent, 'code' | 'wasClean'>) =>
+        client.reportError?.(new Error(message), 'agent-connection', {
+          connection_id: connectionId,
+          ...((listener.telemetryTurnId?.() ?? activeTurnId)
+            ? { turn_id: listener.telemetryTurnId?.() ?? activeTurnId }
+            : {}),
+          ...(close
+            ? { close_code: close.code, was_clean: close.wasClean, close_initiator: 'unknown' }
+            : {}),
+        });
+      const socket = createSocket(socketUrl(serverOrigin, request, connectionId));
       let settledByServer = false;
       const onMessage = (message: { data: unknown }) => {
         if (typeof message.data !== 'string') {
@@ -261,6 +281,7 @@ export function createAgentSessionAdapter(
         try {
           const wire = agentServerEventSchema.parse(JSON.parse(message.data));
           if (wire.t === 'exit' || wire.t === 'error') settledByServer = true;
+          if (wire.t === 'turn-end') activeTurnId = undefined;
           event = sessionEvent(wire);
         } catch {
           connectionError('Agent returned an invalid frame.');
@@ -275,6 +296,7 @@ export function createAgentSessionAdapter(
         if (!settledByServer)
           connectionError(
             `Agent connection closed unexpectedly (code ${event?.code ?? 'unknown'}, clean ${event?.wasClean ?? false}): ${event?.reason ?? ''}`,
+            event,
           );
         listener.onClose();
       };
@@ -285,6 +307,10 @@ export function createAgentSessionAdapter(
           if (socket.readyState !== SOCKET_OPEN) return false;
           try {
             socket.send(JSON.stringify(agentClientEventSchema.parse(clientEvent(command))));
+            if (command.kind === 'prompt') {
+              settledByServer = false;
+              activeTurnId = command.telemetryTurnId;
+            }
             return true;
           } catch {
             // A refused frame tells the runtime to reconnect and
@@ -304,11 +330,7 @@ export function createAgentSessionAdapter(
     },
     async list(agent, scope, signal) {
       const rows = await httpRequest(client, {
-        ...history(
-          scopedPath(`/api/agents/${agent}/sessions`, scope),
-          signal,
-          'Agent history returned an invalid response.',
-        ),
+        ...history(scopedPath(`/api/agents/${agent}/sessions`, scope), signal),
         schema: agentSessionListResponseSchema,
       });
       return rows.map((row) => historyEntry(row, agent, scope));
@@ -321,7 +343,6 @@ export function createAgentSessionAdapter(
             entry.scope,
           ),
           signal,
-          'Agent replay returned an invalid response.',
         ),
         schema: agentSessionReplaySchema,
       });
@@ -338,7 +359,6 @@ export function createAgentSessionAdapter(
             entry.scope,
           ),
           signal,
-          'Agent rename returned an invalid response.',
         ),
         body: agentSessionRenameRequestSchema.parse({ title }),
         method: 'PATCH',
@@ -354,7 +374,6 @@ export function createAgentSessionAdapter(
             entry.scope,
           ),
           signal,
-          'Agent delete returned an invalid response.',
         ),
         method: 'DELETE',
         schema: agentSessionEmptyResponseSchema,

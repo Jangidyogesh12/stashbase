@@ -3,7 +3,17 @@ import { createContext, useContext, type PropsWithChildren } from 'react';
 export type ErrorReporter = (
   error: unknown,
   operation: string,
-  context?: { action?: string; method?: string; route?: string; reason?: string },
+  context?: {
+    action?: string;
+    method?: string;
+    route?: string;
+    reason?: string;
+    turn_id?: string | undefined;
+    connection_id?: string;
+    close_code?: number;
+    was_clean?: boolean;
+    close_initiator?: 'client' | 'server' | 'unknown';
+  },
 ) => void;
 const ErrorReportingContext = createContext<ErrorReporter | undefined>(undefined);
 

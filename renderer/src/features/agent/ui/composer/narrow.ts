@@ -2,9 +2,9 @@
  *  card is the `@container`, so these read the pane rather than the window.
  *
  *  At the narrow step the words a reader can do without go: the provider's
- *  name, the mode's name, the persona's name, and the model's name, so
- *  the model-and-thinking control reads as its level alone; while no level is
- *  known yet the name stays instead. At the narrowest step the level goes
+ *  name, the mode's name, the persona's name, and Default's Tools label.
+ *  The model-and-thinking control keeps its model and level, which the
+ *  folded triggers beside it leave room for. At the narrowest step those go
  *  too and every trigger is an icon; a hover tooltip still names each
  *  trigger's selection. */
 export const NARROW_LABEL = '@max-[34rem]:hidden';

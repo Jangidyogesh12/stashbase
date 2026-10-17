@@ -1,8 +1,5 @@
-/** The Agent conversation surface: the transcript, the connection strip that
- *  explains a stopped session, and the composer beneath them. The workspace
- *  only reads session state and hands verbs back to the runtime; every
- *  decision about what a connection means is a domain selector. */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+/** Conversation surface. Reads session state and invokes runtime actions. */
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -22,6 +19,7 @@ import {
 import { EMPTY_CHAT_PROMPTS } from '@/features/agent/domain/starters';
 import { useAgentAccess } from '@/features/agent/hooks/use-agent-access';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
+import { useAgentModelRefresh } from '@/features/agent/hooks/use-agent-model-refresh';
 import { useAgentPersona } from '@/features/agent/hooks/use-agent-persona';
 import { useAgentRuntimeUpdate } from '@/features/agent/hooks/use-agent-runtime-update';
 import { useRenameConversation } from '@/features/agent/hooks/use-conversation-history';
@@ -58,6 +56,7 @@ function ChatWorkspace({
   catalogPort,
   header = true,
   persona: personaApi,
+  tools: toolsApi,
   onBrowsePersonas,
   onOpenAgentSettings,
   onSignIn,
@@ -74,6 +73,7 @@ function ChatWorkspace({
   catalogPort: AgentCatalogPort;
 }) {
   const activeId = active.id;
+  const [crewSaving, setCrewSaving] = useState(false);
   const scopeEnvironment = useStore(runtime.store, (state) => state.scopeEnvironment);
   const state = useStore(
     active.store,
@@ -114,6 +114,7 @@ function ChatWorkspace({
     onRefresh: catalog.refresh,
   });
   const runtimeUpdate = useAgentRuntimeUpdate(active, catalogPort, catalog.refresh);
+  const modelRefresh = useAgentModelRefresh(active, catalog.refresh);
   const activeTurn = agentTurnIsActive(state.connection);
   const busy = agentSessionIsBusy(active.store.getState());
   const notice = connectionNotice(state.connection);
@@ -206,6 +207,7 @@ function ChatWorkspace({
               activeTurn={activeTurn}
               blocks={state.transcript}
               key={activeId}
+              modelRefresh={modelRefresh}
               onEditPrompt={composerShown ? editPrompt : undefined}
               onOpenExternal={onOpenExternal}
               onOpenSource={onOpenSource}
@@ -220,17 +222,19 @@ function ChatWorkspace({
         </div>
       </div>
 
-      <AgentWorkStatus session={active} onOpenSettings={onOpenAgentSettings} />
       {!scroll.atBottom && !empty && (
-        <Button
-          className="mx-auto mb-2"
-          size="compact"
-          variant="secondary"
-          onClick={scroll.scrollToBottom}
-        >
-          Back to latest
-        </Button>
+        <div className="relative z-10 h-0">
+          <Button
+            className="absolute bottom-2 left-1/2 -translate-x-1/2"
+            size="compact"
+            variant="secondary"
+            onClick={scroll.scrollToBottom}
+          >
+            Back to latest
+          </Button>
+        </div>
       )}
+      <AgentWorkStatus session={active} onOpenSettings={onOpenAgentSettings} />
       {notice && state.delivery !== 'unknown' && (
         <AgentConnectionNotice connection={state.connection} onReconnect={active.reconnect} />
       )}
@@ -256,7 +260,7 @@ function ChatWorkspace({
               onSkillChange={active.setSkill}
               onStop={active.interrupt}
               onSend={access.send}
-              placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Write with StashBase…'}
+              placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Message your agent…'}
               placeholderIsPrompt={promptPlaceholder !== null}
               queue={state.queuedPrompts.map(({ context, id, text }) => ({
                 files: context.flatMap((item) =>
@@ -265,7 +269,14 @@ function ChatWorkspace({
                 id,
                 text,
               }))}
+              // Left, what goes into the writing beside the attachments: the
+              // persona it is written in. Right, what follows the Agent: who
+              // runs the turn, under what permissions, on which model at
+              // what level; changing the Agent changes that whole group.
               leftSlot={
+                <AgentPersonaControl disabled={busy} onBrowse={onBrowsePersonas} picker={persona} />
+              }
+              rightSlot={
                 <>
                   <AgentProviderControl
                     activeAgent={selectedAgent}
@@ -276,9 +287,7 @@ function ChatWorkspace({
                         : [selectedAgent, ...catalog.agents]
                     }
                     disabled={busy || runtimeUpdate.busy || preferencesUnavailable}
-                    onAgentChange={(agent) => {
-                      void runtime.chooseAgent(agent);
-                    }}
+                    onAgentChange={(agent) => void runtime.chooseAgent(agent)}
                   />
                   {readyAgent && readyAgent.abilities.modes.length > 0 && (
                     <AgentPermissionMode
@@ -288,26 +297,26 @@ function ChatWorkspace({
                       onChange={active.setAccessMode}
                     />
                   )}
-                  <AgentPersonaControl
-                    disabled={busy}
-                    onBrowse={onBrowsePersonas}
-                    picker={persona}
-                  />
+                  {readyAgent && (
+                    <AgentThinkingControl
+                      activeAgent={readyAgent}
+                      onEffortChange={active.setEffort}
+                      onModelChange={active.setModel}
+                      onRequestCatalog={active.start}
+                      runtimeUpdate={readyAgent.updatable ? runtimeUpdate : undefined}
+                      state={{ ...state, activeTurn: busy || preferencesUnavailable }}
+                      tools={{
+                        api: toolsApi,
+                        chat: state.nativeSessionId ?? activeId,
+                        onChanged: active.applyPersona,
+                        onSaving: setCrewSaving,
+                      }}
+                    />
+                  )}
                 </>
               }
-              rightSlot={
-                readyAgent ? (
-                  <AgentThinkingControl
-                    activeAgent={readyAgent}
-                    onEffortChange={active.setEffort}
-                    onModelChange={active.setModel}
-                    onRequestCatalog={active.start}
-                    runtimeUpdate={readyAgent.updatable ? runtimeUpdate : undefined}
-                    state={{ ...state, activeTurn: busy || preferencesUnavailable }}
-                  />
-                ) : null
-              }
               sendable={
+                !crewSaving &&
                 !catalog.loading &&
                 !catalog.error &&
                 !runtimeUpdate.busy &&
@@ -378,17 +387,5 @@ export default function ManagedAgentWorkspace(props: AgentWorkspaceProps) {
   }, [catalog.readyAgents, props.runtime]);
 
   if (!active) return null;
-  return (
-    <ChatWorkspace
-      active={active}
-      {...props}
-      catalogPort={props.catalog}
-      catalog={{
-        agents: catalog.agents,
-        error: catalog.error,
-        loading: catalog.loading,
-        refresh: catalog.refresh,
-      }}
-    />
-  );
+  return <ChatWorkspace active={active} {...props} catalogPort={props.catalog} catalog={catalog} />;
 }

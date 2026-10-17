@@ -16,7 +16,7 @@ const exactSearchRangeSchema = z
   .tuple([z.number().int().nonnegative(), z.number().int().nonnegative()])
   .refine(([start, end]) => end >= start, 'match range end must not precede its start');
 
-export const exactSearchMatchSchema = z
+const exactSearchMatchSchema = z
   .object({
     line: z.number().int().positive(),
     pdfPage: z.number().int().positive().optional(),
@@ -51,5 +51,4 @@ export const exactSearchFailureSchema = z
   })
   .passthrough();
 
-export type ExactSearchRequestWire = z.infer<typeof exactSearchRequestSchema>;
 export type ExactSearchResponseWire = z.infer<typeof exactSearchResponseSchema>;

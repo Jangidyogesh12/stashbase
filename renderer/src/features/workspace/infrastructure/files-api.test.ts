@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { HttpClient } from '@/platform/http/client';
+import { createHttpClient, type HttpClient } from '@/platform/http/client';
+import { errorDiagnostic } from '@/protocols/http/telemetry';
 import { listing, listingFile } from '@/test/fakes/workspace';
 
 import { createFilesAdapter } from './files-api';
@@ -200,4 +201,58 @@ describe('files API', () => {
       api.renameEntry('/project/notes', { kind: 'file', path: 'a.md' }, 'b', signal),
     ).rejects.toMatchObject({ kind: 'rejected' });
   });
+});
+
+it('retains the original JSON failure and response identity for a failed listing', async () => {
+  const parseError = new SyntaxError('Unexpected end of JSON input');
+  const report = vi.fn();
+  const response = new Response(null, {
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'x-request-id': 'listing-request-42',
+    },
+  });
+  vi.spyOn(response, 'json').mockRejectedValue(parseError);
+  const api = createFilesAdapter(
+    createHttpClient('http://127.0.0.1:8090', async () => response, report),
+  );
+  await expect(api.load('/private/project', new AbortController().signal)).rejects.toMatchObject({
+    kind: 'invalid-response',
+    cause: parseError,
+  });
+  expect(report).toHaveBeenCalledTimes(1);
+  const diagnostic = errorDiagnostic(report.mock.calls[0]?.[0]);
+  expect(diagnostic).toMatchObject({
+    http_status: 200,
+    request_id: 'listing-request-42',
+    content_type: 'application/json',
+  });
+  expect(diagnostic.causes?.[0]).toMatchObject({
+    name: 'SyntaxError',
+    message: parseError.message,
+    stack: parseError.stack,
+  });
+  expect(report.mock.calls[0]?.slice(1)).toEqual([
+    'http-response',
+    { method: 'GET', route: '/api/files' },
+  ]);
+  expect(JSON.stringify(diagnostic)).not.toContain('/private/project');
+});
+
+it('keeps cancellation during the response body out of invalid-listing diagnostics', async () => {
+  const controller = new AbortController();
+  const report = vi.fn();
+  const response = new Response(null, { status: 200 });
+  vi.spyOn(response, 'json').mockImplementation(async () => {
+    controller.abort();
+    throw controller.signal.reason;
+  });
+  const api = createFilesAdapter(
+    createHttpClient('http://127.0.0.1:8090', async () => response, report),
+  );
+  await expect(api.load('/project', controller.signal)).rejects.toMatchObject({
+    name: 'AbortError',
+  });
+  expect(report).not.toHaveBeenCalled();
 });

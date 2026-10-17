@@ -1,3 +1,4 @@
+import { attachAgentDiagnostics } from './error-reporting.ts';
 import { telemetry } from './telemetry.ts';
 /**
  * Compatibility-first contract for the Agent Panel.
@@ -9,6 +10,7 @@ import { telemetry } from './telemetry.ts';
 import type { WebSocket } from 'ws';
 import { CLIS } from './terminal.ts';
 import { agentCliVersion, resolveAgentCli } from './agent-cli.ts';
+import { isNativeAgentId, nativeAgentCliSpec } from './native-agents.ts';
 import { agentSupportsInAppUpdate, agentBootstrapStatus } from './agent-runtime-installer.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import { rememberedCatalogFor } from './agent-model-catalog.ts';
@@ -75,6 +77,7 @@ export interface AgentCapabilities {
 
 export interface AgentConnectionOptions {
   windowId: string;
+  telemetryConnectionId?: string;
   effort?: string;
   resume?: string;
   access?: AgentAccessMode;
@@ -84,6 +87,8 @@ export interface AgentConnectionOptions {
   folder?: string;
   /** The library persona this Chat runs under; absent runs none. */
   persona?: string;
+  /** The Default chat's crew choices, before or after native identification. */
+  crew?: string;
 }
 
 export type AgentSessionFolderResolution =
@@ -177,33 +182,6 @@ export type AgentSessionTermination = {
   folder: string;
 };
 
-export interface FolderBoundAgentSession {
-  boundFolder(): string | null;
-  dispose(termination?: AgentSessionTermination): void;
-}
-
-/** Dispose exactly the sessions bound to `folderAbs` (filesystem identity
- * comparison), leaving sessions bound to other folders running. Shared by the
- * runtime registries so folder removal has one teardown semantic. */
-export function disposeSessionsBoundToFolder<T extends FolderBoundAgentSession>(
-  sessions: Set<T>,
-  folderAbs: string,
-): void {
-  for (const session of [...sessions]) {
-    const bound = session.boundFolder();
-    let matches = false;
-    try {
-      matches = bound != null && filesystemPath.equal(bound, folderAbs);
-    } catch {
-      matches = false;
-    }
-    if (matches) {
-      session.dispose({ kind: 'scope-removed', folder: folderAbs });
-      sessions.delete(session);
-    }
-  }
-}
-
 export interface AgentRuntimeDescriptor {
   id: AgentId;
   label: string;
@@ -231,10 +209,7 @@ export interface AgentRuntimeDescriptor {
 const adapters = new Map<AgentId, AgentAdapter>();
 
 export function agentExecutableFor(id: Exclude<AgentId, 'stashbase'>): string | null {
-  const config = id === 'claude'
-    ? { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude' }
-    : { name: 'codex', envNames: ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'], logLabel: 'Codex' };
-  return resolveAgentCli(config, () => {});
+  return resolveAgentCli(nativeAgentCliSpec(id), () => {});
 }
 
 export function registerAgentAdapter(adapter: AgentAdapter): void {
@@ -278,7 +253,7 @@ export function runtimeDescriptorFor(
 }
 
 export function agentAdapter(id: string): AgentAdapter | null {
-  return id === 'stashbase' || id === 'claude' || id === 'codex' ? adapters.get(id) ?? null : null;
+  return id === 'stashbase' || isNativeAgentId(id) ? adapters.get(id) ?? null : null;
 }
 
 /** Native discovery is performed at request time so a CLI installed or
@@ -308,16 +283,17 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
     ws.close();
     return;
   }
+  attachAgentDiagnostics(ws, adapter.id, options.telemetryConnectionId);
   const runtime = runtimeDescriptorFor(adapter);
   if (!runtime.installed || runtime.state !== 'available') {
     const message = runtime.error ?? `${adapter.label} is not ready.`;
-    telemetry.captureWarning(message, { source: 'agent', operation: 'connection', runtime: adapter.id });
+    telemetry.captureWarning(message, { source: 'agent', operation: 'connection', runtime: adapter.id, context: { connection_id: options.telemetryConnectionId } });
     ws.send(JSON.stringify({ t: 'error', message }));
     ws.close();
     return;
   }
   if (adapter.id !== 'stashbase' && !agentExecutableFor(adapter.id)) {
-    telemetry.captureWarning(`${adapter.label} CLI is not available.`, { source: 'agent', operation: 'connection', runtime: adapter.id });
+    telemetry.captureWarning(`${adapter.label} CLI is not available.`, { source: 'agent', operation: 'connection', runtime: adapter.id, context: { connection_id: options.telemetryConnectionId } });
     ws.send(JSON.stringify({ t: 'error', message: `${adapter.label} CLI is not available.` }));
     ws.close();
     return;
@@ -326,7 +302,7 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
     if (adapter.id !== 'stashbase') ensureAgentMcp(adapter.id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    telemetry.captureError(error, { source: 'agent', operation: 'mcp-connection', runtime: adapter.id });
+    telemetry.captureError(error, { source: 'agent', operation: 'mcp-connection', runtime: adapter.id, context: { connection_id: options.telemetryConnectionId } });
     ws.send(JSON.stringify({ t: 'error', message: `Could not connect StashBase MCP: ${message}` }));
     ws.close();
     return;

@@ -46,14 +46,8 @@ function personaRequest(
   return {
     error: AgentSessionError,
     failureSchema: agentRuntimeFailureSchema,
-    messages: {
-      'invalid-response': 'The persona service returned an unexpected response.',
-      unauthorized: 'Personas are unavailable.',
-      unavailable: 'StashBase could not reach the Agent service.',
-    },
     method,
     path,
-    serverMessage: true,
     signal,
   };
 }

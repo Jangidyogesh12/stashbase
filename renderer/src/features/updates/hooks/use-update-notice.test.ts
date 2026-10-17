@@ -54,15 +54,15 @@ function harness(read: UpdateResult, answer: UpdateResult = read) {
 
 describe('useUpdateNotice', () => {
   it('subscribes, reads once, and volunteers exactly what the phase table says', async () => {
-    const updates = harness(accepted({ phase: 'available', version: '1.5.0' }));
+    const updates = harness(accepted({ phase: 'ready', version: '1.5.0' }));
     const { result } = renderHook(() => useUpdateNotice(updates.port));
 
     await waitFor(() => expect(result.current.offer).not.toBeNull());
     expect(updates.port.subscribe).toHaveBeenCalledTimes(1);
     expect(updates.port.read).toHaveBeenCalledTimes(1);
     expect(result.current.offer).toEqual({
-      actionLabel: 'Update and restart',
-      message: 'StashBase 1.5.0 is available.',
+      actionLabel: 'Restart to update',
+      message: 'StashBase 1.5.0 is ready to install.',
     });
   });
 
@@ -80,31 +80,31 @@ describe('useUpdateNotice', () => {
   });
 
   it('hides a dismissed offer and volunteers the next thing it has to say', async () => {
-    const updates = harness(accepted({ phase: 'available', version: '1.5.0' }));
+    const updates = harness(accepted({ phase: 'ready', version: '1.5.0' }));
     const { result } = renderHook(() => useUpdateNotice(updates.port));
     await waitFor(() => expect(result.current.offer).not.toBeNull());
 
     act(() => result.current.dismiss());
     expect(result.current.offer).toBeNull();
 
-    act(() => updates.push({ phase: 'ready', version: '1.5.0' }));
-    expect(result.current.offer?.message).toBe('StashBase 1.5.0 is ready to install.');
+    act(() => updates.push({ phase: 'error' }));
+    expect(result.current.offer?.message).toBe('StashBase could not finish the update.');
   });
 
   it('volunteers the same phase again when it names a newer version', async () => {
-    const updates = harness(accepted({ phase: 'available', version: '1.5.0' }));
+    const updates = harness(accepted({ phase: 'ready', version: '1.5.0' }));
     const { result } = renderHook(() => useUpdateNotice(updates.port));
     await waitFor(() => expect(result.current.offer).not.toBeNull());
 
     act(() => result.current.dismiss());
-    act(() => updates.push({ phase: 'available', version: '1.6.0' }));
-    expect(result.current.offer?.message).toBe('StashBase 1.6.0 is available.');
+    act(() => updates.push({ phase: 'ready', version: '1.6.0' }));
+    expect(result.current.offer?.message).toBe('StashBase 1.6.0 is ready to install.');
   });
 
   it('runs the primary action when the table names the action primary', async () => {
     const updates = harness(accepted({ phase: 'ready', version: '1.5.0' }));
     const { result } = renderHook(() => useUpdateNotice(updates.port));
-    await waitFor(() => expect(result.current.offer?.actionLabel).toBe('Install and restart'));
+    await waitFor(() => expect(result.current.offer?.actionLabel).toBe('Restart to update'));
 
     await act(async () => result.current.act());
     expect(updates.port.runPrimaryAction).toHaveBeenCalledTimes(1);

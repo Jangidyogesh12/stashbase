@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/badge/Discord-support%20%26%20chat-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/zsRZH4PTq9)
 
 StashBase is an open-source, local-first writing workspace where you can write
-with Claude and Codex, drawing on your own sources and past work.
+with Claude, Codex, and Antigravity, drawing on your own sources and past work.
 
 - 🔎 **From files to context.** Give your agent fast, accurate search across your
   sources with text extraction and semantic search.
@@ -64,8 +64,8 @@ troubleshooting.
 ### Start Writing
 
 1. **Enter a project.** Open or create a local folder.
-2. **Choose an Agent.** Select Claude or Codex and complete its setup
-   with your provider account. If you can't use either, the built-in
+2. **Choose an Agent.** Select Claude, Codex, or Antigravity and complete its
+   setup with your provider account. If you can't use any of them, the built-in
    **Default Agent** is available as a fallback. Sign in to StashBase to use
    its free credits.
 3. **Talk it through.** Try: “I want to write a blog post about Humanizer.
@@ -97,11 +97,11 @@ without an account. PDF text extraction and OCR run locally, with required
 components downloaded on first use.
 
 Agent conversations send your prompts and relevant context to model services.
-Claude and Codex use your provider accounts; the Default Agent connects
+Claude, Codex, and Antigravity use your provider accounts; the Default Agent connects
 through StashBase's hosted model gateway.
 
 **Search by meaning** requires your own OpenAI or OpenRouter key in
-**Settings → Advanced → Search by Meaning**. It sends source text and search
+**Settings → Advanced → Search by meaning**. It sends source text and search
 queries to your chosen embedding provider. Default Agent credits don't cover
 this service.
 

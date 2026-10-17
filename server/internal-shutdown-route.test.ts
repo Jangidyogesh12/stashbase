@@ -6,10 +6,10 @@ import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
 
 test('internal shutdown requires the process-private token and runs after responding', async (t) => {
   const app = express();
-  let shutdowns = 0;
+  const shutdowns: string[] = [];
   mountInternalShutdownRoute(app, {
     token: 'private-token',
-    shutdown: () => { shutdowns += 1; },
+    shutdown: (reason) => { shutdowns.push(reason); },
   });
   const server: HttpServer = app.listen(0, '127.0.0.1');
   t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -19,13 +19,13 @@ test('internal shutdown requires the process-private token and runs after respon
   const url = `http://127.0.0.1:${address.port}/api/internal/shutdown`;
 
   assert.equal((await fetch(url, { method: 'POST' })).status, 403);
-  assert.equal(shutdowns, 0);
+  assert.equal(shutdowns.length, 0);
 
   const accepted = await fetch(url, {
     method: 'POST',
-    headers: { 'x-stashbase-shutdown-token': 'private-token' },
+    headers: { 'x-stashbase-shutdown-token': 'private-token', 'x-stashbase-shutdown-reason': 'app_update' },
   });
   assert.equal(accepted.status, 202);
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(shutdowns, 1);
+  assert.deepEqual(shutdowns, ['app_update']);
 });

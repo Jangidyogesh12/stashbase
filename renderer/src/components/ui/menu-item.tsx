@@ -24,10 +24,14 @@
  */
 'use client';
 
+import { ChevronDown } from 'lucide-react';
 import { forwardRef, type HTMLAttributes } from 'react';
 
 import { MenuItemCheck } from '@/components/internal/menu-item-check';
+import { MenuItemSwitch } from '@/components/internal/menu-item-switch';
+import { menuRowTone } from '@/components/internal/menu-row-tone';
 import { useProximityRow } from '@/components/internal/proximity-row';
+import { Badge } from '@/components/ui/badge';
 import { WeightedLabel } from '@/components/ui/weighted-label';
 import type { IconComponent } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
@@ -55,6 +59,9 @@ interface MenuItemProps extends HTMLAttributes<HTMLDivElement> {
   /** Optional explanatory copy for choices whose consequence cannot be
    *  understood from the short label alone. */
   description?: string;
+  /** A short neutral tag on the label's line, for a fact a reader should
+   *  weigh before choosing the row (a model's relative cost). */
+  badge?: string;
   /** How the row lays its text out. "stacked" — the default — truncates a
    *  long label on one line and puts any description under it. "inline" puts
    *  a short description beside the label, for compact choice menus.
@@ -75,6 +82,15 @@ interface MenuItemProps extends HTMLAttributes<HTMLDivElement> {
    *  rather than choosing something. It sits where a chosen row draws its
    *  check, so the two never appear together. */
   trailingIcon?: IconComponent;
+  /** When a boolean, the row is an on/off toggle (role="menuitemcheckbox")
+   *  and draws a switch at its trailing edge. Activating the row flips it
+   *  through `onSelect`. Not combined with `checked`. */
+  switched?: boolean;
+  /** Makes the description a compact button with its own action, for a
+   *  row whose second line names a setting the reader can change (a crew
+   *  member's model). ArrowRight on the focused row runs it too, the way it
+   *  opens a submenu. `label` is the button's accessible name. */
+  descriptionAction?: { label: string; onSelect(): void };
   /** Whether activating the row closes the surface. The primitive's default
    *  (closing) is right for a choice and an action; a row that swaps the
    *  surface's own content for a deeper list passes false. */
@@ -87,12 +103,15 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       icon: Icon,
       label,
       description,
+      badge,
       layout = 'stacked',
       checked,
       onSelect,
       disabled,
       trailingAction,
       trailingIcon: TrailingIcon,
+      switched,
+      descriptionAction,
       closeOnClick,
       className,
       onClick,
@@ -130,6 +149,12 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
       onKeyDown?.(event);
       if (event.defaultPrevented || disabled) return;
+      if (descriptionAction && event.key === 'ArrowRight') {
+        event.preventDefault();
+        event.stopPropagation();
+        descriptionAction.onSelect();
+        return;
+      }
       if (trailingAction && (event.key === 'Delete' || event.key === 'Backspace')) {
         event.preventDefault();
         event.stopPropagation();
@@ -138,7 +163,8 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       }
     };
 
-    const accessibleLabel = description ? `${label}. ${description}` : label;
+    const named = badge ? `${label}, ${badge}` : label;
+    const accessibleLabel = description ? `${named}. ${description}` : named;
     const itemClassName = cn(
       // Fixed height (was py-2 around a 19.5px line box ≈ 35.5px) so the
       // text-box trim on the label doesn't shrink the row. shrink-0 because
@@ -149,6 +175,17 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       stackedDescription && 'min-h-14',
       disabled && 'pointer-events-none opacity-50',
       className,
+    );
+
+    const labelText = (
+      <WeightedLabel
+        className={cn('min-w-0 flex-1', menuRowTone(isActive || checked === true))}
+        data-menu-item-label
+        emphasized={false}
+        overflow={wrapsLabel ? 'wrap' : 'truncate'}
+      >
+        {label}
+      </WeightedLabel>
     );
 
     const content = (
@@ -180,33 +217,66 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
           )}
           data-menu-item-content
         >
-          <WeightedLabel
-            className="min-w-0 flex-1"
-            data-menu-item-label
-            emphasized={false}
-            lit={isActive || checked === true}
-            overflow={wrapsLabel ? 'wrap' : 'truncate'}
-          >
-            {label}
-          </WeightedLabel>
-          {description && (
-            <span
+          {badge ? (
+            <span className="flex min-w-0 items-center gap-2">
+              {labelText}
+              <Badge aria-hidden="true" className="-my-1 shrink-0" size="compact">
+                {badge}
+              </Badge>
+            </span>
+          ) : (
+            labelText
+          )}
+          {description && descriptionAction ? (
+            <button
+              aria-label={descriptionAction.label}
               className={cn(
                 sizeClasses.caption,
-                'font-normal text-muted-foreground',
-                inlineDescription
-                  ? 'min-w-0 truncate'
-                  : 'mt-1 block leading-[17px] whitespace-normal',
+                // The hover pill reaches past the text by its padding while
+                // the text stays on the label's edge; see footer actions.
+                shape.chip,
+                'relative mt-0.5 -ml-1 inline-flex w-fit max-w-full items-center gap-0.5 px-1 py-0.5 leading-[17px] font-normal text-muted-foreground outline-none',
+                'transition-colors duration-fast hover:bg-hover hover:text-foreground',
               )}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                descriptionAction.onSelect();
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              tabIndex={-1}
+              type="button"
             >
-              {description}
-            </span>
+              <span className="min-w-0 truncate">{description}</span>
+              <ChevronDown aria-hidden="true" className="shrink-0" size={12} strokeWidth={1.75} />
+            </button>
+          ) : (
+            description && (
+              <span
+                className={cn(
+                  sizeClasses.caption,
+                  'font-normal text-muted-foreground',
+                  inlineDescription
+                    ? 'min-w-0 truncate'
+                    : 'mt-1 block leading-[17px] whitespace-normal',
+                )}
+              >
+                {description}
+              </span>
+            )
           )}
         </span>
         {trailingAction && TrailingActionIcon && (
           <Button
             aria-label={trailingAction.label}
-            className="-my-1 -mr-1 shrink-0"
+            // Shown on the highlighted row only, the way a renamable name
+            // offers its pencil on hover: a column of identical glyphs down
+            // every row read as clutter. It keeps its room at rest, so the
+            // row never reflows, and stays on where there is no hover.
+            className={cn(
+              '-my-1 -mr-1 shrink-0 transition-[color,opacity] duration-fast',
+              isActive ? 'opacity-100' : 'opacity-0 pointer-coarse:opacity-100',
+            )}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -220,6 +290,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
             <TrailingActionIcon aria-hidden="true" />
           </Button>
         )}
+        {typeof switched === 'boolean' && <MenuItemSwitch on={switched} />}
         <MenuItemCheck
           checked={checked === true}
           className="shrink-0 text-foreground"
@@ -251,7 +322,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       ref: mergeRef,
       'data-proximity-index': index,
       'aria-label': accessibleLabel,
-      'aria-keyshortcuts': trailingAction ? 'Delete' : undefined,
+      'aria-keyshortcuts': trailingAction ? 'Delete' : descriptionAction ? 'ArrowRight' : undefined,
       onClick: handleActivate,
       onKeyDown: handleKeyDown,
       className: itemClassName,
@@ -259,12 +330,15 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
     };
     return renderMenuItem({
       radio: typeof checked === 'boolean',
+      toggle: typeof switched === 'boolean' ? { on: switched } : undefined,
       value: index,
       disabled,
       closeOnClick,
       label: accessibleLabel,
       element:
-        typeof checked === 'boolean' ? (
+        typeof switched === 'boolean' ? (
+          <div role="menuitemcheckbox" aria-checked={switched} {...primitiveRow} />
+        ) : typeof checked === 'boolean' ? (
           <div role="menuitemradio" aria-checked={checked} {...primitiveRow} />
         ) : (
           <div role="menuitem" {...primitiveRow} />

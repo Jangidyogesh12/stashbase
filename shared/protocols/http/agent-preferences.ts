@@ -18,6 +18,7 @@ export const projectAgentPreferenceSchema = z.object({
     stashbase: effortSchema.optional(),
     codex: effortSchema.optional(),
     claude: effortSchema.optional(),
+    antigravity: effortSchema.optional(),
   }).optional(),
   persona: agentPersonaIdSchema.nullable().optional(),
 });

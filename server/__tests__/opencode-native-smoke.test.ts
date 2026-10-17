@@ -1,3 +1,4 @@
+import './isolated-home.ts';
 import { attachmentPdf } from './attachment-fixtures.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -20,10 +21,21 @@ import {
   BUNDLED_OPENCODE_VERSION,
   buildOpenCodeConfig,
   bundledOpenCodeExecutable,
-  safeOpenCodeInheritedEnvironment,
+  openCodeRuntimeEnvironment,
+  createOpenCodeSessionRuntime,
+  stopOpenCodeRuntime,
 } from '../opencode-runtime.ts';
+import { setHostedAccountSession } from '../app-config.ts';
+import { setDefaultAgentTool } from '../default-agent-tools.ts';
+import { parseToolCatalog } from '../agent-tool-catalog.ts';
 
 type Event = LegacyEvent | EventPermissionAsked;
+
+/** Two hosted profiles, one under the id the rest of this smoke sends. */
+const SMOKE_PROFILES = [
+  { id: 'stashbase-agent-default', version: 4, displayName: 'Writer Fast', contextTokenLimit: 1_000_000, outputTokenLimit: 65_536, isDefault: true },
+  { id: 'writer-pro', version: 9, displayName: 'Writer Pro', contextTokenLimit: 200_000, outputTokenLimit: 16_000, isDefault: false },
+];
 
 class PanelSocket extends EventEmitter {
   OPEN = 1;
@@ -88,16 +100,21 @@ test('packaged OpenCode resolves from the explicit resources path before depende
 });
 
 test('pinned bundled OpenCode completes one SDK session against a fake compatible model gateway', {
-  timeout: 30_000,
+  // Windows also runs the project-skill tool round trip in this fixture.
+  timeout: 60_000,
 }, async (t) => {
   let stage = 'startup';
   let completed = false;
+  const skillEvents: string[] = [];
   const subscriptions = new AbortController();
   let panel: OpenCodePanelSession | undefined;
   let ownedBroker: HostedAgentBroker | undefined;
   let ownedChild: ReturnType<typeof spawn> | undefined;
   t.signal.addEventListener('abort', () => {
-    if (!completed) console.error(`Native OpenCode smoke stopped during: ${stage}`);
+    if (!completed) {
+      console.error(`Native OpenCode smoke stopped during: ${stage}`);
+      if (stage === 'project skill invocation') console.error(`Skill event types: ${skillEvents.slice(-12).join(', ')}`);
+    }
   });
   const executable = bundledOpenCodeExecutable();
   assert.ok(executable, 'bundled OpenCode postinstall target is missing');
@@ -105,32 +122,59 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
 
   // Windows TEMP can use an 8.3 alias; the SDK and panel must bind the same
   // canonical directory rather than canonicalizing only the panel's scope.
-  const temporaryRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-opencode-native-')));
+  const fixtureRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-opencode-native-')));
+  const temporaryRoot = path.join(fixtureRoot, 'project');
+  const runtimeRoot = path.join(fixtureRoot, 'runtime');
+  fs.mkdirSync(temporaryRoot);
+  // Reproduce a project below a user's home without a Git boundary. Skills in
+  // these ancestor directories must not enter the project model request.
+  const skillSources = ['.agents/skills', '.claude/skills', '.opencode/skills', '.opencode/skill'];
+  for (const [index, source] of skillSources.entries()) {
+    for (const [scope, root] of [['ancestor', fixtureRoot], ['project', temporaryRoot]] as const) {
+      const name = `${scope}-writing-${index}`;
+      const folder = path.join(root, source, name);
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, 'SKILL.md'), `---\nname: ${name}\ndescription: ${scope.toUpperCase()}_SKILL_${index}\n---\n${scope.toUpperCase()}_SKILL_BODY_${index}\n`);
+    }
+  }
+  fs.writeFileSync(path.join(temporaryRoot, 'AGENTS.md'), 'PROJECT_INSTRUCTIONS_RETAINED\n');
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-outside-probe-'));
   const externalFile = path.join(outside, 'reference.txt');
   fs.writeFileSync(externalFile, 'EXPLICIT_EXTERNAL_READ_OK');
   t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
   const gatewayRequests: Array<Record<string, unknown>> = [];
-  const gatewayProfiles: unknown[] = [];
-  const gatewayVersions: unknown[] = [];
-  const catalog = [
-    { id: 'stashbase-agent-default', version: 1, label: 'Gemini', isDefault: true, contextTokenLimit: 1000000, outputTokenLimit: 16384, reasoningEnabled: true },
-    { id: 'second-model', version: 1, label: 'Other model', isDefault: false, contextTokenLimit: 200000, outputTokenLimit: 4096, reasoningEnabled: false },
-  ];
+  const gatewayModels: Array<{ profile: string | undefined; version: string | undefined }> = [];
   let nextTool: { name: string; arguments: string } | undefined;
+  const reviews: Array<Record<string, unknown>> = [];
+  let delayedReview: Promise<void> | undefined;
+  let releaseReview: (() => void) | undefined;
+  let reviewDisconnected = false;
+  let finishReview: (() => void) | undefined;
+  t.after(() => releaseReview?.());
   let emptyResponses = 0;
   let emptyAfterTool = false;
-  let rejectConfiguration = false;
+  let interruptions = 0;
+  let interruptionsAfterTool = 0;
+  let partialInterruption = false;
+  let finishPartial: () => void;
   const gateway = http.createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    gatewayProfiles.push(request.headers['x-stashbase-agent-profile']);
-    gatewayVersions.push(request.headers['x-stashbase-agent-profile-version']);
     gatewayRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>);
-    if (rejectConfiguration) {
-      response.writeHead(422, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ code: 'agent_model_configuration_changed', message: 'The selected model configuration has changed. Reconnect to refresh the available models, then review and send again.' }));
-      return;
+    gatewayModels.push({
+      profile: request.headers['x-stashbase-agent-profile'] as string | undefined,
+      version: request.headers['x-stashbase-agent-profile-version'] as string | undefined,
+    });
+    const body = gatewayRequests.at(-1)!;
+    const reviewing = Array.isArray(body.messages) && body.messages.some((message) =>
+      message.role === 'system' && String(message.content).startsWith('Review one proposed action'));
+    if (reviewing) {
+      reviews.push(body);
+      if (delayedReview) {
+        response.on('close', () => { if (!response.writableEnded) reviewDisconnected = true; });
+        response.on('finish', () => finishReview?.());
+        await delayedReview;
+      }
     }
     const tool = nextTool ?? (gatewayRequests.length === 1
       ? { name: 'read', arguments: JSON.stringify({ filePath: externalFile }) }
@@ -144,8 +188,23 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
       emptyAfterTool = false;
       emptyResponses = 1;
     }
+    if (tool && interruptionsAfterTool) {
+      interruptions = interruptionsAfterTool;
+      interruptionsAfterTool = 0;
+    }
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     const base = { id: 'chatcmpl-stashbase-smoke', object: 'chat.completion.chunk', created: 1, model: 'stashbase-agent-default' };
+    if (!tool && interruptions > 0) {
+      interruptions--;
+      if (partialInterruption) {
+        partialInterruption = false;
+        const observed = new Promise<void>(resolve => { finishPartial = resolve; response.once('close', resolve); });
+        response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: 'assistant', content: 'Partial reply retained' }, finish_reason: null }] })}\n\n`);
+        await observed;
+      }
+      response.end('data: {"error":{"code":"agent_provider_unavailable","message":"The Agent model provider interrupted the response."}}\n\n');
+      return;
+    }
     response.write(`data: ${JSON.stringify({
       ...base,
       choices: [{
@@ -155,7 +214,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
           tool_calls: [{
             index: 0, id: `smoke-tool-${gatewayRequests.length}`, type: 'function', function: tool,
           }],
-        } : { role: 'assistant', content: empty ? '' : 'probe ok' },
+        } : { role: 'assistant', content: reviewing ? 'ALLOW' : empty ? '' : 'probe ok' },
         finish_reason: null,
       }],
     })}\n\n`);
@@ -183,7 +242,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
       } finally {
         gateway.closeAllConnections();
         await new Promise<void>((resolve) => gateway.close(() => resolve()));
-        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }
     }
   });
@@ -199,7 +258,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const serverPort = await unusedPort();
   const username = 'stashbase';
   const password = 'native-smoke-secret';
-  const config = buildOpenCodeConfig(model, '/unused/stashbase-mcp', {}, undefined, catalog);
+  const config = buildOpenCodeConfig(model, '/unused/stashbase-mcp', {}, undefined, SMOKE_PROFILES, temporaryRoot);
   config.mcp = {
     stashbase: {
       type: 'local',
@@ -216,20 +275,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const child = spawn(executable, [
     'serve', '--hostname=127.0.0.1', `--port=${serverPort}`, '--pure', '--log-level=WARN',
   ], {
-    env: {
-      ...safeOpenCodeInheritedEnvironment({
-        ...process.env,
-        ...(process.platform === 'darwin' ? { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', SHELL: '/bin/zsh' } : {}),
-      }),
-      HOME: temporaryRoot,
-      USERPROFILE: temporaryRoot,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
-      OPENCODE_SERVER_USERNAME: username,
-      OPENCODE_SERVER_PASSWORD: password,
-      XDG_DATA_HOME: path.join(temporaryRoot, 'data'),
-      XDG_CONFIG_HOME: path.join(temporaryRoot, 'config'),
-      XDG_CACHE_HOME: path.join(temporaryRoot, 'cache'),
-    },
+    env: openCodeRuntimeEnvironment(config, username, password, runtimeRoot, {
+      ...process.env,
+      ...(process.platform === 'darwin' ? { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', SHELL: '/bin/zsh' } : {}),
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   ownedChild = child;
@@ -287,7 +336,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const subscription = await client.event.subscribe({ signal: subscriptions.signal, sseMaxRetryAttempts: 1 });
   const events: Event[] = [];
   const translator = new OpenCodeEventTranslator();
-  const session = (await client.session.create({ throwOnError: true, body: { title: 'Native Smoke' } })).data;
+  const session = (await client.session.create({ throwOnError: true, body: { title: 'New Chat' } })).data;
   assert.ok(filesystemPath.equal(session.directory, temporaryRoot),
     `SDK session scope ${JSON.stringify(session.directory)} differs from fixture ${JSON.stringify(temporaryRoot)}`);
   translator.bindSession(session.id);
@@ -316,6 +365,12 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     },
   });
   await consumed;
+  assert.equal(gatewayRequests.length, 2, 'one read and its answer must not incur an extra title model call');
+  const initialRequest = JSON.stringify(gatewayRequests[0]);
+  assert.ok(!initialRequest.includes('ANCESTOR_SKILL_'), 'ancestor skills must not reach the model');
+  assert.match(initialRequest, /PROJECT_INSTRUCTIONS_RETAINED/);
+  for (const index of skillSources.keys()) assert.ok(initialRequest.includes(`PROJECT_SKILL_${index}`));
+  assert.doesNotMatch(initialRequest, /PROJECT_SKILL_BODY_/);
   assert.ok(events.some(event => event.type === 'permission.asked'), 'external read must request permission');
   assert.ok(JSON.stringify(gatewayRequests.slice(1)).includes('EXPLICIT_EXTERNAL_READ_OK'), 'authorized external read must reach model');
   assert.ok(events.some((event) => (
@@ -391,17 +446,20 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   panel = new OpenCodePanelSession(socket as unknown as WebSocket, {
     windowId: 'native-modes', folder: temporaryRoot, access: 'acceptEdits',
   }, {
-    models: () => catalog,
+    models: async () => SMOKE_PROFILES,
     client: async () => client,
-    beginTurn: (turnId, profile) => broker.beginTurn('native-smoke', turnId, profile, catalog.find(model => model.id === profile)?.version),
+    beginTurn: (turnId, selected) => broker.beginTurn('native-smoke', turnId, selected),
+    tools: () => [],
+    complete: (profile, messages, signal) => broker.complete('native-smoke', profile, messages, signal),
+    runTool: async () => { throw new Error('No tools in this smoke.'); },
     endTurn: () => broker.endTurn('native-smoke'),
     onExit: () => () => {}, close: async () => {},
   });
   await socket.waitFor('ready');
   const modeFile = path.join(temporaryRoot, 'mode-result.md');
-  const runPanelTurn = async (allowError = false) => {
+  const runPanelTurn = async (allowError = false, text = 'Run the fixture probe.') => {
     const ended = socket.waitFor('turn-end', allowError);
-    socket.request({ t: 'prompt', text: 'Run the fixture probe.' });
+    socket.request({ t: 'prompt', text });
     await ended;
   };
   nextTool = { name: 'stashbase_write_file', arguments: JSON.stringify({ path: modeFile, content: 'Edit allowed' }) };
@@ -412,6 +470,19 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   nextTool = { name: 'stashbase_write_file', arguments: JSON.stringify({ path: modeFile, content: 'Plan must not overwrite' }) };
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Edit allowed', 'Plan must reject a provider that attempts a write');
+
+  // The main agent stays on the default profile; a model pick is not a role.
+  stage = 'panel main model';
+  const firstPanelCall = gatewayModels.findIndex((entry) => entry.version !== undefined);
+  assert.deepEqual(gatewayModels[firstPanelCall], { profile: 'stashbase-agent-default', version: '4' });
+  socket.request({ t: 'set-model', model: 'writer-pro' });
+  const beforeChoice = gatewayRequests.length;
+  await runPanelTurn();
+  assert.ok(gatewayRequests.length > beforeChoice);
+  for (let index = beforeChoice; index < gatewayRequests.length; index++) {
+    assert.equal(gatewayRequests[index]!.model, 'stashbase-agent-default');
+    assert.deepEqual(gatewayModels[index], { profile: 'stashbase-agent-default', version: '4' });
+  }
   nextTool = { name: 'bash', arguments: JSON.stringify({ command: `echo changed > '${modeFile}'`, description: 'Attempt a command in Plan' }) };
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Edit allowed', 'Plan must reject shell writes');
@@ -423,6 +494,34 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Ask approved', 'switching out of Plan must restore approved writes');
   assert.equal(socket.events.filter(event => event.t === 'permission').length, 1);
+
+  stage = 'Auto command review';
+  socket.request({ t: 'set-mode', mode: 'auto' });
+  const autoStart = socket.events.length;
+  nextTool = { name: 'bash', arguments: JSON.stringify({ command: 'pwd', description: 'Show the project directory' }) };
+  await runPanelTurn(false, 'Show the project directory with pwd.');
+  assert.equal(reviews.length, 1, 'Auto must review the exact native command through the hosted broker');
+  assert.equal(reviews[0].tools, undefined, 'the reviewer has no tools');
+  assert.match(JSON.stringify(reviews[0].messages), /Show the project directory with pwd/);
+  const autoEvents = socket.events.slice(autoStart) as Array<{ t: string; content?: string; isError?: boolean }>;
+  assert.equal(autoEvents.filter(event => event.t === 'permission').length, 0);
+  assert.ok(autoEvents.some(event => event.t === 'tool-result' && !event.isError && event.content?.includes(temporaryRoot)));
+
+  stage = 'Auto decision timeout with delayed accounting';
+  delayedReview = new Promise<void>(resolve => { releaseReview = resolve; });
+  const drained = new Promise<void>(resolve => { finishReview = resolve; });
+  const delayedStart = socket.events.length;
+  nextTool = { name: 'bash', arguments: JSON.stringify({ command: 'pwd', description: 'Show the project directory again' }) };
+  await runPanelTurn(false, 'Show the project directory again with pwd.');
+  assert.equal(socket.events.slice(delayedStart).filter(event => event.t === 'permission').length, 1,
+    'slow Auto review must fall back to manual approval');
+  await runPanelTurn();
+  releaseReview!();
+  await drained;
+  assert.equal(reviewDisconnected, false, 'manual fallback and the next turn must not abort an accepted review');
+  assert.equal(reviews.length, 2);
+  assert.equal(reviews[1].max_tokens, 256);
+  delayedReview = undefined;
 
   socket.request({ t: 'set-mode', mode: 'acceptEdits' });
   stage = 'empty response recovery';
@@ -449,46 +548,37 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.deepEqual(failureEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
   stage = 'follow-up after failure';
   await runPanelTurn(); // The same native session remains usable after the failure.
-  stage = 'switch hosted model in the same conversation';
-  socket.request({ t: 'set-model', model: 'second-model' });
-  await runPanelTurn();
-  assert.equal(gatewayProfiles.at(-1), 'second-model');
-  assert.equal(gatewayVersions.at(-1), '1');
-  assert.equal(gatewayRequests.at(-1)?.model, 'second-model');
-  stage = 'stale configuration fails visibly without native retry';
-  const staleStart = socket.events.length;
-  const callsBeforeStale = gatewayRequests.length;
-  rejectConfiguration = true;
+
+  stage = 'hosted interruption after file write';
+  const interruptedStart = socket.events.length;
+  const callsBeforeInterruption = gatewayRequests.length;
+  nextTool = { name: 'stashbase_write_file', arguments: JSON.stringify({ path: modeFile, content: 'Saved before interruption' }) };
+  interruptionsAfterTool = 2;
   await runPanelTurn(true);
-  assert.equal(gatewayRequests.length - callsBeforeStale, 1);
-  assert.ok(socket.events.slice(staleStart).some(event => event.t === 'error' && 'message' in event && String(event.message).includes('Reconnect to refresh')));
-  assert.ok(socket.events.slice(staleStart).some(event => event.t === 'exit'));
-  rejectConfiguration = false;
-  catalog[1] = { ...catalog[1]!, version: 2, label: 'Updated model' };
-  const nativeSessionId = socket.events.find(event => event.t === 'session-id')?.id;
-  assert.ok(nativeSessionId);
-  const selectedHistory = await client.session.messages({ throwOnError: true, path: { id: nativeSessionId } });
-  const lastUser = selectedHistory.data.filter(entry => entry.info.role === 'user').at(-1)?.info;
-  assert.equal(lastUser?.role === 'user' && lastUser.model.modelID, 'second-model');
-  panel.dispose();
-  const restoredSocket = new PanelSocket();
-  panel = new OpenCodePanelSession(restoredSocket as unknown as WebSocket, {
-    windowId: 'native-modes', folder: temporaryRoot, resume: nativeSessionId,
-  }, {
-    models: () => catalog,
-    client: async () => client,
-    beginTurn: (turnId, profile) => broker.beginTurn('native-smoke', turnId, profile, catalog.find(model => model.id === profile)?.version),
-    endTurn: () => broker.endTurn('native-smoke'),
-    onExit: () => () => {}, close: async () => {},
-  });
-  await restoredSocket.waitFor('ready');
-  assert.ok(restoredSocket.events.some(event => event.t === 'models' && 'activeModel' in event && event.activeModel === 'second-model'));
-  assert.equal(gatewayRequests.length, callsBeforeStale + 1, 'reconnection must not resend the refused turn');
-  const resumedTurn = restoredSocket.waitFor('turn-end');
-  restoredSocket.request({ t: 'prompt', text: 'Explicitly resume after refreshing models.' });
-  await resumedTurn;
-  assert.equal(gatewayVersions.at(-1), '2');
-  assert.equal(gatewayProfiles.at(-1), 'second-model');
+  const interruptedEvents = socket.events.slice(interruptedStart) as Array<{ t: string; message?: string; isError?: boolean }>;
+  assert.equal(gatewayRequests.length - callsBeforeInterruption, 3, 'write plus exactly two failed continuation calls');
+  assert.equal(interruptedEvents.filter(event => event.t === 'tool-result').length, 1, 'never replay the completed write');
+  assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Saved before interruption');
+  assert.ok(interruptedEvents.some(event => event.t === 'error' && event.message?.includes('response was interrupted')));
+  assert.ok(!interruptedEvents.some(event => event.message?.includes('Provider is overloaded')));
+  assert.deepEqual(interruptedEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
+
+  stage = 'hosted interruption after partial output';
+  const partialStart = socket.events.length;
+  const callsBeforePartial = gatewayRequests.length;
+  interruptions = 1;
+  partialInterruption = true;
+  const partialText = socket.waitFor('text');
+  const partialTurn = runPanelTurn(true);
+  await partialText;
+  finishPartial!();
+  await partialTurn;
+  const partialEvents = socket.events.slice(partialStart) as Array<{ t: string; delta?: string; message?: string; isError?: boolean }>;
+  assert.equal(gatewayRequests.length - callsBeforePartial, 1, 'native runtime must not replay partial output');
+  assert.ok(partialEvents.some(event => event.t === 'text' && event.delta?.includes('Partial reply retained')), JSON.stringify(partialEvents));
+  assert.ok(partialEvents.some(event => event.t === 'error' && event.message?.includes('response was interrupted')));
+  assert.deepEqual(partialEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
+  await runPanelTurn();
   panel.dispose();
 
   const toolNames = (request: Record<string, unknown>) => (
@@ -500,9 +590,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
       : []
   );
   const folderTools = toolNames(gatewayRequests[0]);
-  for (const name of ['bash', 'read', 'task']) {
+  for (const name of ['bash', 'read']) {
     assert.ok(folderTools.includes(name), `folder profile omitted ${name}`);
   }
+  assert.ok(!folderTools.includes('task'), 'Default must not expose native sub-agents');
   for (const name of ['stashbase_read_file', 'stashbase_write_file']) {
     assert.ok(folderTools.includes(name), `folder profile omitted ${name}`);
   }
@@ -546,6 +637,44 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.ok(followUp.includes(imageBytes.toString('base64')), 'the next model request retains image content');
   assert.ok(followUp.includes(pdfBytes.toString('base64')), 'the next model request retains PDF content');
 
+  stage = 'project skill invocation';
+  nextTool = { name: 'skill', arguments: JSON.stringify({ name: 'project-writing-0' }) };
+  const skillSession = (await client.session.create({ body: { title: 'Project skill probe' }, throwOnError: true })).data;
+  const firstSkillCall = gatewayRequests.length;
+  // A direct SDK turn must answer native permissions as the panel does.
+  const skillSubscription = await client.event.subscribe({ signal: subscriptions.signal, sseMaxRetryAttempts: 1 });
+  const skillTranslator = new OpenCodeEventTranslator();
+  skillTranslator.bindSession(skillSession.id);
+  const skillConsumed = (async () => {
+    for await (const event of skillSubscription.stream) {
+      skillEvents.push(event.type);
+      for (const translated of skillTranslator.translate(event)) {
+        if (translated.t !== 'permission') continue;
+        await client.postSessionIdPermissionsPermissionId({
+          throwOnError: true,
+          path: { id: skillSession.id, permissionID: translated.id },
+          body: { response: 'once' },
+        });
+      }
+      if (event.type === 'session.idle' && event.properties.sessionID === skillSession.id) return;
+    }
+  })();
+  await client.session.promptAsync({
+    throwOnError: true, path: { id: skillSession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder',
+      parts: [{ type: 'text', text: 'Use the project writing skill.' }] },
+  });
+  await skillConsumed;
+  assert.ok(JSON.stringify(gatewayRequests.slice(firstSkillCall + 1)).includes('PROJECT_SKILL_BODY_0'),
+    'project skill contents must load on native invocation');
+
+  // Hosted Claude models refuse a forced tool choice, so every model call the
+  // pinned runtime makes, tool continuations included, must leave it open.
+  const forced = gatewayRequests.map((body) => body.tool_choice)
+    .filter((choice) => choice !== undefined && choice !== 'auto' && choice !== 'none');
+  assert.deepEqual(forced, [], `OpenCode forced a tool choice: ${JSON.stringify(forced)}`);
+  assert.ok(gatewayRequests.some((body) => Array.isArray(body.tools) && body.tools.length > 0));
+
   // A hardened-runtime signing mismatch can let Bun finish the request and
   // then have AMFI kill it while it returns to executable memory. Do not let
   // teardown hide that packaged-only failure as a successful smoke.
@@ -553,4 +682,84 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.equal(child.exitCode, null, `OpenCode exited unexpectedly (${child.exitCode ?? child.signalCode})`);
   assert.equal(child.signalCode, null, `OpenCode exited unexpectedly (${child.signalCode})`);
   completed = true;
+});
+
+test('prewarmed native chats retain exclusive attribution and refresh changed models and tools', { timeout: 30_000 }, async (t) => {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-warm-native-')));
+  setHostedAccountSession({
+    userId: 'warm-fixture', email: 'fixture@example.invalid', accessToken: 'fixture-only', refreshToken: 'fixture-only',
+    expiresAt: Math.floor(Date.now() / 1000) + 3600,
+  });
+  let profiles = SMOKE_PROFILES.map(profile => ({ ...profile,
+    id: profile.isDefault ? profile.id : 'claude-sonnet-5-5',
+  }));
+  let reads = 0;
+  const toolCatalog = parseToolCatalog({
+    schemaVersion: 2,
+    revision: 'smoke',
+    models: [{ id: 'claude-sonnet-5-5', version: 1, name: 'Claude Sonnet 5.5', relativeCost: 2.7, contextTokenLimit: 200_000,
+      outputTokenLimit: 64_000, availability: { status: 'available' } }],
+    tools: [{ id: 'writer', kind: 'agent-role', version: 1, name: 'Writer', summary: 'Drafts', icon: 'pen-line',
+      availability: { status: 'available' }, modelIds: ['claude-sonnet-5-5'], defaultModelId: 'claude-sonnet-5-5',
+      agent: { toolName: 'write_draft', description: 'Writes the draft.' } }],
+  });
+  const originalFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.pathname === '/v1/agent/models') {
+      reads++;
+      return Response.json({ models: profiles });
+    }
+    if (url.pathname === '/v2/agent/tools') {
+      return Response.json({ schemaVersion: 2, revision: toolCatalog.revision, models: toolCatalog.models,
+        tools: toolCatalog.tools.map(tool => ({ ...tool, kind: 'agent-role' })) });
+    }
+    assert.equal(url.hostname, '127.0.0.1', 'startup must not make model or other external requests');
+    return originalFetch(input, init);
+  });
+  t.after(async () => {
+    await stopOpenCodeRuntime();
+    setHostedAccountSession(undefined);
+    setDefaultAgentTool(toolCatalog, 'writer', { enabled: false });
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  });
+  const context = { windowId: 'warm-window', directory: root, persona: undefined };
+  const first = createOpenCodeSessionRuntime(context);
+  const firstClient = await first.client(root);
+  assert.equal((await firstClient.mcp.status({ throwOnError: true })).data.stashbase?.status, 'connected');
+  const firstSession = (await firstClient.session.create({ body: { title: 'First chat' }, throwOnError: true })).data;
+  first.endTurn();
+  await new Promise<void>(resolve => setImmediate(resolve));
+
+  const second = createOpenCodeSessionRuntime(context);
+  const secondClient = await second.client(root);
+  assert.notEqual(first.attributionId, second.attributionId);
+  const config = (await secondClient.config.get({ throwOnError: true })).data;
+  const mcp = config.mcp!.stashbase as { environment: Record<string, string> };
+  assert.equal(mcp.environment.STASHBASE_AGENT_SESSION_ID, second.attributionId);
+  assert.equal((await secondClient.session.list({ throwOnError: true })).data.length, 1, 'warming must not create blank history');
+  const secondSession = (await secondClient.session.create({ body: { title: 'Second chat' }, throwOnError: true })).data;
+  assert.notEqual(firstSession.id, secondSession.id);
+  await first.close();
+  assert.equal((await secondClient.session.get({ path: { id: secondSession.id }, throwOnError: true })).data.title, 'Second chat');
+  second.endTurn();
+  await new Promise<void>(resolve => setImmediate(resolve));
+
+  // A saved choice made after warm-up must reach the new chat even when
+  // the service's profiles themselves did not change.
+  setDefaultAgentTool(toolCatalog, 'writer', { enabled: true });
+  const third = createOpenCodeSessionRuntime(context);
+  const thirdClient = await third.client(root);
+  const thirdConfig = (await thirdClient.config.get({ throwOnError: true })).data;
+  assert.deepEqual(JSON.parse((thirdConfig.mcp!.stashbase as typeof mcp).environment.STASHBASE_AGENT_TOOLS!).map((tool: { id: string }) => tool.id), ['writer']);
+  third.endTurn();
+  await new Promise<void>(resolve => setImmediate(resolve));
+
+  profiles = profiles.map(profile => ({ ...profile, version: profile.version + 1, outputTokenLimit: 4096 }));
+  const fourth = createOpenCodeSessionRuntime(context);
+  const fourthClient = await fourth.client(root);
+  const fourthConfig = (await fourthClient.config.get({ throwOnError: true })).data;
+  assert.equal(fourthConfig.provider!.stashbase!.models!['stashbase-agent-default']!.limit!.output, 4096);
+  assert.equal(reads, 4, 'a new chat must revalidate the service catalog before using a spare');
+  await assert.rejects(fourth.client(path.dirname(root)), /another project/);
 });

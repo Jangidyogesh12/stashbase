@@ -18,7 +18,7 @@ import {
   type NativeAgentId,
 } from './agent-runtime-paths.ts';
 import { probeAgentCommand } from './agent-probe.ts';
-import { agentSetupDiagnostic } from './agent-setup-diagnostic.ts';
+import { AgentAccountRefusedError, agentSetupDiagnostic } from './agent-setup-diagnostic.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import {
   agentCliEnv,
@@ -29,6 +29,13 @@ import {
   resolveAgentCliWithLoginShell,
   resolveNativeAgentCli,
 } from './agent-cli.ts';
+import {
+  NATIVE_AGENT_IDS,
+  NATIVE_AGENTS,
+  nativeAgentCliSpec,
+  nativeAgentInstallerUrl,
+} from './native-agents.ts';
+import { antigravityIsAuthenticated, loginToAntigravity } from './antigravity-setup.ts';
 import { terminateExtractorTree as terminateInstallerTree, waitForExtractorTree } from './extractor-process.ts';
 import type {
   AgentBootstrapFailureCode,
@@ -61,7 +68,7 @@ export interface AgentBootstrapDependencies {
 
 const IDLE_STATUS: AgentBootstrapStatus = { phase: 'idle' };
 
-export class AgentSetupBusyError extends Error { readonly status = 409; }
+class AgentSetupBusyError extends Error { readonly status = 409; }
 
 const INSTALLATION_TIMEOUT_MS = 8 * 60_000;
 const ACTION_LABELS = { bootstrap: 'Install / connect', login: 'Sign in', update: 'Update', connect: 'Check' } as const;
@@ -207,7 +214,8 @@ export class AgentBootstrapCoordinator {
         this.configure(id, action);
         if (this.status(id).phase === 'ready') reportStage(stage, 'success');
       } catch (error) {
-        this.fail(id, action, stage, 'operation-failed', signal.aborted ? signal.reason : error, stage === 'installation' ? 'install-command' : undefined);
+        const code = !signal.aborted && error instanceof AgentAccountRefusedError ? 'account-refused' : 'operation-failed';
+        this.fail(id, action, stage, code, signal.aborted ? signal.reason : error, stage === 'installation' ? 'install-command' : undefined);
       }
     }).finally(() => {
       const status = this.status(id);
@@ -240,7 +248,8 @@ export class AgentBootstrapCoordinator {
       this.fail(id, action, 'authentication', 'authentication-required',
         new Error(`${agentLabel(id)} is installed, but it is not signed in.`));
     } catch (error) {
-      this.fail(id, action, 'authentication', 'authentication-check-failed', error);
+      this.fail(id, action, 'authentication',
+        error instanceof AgentAccountRefusedError ? 'account-refused' : 'authentication-check-failed', error);
     }
     return false;
   }
@@ -296,13 +305,16 @@ export class AgentBootstrapCoordinator {
 }
 
 function agentLabel(id: NativeAgentId): string {
-  return id === 'codex' ? 'Codex' : 'Claude';
+  return NATIVE_AGENTS[id].label;
 }
 
 function agentCliSpec(id: NativeAgentId) {
-  return id === 'codex'
-    ? { name: 'codex', envNames: ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'], logLabel: 'Codex' }
-    : { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude' };
+  return nativeAgentCliSpec(id);
+}
+
+/** The official per-user copy of this runtime's own command. */
+function resolveNativeExecutable(id: NativeAgentId): string | null {
+  return resolveNativeAgentCli(NATIVE_AGENTS[id].bin);
 }
 
 function resolveInstalledExecutable(id: NativeAgentId): string | null {
@@ -313,6 +325,7 @@ function resolveInstalledExecutable(id: NativeAgentId): string | null {
 export async function agentIsAuthenticated(
   id: NativeAgentId, executable: string, signal?: AbortSignal,
 ): Promise<boolean> {
+  if (id === 'antigravity') return antigravityIsAuthenticated(executable, signal);
   const result = await probeAgentCommand(executable, id === 'claude' ? ['auth', 'status'] : ['login', 'status'], {
     timeoutMs: 10_000,
     signal,
@@ -336,6 +349,7 @@ export async function loginToAgent(
   signal: AbortSignal,
 ): Promise<void> {
   signal.throwIfAborted();
+  if (id === 'antigravity') return loginToAntigravity(executable, signal);
   const label = agentLabel(id);
   await new Promise<void>((resolve, reject) => {
     const child = spawn(executable, id === 'claude' ? ['auth', 'login'] : ['login'], {
@@ -386,7 +400,7 @@ export const agentBootstrapCoordinator = new AgentBootstrapCoordinator({
   resolveExecutable: (id, options) => options?.probeLoginShell
     ? resolveAgentCliWithLoginShell(agentCliSpec(id), undefined, options.signal)
     : resolveInstalledExecutable(id),
-  resolveNativeExecutable: resolveNativeAgentCli,
+  resolveNativeExecutable,
   installRuntime: installNativeRuntime,
   isAuthenticated: agentIsAuthenticated,
   login: loginToAgent,
@@ -410,7 +424,7 @@ export function loginAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
  * overrides outside that layout cannot be replaced by an in-app update. */
 export function agentSupportsInAppUpdate(id: NativeAgentId): boolean {
   const override = agentCliOverride(agentCliSpec(id));
-  return !override || override === resolveNativeAgentCli(id);
+  return !override || override === resolveNativeExecutable(id);
 }
 
 /** Explicit user recovery when the installed runtime is too old for what a
@@ -429,7 +443,7 @@ export function recheckAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
 
 /** One asynchronous startup pass includes login-shell discovery. */
 export async function connectInstalledAgentMcpOnStartup(): Promise<Array<{ id: NativeAgentId; status: AgentBootstrapStatus }>> {
-  return Promise.all((['codex', 'claude'] as const).map(async (id) => {
+  return Promise.all(NATIVE_AGENT_IDS.map(async (id) => {
     agentBootstrapCoordinator.connectIfInstalled(id, { probeLoginShell: true });
     return { id, status: await agentBootstrapCoordinator.wait(id) };
   }));
@@ -445,12 +459,11 @@ async function installNativeRuntime(
   signal: AbortSignal,
 ): Promise<void> {
   if (id === 'claude') return installClaude(update, signal);
+  if (id === 'antigravity') return installAntigravity(update, signal);
   return installCodex(update, signal);
 }
 
-const CLAUDE_INSTALLER = process.platform === 'win32'
-  ? 'https://claude.ai/install.ps1'
-  : 'https://claude.ai/install.sh';
+const CLAUDE_INSTALLER = nativeAgentInstallerUrl('claude');
 
 /** Claude's official installer script is written for bash (it relies on
  * `[[ ]]` and regex matching); Windows shares the Codex PowerShell
@@ -473,7 +486,7 @@ export async function installClaude(
   const resolveInstallerShell = dependencies.resolveInstallerShell ?? resolveClaudeInstallerShell;
   const runScript = dependencies.runInstallerScript ?? claudeInstallerScriptRunner;
   const resolveInstalled = dependencies.resolveInstalledExecutable
-    ?? (() => resolveNativeAgentCli('claude'));
+    ?? (() => resolveNativeExecutable('claude'));
   update({ message: 'Downloading the official Claude installer…' });
   const script = await fetchBoundedText(CLAUDE_INSTALLER, signal, 2_000_000);
   const env: NodeJS.ProcessEnv = {
@@ -562,9 +575,58 @@ function claudeInstallerScriptRunner(
   });
 }
 
-const CODEX_INSTALLER = process.platform === 'win32'
-  ? 'https://chatgpt.com/codex/install.ps1'
-  : 'https://chatgpt.com/codex/install.sh';
+const ANTIGRAVITY_INSTALLER = nativeAgentInstallerUrl('antigravity');
+
+/** Antigravity's official installer downloads a verified `agy` release into
+ * `~/.local/bin` (`%LOCALAPPDATA%\agy\bin` on Windows) and owns the user's
+ * PATH profile, like the other providers' installers. Its POSIX script is
+ * written for bash. */
+export async function installAntigravity(
+  update: (next: ProgressUpdate) => void,
+  signal: AbortSignal,
+  dependencies: Partial<AgentInstallDependencies> = {},
+): Promise<void> {
+  const verifyExecutable = dependencies.verifyExecutable ?? verifyAgentExecutable;
+  const resolveInstallerShell = dependencies.resolveInstallerShell ?? resolveClaudeInstallerShell;
+  const runScript = dependencies.runInstallerScript ?? antigravityInstallerScriptRunner;
+  const resolveInstalled = dependencies.resolveInstalledExecutable
+    ?? (() => resolveNativeExecutable('antigravity'));
+  update({ message: 'Downloading the official Antigravity installer…' });
+  const script = await fetchBoundedText(ANTIGRAVITY_INSTALLER, signal, 2_000_000);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ELECTRON_RUN_AS_NODE: undefined,
+  };
+  await runScript(resolveInstallerShell(), script, env, signal, (line) => {
+    const message = line.trim();
+    if (message) update({ message });
+  });
+  const executable = resolveInstalled();
+  if (!executable) {
+    throw new Error(
+      "The official Antigravity installer exited successfully but no 'agy' executable "
+      + 'was found in its standard install locations (such as ~/.local/bin). '
+      + 'Check whether security software quarantined Antigravity, then retry the installation.',
+    );
+  }
+  await verifyExecutable(executable, 'Antigravity', agentCliEnv(), 20_000, signal);
+  update({ progress: 1, message: 'Antigravity installed.' });
+}
+
+function antigravityInstallerScriptRunner(
+  shell: CodexInstallerShell,
+  script: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+  onLine: (line: string) => void,
+): Promise<void> {
+  return runInstallerScript(shell, script, env, signal, onLine, {
+    tempRoot: agentInstallerTempRoot('antigravity'),
+    bootstrap: ANTIGRAVITY_PS1_BOOTSTRAP,
+  });
+}
+
+const CODEX_INSTALLER = nativeAgentInstallerUrl('codex');
 
 export interface CodexInstallerShell {
   command: string;
@@ -674,7 +736,7 @@ export async function installCodex(
   const resolveInstallerShell = dependencies.resolveInstallerShell ?? resolveCodexInstallerShell;
   const runScript = dependencies.runInstallerScript ?? codexInstallerScriptRunner;
   const resolveInstalled = dependencies.resolveInstalledExecutable
-    ?? (() => resolveNativeAgentCli('codex'));
+    ?? (() => resolveNativeExecutable('codex'));
   update({ message: 'Downloading the official Codex installer…' });
   const script = await fetchBoundedText(CODEX_INSTALLER, signal, 2_000_000);
   // The official installer owns its layout and the user's PATH profile:
@@ -864,6 +926,8 @@ export const CLAUDE_PS1_BOOTSTRAP = [
   '$ErrorActionPreference = "Stop"',
   'Remove-Item Env:\\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue',
 ] as const;
+
+export const ANTIGRAVITY_PS1_BOOTSTRAP = CLAUDE_PS1_BOOTSTRAP;
 
 export function agentPowerShellInstallerScript(
   installerScript: string,

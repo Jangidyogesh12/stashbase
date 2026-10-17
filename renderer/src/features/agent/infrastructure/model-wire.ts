@@ -11,8 +11,10 @@ export function toModel(wire: AgentModelWire): AgentModel {
     id: wire.id,
     label: wire.label,
     ...(wire.description === undefined ? {} : { description: wire.description }),
+    ...(wire.release === undefined ? {} : { release: wire.release }),
     ...(wire.supportedEfforts === undefined ? {} : { supportedEfforts: wire.supportedEfforts }),
     ...(wire.defaultEffort === undefined ? {} : { defaultEffort: wire.defaultEffort }),
     ...(wire.isDefault === undefined ? {} : { isDefault: wire.isDefault }),
+    ...(wire.relativeCost === undefined ? {} : { relativeCost: wire.relativeCost }),
   };
 }

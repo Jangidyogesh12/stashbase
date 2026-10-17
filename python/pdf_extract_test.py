@@ -5,6 +5,7 @@ import types
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 import pdf_extract
@@ -18,6 +19,11 @@ class _FakePage:
     def get_text(self, mode: str) -> str:
         assert mode == "text"
         return self.text
+
+    def get_pixmap(self, **kwargs):
+        assert kwargs["dpi"] <= 300
+        assert kwargs["alpha"] is False
+        return types.SimpleNamespace(tobytes=lambda format: b"rendered page")
 
 
 class _FakeDoc:
@@ -44,6 +50,83 @@ class PdfExtractTests(unittest.TestCase):
     def tearDown(self) -> None:
         sys.modules.pop("pymupdf4llm", None)
         sys.modules.pop("pymupdf", None)
+
+    def test_empty_rich_pages_recover_native_text_and_scans_without_changing_source(self) -> None:
+        rich = types.ModuleType("pymupdf4llm")
+        rich.to_markdown = lambda *args, **kwargs: [
+            {"metadata": {"page_number": 1}, "text": "kept rich text"},
+            {"metadata": {"page_number": 2}, "text": ""},
+            {"metadata": {"page_number": 3}, "text": "![](scan.png)"},
+        ]
+        sys.modules["pymupdf4llm"] = rich
+        plain = types.ModuleType("pymupdf")
+        plain.open = lambda path: _FakeDoc([
+            _FakePage("native first"), _FakePage("rescued native text"), _FakePage(""),
+        ])
+        sys.modules["pymupdf"] = plain
+        with TemporaryDirectory() as tmp, mock.patch("ocr_extract.extract_text", return_value="rescued scan text") as ocr:
+            root = Path(tmp)
+            source = root / "Mixed.pdf"
+            source.write_bytes(b"unchanged source")
+            out = root / "out.md"
+            pdf_extract.convert_with_pymupdf(source, out, root / "bundle", batch_timeout_s=0)
+            text = out.read_text(encoding="utf-8")
+            for value in ["kept rich text", "rescued native text", "rescued scan text", pdf_extract.PDF_COMPLETE_MARKER]:
+                self.assertIn(value, text)
+            self.assertIn("<!-- stashbase-pdf-page: 3 -->", text)
+            ocr.assert_called_once_with(b"rendered page")
+            self.assertEqual(source.read_bytes(), b"unchanged source")
+
+    def test_failed_layout_uses_ocr_and_empty_ocr_completes_without_synthetic_text(self) -> None:
+        rich = types.ModuleType("pymupdf4llm")
+        rich.to_markdown = mock.Mock(side_effect=RuntimeError("layout failed"))
+        sys.modules["pymupdf4llm"] = rich
+        plain = types.ModuleType("pymupdf")
+        plain.open = lambda path: _FakeDoc([_FakePage("")])
+        sys.modules["pymupdf"] = plain
+        for recognized in ["recovered scan", ""]:
+            with self.subTest(recognized=recognized), TemporaryDirectory() as tmp, mock.patch("ocr_extract.extract_text", return_value=recognized) as ocr:
+                root = Path(tmp)
+                source = root / "Scan.pdf"
+                source.write_bytes(b"source")
+                out = root / "out.md"
+                pdf_extract.convert_with_pymupdf(source, out, root / "bundle", batch_timeout_s=0)
+                ocr.assert_called_once()
+                text = out.read_text(encoding="utf-8")
+                self.assertIn(pdf_extract.PDF_COMPLETE_MARKER, text)
+                if recognized:
+                    self.assertIn(recognized, text)
+                else:
+                    self.assertEqual(text.strip(), pdf_extract.PDF_COMPLETE_MARKER)
+
+    def test_ocr_failure_does_not_publish_completed_output_or_checkpoint(self) -> None:
+        rich = types.ModuleType("pymupdf4llm")
+        rich.to_markdown = lambda *args, **kwargs: []
+        sys.modules["pymupdf4llm"] = rich
+        plain = types.ModuleType("pymupdf")
+        plain.open = lambda path: _FakeDoc([_FakePage("")])
+        sys.modules["pymupdf"] = plain
+        with TemporaryDirectory() as tmp, mock.patch("ocr_extract.extract_text", side_effect=RuntimeError("OCR unavailable")):
+            root = Path(tmp)
+            source = root / "Scan.pdf"
+            source.write_bytes(b"source")
+            out = root / "out.md"
+            with self.assertRaisesRegex(RuntimeError, "OCR unavailable"):
+                pdf_extract.convert_with_pymupdf(source, out, root / "bundle", batch_timeout_s=0)
+            self.assertFalse(out.exists())
+            self.assertFalse((root / "bundle").exists())
+            self.assertEqual(list(pdf_extract._resume_dir_for(out).glob("batch-*.json")), [])
+
+    def test_timeout_cannot_publish_a_scan_as_empty_or_restart_ocr_without_a_deadline(self) -> None:
+        plain = types.ModuleType("pymupdf")
+        plain.open = lambda path: _FakeDoc([_FakePage("")])
+        sys.modules["pymupdf"] = plain
+        with TemporaryDirectory() as tmp, mock.patch("ocr_extract.extract_text") as ocr:
+            args = (str(Path(tmp) / "scan.pdf"), [0], 1, 1, "bundle", tmp, 12.0)
+            with self.assertRaisesRegex(RuntimeError, "no extractable text layer"):
+                pdf_extract._convert_batch_plain_text_worker(args, "batch timed out", ocr=False)
+            ocr.assert_not_called()
+            self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_pymupdf_converter_falls_back_to_plain_text_when_rich_extraction_fails(self) -> None:
         rich = types.ModuleType("pymupdf4llm")

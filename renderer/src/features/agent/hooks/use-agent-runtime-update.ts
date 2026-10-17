@@ -48,11 +48,14 @@ export interface AgentRuntimeUpdateView {
   update(errorBlockId?: string): void;
 }
 
-type ReconnectOutcome = 'live' | 'settled' | 'timeout' | 'cancelled';
+export type ReconnectOutcome = 'live' | 'settled' | 'timeout' | 'cancelled';
 
 /** Settles once the session is live on its new socket, or as soon as the
  *  connection settles anywhere it cannot carry a resend. */
-function reconnected(session: AgentSessionRuntime, signal: AbortSignal): Promise<ReconnectOutcome> {
+export function reconnected(
+  session: AgentSessionRuntime,
+  signal: AbortSignal,
+): Promise<ReconnectOutcome> {
   return new Promise((resolve) => {
     let cleanup: (() => void) | null = null;
     const settle = (outcome: ReconnectOutcome) => {

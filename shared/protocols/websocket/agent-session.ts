@@ -1,13 +1,14 @@
 import { z } from "zod";
+import { agentCrewCallSchema } from '../http/agent-tools';
 
 import { agentIdSchema } from "../http/agent-runtime";
 
 const boundedText = (maximum: number) => z.string().max(maximum);
 const recordSchema = z.record(z.string(), z.unknown());
 
-export const agentAccessModeSchema = z.enum(["default", "acceptEdits", "plan", "auto"]);
+const agentAccessModeSchema = z.enum(["default", "acceptEdits", "plan", "auto"]);
 
-export const agentTurnFailureKindSchema = z.enum([
+const agentTurnFailureKindSchema = z.enum([
   "rate-limit",
   "quota",
   "allowance-exhausted",
@@ -15,15 +16,16 @@ export const agentTurnFailureKindSchema = z.enum([
   "auth-expired",
   "network",
   "runtime-outdated",
+  "model-changed",
 ]);
 
-export const agentTurnFailureSchema = z.object({ kind: agentTurnFailureKindSchema }).strict();
+const agentTurnFailureSchema = z.object({ kind: agentTurnFailureKindSchema }).strict();
 
 import { agentModelSchema } from '../agent-model';
 
 export { agentModelSchema };
 
-export const agentSkillSchema = z
+const agentSkillSchema = z
   .object({
     id: boundedText(200),
     label: boundedText(500),
@@ -63,7 +65,7 @@ export const agentClientEventSchema = z.discriminatedUnion("t", [
 
 /** One Markdown file an Agent turn left different on disk. `path` is absolute
  *  POSIX; the counts are lines, not hunks. */
-export const agentTurnChangedFileSchema = z
+const agentTurnChangedFileSchema = z
   .object({
     path: boundedText(16_384),
     change: z.enum(["created", "edited", "deleted"]),
@@ -105,6 +107,7 @@ export const agentServerEventSchema = z.union([
       id: boundedText(512),
       name: boundedText(512),
       input: recordSchema,
+      crew: agentCrewCallSchema.optional(),
     })
     .strict(),
   z
@@ -174,11 +177,13 @@ export const agentServerEventSchema = z.union([
 ]);
 
 const agentSessionConnectFields = {
+  telemetryConnectionId: z.string().uuid().optional(),
   access: agentAccessModeSchema.default("auto"),
   agent: agentIdSchema,
   effort: boundedText(64).optional(),
   model: boundedText(200).optional(),
   resume: boundedText(512).optional(),
+  crew: z.string().regex(/^[a-zA-Z0-9_-]{1,512}$/u).optional(),
   /** The library persona the Chat runs under; absent runs none. */
   persona: z.string().regex(/^[a-z0-9][a-z0-9-]{0,95}$/u).optional(),
 };
@@ -197,4 +202,3 @@ export type AgentSkill = z.infer<typeof agentSkillSchema>;
 export type AgentClientEvent = z.infer<typeof agentClientEventSchema>;
 export type AgentServerEvent = z.infer<typeof agentServerEventSchema>;
 export type AgentTurnChangedFile = z.infer<typeof agentTurnChangedFileSchema>;
-export type AgentSessionConnectWire = z.infer<typeof agentSessionConnectSchema>;

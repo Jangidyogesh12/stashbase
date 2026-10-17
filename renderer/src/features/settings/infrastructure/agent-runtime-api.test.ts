@@ -138,6 +138,7 @@ describe('agent runtime API', () => {
     const allowance = {
       profile: 'stashbase-agent-default',
       remainingPercent: 62,
+      reservedPercent: 25,
       inputTokens: 128_402,
       outputTokens: 41_208,
       cacheReadTokens: 9_014,
@@ -153,6 +154,7 @@ describe('agent runtime API', () => {
       inputTokens: 128_402,
       outputTokens: 41_208,
       remainingPercent: 62,
+      reservedPercent: 25,
       windowEndsAt: '2026-09-08T00:00:00.000Z',
     });
   });
@@ -170,7 +172,6 @@ describe('agent runtime API', () => {
     });
     await expect(unavailable.listAgents(new AbortController().signal)).rejects.toMatchObject({
       kind: 'unavailable',
-      message: 'Agent runtimes are unavailable.',
     });
   });
 });

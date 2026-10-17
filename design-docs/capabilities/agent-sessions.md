@@ -3,23 +3,8 @@
 ## Scope
 
 Chat mode and the Agent pane in Documents share conversation identity, execution,
-and unfinished requests. Default, Codex, and Claude expose their actual
-capabilities through this common experience.
-
-Default's hosted model calls use OpenRouter, initially with Gemini as the default.
-StashBase owns account allowance and approved model choices; provider routing must
-stay within that choice. Default's model picker lists the service's approved
-models and configured default. Selection applies between turns, survives native
-history restoration, and never silently falls back when a selected model becomes
-unavailable. If the service republishes the selected model configuration, an old
-session offers **Reconnect** to refresh its model configuration before another turn; it must
-not run a different release under the old name or context limits. An admitted
-turn keeps its original configuration. Reconnection preserves the conversation,
-draft, and paused queue without automatically resending the failed request. Model costs consume the existing allowance, and uncertain
-usage must remain distinguishable from confirmed settlement. Pending accounting
-continues to occupy its spending reservation until confirmed, without keeping
-a finished request in the concurrency limit. Original attachment
-media must not silently move to a different paid processing service.
+and unfinished requests. Default, Codex, Claude, and Antigravity expose their
+actual capabilities through this common experience.
 
 ## Identity and Continuity
 
@@ -34,6 +19,11 @@ media must not silently move to a different paid processing service.
   conversation; it does not transfer history.
 - Project removal stops active work, retains transcripts, and disables sending.
   A conversation never migrates to another project.
+- Antigravity keeps no history StashBase can read. StashBase therefore records
+  the Antigravity conversations its chats start: their project, title, and the
+  turns as the chat showed them. Restoring one continues the same Antigravity
+  conversation. Removing it from the chat list removes StashBase's record; the
+  conversation stays in Antigravity.
 
 ## Choice and Readiness
 
@@ -45,6 +35,11 @@ The [Chat journey](../journeys/chat.md#first-send) owns the first-send interacti
 Setup acknowledgement is not readiness. Standalone setup never sends a draft.
 Only the still-current submission that explicitly requested access may continue
 once setup succeeds; changed work or cancelled consent rejects late completion.
+
+After a Default turn, the app may prepare a local runtime for the next chat to
+reduce connection delay. This creates no conversation, sends no model request,
+and consumes no Agent credits. Each chat still receives its own runtime and
+permissions, with current model and tool choices checked before use.
 
 ## Submission and Execution
 
@@ -71,6 +66,16 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   file do not change what was asked about; it is refused only when its file
   leaves the project or it exceeds 6,000 characters. Reloaded history shows it
   as the same passage chip.
+- Antigravity offers Auto, Ask, Edit, and Plan. Running for StashBase, it
+  cannot ask the reader itself, so StashBase reviews each tool call before it
+  runs. Reads pass. Edit passes ordinary changes inside the project. Auto is
+  StashBase's own rule set rather than Antigravity's, whose Auto refuses
+  StashBase's tools and asks no one: it also passes commands that only read,
+  shown by the command line itself, plus web searches and page reads whose
+  address carries no query. Plan refuses changes. Anything else shows the same
+  approval card the other runtimes use, and an unanswered card never becomes a
+  grant. Antigravity's messages carry text only, so attachments reach it as
+  file paths it reads with its own tools, as they do for Claude and Codex.
 - A runtime that advertises attachments accepts ordinary local files through the
   picker, drop, or paste. Images and PDFs may have visual previews; other files
   remain named file cards. Attachment acceptance does not promise that every
@@ -93,29 +98,85 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   did not choose. A model named by an alias shows the release that alias
   resolves to, in the runtime's own words, so the reader can tell which model
   the choice actually runs. A model chosen while a session is still starting applies
-  before its first turn.
-  Options remain fixed during a turn. A persona is standing session guidance
-  chosen per Chat in the composer from the reader's persona library, or none.
-  Switching between personas is the reason to keep several; a persona that
-  never changes belongs in the project's own instruction files. Choosing one
-  applies from that Chat's next message by resuming its own conversation, and
-  becomes the persona the project's next new Chat starts with; other open
-  Chats keep theirs. Reopening a Chat from history restores its persona. The
-  library is shared by every project and lives in app data, never in a project
-  folder. A new library starts with the packaged personas; the reader can
-  write, edit, and delete any of them, and add copies from the Gallery. Editing
-  a persona applies to every Chat that runs it from that Chat's next message; a
-  deleted persona leaves its Chats running none. A persona is distinct from
-  permissions, requests, and user-owned native instruction files, which own
-  how the Agent works.
+  before its first turn. Default's composer control offers no model; it reads Crew,
+  and its tooltip names the crew members that are on.
+- Default discovers user skills only in the bound project's `.agents/skills`,
+  `.claude/skills`, `.opencode/skills`, and `.opencode/skill` directories. It does
+  not import global or ancestor skills. This is its default behavior, without a
+  setting. Skill bodies load on native invocation. Project instruction files
+  remain available, preferring `AGENTS.md`, then `CLAUDE.md`, then `CONTEXT.md`.
+  Codex, Claude, and Antigravity retain their own native discovery rules.
+  Antigravity offers no list of its skills, so its composer has no skill picker;
+  its model still uses the project's skills on its own.
+- Default's main agent handles general conversation, research, and writing on the
+  service's default model. The composer offers **Crew**, with optional Writer,
+  Reviewer, Reader, and Humanizer members from the service catalog. Initially all
+  are off. Turning a member on explicitly assigns matching work to it in this
+  chat; the user need not name it in every message. The current request takes
+  precedence. Discussion, planning, explanations, and small mechanical edits can
+  stay with the main agent. A review-only request ends with feedback; selection
+  does not authorize unsolicited revision or repeated review/rewrite cycles.
+- The Crew menu shows a toggle and chosen model for each member. The model opens
+  its description and model options, with its default marked Recommended.
+  Changing a model preserves the toggle. Choices belong to this chat and survive
+  reopening; the most recent choices seed new chats without changing other chats.
+  Changes apply to the next turn. Saving disables further changes and Send until
+  settled; failures restore the previous selection and show retry guidance.
+  Unavailable selections block startup with an explanation instead of silently
+  dropping the chosen responsibility or substituting a model. A selected member
+  removed by the service stays visible so the user can turn it off. A cached
+  catalog may survive a failed refresh; without one, chats with no selected Crew
+  can proceed, while selected Crew requires a readable catalog.
+- A Crew member performs one text generation per invocation, with no tools or
+  agent loop. The main agent supplies a task, necessary context, and optional
+  project file paths. The host reads those files within the chat's project.
+  Necessary context includes user decisions, style, exact wording, drafts,
+  feedback, and verified evidence; an unsaved draft can pass directly between
+  members. Unrelated conversation and internal reasoning are omitted. The
+  published description defines the member's work and output. Shared instructions
+  define selection and briefing, avoiding duplicate workflow rules in each role.
+  The main agent presents results, handles justified next steps, and saves files.
+  A root turn can contain multiple calls, billed under the same turn budget.
+- Every Crew call has a standalone card naming the member and selected model,
+  including while running and after failure. Opening it shows the full brief and
+  result. Attribution is fixed when the call starts and persisted with history;
+  changing choices or removing a catalog entry cannot relabel old calls. A stopped
+  call cannot retry in a later turn. Truncated or unfinished output is a failed
+  call, not a completed draft. Ordinary tools remain in collapsed activity.
+- Crew supports text work in Plan; Plan still forbids file changes and commands.
+  Each root turn retains its catalog snapshot. The service owns model availability,
+  provider, price, and reasoning configuration. Default therefore has no separate
+  main-model or thinking selector. Native OpenCode sub-agents are disabled.
+- A persona is standing
+  session guidance chosen per Chat in the composer from the reader's persona
+  library, or none. Switching between personas is the reason to keep several;
+  a persona that never changes belongs in the project's own instruction files.
+  Choosing one applies from that Chat's next message by resuming its own
+  conversation, and becomes the persona the project's next new Chat starts
+  with; other open Chats keep theirs. Reopening a Chat from history restores
+  its persona. The library is shared by every project and lives in app data,
+  never in a project folder. A new library starts with the packaged personas;
+  the reader can write, edit, and delete any of them, and add copies from the
+  Gallery. Editing a persona applies to every Chat that runs it from that
+  Chat's next message; a deleted persona leaves its Chats running none. A
+  persona is distinct from permissions, requests, and user-owned native
+  instruction files, which own how the Agent works.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.
-- Default offers Ask, Edit, and Plan. Ask confirms changes and commands; Edit
+- Default offers Auto, Ask, Edit, and Plan. Ask confirms changes and commands; Edit
   approves only ordinary project document writes and asks for other actions.
-  Plan reads and explores without writes, commands, or delegated work. A mode
-  change applies between turns, including when a conversation resumes. Default
-  does not offer Auto because its runtime has no automatic risk reviewer.
+  Auto also approves those writes, then uses the default model to review routine
+  commands, web fetches, and external reads against the current user request.
+  Uncertain, failed, or five-second overdue reviews ask the reader instead.
+  That decision deadline prevents new review dispatch, but an already dispatched
+  review finishes within its own bounded output and time budget so its actual
+  usage can settle. A late answer never authorizes an action, including after
+  manual approval, Stop, or a new turn. Application shutdown cancels remaining work.
+  Deletion, moves, project creation, and unfamiliar tools retain explicit approval.
+  Reviews have no tools and share the current turn's usage allowance. Plan reads
+  and explores without writes or commands. A mode change applies between turns,
+  including when a conversation resumes.
 - A new chat starts each Agent in Auto, or in Edit where Auto is not offered;
   Ask is only a choice, never the starting point while either exists. The mode belongs to its Agent: switching Agents in an
   unsent chat restores the mode that Agent was last left in there, so one
@@ -136,9 +197,24 @@ repair, an outdated runtime, provider limits, transport loss, and turn failure s
 recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
-Default retries an empty model response once within the current turn, retaining
-completed tool results and file changes. Once a model response has begun producing
-output, it is not automatically replayed. Exhausted recovery or an unknown native
+An uninstalled Agent is an installation prerequisite when reading its history,
+not a server failure or evidence that its native history is empty.
+Repeated identical native retry errors appear once per turn while retries continue;
+a final short-term request limit or accounting-recovery refusal remains a rate-limit
+failure with manual recovery. Accounting recovery may require service-side
+reconciliation; its message must not imply exhausted credits or a guaranteed reset time.
+Hosted retry responses carry the service's suggested delay to the native runtime.
+When the service changes the configuration of a Default model a chat runs on,
+or withdraws it, the refused turn offers **Refresh models**. Refreshing
+reconnects the same conversation to read the list again and keeps the
+transcript, draft, and paused queue. It never resends; the failed turn offers
+a manual retry only after the refresh.
+Default retries an empty model response or a hosted stream interruption before
+output once within the current turn, retaining completed tool results and file
+changes. Both failures share the same single retry. A stream interruption is not
+evidence of provider overload. Once a model response has begun producing output,
+it is not automatically replayed; streamed text and reasoning remain visible on
+failure. Exhausted recovery or an unknown native
 completion shows an incomplete-turn failure, never silent success. Recovery must
 not automatically repeat the whole user request or its completed file operations.
 An unknown outcome keeps the runtime or connection's reported failure visible

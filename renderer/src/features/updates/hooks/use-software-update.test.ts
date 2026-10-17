@@ -145,11 +145,8 @@ describe('useSoftwareUpdate', () => {
 });
 
 describe('Settings recovery after dismissing the update notice', () => {
-  it.each([
-    { phase: 'available', label: 'Update and restart' },
-    { phase: 'ready', label: 'Install and restart' },
-  ] as const)('keeps the $phase action reachable', async ({ phase, label }) => {
-    const updates = harness(accepted({ phase, version: '1.5.0' }));
+  it('keeps the restart reachable', async () => {
+    const updates = harness(accepted({ phase: 'ready', version: '1.5.0' }));
     const { result } = renderHook(() => ({
       notice: useUpdateNotice(updates.port),
       settings: useSoftwareUpdate(updates.port),
@@ -157,7 +154,7 @@ describe('Settings recovery after dismissing the update notice', () => {
     await waitFor(() => expect(result.current.notice.offer).not.toBeNull());
     act(() => result.current.notice.dismiss());
     expect(result.current.notice.offer).toBeNull();
-    expect(result.current.settings.actionLabel).toBe(label);
+    expect(result.current.settings.actionLabel).toBe('Restart to update');
     await act(async () => result.current.settings.act());
     expect(updates.port.runPrimaryAction).toHaveBeenCalledTimes(1);
     expect(updates.port.check).not.toHaveBeenCalled();

@@ -30,10 +30,8 @@ const { registerWindowLifecycle } = require('../dist/electron/window/lifecycle.c
 const { createWindowLifecycleUpdateBarrier } = require('./update-window-barrier.cjs');
 const { createUpdateManager } = require('./update-manager.cjs');
 
-test('Linux main windows auto-hide the native application menu bar', () => {
-  assert.equal(applicationWindowChromeOptions('linux').autoHideMenuBar, true);
-  assert.equal(applicationWindowChromeOptions('win32').autoHideMenuBar, false);
-  assert.equal(applicationWindowChromeOptions('darwin').autoHideMenuBar, false);
+test('main windows keep the native File menu visible on Linux', () => {
+  assert.equal(applicationWindowChromeOptions().autoHideMenuBar, false);
 });
 
 test('smoke runner terminates and rejects a hung Electron child', async () => {
@@ -652,7 +650,7 @@ function updateBarrierFixture({ installUpdate = () => {} } = {}) {
 test('one refused save cancels the update install and leaves every window unapproved', async () => {
   const setup = updateBarrierFixture();
   await setup.manager.start();
-  setup.updater.emit('update-available', { version: '2.1.0' });
+  setup.updater.emit('update-downloaded', { version: '2.1.0' });
 
   const acting = setup.manager.primaryAction();
   await new Promise((resolve) => setImmediate(resolve));
@@ -687,7 +685,7 @@ test('an install that fails after every window approved stops pre-approving thei
     },
   });
   await setup.manager.start();
-  setup.updater.emit('update-available', { version: '2.1.0' });
+  setup.updater.emit('update-downloaded', { version: '2.1.0' });
 
   const acting = setup.manager.primaryAction();
   await new Promise((resolve) => setImmediate(resolve));

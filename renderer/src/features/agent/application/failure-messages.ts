@@ -70,6 +70,9 @@ const SETUP_FAILURE_MESSAGES: Readonly<Record<AgentSetupFailure['stage'], string
   mcp: 'MCP connection failed.',
 };
 
+/** The account signed in, and the provider still will not serve it. */
+const ACCOUNT_REFUSED = 'Account not accepted.';
+
 /** Keep the failed step and diagnostic visible where setup was requested.
  * Error messages are plain text; stack traces and error objects are not rendered. */
 export function agentAccessFailure(error: unknown): string {
@@ -77,7 +80,9 @@ export function agentAccessFailure(error: unknown): string {
   const summary =
     error instanceof AgentSetupRefused
       ? setup
-        ? SETUP_FAILURE_MESSAGES[setup.stage]
+        ? setup.accountRefused
+          ? ACCOUNT_REFUSED
+          : SETUP_FAILURE_MESSAGES[setup.stage]
         : 'Could not connect.'
       : isFeatureError(error)
         ? agentFailure(error).message
@@ -110,6 +115,13 @@ export function agentUpdateFailure(error: unknown): string {
 const UPDATE_FAILED = 'The update did not finish. Check Agent settings and try again.';
 
 /** The runtime is updated, but this conversation could not come back on it. */
+/** Why a hosted model list could not be refreshed by reconnecting. */
+export function agentModelRefreshFailure(outcome: 'settled' | 'timeout'): string {
+  return outcome === 'timeout'
+    ? 'This conversation did not reconnect in time, so the models were not refreshed. Try again.'
+    : 'This conversation could not reconnect, so the models were not refreshed. Try again.';
+}
+
 export function agentReconnectAfterUpdateFailure(
   label: string,
   outcome: 'settled' | 'timeout',

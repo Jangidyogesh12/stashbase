@@ -10,13 +10,19 @@ an empty project and a conversation without references are valid.
 
 - Keep original sources authoritative. Extracted text and indexes stay hidden;
   Agent-written documents remain ordinary project files.
+- Apply search and preparation exclusions within the selected project. A project
+  remains searchable when its parent path is hidden, including a cloud drive's
+  internal mount path; hidden directories inside the project stay excluded.
 - Publish only complete, current preparation output. Partial, stale, cancelled,
-  or orphaned output cannot serve as evidence. Empty OCR output is a valid
-  non-searchable result. The [format matrix](project-files.md#format-capability-matrix)
+  or orphaned output cannot serve as evidence. Empty completed OCR, including a
+  textless PDF, is a valid non-searchable result; an OCR execution failure is not.
+  PDFs with missing extracted text try local OCR without changing the original.
+  The [format matrix](project-files.md#format-capability-matrix)
   defines which sources participate.
 - Preview, preparation, and semantic-index readiness are separate. Background work
   prioritizes interaction without blocking unrelated documents or conversation.
 - Local PDF/OCR components download on first demand and work offline thereafter.
+  Updating the app reuses an installed component when that component is unchanged.
   Failed setup offers retry beside a waiting document, or one retry on next launch.
   Cancelled source demand cannot silently resume; independently requested component
   installation may continue. Downloads do not send source bytes or steal focus.

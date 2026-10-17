@@ -1,10 +1,9 @@
-import { publicHostedModels } from './hosted-agent-models.ts';
-import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 /** OpenCode implementation of StashBase's Shared Agent Contract. */
 import { prepareAgentAttachments } from './agent-attachments.ts';
 import { agentClientEventSchema } from '../shared/protocols/websocket/agent-session.ts';
 import { randomUUID } from 'node:crypto';
-import type { EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
+import type { EventMessagePartDelta, EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
 import type {
   Event,
   FileDiff,
@@ -15,20 +14,22 @@ import type {
   ToolPart,
 } from '@opencode-ai/sdk';
 import type { WebSocket, RawData } from 'ws';
-import { errorMessage } from './log.ts';
+import { errorMessage, logger } from './log.ts';
 import {
-  disposeSessionsBoundToFolder,
   resolveSessionBinding,
   type AgentClientEvent,
+  type AgentConnectionOptions,
   type AgentHistoryActions,
   type AgentServerEvent,
   type AgentSessionTermination,
 } from './agent-contract.ts';
 import {
+  attributedAgentSession,
+  liveSessionSet,
   registerAttributedAgentSession,
   unregisterAttributedAgentSession,
 } from './agent-session-registry.ts';
-import { getCurrentFolder, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, normalizeWindowId, runWithWindowId } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { isTransientAttachmentPath } from './routes/attach.ts';
@@ -37,17 +38,30 @@ import { isStashbaseWorkspaceEdit } from './agent-file-permissions.ts';
 import type { AgentAccessMode } from '../shared/agent-runtime.ts';
 import {
   createOpenCodeSessionRuntime,
+  discardWarmOpenCodeForWindow,
+  discardWarmOpenCodeForFolder,
   openCodeClient,
+  type AgentToolResult,
   type OpenCodeSessionRuntime,
 } from './opencode-runtime.ts';
 import type { SessionBlock, SessionInfo } from '../shared/agent-sessions.ts';
+import {
+  DEFAULT_HOSTED_AGENT_PROFILE,
+  defaultHostedAgentProfile,
+  hostedAgentCatalogModels,
+} from './hosted-agent-models.ts';
+import { reviewDefaultAgentPermission } from './default-agent-permissions.ts';
+import { rememberCrewChat } from './default-agent-tools.ts';
+import { INTERRUPTED_MODEL_RESPONSE } from './hosted-agent-stream.ts';
+import { crewCallHistory, recordCrewCall, forgetCrewCalls } from './agent-crew-history.ts';
 
+const log = logger('opencode-agent');
 const DATA_REQUEST = { throwOnError: true as const };
 
 /** Keep OpenCode's provider-specific tool vocabulary behind the adapter.
  * The renderer, history replay, and permission cards all consume the same
  * stable names already used by the Shared Agent Contract. */
-export function normalizeOpenCodeToolName(name: string): string {
+function normalizeOpenCodeToolName(name: string): string {
   switch (name.toLowerCase()) {
     case 'bash': return 'Bash';
     case 'read': return 'Read';
@@ -81,24 +95,18 @@ function providerErrorDiagnostic(error: unknown): unknown {
     request_id: headers?.['x-request-id'] ?? headers?.['request-id'] ?? headers?.['x-amzn-requestid'] };
 }
 
-/** Only the gateway's structured refusal retires an obsolete catalog. Ordinary
- * provider failures and prose mentioning models must keep the session usable. */
-function isStaleHostedModel(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const data = (error as { data?: { statusCode?: unknown; responseBody?: unknown } }).data;
-  if (data?.statusCode !== 422 || typeof data.responseBody !== 'string') return false;
-  try {
-    const body = JSON.parse(data.responseBody);
-    return body?.error?.code === 'agent_model_configuration_changed';
-  } catch { return false; }
-}
-
-function eventErrorMessage(event: Extract<Event, { type: 'session.error' }>): string {
-  const error = event.properties.error;
+function nativeErrorMessage(error: Extract<Event, { type: 'session.error' }>['properties']['error']): string {
   if (!error) return 'The Agent turn failed.';
   if ('data' in error && error.data && typeof error.data === 'object') {
     const data = error.data as { message?: unknown; responseBody?: unknown };
-    if (typeof data.message === 'string' && data.message) return data.message;
+    if (typeof data.message === 'string' && data.message) {
+      // OpenCode serializes SSE error objects into UnknownError prose. Decode
+      // only our terminal envelope; all other provider messages stay intact.
+      try {
+        if (JSON.parse(data.message)?.code === INTERRUPTED_MODEL_RESPONSE.code) return INTERRUPTED_MODEL_RESPONSE.message;
+      } catch { /* ordinary provider prose */ }
+      return data.message;
+    }
     if (typeof data.responseBody === 'string' && data.responseBody) return data.responseBody;
   }
   return error.name;
@@ -110,16 +118,19 @@ export class OpenCodeEventTranslator {
   private sessionId: string | null = null;
   private turnActive = false;
   private nativeTurnStarted = false;
+  private stopping = false;
   private lastFinishReason: string | undefined;
+  private completion: Record<string, string | number> = {};
   private turnNumber = 0;
   private readonly messageTurns = new Map<string, number>();
-  private readonly content = new Map<string, string>();
+  private readonly content = new Map<string, { text: string; type: 'text' | 'reasoning'; messageID: string }>();
   private readonly tools = new Map<string, ToolPart['state']['status']>();
   private readonly toolNames = new Map<string, string>();
   private readonly toolInputs = new Map<string, Record<string, unknown>>();
   private readonly diffs = new Set<string>();
   private diffCounter = 0;
   private readonly errors = new Set<string>();
+  private readonly retryNotices = new Set<string>();
   /** OpenCode streams the reader's own prompt as parts too; only its role,
    * announced on the message before its parts, tells them from the reply. */
   private readonly userMessages = new Set<string>();
@@ -128,17 +139,30 @@ export class OpenCodeEventTranslator {
   beginTurn(): AgentServerEvent[] {
     if (this.turnActive) return [];
     this.turnActive = true;
+    this.stopping = false;
     this.turnNumber++;
     this.nativeTurnStarted = false;
     this.lastFinishReason = undefined;
+    this.completion = {};
     this.diffs.clear();
+    this.retryNotices.clear();
     return [{ t: 'turn-start' }];
   }
   isTurnActive(): boolean { return this.turnActive; }
+  diagnostic(cause?: unknown): unknown {
+    return { name: 'OpenCodeTurn', code: 'OPENCODE_TURN_FAILURE',
+      message: `Native model completion: ${JSON.stringify(this.completion)}`, cause };
+  }
+  private recordCompletion(messageId: string, finish: string, tokens: { input: number; output: number; reasoning: number }): void {
+    this.lastFinishReason = finish;
+    this.completion = { message_id: messageId, finish_reason: finish,
+      input_tokens: tokens.input, output_tokens: tokens.output, reasoning_tokens: tokens.reasoning };
+  }
   endTurnWithError(): AgentServerEvent[] { return this.finishTurn(true); }
+  requestInterrupt(): void { this.stopping = true; }
   endTurnAfterInterrupt(): AgentServerEvent[] { return this.finishTurn(false, true); }
 
-  translate(event: Event | EventPermissionAsked): AgentServerEvent[] {
+  translate(event: Event | EventPermissionAsked | EventMessagePartDelta): AgentServerEvent[] {
     switch (event.type) {
       case 'session.status': {
         if (!this.matches(event.properties.sessionID)) return [];
@@ -148,7 +172,10 @@ export class OpenCodeEventTranslator {
           return events;
         }
         if (event.properties.status.type === 'retry') {
-          return [{ t: 'notice', message: event.properties.status.message }];
+          const message = event.properties.status.message;
+          if (this.retryNotices.has(message)) return [];
+          this.retryNotices.add(message);
+          return [{ t: 'notice', message }];
         }
         return this.finishTurn(false);
       }
@@ -156,7 +183,8 @@ export class OpenCodeEventTranslator {
         return this.matches(event.properties.sessionID) ? this.finishTurn(false) : [];
       case 'session.error': {
         if (event.properties.sessionID && !this.matches(event.properties.sessionID)) return [];
-        const message = eventErrorMessage(event);
+        if (this.stopping && event.properties.error?.name === 'MessageAbortedError') return [];
+        const message = nativeErrorMessage(event.properties.error);
         const events: AgentServerEvent[] = [];
         if (!this.errors.has(message)) {
           this.errors.add(message);
@@ -180,17 +208,25 @@ export class OpenCodeEventTranslator {
         if (!this.messageTurns.has(info.id)) this.messageTurns.set(info.id, this.turnNumber);
         if (info.role === 'user') this.userMessages.add(info.id);
         if (info.role !== 'assistant' || !this.turnActive || this.messageTurns.get(info.id) !== this.turnNumber) return [];
-        if (this.turnActive && info.finish) this.lastFinishReason = info.finish;
+        if (info.finish) this.recordCompletion(info.id, info.finish, info.tokens);
         if (!info.error) return [];
-        const message = 'data' in info.error && typeof info.error.data?.message === 'string'
-          ? info.error.data.message
-          : info.error.name;
+        if (this.stopping && info.error.name === 'MessageAbortedError') return [];
+        const message = nativeErrorMessage(info.error);
         if (this.errors.has(message)) return [];
         this.errors.add(message);
         return [agentTurnErrorEvent(message)];
       }
       case 'message.part.updated':
         return this.part(event.properties.part, event.properties.delta);
+      case 'message.part.delta': {
+        const { sessionID, messageID, partID, field, delta } = event.properties;
+        if (!this.matches(sessionID) || !this.turnActive || field !== 'text'
+            || this.userMessages.has(messageID) || this.messageTurns.get(messageID) !== this.turnNumber) return [];
+        const part = this.content.get(partID);
+        if (!part || part.messageID !== messageID || !delta) return [];
+        part.text += delta;
+        return [{ t: part.type === 'text' ? 'text' : 'thinking', delta }];
+      }
       case 'permission.asked':
       case 'permission.updated': {
         const permission = event.properties;
@@ -218,6 +254,8 @@ export class OpenCodeEventTranslator {
 
   private finishTurn(isError: boolean, interrupted = false): AgentServerEvent[] {
     if (!this.turnActive) return [];
+    // Native idle can arrive before the abort RPC confirms cancellation.
+    if (this.stopping && !isError && !interrupted) return [];
     // `session.status: idle` and `session.idle` can straddle the next prompt.
     // Its optimistic start is not evidence that the native runtime started it.
     if (!isError && !interrupted && !this.nativeTurnStarted) return [];
@@ -236,12 +274,12 @@ export class OpenCodeEventTranslator {
     if (!this.matches(part.sessionID) || this.userMessages.has(part.messageID)) return [];
     if (!this.messageTurns.has(part.messageID)) this.messageTurns.set(part.messageID, this.turnNumber);
     if (this.messageTurns.get(part.messageID) !== this.turnNumber) return [];
-    if (part.type === 'step-finish' && this.turnActive) this.lastFinishReason = part.reason;
+    if (part.type === 'step-finish' && this.turnActive) this.recordCompletion(part.messageID, part.reason, part.tokens);
     if (part.type === 'text' || part.type === 'reasoning') {
-      const previous = this.content.get(part.id) ?? '';
+      const previous = this.content.get(part.id)?.text ?? '';
       const next = part.text;
       const addition = delta ?? (next.startsWith(previous) ? next.slice(previous.length) : next);
-      this.content.set(part.id, next);
+      this.content.set(part.id, { text: next, type: part.type, messageID: part.messageID });
       if (!addition) return [];
       return [{ t: part.type === 'text' ? 'text' : 'thinking', delta: addition }];
     }
@@ -266,7 +304,7 @@ export class OpenCodeEventTranslator {
       events.push({ t: 'tool', id, name, input: part.state.input });
     }
     if ((part.state.status === 'completed' || part.state.status === 'error') && prior !== part.state.status) {
-      events.push({
+      if (!(this.stopping && part.state.status === 'error' && part.state.error === 'Tool execution aborted')) events.push({
         t: 'tool-result',
         id,
         content: part.state.status === 'completed' ? part.state.output : part.state.error,
@@ -298,17 +336,16 @@ export class OpenCodePanelSession {
   private readonly translator = new OpenCodeEventTranslator();
   private readonly cwd: string;
   readonly agentId = 'stashbase' as const;
-  readonly attributionId = randomUUID();
+  readonly attributionId: string;
   readonly windowId: string;
   private readonly runtime: OpenCodeSessionRuntime;
   private sessionId: string | null = null;
-  private selectedModel: string | undefined;
-  private catalogReady = false;
-  private modelChoiceRevision = 0;
   private client: Awaited<ReturnType<typeof openCodeClient>> | null = null;
   private disposed = false;
   private interrupted = false;
   private access: AgentAccessMode;
+  private permissionReview = new AbortController();
+  private userRequest = '';
   private readonly pendingPermissions = new Set<string>();
   private readonly seenPermissions = new Set<string>();
   private readonly waitingToolPermissions = new Map<string, Extract<AgentServerEvent, { t: 'permission' }>>();
@@ -317,10 +354,14 @@ export class OpenCodePanelSession {
   private readonly onClose = () => this.dispose();
   private preparingAttachments: AbortController | null = null;
   private attachmentPreparation: Promise<FilePartInput[]> | null = null;
+  /** The main agent's profile, as the service listed it when this session
+   * started; undefined runs the unversioned default. Roles carry their own
+   * profiles in the runtime's configuration. */
+  private model: { profile: string; version: number } | undefined;
 
   constructor(
     private readonly ws: WebSocket,
-    private readonly options: import('./agent-contract.ts').AgentConnectionOptions,
+    private readonly options: AgentConnectionOptions,
     runtime?: OpenCodeSessionRuntime,
   ) {
     const binding = runWithWindowId(options.windowId, () => resolveSessionBinding({
@@ -328,17 +369,16 @@ export class OpenCodePanelSession {
       currentFolder: getCurrentFolder(),
     }));
     this.cwd = binding.cwd;
-    this.selectedModel = options.model;
-    // Auto is not offered here; a new chat asks for it before the renderer
-    // settles, and Edit is where it settles.
-    this.access = options.access === 'auto' ? 'acceptEdits'
-      : options.access === 'acceptEdits' || options.access === 'plan' ? options.access : 'default';
-    this.windowId = options.windowId;
+    this.access = options.access === 'auto' || options.access === 'acceptEdits' || options.access === 'plan'
+      ? options.access : 'default';
+    this.windowId = normalizeWindowId(options.windowId);
     this.runtime = runtime ?? createOpenCodeSessionRuntime({
       windowId: this.windowId,
-      agentSessionId: this.attributionId,
+      directory: this.cwd,
       persona: options.persona,
+      ...(options.crew || options.resume ? { crew: options.crew ?? options.resume! } : {}),
     });
+    this.attributionId = this.runtime.attributionId ?? randomUUID();
     this.stopRuntimeExitListener = this.runtime.onExit((error) => {
       if (!this.disposed) this.fail(error, true);
     });
@@ -350,7 +390,13 @@ export class OpenCodePanelSession {
 
   boundFolder(): string | null { return this.cwd; }
   turnInFlight(): boolean { return this.translator.isTurnActive(); }
-  ownedByWindow(windowId: string): boolean { return this.options.windowId === windowId; }
+
+  /** Runs an enabled tool for the main agent, inside its running turn: one
+   * call on the tool's model, on the turn's catalog snapshot. */
+  async runTool(id: string, task: string | (() => Promise<string>), signal?: AbortSignal): Promise<AgentToolResult> {
+    if (!this.turnInFlight()) throw Object.assign(new Error('Tools run only inside an Agent turn.'), { status: 409 });
+    return this.runtime.runTool(id, task, signal);
+  }
 
   dispose(termination?: AgentSessionTermination): void {
     if (this.disposed) return;
@@ -360,6 +406,7 @@ export class OpenCodePanelSession {
     this.seenPermissions.clear();
     this.waitingToolPermissions.clear();
     this.preparingAttachments?.abort();
+    this.permissionReview.abort();
     this.abort.abort();
     this.stopRuntimeExitListener();
     this.runtime.endTurn();
@@ -378,7 +425,17 @@ export class OpenCodePanelSession {
   }
 
   private async initialize(): Promise<void> {
+    const started = performance.now();
     try {
+      // Without a readable list the chat still runs, on the default profile
+      // the service picks for an unversioned request.
+      const profiles = await this.runtime.models().catch((error: unknown) => {
+        log.warn(`could not read the Agent model list: ${errorMessage(error)}`);
+        return [];
+      });
+      const main = defaultHostedAgentProfile(profiles);
+      if (main) this.model = { profile: main.id, version: main.version };
+      if (this.disposed) return;
       this.client = await this.runtime.client(this.cwd);
       const subscription = await this.client.event.subscribe({ signal: this.abort.signal });
       void this.consume(subscription.stream);
@@ -391,31 +448,21 @@ export class OpenCodePanelSession {
         throw new Error('The OpenCode session does not belong to this Chat scope.');
       }
       this.sessionId = native.id;
+      if (this.options.crew) rememberCrewChat(this.options.crew, native.id);
       this.translator.bindSession(native.id);
       send(this.ws, { t: 'session-id', id: native.id });
       if (native.title) send(this.ws, { t: 'session-title', title: native.title });
-      if (this.options.resume && this.selectedModel === undefined) {
-        const revision = this.modelChoiceRevision;
-        const history = await this.client.session.messages({ ...DATA_REQUEST, path: { id: native.id } });
-        const lastUser = history.data.filter(entry => entry.info.role === 'user').at(-1)?.info;
-        if (revision === this.modelChoiceRevision && lastUser?.role === 'user' && lastUser.model.providerID === 'stashbase') this.selectedModel = lastUser.model.modelID;
-      }
-      if (this.disposed) return;
-      this.catalogReady = true;
-      this.publishModels();
+      // The main agent always runs on the service's default; the reader
+      // chooses each member's model in the Crew menu.
+      send(this.ws, main
+        ? { t: 'models', models: hostedAgentCatalogModels([main]), activeModel: main.id }
+        : { t: 'models', models: [] });
       send(this.ws, { t: 'skills', skills: [], state: 'empty' });
+      log.debug('session ready', { session_id: this.attributionId, elapsed_ms: Math.round(performance.now() - started) });
       send(this.ws, { t: 'ready' });
     } catch (error) {
       this.fail(error, true);
     }
-  }
-
-  private publishModels(): void {
-    const models = publicHostedModels(this.runtime.models());
-    const activeModel = this.selectedModel ?? models.find(model => model.isDefault)?.id;
-    const unavailable = activeModel && !models.some(model => model.id === activeModel);
-    send(this.ws, { t: 'models', models, ...(activeModel ? { activeModel } : {}),
-      ...(unavailable ? { fallback: 'The selected model is unavailable. Choose another model before sending.' } : {}) });
   }
 
   private async consume(stream: AsyncGenerator<Event>): Promise<void> {
@@ -439,16 +486,17 @@ export class OpenCodePanelSession {
           }
           const nativeError = event.type === 'session.error' ? event.properties.error
             : event.type === 'message.updated' && event.properties.info.role === 'assistant' ? event.properties.info.error : undefined;
-          send(this.ws, item, item.t === 'error' ? providerErrorDiagnostic(nativeError) : undefined);
-          if (item.t === 'error' && isStaleHostedModel(nativeError)) {
-            // End the failed turn before the terminal event, so reconnect keeps
-            // its known failure rather than marking delivery as uncertain.
-            const ending = translated.filter(event => event.t === 'turn-end');
-            for (const ended of ending.length ? ending : this.translator.endTurnWithError()) send(this.ws, ended);
-            send(this.ws, { t: 'exit', message: item.message });
-            this.dispose();
-            return;
+          const cause = item.t === 'error' ? this.translator.diagnostic(this.runtime.diagnostic?.()) : undefined;
+          if (item.t === 'tool' && this.sessionId) {
+            const selected = this.runtime.tools().find(({ tool }) => item.name === `stashbase_${tool.agent.toolName}` || item.name === tool.agent.toolName);
+            if (selected) {
+              item.crew = { id: selected.tool.id, label: selected.tool.name, icon: selected.tool.icon, model: selected.model.name };
+              recordCrewCall(this.sessionId, item.id, item.crew);
+            }
           }
+          send(this.ws, item, nativeError
+            ? { ...providerErrorDiagnostic(nativeError) as object, cause }
+            : cause);
           if (item.t === 'tool') {
             for (const permission of this.waitingToolPermissions.values()) {
               if (permission.toolUseId !== item.id) continue;
@@ -458,6 +506,7 @@ export class OpenCodePanelSession {
           }
         }
         if (translated.some((item) => item.t === 'turn-end')) {
+          this.permissionReview.abort();
           this.pendingPermissions.clear();
           this.seenPermissions.clear();
           this.waitingToolPermissions.clear();
@@ -480,35 +529,26 @@ export class OpenCodePanelSession {
       event = parsed.data;
     } catch { return; }
     if (event.t === 'close') { this.dispose(); return; }
+    if (event.t === 'set-model') return;
     if (event.t === 'set-mode') {
-      if (!this.turnInFlight() && (event.mode === 'default' || event.mode === 'acceptEdits' || event.mode === 'plan')) {
+      if (!this.turnInFlight() && (event.mode === 'default' || event.mode === 'acceptEdits' || event.mode === 'plan' || event.mode === 'auto')) {
         this.access = event.mode;
       }
       return;
     }
-    if (event.t === 'set-model') {
-      if (this.turnInFlight()) return;
-      const requested = event.model || undefined;
-      if (!this.catalogReady || !requested || this.runtime.models().some(model => model.id === requested)) {
-        this.modelChoiceRevision++;
-        this.selectedModel = requested;
-      }
-      if (this.catalogReady) this.publishModels();
-      return;
-    }
-    if (!this.client || !this.sessionId || !this.catalogReady) return;
+    if (!this.client || !this.sessionId) return;
     let preparationSignal: AbortSignal | undefined;
     try {
       switch (event.t) {
         case 'prompt': {
           if (this.turnInFlight()) return;
-          const model = this.selectedModel ?? this.runtime.models().find(model => model.isDefault)?.id;
-          if (!model || !this.runtime.models().some(entry => entry.id === model)) {
-            throw new Error('The selected model is unavailable. Choose another model before sending.');
-          }
+          this.permissionReview.abort();
+          this.permissionReview = new AbortController();
+          this.userRequest = restoreHistoryAttachments(event.text).text;
           this.interrupted = false;
-          beginAgentDiagnosticTurn(this.ws, event.telemetryTurnId, { model, native_session_id: this.sessionId });
-          this.runtime.beginTurn(event.telemetryTurnId ?? randomUUID(), model);
+          const modelID = this.model?.profile ?? DEFAULT_HOSTED_AGENT_PROFILE;
+          beginAgentDiagnosticTurn(this.ws, event.telemetryTurnId, { model: modelID, native_session_id: this.sessionId });
+          this.runtime.beginTurn(event.telemetryTurnId ?? randomUUID(), this.model);
           for (const translated of this.translator.beginTurn()) send(this.ws, translated);
           if (event.titleHint) {
             void this.client.session.update({
@@ -531,20 +571,24 @@ export class OpenCodePanelSession {
             }
           }
           if (this.disposed || this.interrupted || preparation.signal.aborted) return;
+          agentDiagnosticStage(this.ws, 'runtime_dispatched');
           await this.client.session.promptAsync({
             ...DATA_REQUEST,
             path: { id: this.sessionId },
             body: {
-              model: { providerID: 'stashbase', modelID: model },
-              agent: this.access === 'plan' ? 'stashbase-plan' : this.access === 'acceptEdits' ? 'stashbase-edit' : 'stashbase-folder',
+              model: { providerID: 'stashbase', modelID },
+              agent: this.access === 'plan' ? 'stashbase-plan'
+                : this.access === 'acceptEdits' || this.access === 'auto' ? 'stashbase-edit' : 'stashbase-folder',
               parts: [{ type: 'text', text: event.text }, ...attachments],
             },
           });
           break;
         }
         case 'interrupt':
+          this.permissionReview.abort();
           this.preparingAttachments?.abort();
           this.interrupted = true;
+          this.translator.requestInterrupt();
           this.pendingPermissions.clear();
           this.waitingToolPermissions.clear();
           if (this.attachmentPreparation) await this.attachmentPreparation.catch(() => undefined);
@@ -585,9 +629,20 @@ export class OpenCodePanelSession {
     const projectEdit = item.name.startsWith('stashbase_') && isStashbaseWorkspaceEdit({
       input: { server: 'stashbase', tool: item.name.slice('stashbase_'.length), arguments: item.input },
     }, this.cwd);
-    if (this.access === 'acceptEdits' && projectEdit) {
+    if ((this.access === 'acceptEdits' || this.access === 'auto') && projectEdit) {
       await this.replyPermission(item.id, true);
       return;
+    }
+    if (this.access === 'auto') {
+      const review = this.permissionReview;
+      const allowed = await reviewDefaultAgentPermission({
+        name: item.name, input: item.input, project: this.cwd, userRequest: this.userRequest,
+      }, (messages, signal) => this.runtime.complete(this.model ?? { profile: DEFAULT_HOSTED_AGENT_PROFILE }, messages, signal), review.signal);
+      if (review.signal.aborted || this.permissionReview !== review || this.disposed || !this.turnInFlight()) return;
+      if (allowed) {
+        await this.replyPermission(item.id, true);
+        return;
+      }
     }
     this.pendingPermissions.add(item.id);
     send(this.ws, item);
@@ -603,6 +658,7 @@ export class OpenCodePanelSession {
   }
 
   private fail(error: unknown, terminal: boolean): void {
+    this.permissionReview.abort();
     this.pendingPermissions.clear();
     this.seenPermissions.clear();
     this.waitingToolPermissions.clear();
@@ -619,25 +675,26 @@ export class OpenCodePanelSession {
   }
 }
 
-const sessions = new Set<OpenCodePanelSession>();
+const sessions = liveSessionSet<OpenCodePanelSession>();
 
-export function attachOpenCodeWebSocket(
-  ws: WebSocket,
-  options: import('./agent-contract.ts').AgentConnectionOptions,
-): void {
-  const session = new OpenCodePanelSession(ws, options);
-  sessions.add(session);
+/** The live Default chat a tool call is attributed to, if any. */
+export function openCodeToolSession(attributionId: string | undefined): OpenCodePanelSession | null {
+  const session = attributedAgentSession(attributionId);
+  return session instanceof OpenCodePanelSession ? session : null;
+}
+
+export function attachOpenCodeWebSocket(ws: WebSocket, options: AgentConnectionOptions): void {
+  sessions.add(new OpenCodePanelSession(ws, options));
 }
 
 export function killActiveOpenCode(windowId?: string): void {
-  for (const session of [...sessions]) {
-    if (windowId && !session.ownedByWindow(windowId)) continue;
-    session.dispose();
-  }
+  sessions.killWindow(windowId);
+  void discardWarmOpenCodeForWindow(windowId);
 }
 
-export function killOpenCodeSessionsForFolder(folderAbs: string): void {
-  disposeSessionsBoundToFolder(sessions, folderAbs);
+export function killOpenCodeSessionsForFolder(folder: string): void {
+  sessions.killFolder(folder);
+  void discardWarmOpenCodeForFolder(folder);
 }
 
 export function openCodeSessionHasContent(
@@ -696,7 +753,9 @@ export function blocksForMessage(info: Message, parts: Part[]): SessionBlock[] {
       id: part.callID,
       name: normalizeOpenCodeToolName(part.tool),
       input: part.state.input,
-      status: part.state.status === 'error' ? 'error' : 'done',
+      status: part.state.status === 'error'
+        ? info.error?.name === 'MessageAbortedError' && part.state.error === 'Tool execution aborted' ? 'cancelled' : 'error'
+        : 'done',
       result: part.state.status === 'error' ? part.state.error : part.state.output,
     });
   }
@@ -727,8 +786,10 @@ async function sessionBlocks(
     client.session.messages({ ...DATA_REQUEST, path: { id } }),
     client.session.diff({ ...DATA_REQUEST, path: { id } }),
   ]);
+  const crew = crewCallHistory(id);
   return [
-    ...messages.data.flatMap((message) => blocksForMessage(message.info, message.parts)),
+    ...messages.data.flatMap((message) => blocksForMessage(message.info, message.parts))
+      .map((block) => block.kind === 'tool' && crew[block.id] ? { ...block, crew: crew[block.id] } : block),
     ...blocksForDiffs(diffs.data),
   ];
 }
@@ -802,6 +863,7 @@ export function openCodeHistoryActions(): AgentHistoryActions {
       const { client, cwd } = await clientFor(folder);
       await assertSessionInScope(client, id, cwd);
       await client.session.delete({ ...DATA_REQUEST, path: { id } });
+      forgetCrewCalls(id);
     },
   };
 }

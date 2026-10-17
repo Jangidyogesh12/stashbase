@@ -68,6 +68,15 @@ export function useEmbedder(port: EmbedderPort): EmbedderViewModel {
   };
 }
 
+/** The setting as last read, without the commands that change it. */
+export function useEmbedderState(port: EmbedderPort): {
+  loading: boolean;
+  state: EmbedderState | null;
+} {
+  const state = useQuery(embedderQuery(port));
+  return { loading: state.isPending, state: state.data ?? null };
+}
+
 /**
  * Whether search by meaning exists in this window: true once the reader's
  * own key answers embeddings, false once the source is known to be anything

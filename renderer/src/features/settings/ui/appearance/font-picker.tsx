@@ -13,6 +13,7 @@ import { useId, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CommandItem, CommandList } from '@/components/ui/command-menu';
 import type { IncludedFont, SystemFont } from '@/features/settings/domain/appearance';
+import { cn } from '@/lib/utils';
 import { SearchField, SearchPopup, useSearchListKeys } from '@/shared/ui/search-popover';
 
 /** A few hundred rows draw at once; the search field narrows the rest. */
@@ -111,14 +112,21 @@ export function FontPicker({
         render={
           <Button
             aria-label={`${label}: ${current}${missing ? ' (not installed)' : ''}`}
-            className="w-56 justify-between"
+            className={cn(
+              'w-56',
+              // The label's wrapper and the label fill the trigger, so the
+              // chevron sits at its right edge as a select's does, and a long
+              // name ends in an ellipsis. Truncation clips, so the label drops
+              // the primitive's cap trim, which would cut off descenders.
+              '[&>span:last-child]:flex-1 [&>span:last-child>span]:flex-1 [&>span:last-child>span]:truncate [&>span:last-child>span]:text-left [&>span:last-child>span]:[text-box:normal]',
+            )}
             size="compact"
             trailingIcon={ChevronDown}
             variant="tertiary"
           />
         }
       >
-        <span className="min-w-0 flex-1 truncate text-left">{current}</span>
+        {current}
       </Popover.Trigger>
       <SearchPopup label={label}>
         <SearchField

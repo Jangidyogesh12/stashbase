@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { agentContextPort, agentSessionPort } from '@/test/fakes/agent';
 
 import { createAgentSessionRuntime, type AgentSessionRuntime } from './session-runtime';
+import { heldScheduler } from './session-runtime.harness';
 import { createAgentWorkspaceRuntime } from './workspace-runtime';
 
 const sessions: AgentSessionRuntime[] = [];
@@ -17,7 +18,7 @@ function live() {
     id: 'chat',
     port: fake.port,
     scope: { kind: 'folder', path: '/project' },
-    scheduler: { jitter: (value) => value, wait: () => new Promise(() => {}) },
+    scheduler: heldScheduler().scheduler,
   });
   sessions.push(session);
   fake.listeners[0]?.onEvent({ kind: 'ready' });

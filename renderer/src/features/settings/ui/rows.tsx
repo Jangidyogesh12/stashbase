@@ -13,7 +13,7 @@
  * confirmation, both of which sit outside this grammar.
  */
 
-import { useId, type HTMLAttributes, type ReactNode } from 'react';
+import { Children, useId, type HTMLAttributes, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useShape } from '@/lib/shape-context';
@@ -113,6 +113,12 @@ export interface SettingsRowProps extends Omit<HTMLAttributes<HTMLElement>, 'tit
   trail?: ReactNode;
 }
 
+/** Whether a slot has anything to draw: a conditional note or action arrives
+ *  as `false` (or a list of them) when it has nothing to say. */
+function drawn(node: ReactNode): boolean {
+  return Children.toArray(node).length > 0;
+}
+
 export function SettingsRow({
   as: Component = 'div',
   children,
@@ -124,7 +130,7 @@ export function SettingsRow({
   trail,
   ...props
 }: SettingsRowProps) {
-  const tall = children !== undefined && children !== null && children !== false;
+  const tall = drawn(children);
   return (
     <Component
       className={cn(
@@ -149,7 +155,7 @@ export function SettingsRow({
           <div className="mt-0.5 text-caption leading-snug text-muted-foreground">{detail}</div>
         )}
       </div>
-      {trail !== undefined && trail !== null && (
+      {drawn(trail) && (
         <div className={cn('flex shrink-0 items-center gap-1 justify-self-end', tall && 'mt-0.5')}>
           {trail}
         </div>

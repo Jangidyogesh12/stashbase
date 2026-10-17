@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BUILT_IN_AGENT_ADAPTERS } from '../agent-adapters.ts';
+import { liveSessionSet } from '../agent-session-registry.ts';
 import {
   attachAgentRuntime,
   discoverAgentRuntimes,
-  disposeSessionsBoundToFolder,
   parseAgentEffort,
   registerAgentAdapter,
   resolveAgentSessionFolder,
@@ -24,6 +24,7 @@ test('every built-in runtime declares the fundamental Shared Agent Contract beha
   assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => [adapter.id, adapter.label]), [
     ['codex', 'Codex'],
     ['claude', 'Claude'],
+    ['antigravity', 'Antigravity'],
     ['stashbase', 'Default'],
   ]);
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
@@ -46,10 +47,12 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.equal(capabilities.claude!.titleHint, false);
   assert.equal(capabilities.codex!.steering, true);
   assert.equal(capabilities.codex!.titleHint, true);
-  assert.deepEqual(capabilities.stashbase!.modes, ['default', 'acceptEdits', 'plan']);
+  assert.deepEqual(capabilities.stashbase!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.deepEqual(capabilities.claude!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
   assert.deepEqual(capabilities.codex!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
-  assert.equal(capabilities.stashbase!.models, true);
+  assert.deepEqual(capabilities.antigravity!.modes, ['default', 'acceptEdits', 'plan', 'auto']);
+  assert.equal(capabilities.stashbase!.models, false);
+  assert.equal(capabilities.stashbase!.effort, false);
   assert.equal(capabilities.stashbase!.skills, false);
   assert.equal(capabilities.stashbase!.attachments, true);
   assert.equal(capabilities.claude!.attachments, true);
@@ -100,6 +103,9 @@ test('capability discovery reports installed and unavailable native runtimes wit
     codex: process.platform === 'win32'
       ? 'irm https://chatgpt.com/codex/install.ps1 | iex'
       : 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
+    antigravity: process.platform === 'win32'
+      ? 'irm https://antigravity.google/cli/install.ps1 | iex'
+      : 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
   } as const;
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
     if (adapter.id === 'stashbase') continue;
@@ -108,7 +114,7 @@ test('capability discovery reports installed and unavailable native runtimes wit
     assert.equal(available.source, 'system');
     assert.equal(available.bootstrap.phase, 'idle');
     assert.equal(available.version, null, 'an executable that cannot report a version is still discovered');
-    assert.equal(available.updatable, true, 'both native runtimes support the official native installer');
+    assert.equal(available.updatable, true, 'every native runtime supports the official native installer');
     const unavailable = runtimeDescriptorFor(adapter, null);
     assert.equal(unavailable.state, 'unavailable');
     assert.equal(unavailable.source, null);
@@ -121,7 +127,7 @@ test('capability discovery reports installed and unavailable native runtimes wit
 test('capability discovery publishes the registered adapter catalog', async () => {
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) registerAgentAdapter(adapter);
   const discovered = await discoverAgentRuntimes();
-  assert.deepEqual(discovered.map((runtime) => runtime.id), ['codex', 'claude', 'stashbase']);
+  assert.deepEqual(discovered.map((runtime) => runtime.id), ['codex', 'claude', 'antigravity', 'stashbase']);
   for (const runtime of discovered) {
     const adapter = BUILT_IN_AGENT_ADAPTERS.find((candidate) => candidate.id === runtime.id)!;
     assert.equal(runtime.endpoint, '/ws/agent');
@@ -154,6 +160,7 @@ test('an explicit session folder is accepted only when it is a registered projec
 test('folder-bound teardown ends only the sessions bound to the removed folder', () => {
   const makeSession = (bound: string | null) => {
     const session = {
+      windowId: 'test-window',
       disposed: false,
       termination: null as null | { kind: 'scope-removed'; folder: string },
       boundFolder: () => bound,
@@ -169,9 +176,10 @@ test('folder-bound teardown ends only the sessions bound to the removed folder',
   const removedB = makeSession('/Users/me/Projects/Research/');
   const otherFolder = makeSession('/Users/me/Documents/StashBase/Notes');
   const unstarted = makeSession(null);
-  const sessions = new Set([removedA, removedB, otherFolder, unstarted]);
+  const sessions = liveSessionSet<ReturnType<typeof makeSession>>();
+  for (const session of [removedA, removedB, otherFolder, unstarted]) sessions.add(session);
 
-  disposeSessionsBoundToFolder(sessions, '/Users/me/Projects/Research');
+  sessions.killFolder('/Users/me/Projects/Research');
 
   assert.equal(removedA.disposed, true);
   assert.equal(removedB.disposed, true);
@@ -183,7 +191,13 @@ test('folder-bound teardown ends only the sessions bound to the removed folder',
   assert.equal(otherFolder.disposed, false);
   assert.equal(otherFolder.termination, null);
   assert.equal(unstarted.disposed, false);
-  assert.deepEqual([...sessions], [otherFolder, unstarted]);
+
+  // Removed sessions left the set; the survivors are still tracked.
+  removedA.disposed = false;
+  sessions.killWindow();
+  assert.equal(removedA.disposed, false);
+  assert.equal(otherFolder.disposed, true);
+  assert.equal(unstarted.disposed, true);
 });
 
 test('unsupported runtime connections return a contract error and close cleanly', () => {

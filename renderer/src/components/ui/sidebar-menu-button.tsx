@@ -49,12 +49,8 @@ interface SidebarMenuButtonProps
   /** Convenience shorthand for the common "one leading glyph, then a label"
    *  row: the icon is rendered ahead of `children` with the row's own lit
    *  colour and stroke weight. The icon slot takes exactly one glyph and
-   *  nothing more; a slot that needs anything richer passes `leading`. */
+   *  nothing more. */
   icon?: IconComponent;
-  /** A custom node for the icon slot — an avatar disc, a swatch — where one
-   *  glyph component cannot say it. The caller sizes it; it wins over
-   *  `icon` and the status dot. */
-  leading?: ReactNode;
   /** Semantic thread state for status-dot navigation. It is the only source
    *  of the dot in the icon column (`active`/`unread` → filled, `idle` →
    *  ring), stamps `data-status` on the button, appends visually-hidden
@@ -78,18 +74,7 @@ interface SidebarMenuButtonProps
  */
 const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
   (
-    {
-      isActive = false,
-      variant,
-      icon: Icon,
-      leading,
-      label,
-      status,
-      render,
-      className,
-      children,
-      ...props
-    },
+    { isActive = false, variant, icon: Icon, label, status, render, className, children, ...props },
     ref,
   ) => {
     const scope = useContext(MenuScopeContext);
@@ -123,9 +108,8 @@ const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
 
     const inner = (
       <>
-        {leading}
-        {!leading && Icon && <RowIcon icon={Icon} size={iconSize} />}
-        {!leading && !Icon && resolvedDot && (
+        {Icon && <RowIcon icon={Icon} size={iconSize} />}
+        {!Icon && resolvedDot && (
           <span
             className="flex shrink-0 items-center justify-center"
             style={{ width: iconSize, height: iconSize }}

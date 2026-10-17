@@ -1,60 +1,31 @@
 /** The composer's model-and-thinking control: one trigger naming the model
- *  the next turn runs on and how hard it thinks, over a menu that opens on
- *  the thinking level and keeps the model list one layer deeper. The level is
- *  the thing a reader changes turn to turn; the model is chosen once. It sits
- *  at the composer's right edge beside Send, where the reader looks last
- *  before sending; the runtime, its permission mode, and the persona keep
- *  the left. */
-import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Zap } from 'lucide-react';
-import { useState } from 'react';
+ *  the next turn runs on and how hard it thinks, over a panel that holds the
+ *  thinking level as a slider and keeps the model list one step deeper, in a
+ *  menu of its own. The level is the thing a reader changes turn to turn; the
+ *  model is chosen once. It sits beside Send, where the reader looks last
+ *  before sending. */
+import { Popover } from '@base-ui/react/popover';
+import { Brain, ChevronRight, RotateCcw } from 'lucide-react';
+import { useRef, useState, type RefObject } from 'react';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownContent,
-  DropdownLabel,
-  DropdownMenu,
-  DropdownSeparator,
-  DropdownTrigger,
-} from '@/components/ui/dropdown';
-import { MenuItem } from '@/components/ui/menu-item';
+import { DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
+import { Elevated } from '@/components/ui/elevated';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { modelChoice, type ModelChoice } from '@/features/agent/domain/model-choice';
 import type { AgentSessionState } from '@/features/agent/domain/session';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
+import { focusRing } from '@/lib/focus-ring';
+import { useShape } from '@/lib/shape-context';
+import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 
-import { NARROW_LABEL, NARROWEST_LABEL, NARROWEST_TRIGGER } from './narrow';
-
-type Layer = 'effort' | 'model';
-
-type ThinkingState = Pick<AgentSessionState, 'activeModel' | 'effort' | 'model' | 'models'>;
-
-function effortLabel(effort: string): string {
-  return effort
-    .replace(/^xhigh$/u, 'Extra high')
-    .replace(/[-_]+/gu, ' ')
-    .replace(/^./u, (letter) => letter.toUpperCase());
-}
-
-function effortDescription(effort: string): string | undefined {
-  switch (effort.toLowerCase()) {
-    case 'low':
-      return 'Faster';
-    case 'medium':
-      return 'Balanced';
-    case 'high':
-      return 'Deeper reasoning';
-    case 'xhigh':
-      return 'Deepest reasoning';
-    case 'max':
-      return 'Maximum reasoning';
-    case 'ultra':
-      return 'Maximum reasoning with delegation';
-    default:
-      return undefined;
-  }
-}
+import { ComposerMenuTrigger } from './menu-trigger';
+import { NARROWEST_LABEL } from './narrow';
+import { ModelMenu, modelDisplayName, type ThinkingState } from './thinking-models';
+import { effortLabel, rankedLevels, ThinkingSlider } from './thinking-slider';
+import { AgentToolsControl, type AgentToolsControlProps } from './tools';
 
 export interface AgentThinkingControlProps {
   activeAgent: Agent;
@@ -65,159 +36,152 @@ export interface AgentThinkingControlProps {
     };
   onEffortChange(effort: string | null): void;
   onModelChange(model: string | null): void;
+  /** Default's tools, which take the place of its model choice. */
+  tools: Pick<AgentToolsControlProps, 'api' | 'chat' | 'onChanged' | 'onSaving'>;
   /** Called when the trigger is pressed, so the catalog can be re-read. */
   onRequestCatalog(): void;
   runtimeUpdate?: AgentRuntimeUpdateView | undefined;
 }
 
-/** The first layer: the levels the chosen model accepts, with the model row
- *  at the foot leading one layer deeper. A model that declares no default
- *  level keeps a Default row, because the runtime's own level is then the
- *  only way back to it. */
-function EffortLayer({
+/** The panel: the model leads, centred at the top with Reset at the corner,
+ *  and opens one step deeper to a menu of its own; the level it thinks at
+ *  reads under it, quieter, live while the slider below moves. */
+function ThinkingPanel({
   choice,
   modelLocked,
   modelName,
   models,
   onEffortChange,
-  onModelLayer,
+  onModelChange,
+  panel,
+  runtimeUpdate,
+  state,
 }: {
   choice: ModelChoice;
   modelLocked: boolean;
   modelName: string;
   models: boolean;
   onEffortChange(effort: string | null): void;
-  onModelLayer(): void;
-}) {
-  const declared = choice.model?.defaultEffort;
-  const hasDeclaredDefault = declared !== undefined && choice.efforts.includes(declared);
-  return (
-    <>
-      <DropdownLabel>
-        {choice.efforts.length === 0 ? 'Thinking is set by the runtime' : 'Thinking'}
-      </DropdownLabel>
-      {choice.efforts.length > 0 && !hasDeclaredDefault && (
-        <MenuItem
-          checked={choice.effort === null}
-          label="Default"
-          onSelect={() => onEffortChange(null)}
-        />
-      )}
-      {choice.efforts.map((effort) => {
-        const description = effortDescription(effort);
-        return (
-          <MenuItem
-            checked={effort === choice.effort}
-            {...(description === undefined ? {} : { description })}
-            key={effort}
-            label={effortLabel(effort)}
-            layout="inline"
-            onSelect={() => onEffortChange(effort)}
-          />
-        );
-      })}
-      {models && (
-        <>
-          <DropdownSeparator />
-          <MenuItem
-            closeOnClick={false}
-            description={modelName}
-            disabled={modelLocked}
-            label="Model"
-            layout="inline"
-            onSelect={onModelLayer}
-            trailingIcon={ChevronRight}
-          />
-        </>
-      )}
-    </>
-  );
-}
-
-/** The deeper layer: the catalog, newest first as the runtime lists it. The
- *  row that will run is marked whether it was picked or is the runtime's own
- *  default; a runtime that names no default keeps a Default row for the same
- *  reason the level list does. A model pick closes the menu, because it is
- *  made once and the reader came down a layer to make it; a level pick keeps
- *  the menu open the way every choice menu here does, so the check can be
- *  seen before the pointer leaves. */
-function ModelLayer({
-  choice,
-  effort,
-  onEffortLayer,
-  onModelChange,
-  runtimeUpdate,
-  state,
-}: {
-  choice: ModelChoice;
-  effort: boolean;
-  onEffortLayer(): void;
   onModelChange(model: string | null): void;
+  /** The panel's own box, which the model menu clears rather than covering
+   *  the name it opened from. */
+  panel: RefObject<HTMLDivElement | null>;
   runtimeUpdate?: AgentRuntimeUpdateView | undefined;
   state: ThinkingState;
 }) {
-  const runtimeNamesDefault =
-    state.activeModel !== null || state.models.some((model) => model.isDefault === true);
+  const sizeClasses = useSize();
+  const shape = useShape();
+  // Where the thumb is while it moves, so the name above follows it.
+  const [moving, setMoving] = useState<number | null>(null);
+  const { ranked, unranked } = rankedLevels(choice.efforts);
+  const chosen = choice.effort === null ? -1 : ranked.indexOf(choice.effort);
+  const position = moving ?? chosen;
+  const declared = choice.model?.defaultEffort;
+  const hasDeclaredDefault = declared !== undefined && choice.efforts.includes(declared);
+  const atDefault = choice.effort === null || (hasDeclaredDefault && choice.effort === declared);
+  const levels = choice.efforts.length > 0;
+  const shownLevel = (position >= 0 ? ranked[position] : choice.effort) ?? null;
+  const modelText = cn('px-1.5 py-0.5 font-medium text-foreground', sizeClasses.text);
   return (
-    <>
-      {effort && (
-        <MenuItem closeOnClick={false} icon={ChevronLeft} label="Back" onSelect={onEffortLayer} />
-      )}
-      <DropdownLabel>Model</DropdownLabel>
-      {!runtimeNamesDefault && (
-        <MenuItem
-          checked={choice.model === null}
-          closeOnClick
-          disabled={runtimeUpdate?.busy === true}
-          label="Default"
-          layout="wrap"
-          onSelect={() => onModelChange(null)}
-        />
-      )}
-      {state.models.map((model) => (
-        <MenuItem
-          checked={model.id === choice.model?.id}
-          closeOnClick
-          disabled={runtimeUpdate?.busy === true}
-          // A runtime's model labels are aliases: "Opus" is whichever Opus
-          // that build runs. The release it resolves to is in the runtime's
-          // own description, which is the only place a reader can see that
-          // their Opus is now 5.5, so the rows carry it the way the levels
-          // above them already do.
-          {...(model.description === undefined ? {} : { description: model.description })}
-          key={model.id}
-          label={model.label}
-          layout="wrap"
-          onSelect={() => onModelChange(model.id)}
-        />
-      ))}
-      {runtimeUpdate && (
-        <>
-          <DropdownSeparator />
-          {/* An action, not a choice: one line under its icon like Back,
-              so it does not outweigh the models it sits beneath. */}
-          <MenuItem
-            closeOnClick={false}
-            disabled={runtimeUpdate.busy}
-            icon={RefreshCw}
-            label={
-              runtimeUpdate.busy
-                ? `Updating ${runtimeUpdate.label}…`
-                : `Update ${runtimeUpdate.label}`
-            }
-            onSelect={() => runtimeUpdate.update()}
-          />
-          {runtimeUpdate.failure && (
-            <DropdownLabel role="alert">{runtimeUpdate.failure}</DropdownLabel>
+    <div className="flex flex-col gap-2 px-3 pt-2.5 pb-3">
+      {/* Reset's width mirrored on the left, so the model centres on the panel. */}
+      <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_1.75rem] items-start">
+        <span aria-hidden="true" />
+        <div className="flex min-w-0 flex-col items-center gap-0.5">
+          {models ? (
+            <DropdownMenu disabled={modelLocked}>
+              <DropdownTrigger
+                render={
+                  <button
+                    aria-label={`Model: ${modelName}`}
+                    className={cn(
+                      'flex max-w-full cursor-pointer items-center gap-0.5 outline-none',
+                      modelText,
+                      shape.chip,
+                      'transition-colors duration-fast hover:bg-hover data-[popup-open]:bg-hover',
+                      'disabled:pointer-events-none disabled:opacity-50',
+                      focusRing(),
+                    )}
+                    disabled={modelLocked}
+                    type="button"
+                  />
+                }
+              >
+                <span className="min-w-0 truncate">{modelName}</span>
+                <ChevronRight
+                  aria-hidden="true"
+                  className="shrink-0 text-muted-foreground"
+                  size={12}
+                  strokeWidth={1.75}
+                />
+              </DropdownTrigger>
+              <ModelMenu
+                anchor={panel}
+                choice={choice}
+                onModelChange={onModelChange}
+                runtimeUpdate={runtimeUpdate}
+                state={state}
+              />
+            </DropdownMenu>
+          ) : (
+            <span className={cn('truncate', modelText)}>{modelName}</span>
           )}
-        </>
+          <span className={cn('truncate text-muted-foreground', sizeClasses.caption)}>
+            {levels
+              ? shownLevel === null
+                ? 'Default'
+                : effortLabel(shownLevel)
+              : 'Thinking is set by the runtime'}
+          </span>
+        </div>
+        {levels ? (
+          <Tooltip content="Reset to default" side="top">
+            <Button
+              aria-label="Reset thinking to the model's default"
+              disabled={atDefault}
+              onClick={() => onEffortChange(null)}
+              size="icon-compact"
+              variant="ghost"
+            >
+              <RotateCcw aria-hidden="true" />
+            </Button>
+          </Tooltip>
+        ) : (
+          <span aria-hidden="true" />
+        )}
+      </div>
+      {ranked.length > 0 && (
+        <ThinkingSlider
+          effort={choice.effort}
+          onEffortChange={onEffortChange}
+          onMove={setMoving}
+          position={position}
+          ranked={ranked}
+        />
       )}
-    </>
+      {unranked.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-1">
+          {unranked.map((effort) => (
+            <Button
+              aria-pressed={choice.effort === effort}
+              key={effort}
+              onClick={() => onEffortChange(effort)}
+              size="compact"
+              variant={choice.effort === effort ? 'secondary' : 'ghost'}
+            >
+              {effortLabel(effort)}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
 /** Renders nothing for a runtime that advertises neither a model nor a level
- *  choice, so the caller places it without asking. */
+ *  choice, so the caller places it without asking. Default's main model is
+ *  fixed, so it offers its optional tools instead. A runtime with models but
+ *  no level opens straight on the model list. */
 export function AgentThinkingControl({
   activeAgent,
   onEffortChange,
@@ -225,91 +189,96 @@ export function AgentThinkingControl({
   onRequestCatalog,
   runtimeUpdate,
   state,
+  tools,
 }: AgentThinkingControlProps) {
   const { effort, models } = activeAgent.abilities;
   const disabled = state.activeTurn;
   // A populated Claude conversation keeps its model for the rest of its run.
   const modelLocked = activeAgent.id === 'claude' && state.transcript.length > 0;
   const choice = modelChoice(state);
-  const firstLayer: Layer = effort ? 'effort' : 'model';
-  const [layer, setLayer] = useState<Layer>(firstLayer);
-  const modelName = choice.model?.label ?? 'Default';
+  const [open, setOpen] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  const shape = useShape();
+  const name = modelDisplayName(choice.model, state.models);
   const effortName = choice.effort === null ? null : effortLabel(choice.effort);
-  const reading = effortName === null ? modelName : `${modelName}, ${effortName}`;
+  const reading = effortName === null ? name : `${name}, ${effortName}`;
   const label = `Model and thinking: ${reading}`;
 
+  if (activeAgent.id === 'stashbase') {
+    return <AgentToolsControl key={tools.chat} {...tools} disabled={disabled} />;
+  }
   if (!effort && !models) return null;
 
-  return (
-    <DropdownMenu
+  const trigger = (
+    <ComposerMenuTrigger
+      className="max-w-56"
       disabled={disabled}
-      onOpenChange={(open) => {
-        if (open) setLayer(firstLayer);
-      }}
+      icon={Brain}
+      label={label}
+      onClick={onRequestCatalog}
+      popover={effort}
     >
-      <Tooltip content={label} side="top">
-        <DropdownTrigger
-          render={
-            <Button
-              aria-label={label}
-              className={cn('max-w-56', NARROWEST_TRIGGER)}
-              disabled={disabled}
-              leadingIcon={Zap}
-              onClick={onRequestCatalog}
-              size="compact"
-              trailingIcon={ChevronDown}
-              variant="ghost"
-            >
-              {/* As the pane narrows the model's name folds away first and the
-                  level, the thing changed turn to turn, stays until the
-                  narrowest step. While no level is known, before the catalog
-                  has been read, the name stays in its place instead, so the
-                  trigger is never a bare icon above the narrowest step. */}
-              <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-                <span
-                  className={cn(
-                    'min-w-0 truncate',
-                    effortName === null ? NARROWEST_LABEL : NARROW_LABEL,
-                  )}
-                >
-                  {modelName}
-                </span>
-                {effortName !== null && (
-                  <span className={cn('shrink-0 text-muted-foreground', NARROWEST_LABEL)}>
-                    {effortName}
-                  </span>
-                )}
-              </span>
-            </Button>
-          }
-        />
-      </Tooltip>
-      <DropdownContent
-        align="end"
-        className="w-72 max-w-[calc(100vw-1rem)]"
-        selectionAppearance="none"
-        side="top"
-      >
-        {layer === 'effort' ? (
-          <EffortLayer
-            choice={choice}
-            modelLocked={modelLocked}
-            modelName={modelName}
-            models={models}
-            onEffortChange={onEffortChange}
-            onModelLayer={() => setLayer('model')}
-          />
-        ) : (
-          <ModelLayer
-            choice={choice}
-            effort={effort}
-            onEffortLayer={() => setLayer('effort')}
-            onModelChange={onModelChange}
-            runtimeUpdate={runtimeUpdate}
-            state={state}
-          />
+      {/* The model's name leads and the level follows it; both stay until
+          the narrowest step (narrow.ts), and a long name truncates first. */}
+      <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+        <span className={cn('min-w-0 truncate', NARROWEST_LABEL)}>{name}</span>
+        {effortName !== null && (
+          <span className={cn('shrink-0 text-muted-foreground', NARROWEST_LABEL)}>
+            {effortName}
+          </span>
         )}
-      </DropdownContent>
-    </DropdownMenu>
+      </span>
+    </ComposerMenuTrigger>
+  );
+
+  if (!effort) {
+    return (
+      <DropdownMenu disabled={disabled}>
+        {trigger}
+        <ModelMenu
+          choice={choice}
+          onModelChange={onModelChange}
+          runtimeUpdate={runtimeUpdate}
+          state={state}
+        />
+      </DropdownMenu>
+    );
+  }
+
+  return (
+    <Popover.Root onOpenChange={setOpen} open={open && !disabled}>
+      {trigger}
+      <Popover.Portal>
+        <Popover.Positioner align="end" className="z-50 outline-none" side="top" sideOffset={6}>
+          <Popover.Popup
+            aria-label="Model and thinking"
+            ref={panel}
+            // A larger radius than the menus': a panel of a few controls
+            // rather than a list, the way the composer card it rises from
+            // rounds its own corners.
+            className={cn(
+              'flex w-64 max-w-[calc(100vw-1rem)] flex-col p-1 outline-none',
+              shape.card,
+            )}
+            render={<Elevated offset={2} shadowLevel={3} />}
+          >
+            <ThinkingPanel
+              choice={choice}
+              modelLocked={modelLocked}
+              modelName={name}
+              models={models}
+              onEffortChange={onEffortChange}
+              onModelChange={(model) => {
+                onModelChange(model);
+                setOpen(false);
+              }}
+              panel={panel}
+              runtimeUpdate={runtimeUpdate}
+              state={state}
+            />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

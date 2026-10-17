@@ -33,8 +33,9 @@ describe('HTTP client', () => {
       'http://127.0.0.1:8090',
       vi.fn(async () => new Response('not-json', { status: 502 })),
     );
-    await expect(client.request({ path: '/api/projects' })).resolves.toEqual({
+    await expect(client.request({ path: '/api/projects' })).resolves.toMatchObject({
       body: null,
+      bodyError: expect.any(SyntaxError),
       status: 502,
     });
   });
@@ -59,7 +60,7 @@ describe('HTTP client', () => {
     expect(init?.body).toBe(JSON.stringify({ baseVersion: 'v1', content: 'changed' }));
   });
 
-  it('exposes response headers only for metadata HEAD requests', async () => {
+  it('exposes metadata for HEAD requests without trying to parse an absent body', async () => {
     const client = createHttpClient(
       'http://127.0.0.1:8090',
       vi.fn(

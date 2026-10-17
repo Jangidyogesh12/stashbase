@@ -74,7 +74,7 @@ export function isCloudPlaceholderName(name: string): boolean {
   return name.toLowerCase().endsWith('.icloud');
 }
 
-export function pathHasCloudPlaceholder(relPath: string): boolean {
+function pathHasCloudPlaceholder(relPath: string): boolean {
   return relPath
     .replace(/\\/g, '/')
     .split('/')
@@ -125,10 +125,6 @@ export function isRetrievalEligiblePath(relPath: string): boolean {
   const base = relPath.replace(/\\/g, '/').split('/').pop() ?? '';
   if (EXCLUDED_BASENAMES.has(base)) return false;
   return !dipsIntoIndexExcludedDir(relPath);
-}
-
-export function shouldIndexSourcePath(sourcePath: string): boolean {
-  return shouldIndexFilePath(sourcePath);
 }
 
 export function indexableFileSizeError(absPath: string): string | null {

@@ -3,7 +3,7 @@
  *
  * Owns the platform launcher script under `~/.stashbase/bin`, the
  * per-process launcher used by OpenQuill, and idempotent config writes
- * for the bring-your-own Chat runtimes (Claude, Codex). Only Agent
+ * for the bring-your-own Chat runtimes (Claude, Codex, Antigravity). Only Agent
  * readiness calls `ensureAgentMcp`; every other
  * MCP-compatible client configures itself from the standard config that
  * Settings → MCP exposes read-only.
@@ -14,7 +14,15 @@ import { parseTOML, getStaticTOMLValue } from 'toml-eslint-parser';
 import os from 'node:os';
 import path from 'node:path';
 import { appDataRoot } from './local-data.ts';
-import { claudeConfigPath, codexConfigPath } from './agent-config-paths.ts';
+import { writeFileAtomic } from './atomic-write.ts';
+import {
+  antigravityHooksPath,
+  antigravityMcpConfigPath,
+  claudeConfigPath,
+  codexConfigPath,
+} from './agent-config-paths.ts';
+import type { NativeAgentId } from './agent-runtime-paths.ts';
+import { parsePortArg } from '../shared/port-arg.ts';
 
 const APP_ROOT = process.env.STASHBASE_APP_ROOT
   ? path.resolve(process.env.STASHBASE_APP_ROOT)
@@ -45,13 +53,16 @@ export function standardMcpJson(wrapper: string): Record<string, unknown> {
  * regenerate the launcher, then rewrite the stashbase entry in that agent's
  * own config file. Third-party clients are never written here — they get the
  * standard config to paste. */
-export function ensureAgentMcp(id: 'claude' | 'codex'): void {
+export function ensureAgentMcp(id: NativeAgentId): void {
   if (!fs.existsSync(MCP_ENTRY)) {
     throw new Error(`MCP entry missing: ${MCP_ENTRY}`);
   }
   const wrapper = writeMcpWrapper();
   if (id === 'codex') {
     configureCodex(codexConfigPath(), wrapper);
+  } else if (id === 'antigravity') {
+    configureJsonMcp(antigravityMcpConfigPath(), { command: wrapper });
+    configureAntigravityHooks(antigravityHooksPath(), writeAntigravityHookLauncher());
   } else {
     // Claude defers MCP tool definitions behind its tool search once a user's
     // connectors grow past a share of the context, leaving the model a bare
@@ -87,6 +98,9 @@ function localBin(name: string): string {
 }
 
 function writeMcpWrapper(homeDir = os.homedir()): string {
+  // Stdio clients must reach the host that generated their launcher. Explicit
+  // launcher arguments still win, for clients deliberately targeting a port.
+  const port = parsePortArg(process.argv.slice(2), 8090);
   const binDir = path.join(homeDir, '.stashbase', 'bin');
   const wrapper = currentMcpWrapper(homeDir);
   const resourcesPath = process.env.STASHBASE_RESOURCES_PATH || APP_ROOT;
@@ -105,10 +119,10 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
         ...(isBuilt
           ? [
               'set "ELECTRON_RUN_AS_NODE=1"',
-              `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %*`,
+              `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %* --port=${port}`,
             ]
           : [
-              `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %*`,
+              `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %* --port=${port}`,
             ]),
         '',
       ].join('\r\n')
@@ -121,22 +135,26 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
         ...(isBuilt
           ? [
               'export ELECTRON_RUN_AS_NODE=1',
-              `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
+              `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@" --port=${port}`,
             ]
           : [
-              `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
+              `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@" --port=${port}`,
             ]),
         '',
       ].join('\n');
   fs.mkdirSync(binDir, { recursive: true });
-  writeTextAtomic(wrapper, content, 0o755);
+  writeFileAtomic(wrapper, content, { mode: 0o755 });
   return wrapper;
 }
 
 function readJsonObject(file: string): Record<string, unknown> | null {
   if (!fs.existsSync(file)) return {};
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // An empty file holds no settings to keep (Antigravity's installers leave
+    // one behind), and editors on Windows may save a byte-order mark.
+    const text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+    if (!text.trim()) return {};
+    const parsed = JSON.parse(text);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }
@@ -147,7 +165,7 @@ function readJsonObject(file: string): Record<string, unknown> | null {
 }
 
 function writeJson(file: string, value: unknown): void {
-  writeTextAtomic(file, JSON.stringify(value, null, 2) + '\n');
+  writeFileAtomic(file, JSON.stringify(value, null, 2) + '\n');
 }
 
 function configureJsonMcp(file: string, serverConfig: Record<string, unknown>): void {
@@ -198,7 +216,7 @@ function configureCodex(file: string, wrapper: string): void {
   let updated: string;
   try { updated = replaceCodexMcpTables(raw, block); }
   catch { throw new Error(`Could not safely update StashBase MCP in ${file}; leaving it untouched. Check the TOML configuration.`); }
-  if (updated !== raw) writeTextAtomic(file, updated);
+  if (updated !== raw) writeFileAtomic(file, updated);
 }
 
 const CODEX_AUTO_APPROVED_STASHBASE_TOOLS = [
@@ -209,15 +227,71 @@ const CODEX_AUTO_APPROVED_STASHBASE_TOOLS = [
   'search_project',
 ];
 
-function writeTextAtomic(file: string, content: string, mode?: number): void {
-  const dir = path.dirname(file);
-  fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
-  try {
-    fs.writeFileSync(tmp, content, { encoding: 'utf8', ...(mode === undefined ? {} : { mode }) });
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
-    throw err;
-  }
+/** Seconds Antigravity waits for the approval hook. A StashBase approval card
+ * has no deadline of its own, so the hook allows nearly an hour; the host
+ * answers before Antigravity's own limit (`antigravity-approval.ts`). */
+export const ANTIGRAVITY_HOOK_TIMEOUT_SECONDS = 3600;
+const ANTIGRAVITY_HOOK_CURL_SECONDS = ANTIGRAVITY_HOOK_TIMEOUT_SECONDS - 60;
+const ANTIGRAVITY_HOOK_ROUTE = '/api/agent/antigravity/hook';
+const ANTIGRAVITY_HOOK_UNREACHABLE = '{"decision":"deny","reason":"StashBase could not review this action, so it was not run."}';
+
+/** Antigravity's approval gate for StashBase chats (`PreToolUse`). Every
+ * Antigravity run reads the same hooks, so outside a StashBase chat, where no
+ * session id is set, the launcher answers `allow`, which leaves the run's own
+ * permission rules in charge. Inside one it asks the host that started the
+ * chat; failing to reach it denies the action, as a failing hook would. */
+export function antigravityHookLauncher(port: number, platform: NodeJS.Platform = process.platform): string {
+  const url = `http://127.0.0.1:${port}${ANTIGRAVITY_HOOK_ROUTE}`;
+  return platform === 'win32'
+    ? [
+        '@echo off',
+        'if not defined STASHBASE_AGENT_SESSION_ID (',
+        '  echo {"decision":"allow"}',
+        '  exit /b 0',
+        ')',
+        `curl.exe -sS --fail --max-time ${ANTIGRAVITY_HOOK_CURL_SECONDS} -X POST -H "content-type: application/json" -H "x-stashbase-agent-session-id: %STASHBASE_AGENT_SESSION_ID%" --data-binary @- "${url}"`,
+        `if errorlevel 1 echo ${ANTIGRAVITY_HOOK_UNREACHABLE}`,
+        'exit /b 0',
+        '',
+      ].join('\r\n')
+    : [
+        '#!/bin/sh',
+        'if [ -z "${STASHBASE_AGENT_SESSION_ID:-}" ]; then',
+        `  printf '%s\\n' '{"decision":"allow"}'`,
+        '  exit 0',
+        'fi',
+        `if ! curl -sS --fail --max-time ${ANTIGRAVITY_HOOK_CURL_SECONDS} -X POST \\`,
+        `  -H 'content-type: application/json' \\`,
+        '  -H "x-stashbase-agent-session-id: ${STASHBASE_AGENT_SESSION_ID}" \\',
+        `  --data-binary @- ${shellQuote(url)}; then`,
+        `  printf '%s\\n' ${shellQuote(ANTIGRAVITY_HOOK_UNREACHABLE)}`,
+        'fi',
+        '',
+      ].join('\n');
+}
+
+function writeAntigravityHookLauncher(homeDir = os.homedir()): string {
+  const port = parsePortArg(process.argv.slice(2), 8090);
+  const launcher = path.join(
+    homeDir,
+    '.stashbase',
+    'bin',
+    process.platform === 'win32' ? 'stashbase-antigravity-hook.cmd' : 'stashbase-antigravity-hook',
+  );
+  writeFileAtomic(launcher, antigravityHookLauncher(port), { mode: 0o755 });
+  return launcher;
+}
+
+/** Replace only StashBase's entry in Antigravity's shared hooks file; every
+ * other hook, and an unparseable file, is left as it was. */
+function configureAntigravityHooks(file: string, launcher: string): void {
+  const config = readJsonObject(file);
+  if (!config) throw new Error(`Couldn't parse ${file}; leaving it untouched.`);
+  const desired = {
+    PreToolUse: [
+      { matcher: '*', hooks: [{ type: 'command', command: launcher, timeout: ANTIGRAVITY_HOOK_TIMEOUT_SECONDS }] },
+    ],
+  };
+  if (isDeepStrictEqual(config.stashbase, desired)) return;
+  writeJson(file, { ...config, stashbase: desired });
 }

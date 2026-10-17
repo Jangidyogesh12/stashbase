@@ -89,6 +89,7 @@ export function WorkspacePanes({
           accountSignedIn={account.account?.signedIn ?? false}
           header={mode === 'documents'}
           persona={dependencies.agent.persona}
+          tools={dependencies.agent.tools}
           onBrowsePersonas={onBrowsePersonas}
           onOpenAgentSettings={() => settings.openSettings('agents')}
           onOpenExternal={(href) => void dependencies.documents.openExternal(href)}

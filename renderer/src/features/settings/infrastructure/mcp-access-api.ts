@@ -28,28 +28,15 @@ function toHttpAccess(wire: McpHttpStatusWire): McpHttpAccess {
   };
 }
 
-function mcpAccess(
-  path: string,
-  signal: AbortSignal,
-  messages: { invalid: string; unavailable: string },
-) {
-  return settingsRequest({
-    failureSchema: mcpFailureSchema,
-    invalidResponse: messages.invalid,
-    path,
-    signal,
-    unavailable: messages.unavailable,
-  });
+function mcpAccess(path: string, signal: AbortSignal) {
+  return settingsRequest({ failureSchema: mcpFailureSchema, path, signal });
 }
 
 export function createMcpAccessAdapter(client: HttpClient): McpAccessPort {
   return {
     async status(signal) {
       const wire = await request(client, {
-        ...mcpAccess('/api/mcp/status', signal, {
-          invalid: 'MCP access settings returned an invalid response.',
-          unavailable: 'MCP access settings are unavailable.',
-        }),
+        ...mcpAccess('/api/mcp/status', signal),
         schema: mcpStatusSchema,
       });
       return {
@@ -60,10 +47,7 @@ export function createMcpAccessAdapter(client: HttpClient): McpAccessPort {
     },
     async rotateToken(signal) {
       const parsed = await request(client, {
-        ...mcpAccess('/api/mcp/http/token', signal, {
-          invalid: 'The MCP token rotation returned an invalid response.',
-          unavailable: 'The MCP token could not be rotated.',
-        }),
+        ...mcpAccess('/api/mcp/http/token', signal),
         method: 'POST',
         schema: mcpHttpWriteResponseSchema,
       });
@@ -71,10 +55,7 @@ export function createMcpAccessAdapter(client: HttpClient): McpAccessPort {
     },
     async setDockerAccess(enabled, signal) {
       const parsed = await request(client, {
-        ...mcpAccess('/api/mcp/http/docker-access', signal, {
-          invalid: 'The Docker MCP access change returned an invalid response.',
-          unavailable: 'Docker MCP access could not be changed.',
-        }),
+        ...mcpAccess('/api/mcp/http/docker-access', signal),
         body: mcpDockerAccessRequestSchema.parse({ enabled }),
         method: 'PUT',
         schema: mcpHttpWriteResponseSchema,
@@ -83,10 +64,7 @@ export function createMcpAccessAdapter(client: HttpClient): McpAccessPort {
     },
     async setDockerPort(port, signal) {
       const parsed = await request(client, {
-        ...mcpAccess('/api/mcp/http/docker-port', signal, {
-          invalid: 'The Docker MCP port change returned an invalid response.',
-          unavailable: 'The Docker MCP port could not be saved.',
-        }),
+        ...mcpAccess('/api/mcp/http/docker-port', signal),
         body: mcpDockerPortRequestSchema.parse({ port }),
         method: 'PUT',
         schema: mcpHttpWriteResponseSchema,

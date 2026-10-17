@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { HostedAgentBroker } from '../hosted-agent-broker.ts';
+import http from 'node:http';
+import { reviewDefaultAgentPermission } from '../default-agent-permissions.ts';
+import { HostedAgentBroker, HostedAgentToolError } from '../hosted-agent-broker.ts';
 import { OpenCodeEventTranslator } from '../opencode-agent.ts';
+import { classifyAgentTurnFailure } from '../agent-turn-failure.ts';
 
 test('hosted Agent broker keeps the account credential upstream and streams an OpenAI-compatible response', async (t) => {
   const accessCalls: boolean[] = [];
@@ -32,7 +35,7 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   await broker.start();
   t.after(() => broker.close());
   const runtime = broker.runtime('agent-session-1')!;
-  broker.beginTurn('agent-session-1', '00000000-0000-4000-8000-000000000001', 'stashbase-agent-default', 7);
+  broker.beginTurn('agent-session-1', '00000000-0000-4000-8000-000000000001');
 
   const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -51,11 +54,171 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   assert.equal(upstream[0].turnId, '00000000-0000-4000-8000-000000000001');
   assert.equal(upstream[1].turnId, upstream[0].turnId);
   assert.equal(upstream[0].profile, 'stashbase-agent-default');
-  assert.deepEqual(upstream.map(call => call.version), ['7', '7']);
+  // An unversioned turn leaves the configuration to the service.
+  assert.equal(upstream[0].version, null);
   assert.equal(runtime.model, 'stashbase-agent-default');
   assert.equal(upstream[0].url, 'https://gateway.invalid/v1/agent/chat/completions');
   assert.doesNotMatch(upstream[0].body, /account-token/);
 });
+
+test('hosted Agent broker retains the gateway retry delay on a short-term limit', async (t) => {
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: async () => Response.json({ code: 'agent_rate_limited', message: 'Too many Agent requests or too much short-term usage.' },
+      { status: 429, headers: { 'retry-after': '37' } }),
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const runtime = broker.runtime('short-term-limit')!;
+  broker.beginTurn('short-term-limit', '00000000-0000-4000-8000-000000000020');
+  const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+    method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], stream: true }),
+  });
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get('retry-after'), '37');
+  assert.deepEqual(await response.json(), { error: {
+    message: 'Too many Agent requests or too much short-term usage.',
+    type: 'stashbase_hosted_error', code: 'agent_rate_limited',
+  } });
+});
+
+test('a turn keeps the model it began with for every call, and the next turn takes a new choice', async (t) => {
+  const seen: Array<{ turn: string | null; profile: string | null; version: string | null }> = [];
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      seen.push({
+        turn: headers.get('x-stashbase-agent-turn-id'),
+        profile: headers.get('x-stashbase-agent-profile'),
+        version: headers.get('x-stashbase-agent-profile-version'),
+      });
+      return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n', {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    },
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const runtime = broker.runtime('model-turns')!;
+  const call = async () => (await fetch(`${runtime.baseUrl}/chat/completions`, {
+    method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], stream: true }),
+  })).text();
+
+  const model = { profile: 'writer-pro', version: 3 };
+  broker.beginTurn('model-turns', '00000000-0000-4000-8000-000000000011', model);
+  // The caller's object changing later cannot move a turn already running.
+  model.profile = 'other';
+  await call();
+  await call();
+  broker.endTurn('model-turns');
+  broker.beginTurn('model-turns', '00000000-0000-4000-8000-000000000012', { profile: 'writer-fast', version: 1 });
+  await call();
+
+  assert.deepEqual(seen, [
+    { turn: '00000000-0000-4000-8000-000000000011', profile: 'writer-pro', version: '3' },
+    { turn: '00000000-0000-4000-8000-000000000011', profile: 'writer-pro', version: '3' },
+    { turn: '00000000-0000-4000-8000-000000000012', profile: 'writer-fast', version: '1' },
+  ]);
+});
+
+test('a tool call goes to the v2 endpoint under the root turn, selected by tool headers alone', async (t) => {
+  const seen: Array<{ url: string; headers: Headers; body: { model?: string } }> = [];
+  let refuseFirst = true;
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: async (url, init) => {
+      seen.push({ url: String(url), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) });
+      if (refuseFirst) {
+        refuseFirst = false;
+        return new Response('{}', { status: 401 });
+      }
+      return new Response('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: {"choices":[{"delta":{"content":" there"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    },
+    upstreamUrl: 'https://gateway.invalid/v1/agent/chat/completions', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  broker.runtime('tools');
+  const messages = [{ role: 'user' as const, content: 'Write.' }];
+  const selection = { tool: 'writer', toolVersion: 4, model: 'claude-opus-5-5', modelVersion: 9 };
+  await assert.rejects(broker.completeTool('tools', selection, messages), /active turn/);
+
+  broker.beginTurn('tools', '00000000-0000-4000-8000-000000000021', { profile: 'main', version: 2 });
+  assert.equal(await broker.completeTool('tools', selection, messages), 'Hello there');
+  assert.equal(seen.length, 2, 'a refreshed sign-in retries once');
+  for (const { url, headers, body } of seen) {
+    assert.equal(url, 'https://gateway.invalid/v2/agent/chat/completions');
+    assert.equal(headers.get('x-stashbase-agent-turn-id'), '00000000-0000-4000-8000-000000000021', 'every role shares the root turn');
+    assert.equal(headers.get('x-stashbase-agent-tool'), 'writer');
+    assert.equal(headers.get('x-stashbase-agent-tool-version'), '4');
+    assert.equal(headers.get('x-stashbase-agent-tool-model'), 'claude-opus-5-5');
+    assert.equal(headers.get('x-stashbase-agent-tool-model-version'), '9');
+    assert.equal(headers.get('x-stashbase-agent-profile'), null, 'never mixed with the main profile');
+    assert.equal(headers.get('x-stashbase-agent-profile-version'), null);
+    assert.deepEqual(body, { model: 'claude-opus-5-5', messages, stream: true });
+  }
+  assert.equal(seen[0]!.headers.get('idempotency-key'), seen[1]!.headers.get('idempotency-key'), 'a retry keeps the logical request key');
+
+  await broker.completeTool('tools', selection, messages);
+  assert.notEqual(seen[2]!.headers.get('idempotency-key'), seen[1]!.headers.get('idempotency-key'), 'a new call gets a new key');
+});
+
+test('a refused tool call keeps the service code and never moves to another model', async (t) => {
+  const bodies: string[] = [];
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: async (_url, init) => {
+      bodies.push(String(init?.body));
+      return Response.json({ error: { code: 'agent_tool_version_changed', message: 'changed' } }, { status: 422 });
+    },
+    upstreamUrl: 'https://gateway.invalid/v1/agent/chat/completions', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  broker.runtime('tools');
+  broker.beginTurn('tools', '00000000-0000-4000-8000-000000000022');
+  const refused = await broker.completeTool('tools', { tool: 'reader', toolVersion: 1, model: 'gpt-6-1-sol', modelVersion: 2 }, [])
+    .catch((error: unknown) => error);
+  assert.ok(refused instanceof HostedAgentToolError);
+  assert.equal(refused.code, 'agent_tool_version_changed');
+  assert.equal(refused.status, 422);
+  assert.equal(bodies.length, 1);
+});
+
+for (const [status, code] of [[422, 'agent_model_configuration_changed'], [503, 'agent_model_unavailable']] as const) {
+  test(`a refused model (${code}) ends without a native retry and asks for a model refresh`, async (t) => {
+    let calls = 0;
+    const broker = new HostedAgentBroker({
+      accessToken: async () => 'fixture-token',
+      fetch: async () => {
+        calls += 1;
+        return Response.json({ code, message: 'Service wording may change.' }, { status });
+      },
+      upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+    });
+    await broker.start();
+    t.after(() => broker.close());
+    const runtime = broker.runtime('model-refused')!;
+    broker.beginTurn('model-refused', '00000000-0000-4000-8000-000000000013', { profile: 'writer-pro', version: 2 });
+    const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+      method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const payload = await response.json() as { error: { code: string; message: string } };
+    // 422 is outside the native runtime's retryable statuses.
+    assert.equal(response.status, 422);
+    assert.equal(payload.error.code, code);
+    assert.equal(classifyAgentTurnFailure(payload.error.message), 'model-changed');
+    assert.equal(calls, 1);
+  });
+}
 
 const emptyResponse = 'data: {"choices":[{"delta":{"role":"assistant","content":""},"finish_reason":null}]}\r\n\r\n'
   + 'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":0}}\r\n\r\ndata: [DONE]\r\n\r\n';
@@ -114,6 +277,86 @@ test('repeated empty model responses fail visibly after one retry', async (t) =>
   assert.match(body.error.message, /empty response twice/);
 });
 
+const interruptedResponse = 'data: {"error":{"code":"agent_provider_unavailable","message":"The Agent model provider interrupted the response."}}\n\n';
+
+test('a hosted stream interruption before output retries the continuation once and preserves completed tool results', async (t) => {
+  const answer = 'data: {"choices":[{"delta":{"content":"Recovered"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+  const harness = await streamHarness(t, attempt => sse(attempt === 1 ? interruptedResponse : answer));
+  const response = await harness.request();
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), answer);
+  assert.equal(harness.calls.length, 2);
+  assert.equal(harness.calls[0].body, harness.calls[1].body);
+  assert.equal(harness.calls[0].turn, harness.calls[1].turn);
+  assert.notEqual(harness.calls[0].key, harness.calls[1].key);
+});
+
+test('repeated hosted stream interruptions end without inviting native overload retries', async (t) => {
+  const harness = await streamHarness(t, () => sse(interruptedResponse));
+  const response = await harness.request();
+  assert.equal(response.status, 422);
+  assert.equal(harness.calls.length, 2);
+  const body = await response.json() as { error: { code: string; message: string } };
+  assert.equal(body.error.code, 'agent_response_interrupted');
+  assert.match(body.error.message, /interrupted.*completed file changes have been kept/);
+  assert.doesNotMatch(body.error.message, /overload|unavailable/i);
+  assert.match(JSON.stringify(harness.broker.diagnostic('empty-response')), /agent_provider_unavailable/);
+});
+
+for (const sequence of [[emptyResponse, interruptedResponse], [interruptedResponse, emptyResponse]]) {
+  test(`empty and interrupted responses share one recovery budget: ${sequence[0] === emptyResponse ? 'empty' : 'interrupted'} first`, async (t) => {
+    const harness = await streamHarness(t, attempt => sse(sequence[attempt - 1]!));
+    const response = await harness.request();
+    assert.equal(response.status, 422);
+    assert.equal(harness.calls.length, 2);
+    assert.match(await response.text(), /agent_response_interrupted/);
+  });
+}
+
+test('an interruption sharing a frame with output preserves the output without replaying it', async (t) => {
+  const harness = await streamHarness(t, () => sse(`data: ${JSON.stringify({
+    choices: [{ delta: { content: 'Keep this text' }, finish_reason: 'error',
+      error: { code: 'agent_provider_unavailable', message: 'Interrupted' } }],
+  })}\r\n\r\n`));
+  const response = await harness.request();
+  const text = await response.text();
+  assert.equal(response.status, 200);
+  assert.equal(harness.calls.length, 1);
+  assert.match(text, /Keep this text/);
+  assert.match(text, /agent_response_interrupted/);
+  assert.doesNotMatch(text, /agent_provider_unavailable/);
+  assert.match(JSON.stringify(harness.broker.diagnostic('empty-response')), /agent_provider_unavailable/);
+});
+
+test('large model frames keep Unicode output intact and still stop on a following hosted interruption', async (t) => {
+  const prefix = `data: ${JSON.stringify({ choices: [{ delta: { content: '📝'.repeat(80_000) } }] })}\r\n\r\n`;
+  const harness = await streamHarness(t, () => new Response(prefix + interruptedResponse, { headers: { 'content-type': 'text/event-stream' } }));
+  const text = await (await harness.request()).text();
+  assert.ok(text.startsWith(prefix));
+  assert.match(text, /agent_response_interrupted/);
+  assert.equal(harness.calls.length, 1);
+});
+
+for (const delta of [{ content: 'Partial 中文 reply' }, { reasoning_content: 'Thinking' },
+  { tool_calls: [{ index: 0, function: { arguments: '{' } }] }]) {
+  test(`a hosted interruption after output is terminal, including within one transport chunk: ${JSON.stringify(delta)}`, async (t) => {
+    const prefix = `data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`;
+    const wire = prefix + interruptedResponse;
+    for (const fragmented of [false, true]) {
+      const harness = await streamHarness(t, () => fragmented ? sse(wire)
+        : new Response(wire, { headers: { 'content-type': 'text/event-stream' } }));
+      const response = await harness.request();
+      const text = await response.text();
+      assert.equal(response.status, 200);
+      assert.ok(text.startsWith(prefix), 'keep every already-produced delta');
+      assert.match(text, /agent_response_interrupted/);
+      assert.doesNotMatch(text, /agent_provider_unavailable|Provider is overloaded/);
+      assert.equal(harness.calls.length, 1);
+      assert.match(JSON.stringify(harness.broker.diagnostic('empty-response')), /agent_provider_unavailable/);
+    }
+  });
+}
+
 for (const output of [
   { choices: [{ delta: { tool_calls: [{ index: 0, id: 'write', type: 'function', function: { name: 'stashbase_write_file', arguments: '{' } }] } }] },
   { choices: [{ delta: { content: 'Partial reply' } }] },
@@ -168,6 +411,7 @@ test('empty response buffering is bounded and malformed events are not retried',
 });
 
 for (const scenario of [
+  { code: 'agent_allowance_reserved', message: 'Remaining Agent credits cannot cover this request while some credits are reserved for active requests or fees awaiting confirmation. Check Agent credits in Settings; wait for reservations to clear or try a shorter conversation.', kind: 'allowance-exhausted' },
   { code: 'agent_allowance_exhausted', message: 'Remaining Agent credits cannot cover this request. Try a shorter conversation or wait for credits to refill.', kind: 'allowance-exhausted' },
   { code: 'agent_turn_budget_exhausted', message: 'This Agent turn has insufficient spending budget for another model call.', kind: 'quota' },
 ]) {
@@ -309,6 +553,122 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
+test('a canceled tool or permission review cannot forward after pending credentials arrive', async (t) => {
+  const token = deferred<string>();
+  let calls = 0;
+  const broker = new HostedAgentBroker({
+    accessToken: () => token.promise,
+    fetch: async () => { calls++; return sse('data: [DONE]\n\n'); },
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  broker.runtime('review');
+  broker.beginTurn('review', '00000000-0000-4000-8000-000000000004');
+  const controller = new AbortController();
+  const completion = broker.complete('review', { profile: 'stashbase-agent-default' }, [], controller.signal);
+  const rejected = assert.rejects(completion, { name: 'AbortError' });
+  controller.abort();
+  token.resolve('late-token');
+  await rejected;
+  assert.equal(calls, 0);
+});
+
+test('manual approval fallback drains an already dispatched review under its original turn', async (t) => {
+  const deadline = new AbortController();
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 5_000 ? deadline.signal : timeout(ms));
+  const received = deferred<{ response: http.ServerResponse; body: Record<string, unknown> }>();
+  let disconnected = false;
+  const gateway = http.createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    response.on('close', () => { if (!response.writableEnded) disconnected = true; });
+    received.resolve({ response, body: JSON.parse(Buffer.concat(chunks).toString()) });
+  });
+  await new Promise<void>(resolve => gateway.listen(0, '127.0.0.1', resolve));
+  t.after(() => { gateway.closeAllConnections(); gateway.close(); });
+  const address = gateway.address() as { port: number };
+  const headers: Headers[] = [];
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: (url, init) => { headers.push(new Headers(init?.headers)); return fetch(url, init); },
+    upstreamUrl: `http://127.0.0.1:${address.port}`, clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  broker.runtime('review');
+  const turnId = '00000000-0000-4000-8000-000000000004';
+  broker.beginTurn('review', turnId);
+  let completion!: Promise<string>;
+  const decision = reviewDefaultAgentPermission({ name: 'Bash', input: { command: 'pwd' }, project: '/fixture', userRequest: 'Show the directory.' },
+    (messages, signal) => {
+      completion = broker.complete('review', { profile: 'stashbase-agent-default' }, messages, signal);
+      return completion;
+    }, new AbortController().signal);
+  const { response, body } = await received.promise;
+  deadline.abort();
+  assert.equal(await decision, false, 'overdue review returns to manual approval');
+  broker.endTurn('review');
+  broker.beginTurn('review', '00000000-0000-4000-8000-000000000005');
+  response.writeHead(200, { 'content-type': 'text/event-stream' });
+  response.end('data: {"choices":[{"delta":{"content":"ALLOW"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+  assert.equal(await completion, 'ALLOW', 'already dispatched work finishes instead of producing a disconnected estimate');
+  assert.equal(await decision, false, 'late ALLOW never authorizes an action');
+  assert.equal(disconnected, false);
+  assert.equal(headers.length, 1);
+  assert.equal(headers[0].get('x-stashbase-agent-turn-id'), turnId);
+  assert.equal(body.max_tokens, 256, 'permission classification has a bounded output budget');
+});
+
+for (const stop of ['deadline', 'shutdown'] as const) {
+  test(`a dispatched permission review cannot outlive its ${stop}`, async (t) => {
+    const deadline = new AbortController();
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 30_000 ? deadline.signal : timeout(ms));
+    const received = deferred<void>();
+    const broker = new HostedAgentBroker({
+      accessToken: async () => 'fixture-token',
+      fetch: async (_url, init) => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+        received.resolve();
+      }),
+      upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+    });
+    await broker.start();
+    t.after(() => broker.close());
+    broker.runtime('review');
+    broker.beginTurn('review', '00000000-0000-4000-8000-000000000004');
+    const result = assert.rejects(broker.complete('review', { profile: 'stashbase-agent-default' }, []));
+    await received.promise;
+    if (stop === 'deadline') deadline.abort();
+    else await broker.close();
+    await result;
+  });
+}
+
+test('an expired permission decision does not retry a rejected authentication attempt', async (t) => {
+  const response = deferred<Response>();
+  const received = deferred<void>();
+  let authentications = 0;
+  const broker = new HostedAgentBroker({
+    accessToken: async () => { authentications++; return 'fixture-token'; },
+    fetch: async () => { received.resolve(); return response.promise; },
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  broker.runtime('review');
+  broker.beginTurn('review', '00000000-0000-4000-8000-000000000004');
+  const decision = new AbortController();
+  const result = assert.rejects(broker.complete('review', { profile: 'stashbase-agent-default' }, [], decision.signal));
+  await received.promise;
+  decision.abort();
+  response.resolve(new Response('{}', { status: 401 }));
+  await result;
+  assert.equal(authentications, 1);
+});
+
 
 test('hosted broker adapts inline PDFs without changing image bytes, text, tools, or other file parts', async (t) => {
   let forwarded: Record<string, unknown> | undefined;
@@ -336,3 +696,86 @@ test('hosted broker adapts inline PDFs without changing image bytes, text, tools
   await response.text();
   assert.deepEqual(forwarded, { messages: [{ role: 'user', content: [text, image, file, { type: 'image_url', image_url: { url: pdf } }] }, tool], stream: true });
 });
+
+
+for (const [label, suffix, expected] of [
+  ['unknown finish', 'data: {"choices":[{"delta":{},"finish_reason":"unknown"}]}\n\ndata: [DONE]\n\n', /"finish_reasons":\["unknown"\]/],
+  ['stream error', 'data: {"error":{"code":"provider_overloaded","message":"Upstream overloaded token=fixture-secret"}}\n\n', /provider_overloaded/],
+  ['malformed frame', 'data: {broken\n\n', /"malformed_frames":1/],
+] as const) {
+  test(`broker retains ${label} evidence and request identity without capturing conversation content`, async (t) => {
+    const wire = 'data: {"choices":[{"delta":{"content":"PRIVATE MODEL OUTPUT"}}]}\n\n' + suffix;
+    const broker = new HostedAgentBroker({
+      accessToken: async () => 'private-account-token',
+      fetch: async () => new Response(wire, { headers: {
+        'content-type': 'text/event-stream', 'x-request-id': 'provider-request-42',
+      } }),
+      upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+    });
+    await broker.start();
+    t.after(() => broker.close());
+    const runtime = broker.runtime('diagnostic-session')!;
+    broker.beginTurn('diagnostic-session', '00000000-0000-4000-8000-000000000011');
+    const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+      method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'PRIVATE PROMPT' }], stream: true }),
+    });
+    assert.equal(await response.text(), wire, 'observation must not change model output');
+    const diagnostic = broker.diagnostic('diagnostic-session')!;
+    assert.equal(diagnostic.http_status, 200);
+    assert.equal(diagnostic.request_id, 'provider-request-42');
+    assert.match(diagnostic.message + JSON.stringify(diagnostic.causes), expected);
+    assert.doesNotMatch(JSON.stringify(diagnostic), /PRIVATE|fixture-secret|private-account-token/);
+    assert.equal(broker.diagnostic('other-session'), undefined);
+    broker.beginTurn('diagnostic-session', '00000000-0000-4000-8000-000000000012');
+    assert.equal(broker.diagnostic('diagnostic-session'), undefined, 'new turns cannot inherit an earlier failure');
+  });
+}
+
+test('broker retains the original socket cause when an already-streaming model response fails', async (t) => {
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture',
+    fetch: async () => new Response(new ReadableStream<Uint8Array>({ start(value) { controller = value; } }), {
+      headers: { 'content-type': 'text/event-stream', 'x-request-id': 'broken-stream-42' },
+    }),
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const runtime = broker.runtime('broken-stream')!;
+  broker.beginTurn('broken-stream', '00000000-0000-4000-8000-000000000011');
+  const pending = fetch(`${runtime.baseUrl}/chat/completions`, {
+    method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` }, body: '{}',
+  });
+  while (!controller!) await new Promise(resolve => setImmediate(resolve));
+  controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'));
+  const response = await pending;
+  const reading = assert.rejects(response.text());
+  controller.error(Object.assign(new Error('upstream socket reset'), { code: 'ECONNRESET' }));
+  await reading;
+  const diagnostic = broker.diagnostic('broken-stream')!;
+  assert.equal(diagnostic.request_id, 'broken-stream-42');
+  assert.match(JSON.stringify(diagnostic.causes), /ECONNRESET/);
+  assert.match(diagnostic.message, /"stream_ended":false/);
+});
+
+
+for (const [reason, ending] of [
+  ['output limit', 'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n'],
+  ['lost stream', 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'],
+  ['missing finish', 'data: [DONE]\n\n'],
+] as const) {
+  test(`a crew response ending with ${reason} cannot succeed with partial prose`, async (t) => {
+    const broker = new HostedAgentBroker({ accessToken: async () => 'fixture',
+      clientVersion: () => '2.16.0', upstreamUrl: 'https://gateway.invalid/v1/agent/chat/completions',
+      fetch: async () => new Response('data: {"choices":[{"delta":{"content":"unfinished draft"}}]}\n\n' + ending),
+    });
+    t.after(() => broker.close());
+    await broker.start();
+    broker.runtime('incomplete');
+    broker.beginTurn('incomplete', '00000000-0000-4000-8000-000000000111');
+    await assert.rejects(broker.completeTool('incomplete', {tool:'writer',toolVersion:1,model:'opus',modelVersion:1}, []),
+      (error: unknown) => (error as {code?: string}).code === 'agent_tool_incomplete');
+  });
+}

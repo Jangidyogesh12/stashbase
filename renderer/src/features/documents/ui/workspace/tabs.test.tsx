@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import type { DocumentSourcePort } from '@/features/documents/application/ports';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import type { DocumentTextSource } from '@/features/documents/domain/document';
+import { pending } from '@/features/documents/ui/source/document-source.harness';
 import { SOURCE_DRAG_MIME } from '@/shared/utils/source-drag';
 import { expectFocused } from '@/test/dom';
 import {
@@ -21,11 +22,6 @@ import { withQueryClient } from '@/test/query';
 import { DocumentOutline } from './outline';
 import { DocumentTabs } from './tabs';
 import { DocumentWorkspace } from './workspace';
-
-/** A port call that never settles, for the viewers these tests leave pending. */
-function pending(): () => Promise<never> {
-  return () => new Promise<never>(() => undefined);
-}
 
 function createRuntime(api: DocumentSourcePort = loadedSourceApi) {
   let next = 2;

@@ -43,8 +43,13 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       assert.equal((await save(project, 'codex', '')).status, 400);
       assert.equal((await save(project, 'codex', 2)).status, 400);
       assert.equal((await save('/unregistered', 'codex', 'high')).status, 404);
-      const saved = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      let saved = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
       assert.deepEqual(saved.efforts, {codex:null,claude:'medium'});
+      // Every Agent's level survives the next read and write, Antigravity's included.
+      assert.equal((await save(project, 'antigravity', 'high')).status, 200);
+      assert.equal((await save(project, 'claude', 'medium')).status, 200);
+      saved = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      assert.deepEqual(saved.efforts, {codex:null,claude:'medium',antigravity:'high'});
       assert.equal(saved.agent, 'claude');
       // A persona chosen in an older Chat becomes the project's choice for new
       // Chats without changing its Agent; null starts them with none.

@@ -1,3 +1,6 @@
+/** The agent feature's ports: the services a conversation, its catalog,
+ *  personas, tools, and context reach through, each implemented in
+ *  `infrastructure/`. */
 import type { AgentContextExtra } from '@/features/agent/application/failure-messages';
 import type { AgentAccessMode } from '@/features/agent/domain/access';
 import type { AgentCatalog } from '@/features/agent/domain/agent-catalog';
@@ -38,6 +41,53 @@ export interface AgentPersonaInput {
 
 /** The reader's persona library, shared by every project. Which persona a
  *  Chat runs under is session state; the service composes the real prompt. */
+/** A Default Agent tool from the service's catalog, which the main agent
+ *  may call once the user turns it on, on a model from the tool model pool. */
+export interface AgentTool {
+  readonly id: string;
+  readonly label: string;
+  /** The function name the main agent calls it by. */
+  readonly toolName: string;
+  /** The short line the tools list shows. */
+  readonly summary: string;
+  /** A generic icon name; an unknown one falls back. */
+  readonly icon: string;
+  /** Whether the user turned it on. Every tool starts off. */
+  readonly enabled: boolean;
+  /** Why it cannot be used at all right now, or null. */
+  readonly unavailable: string | null;
+  /** The model it runs on, or would once on; null when none can be used. */
+  readonly model: string | null;
+  /** Why the user must choose a model first, or null. */
+  readonly modelProblem: string | null;
+  /** The model it runs on until the user picks another. */
+  readonly defaultModel: string | null;
+  readonly options: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly available: boolean;
+    readonly reason: string | null;
+  }[];
+}
+
+/** One change to a tool: turn it on or off, pick its model, or both. */
+export interface AgentToolChange {
+  readonly enabled?: boolean;
+  readonly model?: string;
+}
+
+/** Which tools Default's main agent has. A change answers every tool as the
+ *  service now resolves it, and applies to chats started or reconnected. */
+export interface AgentToolsPort {
+  list(signal: AbortSignal, chat: string): Promise<readonly AgentTool[]>;
+  set(
+    tool: AgentTool['id'],
+    change: AgentToolChange,
+    signal: AbortSignal,
+    chat: string,
+  ): Promise<readonly AgentTool[]>;
+}
+
 export interface AgentPersonaPort {
   list(signal: AbortSignal): Promise<AgentPersona[]>;
   create(input: AgentPersonaInput, signal: AbortSignal): Promise<AgentPersona>;
@@ -67,6 +117,7 @@ export interface AgentSocket {
 }
 
 export interface AgentConnectionListener {
+  telemetryTurnId?(): string | undefined;
   onEvent(event: AgentSessionEvent): void;
   onClose(): void;
   onInvalidResponse(): void;
@@ -83,6 +134,7 @@ export interface AgentConnectRequest {
   model?: string | undefined;
   access?: AgentAccessMode | undefined;
   persona?: string | undefined;
+  crew?: string | undefined;
 }
 
 export interface AgentSessionPort {
@@ -118,7 +170,11 @@ export interface AgentUploadOutcome {
 export interface AgentContextPort {
   /** Resolves one project source to what the Agent should read. A missing
    *  file is `not-found`; a format the Agent cannot read is `unsupported`. */
-  resolve(source: SourceReference, signal: AbortSignal): Promise<ResolvedContextFile>;
+  resolve(
+    source: SourceReference,
+    signal: AbortSignal,
+    telemetryTurnId?: string,
+  ): Promise<ResolvedContextFile>;
   /** Uploads transient files outside every project folder; outcomes follow
    *  request order. */
   upload(files: File[], signal: AbortSignal, folderPath: string): Promise<AgentUploadOutcome[]>;

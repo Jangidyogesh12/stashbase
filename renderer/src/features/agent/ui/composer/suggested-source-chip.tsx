@@ -1,4 +1,4 @@
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -8,9 +8,12 @@ import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { basePathName } from '@/shared/utils/file-path';
 
+import { CHIP_FRAME, ChipCloseButton } from './chip';
+
 /** The document in front of the reader, offered but never bound until the
- *  reader clicks it: a dashed outline with no surface, so it reads as an
- *  option beside the context that is really attached. */
+ *  reader clicks it. It wears an attached chip's frame and close, so the row
+ *  reads as one kind of thing; muted words and a leading plus are all that
+ *  say it is only offered. */
 export function SuggestedSourceChip({
   onAttach,
   onDismiss,
@@ -23,17 +26,12 @@ export function SuggestedSourceChip({
   const shape = useShape();
   const name = basePathName(source.path);
   return (
-    <div
-      className={cn(
-        'inline-flex h-7 max-w-64 shrink-0 items-center border border-dashed border-border text-ui-12 text-muted-foreground',
-        shape.bg,
-      )}
-    >
+    <div className={cn(CHIP_FRAME, 'max-w-64 shrink-0 text-muted-foreground', shape.bg)}>
       <Tooltip content={`Attach ${source.path}`} side="top">
         <button
           aria-label={`Attach ${name}`}
           className={cn(
-            'inline-flex h-full min-w-0 cursor-pointer items-center gap-1.5 pr-1 pl-2 transition-colors duration-fast outline-none hover:text-foreground',
+            'inline-flex h-full min-w-0 cursor-pointer items-center gap-1.5 pr-1.5 pl-2 transition-colors duration-fast outline-none hover:text-foreground',
             shape.bg,
             focusRing(),
           )}
@@ -46,18 +44,7 @@ export function SuggestedSourceChip({
         </button>
       </Tooltip>
       <Tooltip content="Don't suggest" side="top">
-        <button
-          aria-label={`Don't suggest ${name}`}
-          className={cn(
-            'mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center transition-colors duration-fast outline-none hover:bg-hover hover:text-foreground',
-            shape.chip,
-            focusRing(),
-          )}
-          onClick={onDismiss}
-          type="button"
-        >
-          <X aria-hidden="true" size={12} />
-        </button>
+        <ChipCloseButton label={`Don't suggest ${name}`} onClick={onDismiss} />
       </Tooltip>
     </div>
   );

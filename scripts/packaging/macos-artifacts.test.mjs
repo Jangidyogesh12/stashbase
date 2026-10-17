@@ -29,13 +29,7 @@ async function fixture(t) {
     }
     metadata[arch] = { version: '3.0.0', files, path: files[0].url, sha512: files[0].sha512 };
     await fs.writeFile(path.join(directory, 'latest-mac.yml'), stringify(metadata[arch]));
-    const asset = `stashbase-extract-3.0.0-darwin-${arch}.tar.gz`;
-    const bytes = Buffer.from(`${arch} component`);
-    await fs.writeFile(path.join(directory, asset), bytes);
-    await fs.writeFile(path.join(directory, asset.replace('.tar.gz', '.json')), JSON.stringify({
-      schema: 1, version: '3.0.0', platform: 'darwin', arch, asset,
-      sizeBytes: bytes.length, sha256: sha(bytes, 'sha256', 'hex'),
-    }));
+
   }
   return { directories, metadata, output: path.join(root, 'merged'), version: '3.0.0', productName: 'StashBase' };
 }
@@ -48,12 +42,11 @@ test('merged metadata lets the installed updater select the correct architecture
     const files = MacUpdater.filterFilesForArch(resolved, isArm);
     assert.ok(files.some((file) => file.url.pathname.endsWith(`-${arch}.zip`)));
     assert.ok(files.every((file) => file.url.pathname.includes(`-${arch}.`)));
-    assert.ok((await fs.readdir(f.output)).includes(`stashbase-extract-3.0.0-darwin-${arch}.json`));
   }
   await assert.rejects(mergeMacArtifacts(f), /EEXIST/);
 });
 
-for (const failure of ['missing-architecture', 'wrong-version', 'wrong-architecture', 'corrupt-zip', 'corrupt-component']) {
+for (const failure of ['missing-architecture', 'wrong-version', 'wrong-architecture', 'corrupt-zip']) {
   test(`combined channel stays absent when ${failure}`, async (t) => {
     const f = await fixture(t);
     const directory = f.directories.x64;
@@ -62,7 +55,6 @@ for (const failure of ['missing-architecture', 'wrong-version', 'wrong-architect
     if (failure === 'wrong-architecture') f.metadata.x64.files = f.metadata.arm64.files;
     if (failure.startsWith('wrong-')) await fs.writeFile(path.join(directory, 'latest-mac.yml'), stringify(f.metadata.x64));
     if (failure === 'corrupt-zip') await fs.writeFile(path.join(directory, 'StashBase-3.0.0-mac-x64.zip'), 'corrupt');
-    if (failure === 'corrupt-component') await fs.writeFile(path.join(directory, 'stashbase-extract-3.0.0-darwin-x64.tar.gz'), 'corrupt');
     await assert.rejects(mergeMacArtifacts(f));
     assert.equal(await fs.access(f.output).then(() => true, () => false), false);
   });

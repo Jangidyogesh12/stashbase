@@ -175,8 +175,10 @@ export function SearchSurface({
             value={query}
           />
         </InputGroup>
+        {/* mt-1.5: the same step the tab strip keeps below the field, so
+         *  the button's hover fill sits apart from the field's border. */}
         {readiness.state === 'not-set-up' && onConfigureSearch && (
-          <Button variant="ghost" size="compact" onClick={onConfigureSearch}>
+          <Button className="mt-1.5" variant="ghost" size="compact" onClick={onConfigureSearch}>
             Set up search by meaning
           </Button>
         )}

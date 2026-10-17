@@ -1,6 +1,7 @@
 import type { ErrorReporter } from '@/shared/runtime/error-reporting';
 export interface HttpRequest {
   body?: unknown;
+  telemetryTurnId?: string;
   method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   signal?: AbortSignal;
@@ -8,6 +9,7 @@ export interface HttpRequest {
 
 export interface HttpResponse {
   body: unknown;
+  bodyError?: unknown;
   headers?: Readonly<Record<string, string>>;
   status: number;
 }
@@ -27,8 +29,10 @@ export function createHttpClient(
   const baseUrl = new URL(serverOrigin);
   return {
     ...(reportError ? { reportError } : {}),
-    async request({ body, method = 'GET', path, signal }) {
+    async request({ body, method = 'GET', path, signal, telemetryTurnId }) {
       const headers = new Headers({ accept: 'application/json' });
+      if (telemetryTurnId) headers.set('x-stashbase-agent-turn-id', telemetryTurnId);
+      const correlation = telemetryTurnId ? { turn_id: telemetryTurnId } : {};
       const init: RequestInit = { headers, method, ...(signal ? { signal } : {}) };
       if (body !== undefined) {
         headers.set('content-type', 'application/json');
@@ -39,22 +43,40 @@ export function createHttpClient(
         response = await fetchRequest(new URL(path, baseUrl), init);
       } catch (error) {
         if (!signal?.aborted || signal.reason?.name === 'TimeoutError')
-          reportError?.(error, 'http-transport', { method, route: path.split('?')[0] ?? path });
+          reportError?.(error, 'http-transport', {
+            ...correlation,
+            method,
+            route: path.split('?')[0] ?? path,
+          });
         throw error;
       }
       let responseBody: unknown = null;
-      try {
-        responseBody = await response.json();
-      } catch {
-        // The protocol adapter classifies an absent or malformed JSON body.
+      let bodyError: unknown;
+      if (method !== 'HEAD' && response.status !== 204 && response.status !== 205) {
+        try {
+          responseBody = await response.json();
+        } catch (error) {
+          if (signal?.aborted && signal.reason?.name !== 'TimeoutError') throw signal.reason;
+          bodyError = error;
+          reportError?.(
+            Object.assign(new Error('Could not read the HTTP response as JSON', { cause: error }), {
+              code: 'HTTP_RESPONSE_BODY_FAILED',
+              status: response.status,
+              request_id: response.headers.get('x-request-id') ?? undefined,
+              content_type: response.headers.get('content-type') ?? undefined,
+            }),
+            'http-response',
+            { ...correlation, method, route: path.split('?')[0] ?? path },
+          );
+          if (signal?.aborted) throw signal.reason;
+        }
       }
-      return method === 'HEAD'
-        ? {
-            body: responseBody,
-            headers: Object.fromEntries(response.headers.entries()),
-            status: response.status,
-          }
-        : { body: responseBody, status: response.status };
+      return {
+        body: responseBody,
+        ...(bodyError === undefined ? {} : { bodyError }),
+        headers: Object.fromEntries(response.headers.entries()),
+        status: response.status,
+      };
     },
   };
 }

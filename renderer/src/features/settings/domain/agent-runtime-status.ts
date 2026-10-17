@@ -13,7 +13,7 @@ import type { AgentRuntime, AgentRuntimeStage } from '@/features/settings/domain
 const PREPARATION_FAILED = 'Setup failed';
 const PREPARING = 'Preparing…';
 
-type AgentRuntimeActionKind = 'install' | 'login' | 'account' | 'retry' | 'update';
+type AgentRuntimeActionKind = 'install' | 'login' | 'retry' | 'update';
 
 export interface AgentRuntimeAction {
   readonly kind: AgentRuntimeActionKind;
@@ -26,11 +26,6 @@ export interface AgentRuntimeStatus {
    *  this agent row at all. */
   readonly stage: AgentRuntimeStage | null;
   readonly action: AgentRuntimeAction | null;
-}
-
-function ownershipLabel(ownership: AgentRuntime['ownership']): string {
-  if (ownership === 'bundled') return 'Included with StashBase';
-  return 'Installed on your system';
 }
 
 /**
@@ -49,16 +44,20 @@ export function describeRuntime(
   const preparation = runtime.preparation;
   if (preparation.kind === 'failed') {
     const failure = preparation.failure;
+    // Only the bundled runtime needs the StashBase account, and its group's
+    // Account row owns that sign-in, so the row only says what it waits on.
+    if (failure.refusal === 'account-required') {
+      return { description: 'Needs sign-in', stage: failure.stage, action: null };
+    }
+    // A refused account is already signed in; another sign-in changes nothing.
     const action: AgentRuntimeAction | null = busy
       ? null
-      : failure.refusal === 'account-required'
-        ? { kind: 'account', label: 'Sign in' }
-        : failure.stage === 'authenticate'
-          ? { kind: 'login', label: 'Sign in' }
-          : {
-              kind: failure.stage === 'configure' ? 'retry' : (failure.retryAction ?? 'retry'),
-              label: failure.stage === 'configure' ? 'Retry connection' : 'Retry',
-            };
+      : failure.stage === 'authenticate' && failure.refusal !== 'account-refused'
+        ? { kind: 'login', label: 'Sign in' }
+        : {
+            kind: failure.stage === 'configure' ? 'retry' : (failure.retryAction ?? 'retry'),
+            label: failure.stage === 'configure' ? 'Retry connection' : 'Retry',
+          };
     return {
       description: failure.note ?? PREPARATION_FAILED,
       stage: failure.stage,
@@ -82,20 +81,24 @@ export function describeRuntime(
     };
   }
 
-  // An installed runtime names its version beside its ownership, so an
-  // update the reader runs from here has a visible before and after.
-  const label = ownershipLabel(runtime.ownership);
-  const detail = runtime.version ? `${label} · ${runtime.version}` : label;
   // A model the runtime is too old to run is the one thing worth saying
   // ahead of readiness: the row already carries the action for it, and a
   // reader who is ready to chat still has a reason to run it.
   const lead = runtime.upgrade
     ? `${runtime.upgrade.model} needs a newer ${runtime.label}`
     : preparation.kind === 'ready'
-      ? 'Ready to chat'
-      : null;
+      ? 'Ready'
+      : 'Installed';
+  // An installed runtime names its version, so an update the reader runs from
+  // here has a visible before and after. Only the bundled one says where it
+  // came from; every other row is the reader's own install.
+  const parts = [
+    lead,
+    runtime.ownership === 'bundled' ? 'Included with StashBase' : null,
+    runtime.version,
+  ];
   return {
-    description: lead ? `${lead} · ${detail}` : detail,
+    description: parts.filter(Boolean).join(' · '),
     stage: 'ready',
     action: !busy && runtime.updatable ? { kind: 'update', label: 'Update' } : null,
   };

@@ -96,6 +96,43 @@ it('offers the runtime update instead of a retry on a turn the runtime was too o
   expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull();
 });
 
+it('offers a model refresh, and a manual retry only after it, when the hosted model changed', async () => {
+  const refresh = vi.fn();
+  const onRetry = vi.fn(() => true);
+  const refused: AgentTranscriptBlock[] = [
+    { id: 'u1', kind: 'user', text: 'Draft the intro' },
+    {
+      id: 'changed',
+      kind: 'error',
+      text: 'The selected model configuration has changed. Refresh the models, then review and send again.',
+      failure: 'model-changed',
+      retryablePrompt: 'Draft the intro',
+    },
+  ];
+  const view = (refreshedBlockId: string | null) => (
+    <AgentTranscript
+      activeTurn={false}
+      blocks={refused}
+      modelRefresh={{ busy: false, failure: null, refresh, refreshedBlockId }}
+      onOpenExternal={vi.fn()}
+      onPermission={vi.fn(() => true)}
+      onRetry={onRetry}
+    />
+  );
+  const rendered = render(view(null));
+
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh models' }));
+  expect(refresh).toHaveBeenCalledWith('changed');
+  // Refreshing never sends anything by itself.
+  expect(onRetry).not.toHaveBeenCalled();
+
+  rendered.rerender(view('changed'));
+  expect(screen.queryByRole('button', { name: 'Refresh models' })).toBeNull();
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
+  expect(onRetry).toHaveBeenCalledWith('changed');
+});
+
 it('keeps progress visible after a running tool fails and disappears', () => {
   const blocks: AgentTranscriptBlock[] = [
     ...turn.slice(0, 2),
@@ -399,4 +436,21 @@ describe('Agent transcript context', () => {
       'attachment-preview',
     );
   });
+});
+
+it('folds a long prompt behind Show more and opens it again with Show less', async () => {
+  const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(900);
+  try {
+    renderTranscript([{ id: 'u1', kind: 'user', text: 'A long brief' }], false);
+    await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show less' }));
+    expect(screen.getByRole('button', { name: 'Show more' })).not.toBeNull();
+  } finally {
+    height.mockRestore();
+  }
+});
+
+it('leaves a short prompt open with no fold control', () => {
+  renderTranscript([{ id: 'u1', kind: 'user', text: 'Map the repo' }], false);
+  expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
 });

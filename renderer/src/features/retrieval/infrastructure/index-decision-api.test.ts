@@ -26,12 +26,12 @@ describe('index decision API', () => {
     });
   });
 
-  it('surfaces the server reason on failure', async () => {
+  it('carries the server reason as the cause on failure', async () => {
     const client: HttpClient = {
       request: vi.fn(async () => ({ body: { error: 'daemon busy' }, status: 500 })),
     };
     await expect(
       createIndexDecisionAdapter(client).resync('/project/research', signal),
-    ).rejects.toMatchObject({ kind: 'unavailable', message: 'Sync could not start.' });
+    ).rejects.toMatchObject({ cause: new Error('daemon busy'), kind: 'unavailable' });
   });
 });

@@ -7,27 +7,13 @@ on:
         description: Release tag to attach the Windows assets to, for example v0.9.0
         required: true
         type: string
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Release tag to attach the Windows assets to, for example v0.9.0
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 jobs:
-  release-ci-gate:
-    permissions:
-      actions: read
-      contents: read
-    uses: ./.github/workflows/release-ci-gate.yml
-    with:
-      tag: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
-
   windows-installer:
-    needs: release-ci-gate
+    timeout-minutes: 60
     runs-on: windows-latest
     env:
       RELEASE_TAG: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
@@ -66,9 +52,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - uses: ./.github/actions/prepare-native-components
+        with:
+          extractor: 'false'
 
-      - name: Build PDF/OCR download component
-        run: pnpm build:extractor-component
+      - name: Download the verified PDF/OCR component
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/prepare-extractor-release.mjs download
 
       - name: Build Windows installer
         env:
@@ -124,7 +114,7 @@ jobs:
         shell: pwsh
         run: |
           $artifacts = Get-ChildItem -Path release.nosync -File |
-            Where-Object { $_.Name -match '(\.(exe|blockmap)$|^latest.*\.ya?ml$|^stashbase-extract-.*\.(tar\.gz|json)$)' -and $_.Length -gt 0 }
+            Where-Object { $_.Name -match '(\.(exe|blockmap)$|^latest.*\.ya?ml$)' -and $_.Length -gt 0 }
 
           if (-not ($artifacts | Where-Object { $_.Name -eq 'latest.yml' })) {
             Write-Error "Missing latest.yml Windows update metadata"

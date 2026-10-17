@@ -40,11 +40,9 @@ describe('search by meaning settings panel', () => {
   it('marks a stored key active and offers to replace or remove it', async () => {
     renderPanel(embedderPort(keyedEmbedderState({ provider: 'openrouter' })));
 
-    expect(await screen.findByText('OpenRouter API key saved')).not.toBeNull();
+    expect(await screen.findByText('OpenRouter key saved')).not.toBeNull();
     expect(screen.getByText('Active')).not.toBeNull();
-    expect(
-      screen.getByText('Search by meaning is on. Indexing and searches use your OpenRouter key.'),
-    ).not.toBeNull();
+    expect(screen.queryByText(/Search by meaning is off/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Replace key' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Remove key' })).not.toBeNull();
     expect(screen.queryByPlaceholderText('Paste your API key')).toBeNull();

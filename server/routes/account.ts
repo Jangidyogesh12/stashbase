@@ -26,6 +26,7 @@ import { processPrivateTokenMatches } from '../process-private-token.ts';
 import { currentWindowId } from '../folder.ts';
 import { stopAgentRuntime } from '../agent-contract.ts';
 import { stopOpenCodeRuntime } from '../opencode-runtime.ts';
+import { clearToolCatalogCache } from '../agent-tool-catalog.ts';
 
 const log = logger('routes/account');
 const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google']);
@@ -100,6 +101,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await fetchHostedAgentAllowance());
     } catch (error: unknown) {
+      res.locals.diagnosticError = error;
       res.status(502).json({ error: errorMessage(error) });
     }
   });
@@ -186,7 +188,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       log.info('OAuth sign-in completed');
       res.type('html').send(oauthResultPage({
         title: 'Signed in to StashBase',
-        message: 'Your account is ready. This page will return you to the app automatically.',
+        message: 'Your account is ready.',
         autoReturn: true,
         returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,
         returnIntentUrl: `/api/account/oauth/return-intent?flow=${encodeURIComponent(flowId)}`,
@@ -227,6 +229,8 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     stopAgentRuntime('stashbase');
     await stopOpenCodeRuntime();
     await signOutHostedAccount();
+    // The tool catalog is per account; a later sign-in reads its own.
+    clearToolCatalogCache();
     res.json(await hostedAccountState());
   });
 }

@@ -17,7 +17,7 @@ export const semanticSearchRequestSchema = z
 
 /** One chunk of evidence, already remapped to its visible source. `folder`
  *  and `path` are the stable identity; `fileName` remains for MCP callers. */
-export const semanticHitSchema = z
+const semanticHitSchema = z
   .object({
     chunkIndex: z.number().int().nonnegative(),
     content: z.string().max(65_536),
@@ -39,7 +39,8 @@ export const semanticSearchResponseSchema = z
   })
   .passthrough();
 
-export const SEMANTIC_SEARCH_FAILURE_CODES = ['EMBEDDER_KEY_REQUIRED'] as const;
+/** Failure `code` when search by meaning has no embedding provider key. */
+export const EMBEDDER_KEY_REQUIRED_CODE = 'EMBEDDER_KEY_REQUIRED';
 
 export const semanticSearchFailureSchema = z
   .object({
@@ -48,6 +49,4 @@ export const semanticSearchFailureSchema = z
   })
   .passthrough();
 
-export type SemanticSearchRequestWire = z.infer<typeof semanticSearchRequestSchema>;
-export type SemanticHitWire = z.infer<typeof semanticHitSchema>;
 export type SemanticSearchResponseWire = z.infer<typeof semanticSearchResponseSchema>;

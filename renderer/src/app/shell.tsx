@@ -58,6 +58,7 @@ import { WorkspaceNoticeStrip } from './composition/layout/workspace-notice-stri
 import { WorkspacePanes } from './composition/layout/workspace-panes';
 import { WorkspaceSidebar } from './composition/layout/workspace-sidebar';
 import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
+import { useAgentUsage } from './composition/use-agent-usage';
 import { useAppearanceSurface } from './composition/use-appearance-surface';
 import { useDesktopUsage } from './composition/use-desktop-usage';
 import type { AppDependencies } from './dependencies';
@@ -134,9 +135,10 @@ function WorkspaceWindow() {
     treeVersion: status?.treeVersion,
   });
 
+  const recordAgentUsage = useAgentUsage(dependencies.recordUsage);
   const runtime = useAgentWorkspaceRuntime({
     context: dependencies.agent.context,
-    recordUsage: dependencies.recordUsage,
+    recordUsage: recordAgentUsage,
     createId: docs.createId,
     folderPath: selectedPath,
     onFilesChanged: refresh.onAgentFilesChanged,
@@ -335,6 +337,7 @@ function WorkspaceWindow() {
             }
             onBrowseGallery={gallery.browse}
             onReprocess={refresh.reprocess}
+            projectEntry={entry}
             settings={chrome.settings}
             sources={sources}
             workspace={workspace}

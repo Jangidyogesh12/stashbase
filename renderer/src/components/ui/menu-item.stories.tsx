@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ChevronLeft, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Lock, Pencil, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { Button } from './button';
@@ -122,4 +122,43 @@ export const LeadsDeeper: Story = {
       </OpenMenu>
     );
   },
+};
+
+/** A badge names a fact about the row, here what a model costs against the
+ *  default; the expensive ones are listed but locked. */
+export const WithBadge: Story = {
+  render: () => (
+    <OpenMenu label="Model">
+      <MenuItem
+        checked
+        description="1M context · 64K output"
+        label="Gemini 3.8 Flash"
+        layout="wrap"
+      />
+      <MenuItem
+        badge="5× cost"
+        checked={false}
+        description="1M context · 128K output"
+        disabled
+        trailingIcon={Lock}
+        label="Claude Opus 5.5"
+        layout="wrap"
+      />
+      <MenuItem
+        badge="3× cost"
+        checked={false}
+        description="1M context · 128K output"
+        disabled
+        trailingIcon={Lock}
+        label="Claude Sonnet 5.5"
+        layout="wrap"
+      />
+      <MenuItem
+        checked={false}
+        description="1M context · 64K output"
+        label="Gemini 3.5 Flash-Lite"
+        layout="wrap"
+      />
+    </OpenMenu>
+  ),
 };

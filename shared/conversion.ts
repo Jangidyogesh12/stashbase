@@ -1,5 +1,4 @@
-export type ConversionProgress =
-  | { phase: 'queued'; lane: 'light' | 'heavy'; tasksAhead: number }
-  | { phase: 'yielded'; lane: 'light' | 'heavy'; tasksAhead: number }
-  | { phase: 'extracting'; currentPage?: number }
-  | { phase: 'indexing' };
+import type { z } from 'zod';
+import type { conversionProgressSchema } from './protocols/http/index-status.ts';
+
+export type ConversionProgress = z.output<typeof conversionProgressSchema>;

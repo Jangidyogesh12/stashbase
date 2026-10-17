@@ -367,6 +367,4 @@ module.exports = {
   buildGitHubIssueBody,
   buildGitHubIssueUrl,
   createBugReportHandoff,
-  formatDiagnosticsArtifact,
-  issueTitle,
 };

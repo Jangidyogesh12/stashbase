@@ -11,6 +11,7 @@
 export interface HostedAgentAllowance {
   profile: string;
   remainingPercent: number;
+  reservedPercent?: number;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -45,8 +46,8 @@ export interface HostedBillingRedirect {
   url: string;
 }
 
-/** One-time banners about the account. Each is shown until the reader takes it
- * up or declines it, then never again on this installation. */
+/** Banners about the account. Each is shown until the reader takes it up or
+ * declines it; signing out shows the sign-in banner again. */
 export type HostedAccountOffer = 'sign-in';
 
 export interface HostedAccountState {

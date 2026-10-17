@@ -52,9 +52,9 @@ const codex = agentRuntime({
 });
 
 describe('AgentRuntimesPanel', () => {
-  it('starts the browser sign-in from a runtime that needs an account', async () => {
-    // The row's Sign in and the account row's Sign in are one command over one
-    // port, so the runtime can never send the reader somewhere else to do it.
+  it('starts the browser sign-in from the Account row when the Default Agent needs one', async () => {
+    // Sign-in has one entry, the Account row, so the runtime row can never
+    // send the reader somewhere else to do it.
     const port = agentRuntimePort({
       listAgents: vi.fn(async () =>
         catalog([
@@ -78,7 +78,8 @@ describe('AgentRuntimesPanel', () => {
     const rendered = renderPanel(port, account);
     const user = userEvent.setup();
 
-    await screen.findByText('An account is required to use the Default Agent.');
+    // The Account row owns the action; the Default row only says it waits on it.
+    await screen.findByText('Needs sign-in');
     const buttons = screen.getAllByRole('button', { name: 'Sign in' });
     expect(buttons).toHaveLength(1);
     await user.click(buttons[0] as HTMLElement);
@@ -98,7 +99,7 @@ describe('AgentRuntimesPanel', () => {
 
     expect(await screen.findByText('Ada Lovelace · ada@example.com')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
-    expect(await screen.findByText('Agent credits')).not.toBeNull();
+    expect(await screen.findByText('Credits')).not.toBeNull();
     expect(rendered.onOpenExternal).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
@@ -116,7 +117,7 @@ describe('AgentRuntimesPanel', () => {
     const rendered = renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
     const user = userEvent.setup();
 
-    expect(await screen.findByText(/Have a promotion code\?/)).not.toBeNull();
+    expect(await screen.findByText('Free · Paid plans add monthly credits.')).not.toBeNull();
     const subscribe = await screen.findAllByRole('button', { name: 'Subscribe' });
     expect(subscribe).toHaveLength(2);
     await user.click(subscribe[1] as HTMLElement);
@@ -148,6 +149,26 @@ describe('AgentRuntimesPanel', () => {
         'https://billing.stripe.com/p/session/test',
       ),
     );
+  });
+
+  it.each([
+    [
+      'a renewal already canceled',
+      {
+        cancelAtPeriodEnd: true,
+        canManage: true,
+        paidThrough: '2099-11-05T00:00:00.000Z',
+        planName: 'Pro',
+        status: 'active',
+      },
+    ],
+    ['a former subscriber back on Free', { ...FREE_BILLING, canManage: true }],
+  ] as const)('offers billing, not cancel, for %s', async (_case, status) => {
+    const port = agentRuntimePort({ getBillingStatus: vi.fn(async () => status) });
+    renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
+
+    expect(await screen.findByRole('button', { name: 'Manage billing' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Manage or cancel' })).toBeNull();
   });
 
   it('keeps cancellation reachable during confirmation and retries a refused browser launch', async () => {
@@ -208,7 +229,7 @@ describe('AgentRuntimesPanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Install' }));
 
     expect(port.prepareAgent).toHaveBeenCalledWith('codex', 'bootstrap', expect.anything());
-    await waitFor(() => expect(screen.getByText(/Ready to chat/)).not.toBeNull());
+    await waitFor(() => expect(screen.getByText('Ready')).not.toBeNull());
   });
 
   it('updates an installed runtime in place and shows the version it came back with', async () => {
@@ -228,7 +249,7 @@ describe('AgentRuntimesPanel', () => {
     renderPanel(port);
     const user = userEvent.setup();
 
-    expect(await screen.findByText(/Installed on your system · 2\.1\.220/)).not.toBeNull();
+    expect(await screen.findByText('Ready · 2.1.220')).not.toBeNull();
     await user.click(await screen.findByRole('button', { name: 'Update' }));
 
     expect(port.prepareAgent).toHaveBeenCalledWith('claude', 'update', expect.anything());
@@ -245,7 +266,7 @@ describe('AgentRuntimesPanel', () => {
     renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
 
     expect(await screen.findByText('Could not load your credit balance.')).not.toBeNull();
-    expect(screen.queryByText(/remaining/)).toBeNull();
+    expect(screen.queryByText(/% left/)).toBeNull();
   });
 
   it('hides the dev-only debug block while the catalog carries no debug controls', async () => {

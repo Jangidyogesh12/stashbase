@@ -11,13 +11,19 @@ Gallery. Chat becomes available inside the project, even if it contains no
 files. An entry's **Copy prompt** copies its build request for you to paste;
 it does not start a conversation automatically.
 
-Choose Claude or Codex and sign in with your provider account.
-A missing runtime waits for **Connect Claude** or **Connect Codex** before
-installation. If Claude is too old for the model you chose, the failed turn
-offers **Update Claude**. **Settings → Agents** shows each installed runtime's
+Choose Claude, Codex, or Antigravity and sign in with your provider account.
+A missing runtime waits for **Connect Claude**, **Connect Codex**, or
+**Connect Antigravity** before installation. If Claude is too old for the model
+you chose, the failed turn offers **Update Claude**. **Settings → Agents** shows each installed runtime's
 version with an **Update** that runs the runtime's own updater in place.
 
-If you can't use either, the built-in **Default Agent** provides a fallback
+Antigravity asks before changing files or running commands the same way the
+others do, and offers Auto, Ask, Edit, and Plan. Its Auto is StashBase's: it
+also runs commands that only read, searches the web, and reads pages, and still
+asks before other commands. Its chat list lives in StashBase: removing a chat
+there leaves the conversation in Antigravity.
+
+If you can't use any of them, the built-in **Default Agent** provides a fallback
 with free credits. Sign in to StashBase from the bottom of the sidebar or
 **Settings → Agents**; no separate Agent installation or model API key is required.
 
@@ -38,6 +44,8 @@ supported files directly.
 
 - **Cmd/Ctrl+O:** find and open a file in the active folder.
 - **Cmd/Ctrl+Shift+P** or **F1:** open the Command Palette.
+- **Project name at the top of the sidebar:** switch to a recent project, or
+  open, create, or import one. It opens in its own window.
 - **File → New Window** or **Cmd/Ctrl+Shift+N:** work in another window.
 - **Cmd/Ctrl+W:** close the active document tab.
 - **@ mentions in Chat:** find a file or folder and insert its relative path.
@@ -74,7 +82,7 @@ retrieval text, and Agent file access vary by format; see the canonical
 
 Keyword search needs no account or API key and is on from the start. Search
 by meaning, which finds files even when the wording differs, is off until you
-add an OpenAI or OpenRouter key under **Settings → Advanced → Search by Meaning**. The
+add an OpenAI or OpenRouter key under **Settings → Advanced → Search by meaning**. The
 key is billed to you and is used only for search by meaning; signing in to
 StashBase does not turn it on.
 

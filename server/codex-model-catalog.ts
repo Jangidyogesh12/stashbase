@@ -11,11 +11,20 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
 }
 
+/** Codex's "GPT-6.1-Sol" read the way Claude's models read, name first and
+ * then version: "Sol 6.1". The runtime is already named beside the picker, so
+ * the "GPT" prefix says nothing there. Only that exact shape is rewritten;
+ * any other name ("GPT-6", "o3") is passed through whole. */
+export function codexModelName(name: string): string {
+  const match = name.match(/^GPT-(\d+(?:\.\d+)*)-([A-Za-z]+(?:-[A-Za-z]+)*)$/iu);
+  return match ? `${match[2]!.replace(/-/gu, ' ')} ${match[1]}` : name;
+}
+
 /** Normalize one catalog entry while retaining its advertised effort order.
  * Codex returns effort entries as objects, unlike the Claude SDK. The
  * runtime's own default model and each model's default effort travel with
  * the entry, so the composer can name what an unchosen turn runs on. */
-export function codexCatalogModel(entry: unknown): AgentModel | null {
+function codexCatalogModel(entry: unknown): AgentModel | null {
   if (!entry || typeof entry !== 'object') return null;
   const value = entry as JsonObject;
   if (value.hidden === true) return null;
@@ -32,7 +41,7 @@ export function codexCatalogModel(entry: unknown): AgentModel | null {
   const defaultEffort = stringValue(value.defaultReasoningEffort);
   return {
     id,
-    label: stringValue(value.displayName) ?? stringValue(value.name) ?? id,
+    label: codexModelName(stringValue(value.displayName) ?? stringValue(value.name) ?? id),
     ...(typeof value.description === 'string' ? { description: value.description } : {}),
     ...(supportedEfforts.length ? { supportedEfforts } : {}),
     ...(defaultEffort && supportedEfforts.includes(defaultEffort) ? { defaultEffort } : {}),

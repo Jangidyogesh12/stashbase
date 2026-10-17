@@ -26,7 +26,7 @@ export const projectFolderDialogRequestSchema = z
   })
   .strict();
 
-export const projectFolderDialogSuccessSchema = z.object({
+const projectFolderDialogSuccessSchema = z.object({
   folderPath: folderPathSchema.nullable(),
   ok: z.literal(true),
 });
@@ -63,16 +63,16 @@ export const projectFolderRemovalReadySchema = projectFolderRemovalRequestedSche
   .extend({ ready: z.boolean() })
   .strict();
 
-export const projectLifecycleSuccessSchema = z.object({ ok: z.literal(true) }).strict();
+const projectLifecycleSuccessSchema = z.object({ ok: z.literal(true) }).strict();
 
-export const projectPrepareFolderRemovalSuccessSchema = z
+const projectPrepareFolderRemovalSuccessSchema = z
   .object({ ok: z.literal(true), ready: z.boolean() })
   .strict();
 
 /** Opening a member in a window answers which of the two things happened, so
  *  a caller can say "opened it" without claiming a second window that main
  *  deliberately did not make: a folder already on screen is focused instead. */
-export const projectOpenFolderWindowSuccessSchema = z
+const projectOpenFolderWindowSuccessSchema = z
   .object({ ok: z.literal(true), action: z.enum(['opened', 'focused']) })
   .strict();
 
@@ -92,13 +92,8 @@ export const projectOpenFolderWindowResponseSchema = z.union([
 ]);
 
 export type ProjectFolderDialogRequest = z.infer<typeof projectFolderDialogRequestSchema>;
-export type ProjectFolderDialogSuccess = z.infer<typeof projectFolderDialogSuccessSchema>;
 export type ProjectFolderDialogFailure = z.infer<typeof projectFolderDialogFailureSchema>;
 export type ProjectFolderDialogResponse = z.infer<typeof projectFolderDialogResponseSchema>;
-export type ProjectFolderPathRequest = z.infer<typeof projectFolderPathRequestSchema>;
-export type ProjectFolderRemovalRequested = z.infer<
-  typeof projectFolderRemovalRequestedSchema
->;
 export type ProjectLifecycleResponse = z.infer<typeof projectLifecycleResponseSchema>;
 export type ProjectPrepareFolderRemovalResponse = z.infer<
   typeof projectPrepareFolderRemovalResponseSchema

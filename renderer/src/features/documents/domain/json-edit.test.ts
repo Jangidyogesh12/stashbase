@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import {
-  addJsonChild,
-  deleteJsonPath,
-  renameJsonProperty,
-  reorderJsonArrayItem,
-  replaceJsonNode,
-} from './json-edit';
+import { addJsonChild, deleteJsonPath, renameJsonProperty, replaceJsonNode } from './json-edit';
 import { analyzeJsonSource, type JsonSourceNode } from './json-source';
 
 function childAt(node: JsonSourceNode, index: number): JsonSourceNode {
@@ -32,8 +26,6 @@ describe('JSON source edits', () => {
     expect(source).toContain('"precise": 900719925474099399999');
     source = addJsonChild(source, ['items'], '{"raw":1.00e+2}');
     expect(source).toContain('[1, 2, 3, {"raw":1.00e+2}]');
-    source = reorderJsonArrayItem(source, ['items'], 0, 2);
-    expect(source).toContain('[2, 3, 1, {"raw":1.00e+2}]');
     source = deleteJsonPath(source, ['nested', 'enabled']);
     expect(source).not.toContain('enabled');
     expect(source.startsWith('\uFEFF')).toBe(true);

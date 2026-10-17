@@ -12,5 +12,3 @@ export const workspacePreferencesSchema = z
 export const workspacePreferencesRequestSchema = z
   .object({ showHiddenFiles: z.boolean() })
   .strict();
-
-export type WorkspacePreferencesWire = z.infer<typeof workspacePreferencesSchema>;

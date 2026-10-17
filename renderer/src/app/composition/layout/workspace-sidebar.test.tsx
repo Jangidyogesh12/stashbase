@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
 import { appDependencies } from '@/test/fakes/app';
-import { accountPort, SIGNED_IN_ACCOUNT, SIGNED_OUT_ACCOUNT } from '@/test/fakes/settings';
+import {
+  accountPort,
+  agentRuntimePort,
+  IDLE_ALLOWANCE,
+  SIGNED_IN_ACCOUNT,
+  SIGNED_OUT_ACCOUNT,
+} from '@/test/fakes/settings';
 import { filesApi, workspaceAdapters } from '@/test/fakes/workspace';
 
 afterEach(cleanup);
@@ -91,6 +97,42 @@ describe('account row', () => {
     LAZY_TEST_MS,
   );
 
+  it('refreshes credits on menu open and does not present stale credit after a refresh failure', async () => {
+    let fail = false;
+    let remainingPercent = 78;
+    const getAllowance = vi.fn(async () => {
+      if (fail) throw new Error('Offline');
+      return { ...IDLE_ALLOWANCE, remainingPercent, reservedPercent: 25 };
+    });
+    const base = appDependencies();
+    render(
+      <Providers>
+        <App
+          dependencies={appDependencies({
+            settings: {
+              ...base.settings,
+              accountApi: accountPort(SIGNED_IN_ACCOUNT),
+              agentRuntimeApi: agentRuntimePort({ getAllowance }),
+            },
+          })}
+        />
+      </Providers>,
+    );
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole('button', { name: 'Account: Ada Lovelace' });
+    await waitFor(() => expect(getAllowance).toHaveBeenCalled());
+    remainingPercent = 15;
+    await user.click(trigger);
+    expect(await screen.findByText('15%')).not.toBeNull();
+    expect(screen.queryByText('78%')).toBeNull();
+    expect(screen.getByText('25% temporarily reserved')).not.toBeNull();
+    await user.keyboard('{Escape}');
+    fail = true;
+    await user.click(trigger);
+    expect(await screen.findByText('Unavailable')).not.toBeNull();
+    expect(screen.queryByText('15%')).toBeNull();
+  });
+
   it('names the signed-in person and offers credits, plans, and sign-out from a menu', async () => {
     const account = accountPort(SIGNED_IN_ACCOUNT);
     const base = appDependencies();
@@ -120,7 +162,7 @@ describe('account row', () => {
     // Plans and billing lands on the subscription, beside the credits.
     await user.click(within(menu).getByRole('menuitem', { name: 'Plans and billing' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Settings' }));
-    expect(await dialog.findByText(/Have a promotion code\?/)).not.toBeNull();
+    expect(await dialog.findByText('Free · Paid plans add monthly credits.')).not.toBeNull();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
 
@@ -134,7 +176,7 @@ describe('account row', () => {
 });
 
 describe('account banners', () => {
-  it('offers sign-in once while signed out and remembers Not now', async () => {
+  it('offers sign-in while signed out and remembers Not now', async () => {
     const account = accountPort({ ...SIGNED_OUT_ACCOUNT, offers: ['sign-in'] });
     const base = appDependencies();
     render(
@@ -146,16 +188,12 @@ describe('account banners', () => {
     );
     const user = userEvent.setup();
 
-    expect(
-      await screen.findByText('Sign in for free Default Agent credits, valid for 7 days.'),
-    ).not.toBeNull();
+    expect(await screen.findByText('Sign in for free Agent credits every week.')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Not now' }));
     await waitFor(() =>
       expect(account.markOfferSeen).toHaveBeenCalledWith('sign-in', expect.anything()),
     );
-    expect(
-      screen.queryByText('Sign in for free Default Agent credits, valid for 7 days.'),
-    ).toBeNull();
+    expect(screen.queryByText('Sign in for free Agent credits every week.')).toBeNull();
   });
 });
 

@@ -10,7 +10,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { logger, errorMessage } from './log.ts';
+import { logger } from './log.ts';
+import { writeFileAtomic } from './atomic-write.ts';
 import type {
   AppearancePreferences,
   UpdatePreferences,
@@ -19,6 +20,7 @@ import type {
 import { normalizeAppearancePreferences } from '../shared/protocols/http/appearance.ts';
 import type { EmbedderProvider } from '../shared/embedding.ts';
 import type { HostedAccountOffer } from '../shared/account.ts';
+import type { DefaultAgentToolChoice } from '../shared/protocols/http/agent-tools.ts';
 import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
 
 export type {
@@ -41,11 +43,11 @@ export interface RecentFolder {
   favorite?: boolean;
 }
 
-export const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
+const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
   autoCheck: true,
 };
 
-export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
+const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
   showHiddenFiles: false,
 };
 
@@ -88,8 +90,8 @@ export function isEmbedderProvider(value: unknown): value is EmbedderProvider {
 export interface AppConfigFile {
   agentPreferences?: Array<{
     scope: string;
-    agent: 'stashbase' | 'codex' | 'claude';
-    efforts?: Partial<Record<'stashbase' | 'codex' | 'claude', string | null>>;
+    agent: 'stashbase' | 'codex' | 'claude' | 'antigravity';
+    efforts?: Partial<Record<'stashbase' | 'codex' | 'claude' | 'antigravity', string | null>>;
     /** The library persona this project's next new Chat starts with. */
     persona?: string | null;
   }>;
@@ -104,8 +106,9 @@ export interface AppConfigFile {
   };
   account?: {
     session?: HostedAccountSession;
-    /** One-time account banners already taken up or declined. Kept outside
-     *  the session so signing out does not bring them back. */
+    /** Account banners already taken up or declined. Kept outside the
+     *  session so an answer outlasts the launch; signing out forgets the
+     *  sign-in banner's answer on purpose. */
     offersSeen?: HostedAccountOffer[];
   };
   /** Settings-managed bearer credential and explicit exposure preference for
@@ -131,7 +134,12 @@ export interface AppConfigFile {
    * with nothing chosen. A memory rather than a preference: losing it costs
    * one runtime-level read, and no route accepts it from a request body. See
    * `agent-model-catalog.ts`. */
-  agentModelCatalogs?: Partial<Record<'claude' | 'codex', AgentModelCatalog>>;
+  agentModelCatalogs?: Partial<Record<'claude' | 'codex' | 'antigravity', AgentModelCatalog>>;
+  /** The Default Agent tools the reader attached, each with its hosted
+   * profile. Read through `default-agent-tools.ts`, which ignores a profile
+   * outside a tool's own list. */
+  defaultAgentTools?: Partial<Record<string, DefaultAgentToolChoice>>;
+  agentCrewChats?: Record<string, Partial<Record<string, DefaultAgentToolChoice>>>;
 }
 
 export function readAppConfigStrict(file = CONFIG_FILE): AppConfigFile {
@@ -150,7 +158,7 @@ export function readAppConfigStrict(file = CONFIG_FILE): AppConfigFile {
   }
 }
 
-export async function readAppConfigStrictAsync(): Promise<AppConfigFile> {
+async function readAppConfigStrictAsync(): Promise<AppConfigFile> {
   try {
     const raw = await fs.promises.readFile(CONFIG_FILE, 'utf8');
     const parsed = JSON.parse(raw);
@@ -213,17 +221,10 @@ function configAccessError(cause: unknown): Error {
 }
 
 function writeSerializedConfig(serialized: string): void {
-  const tmp = `${CONFIG_FILE}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    // 0600 — config may carry API keys; keep it owner-only.
-    fs.writeFileSync(tmp, serialized, { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(tmp, CONFIG_FILE);
-    if (process.platform !== 'win32') {
-      try { fs.chmodSync(CONFIG_FILE, 0o600); } catch { /* best effort on special filesystems */ }
-    }
-  } catch (err) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
-    throw err;
+  // 0600 — config may carry API keys; keep it owner-only.
+  writeFileAtomic(CONFIG_FILE, serialized, { mode: 0o600 });
+  if (process.platform !== 'win32') {
+    try { fs.chmodSync(CONFIG_FILE, 0o600); } catch { /* best effort on special filesystems */ }
   }
 }
 
@@ -296,6 +297,16 @@ export function markAccountOfferSeen(offer: HostedAccountOffer): void {
   const seen = Array.isArray(cfg.account?.offersSeen) ? cfg.account.offersSeen : [];
   if (seen.includes(offer)) return;
   cfg.account = { ...(cfg.account ?? {}), offersSeen: [...seen.filter((item) => ACCOUNT_OFFERS.includes(item)), offer] };
+  writeAppConfigStrict(cfg);
+}
+
+/** Shows an offer again: signing out returns the reader to where the
+ *  sign-in banner first found them. */
+export function forgetAccountOfferSeen(offer: HostedAccountOffer): void {
+  const cfg = readAppConfigStrict();
+  const seen = cfg.account?.offersSeen;
+  if (!Array.isArray(seen) || !seen.includes(offer)) return;
+  cfg.account = { ...cfg.account, offersSeen: seen.filter((item) => item !== offer) };
   writeAppConfigStrict(cfg);
 }
 

@@ -12,12 +12,11 @@ function buildElectronSmokeArgs(platform, script, port) {
   return platform === 'linux' ? ['--no-sandbox', ...appArgs] : appArgs;
 }
 
-function applicationWindowChromeOptions(platform = process.platform) {
+function applicationWindowChromeOptions() {
   return {
-    // Linux otherwise reserves a permanent native menu strip above the
-    // renderer. Keep the application menu installed for accelerators and let
-    // the platform reveal it temporarily with Alt when it is needed.
-    autoHideMenuBar: platform === 'linux',
+    // File → New Window is the path from an occupied window back to Welcome,
+    // where another project can be opened. Keep the menu visible on Linux.
+    autoHideMenuBar: false,
     titleBarStyle: 'hiddenInset',
     // The inset shell starts every column 8px below the window top (the
     // sidebar's py-2, the inset's m-2), so the 44px (h-11) titlebar band is

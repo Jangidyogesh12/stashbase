@@ -35,7 +35,7 @@ export const galleryEntrySchema = z
 
 /** A ready-made persona a reader can add to their own library. Adding takes
  *  a copy; a later publication never changes a persona already added. */
-export const galleryPersonaSchema = z
+const galleryPersonaSchema = z
   .object({
     /** Stable slug, never reused. Also the id an added copy remembers. */
     id: line(96).regex(/^[a-z0-9][a-z0-9-]*$/u),

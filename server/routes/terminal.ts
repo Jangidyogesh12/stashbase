@@ -20,13 +20,14 @@ import {
   updateAgentBootstrap,
 } from '../agent-runtime-installer.ts';
 import type { AgentId } from '../../shared/agent-protocol.ts';
+import { isNativeAgentId } from '../native-agents.ts';
 
 function agentId(value: unknown): AgentId | null {
-  return value === 'stashbase' || value === 'claude' || value === 'codex' ? value : null;
+  return value === 'stashbase' || isNativeAgentId(value) ? value : null;
 }
 
 function nativeAgentId(value: unknown): NativeAgentId | null {
-  return value === 'claude' || value === 'codex' ? value : null;
+  return isNativeAgentId(value) ? value : null;
 }
 
 async function agentCatalogResponse() {

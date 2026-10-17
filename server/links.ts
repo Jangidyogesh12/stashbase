@@ -27,10 +27,8 @@
  *   - `?query` and `#anchor` suffixes are preserved verbatim.
  */
 import path from 'node:path';
-import {
-  detectFormat,
-  listFilesAsync,
-} from './files.ts';
+import { detectFormat } from './format.ts';
+import { listFilesAsync } from './file-listing.ts';
 import { logger, errorMessage } from './log.ts';
 import { fileChanged, readTextSnapshotAsync, replaceTextSnapshotAsync, textVersion, withTextFileTransaction } from './text-file-transaction.ts';
 

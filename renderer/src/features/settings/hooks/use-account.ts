@@ -53,9 +53,9 @@ export interface AccountViewModel {
   /** Waits for this explicit sign-in; aborting the caller never revokes browser authorization. */
   signInAndWait(signal: AbortSignal): Promise<boolean>;
   signOut(): void;
-  /** Records a one-time banner as taken up or declined. */
+  /** Records an account banner as taken up or declined. */
   markOfferSeen(offer: AccountOffer): void;
-  /** Development: shows every one-time banner again. */
+  /** Development: shows every account banner again. */
   resetOffers(): void;
 }
 

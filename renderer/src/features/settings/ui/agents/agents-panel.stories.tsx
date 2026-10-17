@@ -127,9 +127,9 @@ const signedIn: AccountPort = {
   startSignIn: async () => ({ flowId: 'flow', url: 'https://accounts.example/sign-in' }),
 };
 
-/** Nobody signed in, so the bundled agent cannot run a turn yet: the row
- *  recedes and says what would clear it, and the account row above offers the
- *  same sign-in in the same shape. */
+/** Nobody signed in, so the bundled agent cannot run a turn yet: its row
+ *  recedes and says it needs sign-in, and the Account row below owns the
+ *  action. */
 const signedOut: AccountPort = {
   ...signedIn,
   load: async () => SIGNED_OUT,
@@ -199,4 +199,21 @@ export const NeedsSignIn: Story = { args: { account: signedOut, port: accountReq
 
 export const UpdateOffersAModel: Story = {
   args: { account: signedIn, port: upgradeOfferedPort() },
+};
+
+export const ReservedCredits: Story = {
+  args: {
+    account: signedIn,
+    port: {
+      ...fakePort(),
+      getAllowance: async () => ({
+        remainingPercent: 15,
+        reservedPercent: 24.565635,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        windowEndsAt: '2026-10-18T09:06:28.329Z',
+      }),
+    },
+  },
 };

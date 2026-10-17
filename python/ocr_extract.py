@@ -44,7 +44,7 @@ def load_image(path: Path):
         return str(path)
 
 
-def extract_text(image_path: Path) -> str:
+def extract_text(image_path: Path | bytes) -> str:
     """Run RapidOCR and return the recognised text, one region per line,
     in reading order as RapidOCR emits it. Empty string when nothing is
     found."""
@@ -59,7 +59,7 @@ def extract_text(image_path: Path) -> str:
         raise
 
     engine = RapidOCR()
-    result, _elapse = engine(load_image(image_path))
+    result, _elapse = engine(image_path if isinstance(image_path, bytes) else load_image(image_path))
     if not result:
         return ""
     # Each entry is [box, text, score]; keep the text in emit order.

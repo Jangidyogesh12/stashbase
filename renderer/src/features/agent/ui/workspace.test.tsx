@@ -23,63 +23,6 @@ import { registerWorkspaceCleanup, renderWorkspace } from './workspace.harness';
 registerWorkspaceCleanup();
 
 describe('Agent workspace', () => {
-  it('offers explicit model refresh through reconnect while retaining history, draft, and paused queue', async () => {
-    const { port, listeners, sent } = agentSessionPort();
-    const { runtime } = renderWorkspace(port);
-    await agentGateLifted();
-    const session = runtime.activeSession();
-    await act(async () => {
-      session.start();
-      listeners[0]?.onEvent({ kind: 'identified', id: 'model-refresh-chat' });
-      listeners[0]?.onEvent({ kind: 'ready' });
-      await session.sendPrompt('Keep this refused request');
-      session.setDraft('An unsent follow-up');
-      session.setQueue([{ id: 'pending', text: 'Queued work' }]);
-      listeners[0]?.onEvent({
-        kind: 'failed',
-        message: 'Reconnect to refresh the available models.',
-      });
-      listeners[0]?.onEvent({ kind: 'turn-ended', isError: true });
-      listeners[0]?.onEvent({
-        kind: 'exited',
-        message: 'Reconnect to refresh the available models.',
-      });
-      listeners[0]?.onClose();
-    });
-    expect(session.store.getState().delivery).toBe('failed');
-    expect(
-      session.store
-        .getState()
-        .transcript.some(
-          (block) => block.kind === 'user' && block.text === 'Keep this refused request',
-        ),
-    ).toBe(true);
-    expect(screen.getByRole('button', { name: 'Reconnect' })).not.toBeNull();
-    expect(port.connect).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
-    expect(port.connect).toHaveBeenLastCalledWith(
-      expect.objectContaining({ resume: 'model-refresh-chat' }),
-      expect.anything(),
-    );
-    await act(async () => {
-      listeners[1]?.onEvent({
-        kind: 'models',
-        models: [{ id: 'refreshed', label: 'Updated model' }],
-        activeModel: 'refreshed',
-        fallback: null,
-      });
-      listeners[1]?.onEvent({ kind: 'ready' });
-    });
-    expect(session.store.getState().models).toEqual([{ id: 'refreshed', label: 'Updated model' }]);
-    expect(session.store.getState().draft).toBe('An unsent follow-up');
-    expect(session.store.getState().queuedPrompts.map((item) => item.text)).toEqual([
-      'Queued work',
-    ]);
-    expect(session.store.getState().queuePaused).toBe(true);
-    expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
-  });
-
   it('does not offer updates for an externally controlled executable in the composer or failed turn', async () => {
     const { port, listeners } = agentSessionPort();
     const claude = {
@@ -164,14 +107,14 @@ describe('Agent workspace', () => {
     await agentGateLifted();
 
     // Taking a suggestion fills the draft without starting a turn.
-    expect(screen.getByText('Brainstorm article ideas from this project')).not.toBeNull();
+    expect(screen.getByText('Brainstorm ideas from my notes')).not.toBeNull();
     expect(screen.queryByRole('button', { name: /Build/u })).toBeNull();
 
     const field = screen.getByRole('textbox', { name: 'Message' });
     await userEvent.click(field);
     await userEvent.keyboard('{Tab}');
 
-    expect(draftOf(runtime)).toBe('Brainstorm article ideas from this project');
+    expect(draftOf(runtime)).toBe('Brainstorm ideas from my notes');
     // Filled, not sent: the visible request stays the reader's to edit, so
     // what the Agent receives is still exactly what the transcript records.
     expect(port.connect).not.toHaveBeenCalled();
@@ -244,9 +187,9 @@ describe('Agent workspace', () => {
       });
       listeners[0]?.onEvent({ kind: 'ready' });
     });
-    // The menu opened on the level; the model list is one layer deeper, and
+    // The panel opened on the level; the model list is one step deeper, and
     // this runtime has named no default, so nothing is marked there yet.
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Model. Default' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Model: Default' }));
     const longModelOption = await screen.findByRole('menuitemradio', {
       name: 'Opus (1M context) with extended reasoning',
     });
@@ -258,18 +201,24 @@ describe('Agent workspace', () => {
       }),
     ).not.toBeNull();
 
-    // The pick closes the menu, which leaves once its exit has played; the
-    // level is chosen from the same control, reopened on its first layer.
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull(), { timeout: 2000 });
+    // The pick closes the menu and the panel, which leave once their exits
+    // have played; the level is chosen from the same control, reopened.
+    await waitFor(
+      () => {
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(screen.queryByRole('dialog')).toBeNull();
+      },
+      { timeout: 2000 },
+    );
     await userEvent.click(
       screen.getByRole('button', {
         name: 'Model and thinking: Opus (1M context) with extended reasoning',
       }),
     );
-    const highEffortOption = await screen.findByRole('menuitemradio', {
-      name: 'High. Deeper reasoning',
-    });
-    await userEvent.click(highEffortOption);
+    // No level is chosen and the model declares none, so the slider starts
+    // unplaced; one step lands on the second level, High.
+    (await screen.findByRole('slider', { name: 'Thinking' })).focus();
+    await userEvent.keyboard('{ArrowRight}');
     expect(requests().at(-1)).toMatchObject({ effort: 'high', model: 'gpt-codex' });
     expect(
       screen.getByRole('button', {
@@ -315,7 +264,7 @@ describe('Agent workspace', () => {
         });
         listeners[0]?.onEvent({ kind: 'ready' });
       });
-      await userEvent.click(await screen.findByRole('menuitem', { name: 'Model. Older model' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Model: Older model' }));
       await userEvent.click(await screen.findByRole('menuitem', { name: /Update Codex/u }));
       await waitFor(() =>
         expect(prepareAgent).toHaveBeenCalledWith('codex', 'update', expect.anything()),
@@ -324,12 +273,13 @@ describe('Agent workspace', () => {
         screen.getByRole('menuitem', { name: /Updating Codex/u }).getAttribute('aria-disabled'),
       ).toBe('true');
       expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(0);
-      await userEvent.keyboard('{Escape}');
+      // One Escape leaves the model menu, the next the panel it opened from.
+      await userEvent.keyboard('{Escape}{Escape}');
       expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
       await userEvent.click(
         screen.getByRole('button', { name: 'Model and thinking: Older model' }),
       );
-      await userEvent.click(await screen.findByRole('menuitem', { name: 'Model. Older model' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Model: Older model' }));
 
       await act(async () => {
         finishUpdate();

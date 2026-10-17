@@ -49,3 +49,10 @@ __pycache__/
 python/.venv.nosync/
 python/.venv/
 python/pyinstaller-cache.nosync/
+build/native.nosync/
+
+# Profiling runs (scripts/profiling)
+profiling.nosync/
+
+# Local transcription build outputs.
+native/transcription/build.nosync/

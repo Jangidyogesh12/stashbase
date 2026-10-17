@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react';
 
 import { SURFACE_FAILED } from '@/features/agent/application/failure-messages';
-import type { AgentCatalogPort, AgentPersonaPort } from '@/features/agent/application/ports';
+import type {
+  AgentCatalogPort,
+  AgentPersonaPort,
+  AgentToolsPort,
+} from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { AgentTurnChangeReview } from '@/features/agent/ui/transcript/turn-changes-card';
@@ -19,6 +23,8 @@ export interface AgentWorkspaceProps {
   header?: boolean | undefined;
   /** The reader's persona library. */
   persona: AgentPersonaPort;
+  /** Default's optional model tools. */
+  tools: AgentToolsPort;
   /** Opens the Gallery on its personas. The Gallery is a sibling feature, so
    *  the composition layer supplies this. */
   onBrowsePersonas?: (() => void) | undefined;

@@ -7,7 +7,7 @@ import test from "node:test";
 import express from "express";
 import { workspaceFilesSchema } from "../../shared/protocols/http/files.ts";
 
-import { fileVersion } from "../files.ts";
+import { fileVersionAsync } from "../active-file-operations.ts";
 import { filesystemPath } from "../filesystem-path.ts";
 import { clearCurrentFolder, removeRecentAsync, openProjectFolder } from "../folder.ts";
 import { requireFolder } from "../http.ts";
@@ -89,7 +89,7 @@ test("versioned document route accepts JSON through the shared source authority"
       `http://127.0.0.1:${address.port}/api/files/data.json?folder=${encodeURIComponent(root)}`,
       {
         body: JSON.stringify({
-          baseVersion: fileVersion("data.json"),
+          baseVersion: await fileVersionAsync("data.json"),
           content: '\uFEFF{\n  "value": 2\n}\n',
         }),
         headers: { "content-type": "application/json" },
@@ -278,7 +278,7 @@ test('folder-explicit listing, reads, saves, and index status preserve a trailin
     }
     const saved = await fetch(`${base}/api/files/note.md?${scope}`, {
       method: 'PUT', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ content: 'next draft', baseVersion: fileVersion('note.md') }),
+      body: JSON.stringify({ content: 'next draft', baseVersion: await fileVersionAsync('note.md') }),
     });
     assert.equal(saved.status, 200, await saved.text());
     assert.equal(fs.readFileSync(path.join(root, 'note.md'), 'utf8'), 'next draft');

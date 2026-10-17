@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 import { DARK_THEME_IDS, LIGHT_THEME_IDS } from '../../appearance-themes';
 
-export const appearanceThemeSchema = z.enum(['system', 'light', 'dark']);
+const appearanceThemeSchema = z.enum(['system', 'light', 'dark']);
 
-export const appearanceScaleSchema = z.enum(['small', 'default', 'large']);
+const appearanceScaleSchema = z.enum(['small', 'default', 'large']);
 
 /** The two reading fonts StashBase ships for Markdown prose. */
-export const readingFontSchema = z.enum(['serif', 'sans']);
+const readingFontSchema = z.enum(['serif', 'sans']);
 
 /** A font family the reader chose from the fonts installed on their system.
  *  It is the one free-form appearance value, and it ends up inside a CSS

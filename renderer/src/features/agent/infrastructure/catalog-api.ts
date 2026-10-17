@@ -72,6 +72,7 @@ function toAgent(wire: AgentWire): Agent {
           setupFailure: {
             stage: wire.bootstrap.failure.stage,
             message: wire.bootstrap.failure.message,
+            ...(wire.bootstrap.failure.code === 'account-refused' ? { accountRefused: true } : {}),
           },
         }
       : {}),
@@ -93,12 +94,6 @@ function catalogRequest(
   return {
     error: AgentSessionError,
     failureSchema: agentRuntimeFailureSchema,
-    messages: {
-      'invalid-response': 'The Agent service returned an unexpected response.',
-      'scope-lost': 'Agent runtimes are unavailable.',
-      unauthorized: 'Agent runtimes are unavailable.',
-      unavailable: 'StashBase could not reach the Agent service.',
-    },
     method,
     path,
     signal,

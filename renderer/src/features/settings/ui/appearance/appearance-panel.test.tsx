@@ -109,8 +109,8 @@ describe('AppearancePanel', () => {
     await loaded();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('button', { name: 'Writing font: Serif' }));
-    const writing = await screen.findByRole('listbox', { name: 'Writing font' });
+    await user.click(screen.getByRole('button', { name: 'Document font: Serif' }));
+    const writing = await screen.findByRole('listbox', { name: 'Document font' });
     expect(
       within(writing)
         .getAllByRole('option')
@@ -125,7 +125,7 @@ describe('AppearancePanel', () => {
     );
 
     // An included font retires the installed one, or it would not show.
-    await user.click(await screen.findByRole('button', { name: 'Writing font: Literata' }));
+    await user.click(await screen.findByRole('button', { name: 'Document font: Literata' }));
     await user.click(await screen.findByRole('option', { name: 'Sans, Included' }));
     await waitFor(() =>
       expect(port.update).toHaveBeenCalledWith(
@@ -154,7 +154,7 @@ describe('AppearancePanel', () => {
     );
 
     expect(
-      await screen.findByRole('button', { name: 'Writing font: Gone Serif (not installed)' }),
+      await screen.findByRole('button', { name: 'Document font: Gone Serif (not installed)' }),
     ).toBeTruthy();
   });
 

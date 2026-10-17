@@ -26,19 +26,12 @@
 import './stdio-guard.ts';
 
 import { readAppConfigStrict } from '../server/app-config.ts';
-import { createNativeDiagnostics } from '../server/native-diagnostics.ts';
+import { createNativeDiagnostics, telemetryAvailable } from '../server/native-diagnostics.ts';
 import packageInfo from '../package.json' with { type: 'json' };
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createProjectMcpServer } from './project-server.ts';
+import { createProjectMcpServer, parseMcpAgentTools } from './project-server.ts';
+import { parsePortArg } from '../shared/port-arg.ts';
 
-function parsePortArg(argv: string[], fallback: number): number {
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith('--port=')) return Number(a.slice(7)) || fallback;
-    if (a === '--port') return Number(argv[i + 1]) || fallback;
-  }
-  return fallback;
-}
 // Use 127.0.0.1 explicitly — the server binds to the IPv4 loopback and
 // `localhost` resolves to ::1 first on dual-stack hosts, which would
 // make every web call fail with ECONNREFUSED.
@@ -50,6 +43,8 @@ const server = createProjectMcpServer({
   // Set only when a built-in panel session spawned this host: lets
   // `create_project` attribute the call to that live session.
   agentSessionId: process.env.STASHBASE_AGENT_SESSION_ID,
+  // Set only by a Default chat that enabled model tools.
+  agentTools: parseMcpAgentTools(process.env.STASHBASE_AGENT_TOOLS),
 });
 
 async function main() {
@@ -59,7 +54,7 @@ async function main() {
 
 const configPath = process.env.STASHBASE_DIAGNOSTICS_CONFIG;
 const diagnostics = createNativeDiagnostics({
-  available: process.env.STASHBASE_PACKAGED === '1' && process.env.STASHBASE_TELEMETRY_DISABLED !== '1' && Boolean(configPath && process.env.STASHBASE_DIAGNOSTICS_ROOT),
+  available: telemetryAvailable(process.env.STASHBASE_PACKAGED === '1') && Boolean(configPath && process.env.STASHBASE_DIAGNOSTICS_ROOT),
   version: packageInfo.version, directory: process.env.STASHBASE_DIAGNOSTICS_ROOT,
   // The launcher pins the host's paths, even under Default Agent's private home.
   read: () => readAppConfigStrict(configPath),

@@ -6,107 +6,29 @@
  *  lists as folder-relative visible paths and folds in embedding
  *  availability, conversion scheduling, and preparation failures.
  *
- *  Lives in `shared/` because both processes speak it: `buildIndexStatus`
- *  in `server/index-status.ts` produces it, and the renderer consumes it
- *  through `@/common/api`. Types only — no runtime, no Node imports.
+ *  The schema in `protocols/http/index-status.ts` is the single source of
+ *  truth; these types are what `buildIndexStatus` in `server/index-status.ts`
+ *  produces. Types only — no runtime, no Node imports.
  */
-import type { ConversionProgress } from './conversion.ts';
+import type { z } from 'zod';
+import type {
+  indexStatusResponseSchema,
+  indexWarningSchema,
+  preparationFailureSchema,
+  semanticIndexingStateSchema,
+  semanticIndexingStatusSchema,
+} from './protocols/http/index-status.ts';
 
 /** Coarse embedding-readiness label the renderer renders directly. */
-export type SemanticIndexingState =
-  | 'disabled'
-  | 'indexing'
-  | 'partial-indexing'
-  | 'ready'
-  | 'failed';
+export type SemanticIndexingState = z.output<typeof semanticIndexingStateSchema>;
 
-export interface SemanticIndexingStatus {
-  state: SemanticIndexingState;
-}
 
-/** Non-null when the active folder's background index sync failed after
- *  opening/importing. Cleared by a successful manual/background sync or
- *  user dismissal. */
-export interface IndexWarning {
-  message: string;
-  at: string;
-}
 
 /** Persistent file preparation failure record — subset of the on-disk
  *  entry, with timestamps the UI doesn't need stripped. */
-export interface PreparationFailure {
-  /** Folder-relative source path. */
-  path: string;
-  lastError: string;
-  attempts: number;
-  status: 'failed' | 'cancelled';
-}
+export type PreparationFailure = z.output<typeof preparationFailureSchema>;
 
-export interface IndexStatus {
-  /** Absolute path of the folder this status describes. */
-  folder: string;
-  /** Files on disk that look indexable. */
-  total: number;
-  /** Files on disk that already have rows in the index. */
-  indexed: number;
-  /** UI-visible sources waiting to be embedded, as folder-relative display
-   *  paths. Empty whenever semantic indexing is unavailable — unlike the
-   *  indexer's own `pending`, which is absolute and unfiltered. */
-  pending: string[];
-  pendingCount: number;
-  /** Index rows whose source is gone from disk, folder-relative. */
-  orphaned: string[];
-  orphanedCount: number;
-  /** True iff the indexer sees no pending and no orphaned rows. Computed
-   *  over the indexer's unfiltered lists, not the visible ones above. */
-  upToDate: boolean;
-  /** False when semantic indexing/retrieval is unconfigured, e.g. no
-   *  embedding key. */
-  semanticEnabled: boolean;
-  /** Legacy alias of `semanticEnabled`: key presence only, not provider
-   * authentication, connectivity, or index readiness. */
-  semanticAvailable: boolean;
-  /** Human-readable reason, sent only when `semanticAvailable` is false. */
-  semanticDisabledReason?: string;
-  /** True when no UI-visible file is waiting for embedding. Unlike
-   *  `upToDate`, this ignores orphaned/hidden index rows that are not
-   *  relevant to search-readiness accounting. */
-  visibleIndexingSettled: boolean;
-  semanticIndexing: SemanticIndexingStatus;
-  /** False until the folder has received at least one daemon status
-   *  response. Optional because the indexer interface leaves it optional. */
-  indexReady: boolean;
-  /** Folder-relative paths of sources that are queued or running. */
-  pendingConversions: string[];
-  /** Folder-relative conversion progress keyed by visible source path.
-   *  Used by PDF/image preview banners for queue/extraction/indexing copy. */
-  conversionProgress: Record<string, ConversionProgress>;
-  /** Global in-memory scheduler change counter. Display-only notification;
-   *  derived artifacts remain the conversion source of truth. */
-  conversionRevision: number;
-  /** Folder-relative per-source refresh tokens for derived previews. */
-  conversionVersions: Record<string, number>;
-  /** Persistent preparation failures. Survives app restart (read back from
-   *  AppData `state.db`). Empty when no failures. Drives lightweight row
-   *  markers, rich viewer banners, and the context-menu Reprocess entry. */
-  preparationFailures: PreparationFailure[];
-  /** Monotonic counter the server bumps on every external fs event
-   *  (after self-write filtering). Renderer compares against its
-   *  last-seen value and triggers `/api/files` on any change — picks
-   *  up writes from the chat panel (Claude, `touch`, …) even
-   *  for non-indexable files / empty dirs that don't move `pending`. */
-  treeVersion: number;
-  indexWarning: IndexWarning | null;
-}
-
-export type PdfStatusKind = 'in-flight' | 'done' | 'failed' | 'cancelled';
-
-/** Full per-file preparation status from `GET /api/pdf/status`. Richer than
- *  `PreparationFailure`, which carries only what a failure banner needs. */
-export interface PdfStatusEntry {
-  status: PdfStatusKind;
-  attempts: number;
-  lastError?: string;
-  lastAttemptAt: string;
-  doneAt?: string;
-}
+/** The fields the server builds. The schema tolerates unknown extra fields
+ *  (`passthrough`) for older renderers; `strip` drops that index signature so
+ *  the server's own object stays exactly typed. */
+export type IndexStatus = z.output<ReturnType<(typeof indexStatusResponseSchema)['strip']>>;

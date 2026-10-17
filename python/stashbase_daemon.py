@@ -75,6 +75,23 @@ def _relative(root: str, path: str) -> str:
     return relative
 
 
+def _scope_filters(root: str, args: dict[str, Any]) -> list[Any]:
+    """Search/grep scope from optional `path_prefix` and `extensions` args."""
+    filters: list[Any] = []
+    path_prefix = args.get("path_prefix")
+    if path_prefix and _norm_path(str(path_prefix)) != root:
+        relative_prefix = _relative(root, _norm_path(str(path_prefix)))
+        filters.append(PathPrefix(relative_prefix.rstrip("/") + "/"))
+    extensions = tuple(
+        extension.lower()
+        for extension in (args.get("extensions") or [])
+        if isinstance(extension, str) and extension.startswith(".")
+    )
+    if extensions:
+        filters.append(ByExtension(extensions))
+    return filters
+
+
 def _join(root: str, relative: str) -> str:
     return _norm_path(root) + "/" + relative
 
@@ -545,18 +562,7 @@ class StashbaseMFS:
         if not query:
             return {"hits": []}
         binding = self.binding_for_folder(str(args["folder"]))
-        filters: list[Any] = []
-        path_prefix = args.get("path_prefix")
-        if path_prefix and _norm_path(str(path_prefix)) != binding.root:
-            relative_prefix = _relative(binding.root, _norm_path(str(path_prefix)))
-            filters.append(PathPrefix(relative_prefix.rstrip("/") + "/"))
-        extensions = tuple(
-            extension.lower()
-            for extension in (args.get("extensions") or [])
-            if isinstance(extension, str) and extension.startswith(".")
-        )
-        if extensions:
-            filters.append(ByExtension(extensions))
+        filters = _scope_filters(binding.root, args)
         limit = max(1, min(200, int(args.get("top_k", 8))))
         result = self._mfs.search(
             binding.namespace,
@@ -640,19 +646,9 @@ class StashbaseMFS:
                 case_sensitive=bool(args.get("case_strict")),
                 smart_case=not bool(args.get("case_strict")),
                 whole_word=bool(args.get("whole_word")),
-            )
+            ),
+            *_scope_filters(binding.root, args),
         ]
-        path_prefix = args.get("path_prefix")
-        if path_prefix and _norm_path(str(path_prefix)) != binding.root:
-            relative_prefix = _relative(binding.root, _norm_path(str(path_prefix)))
-            filters.append(PathPrefix(relative_prefix.rstrip("/") + "/"))
-        extensions = tuple(
-            extension.lower()
-            for extension in (args.get("extensions") or [])
-            if isinstance(extension, str) and extension.startswith(".")
-        )
-        if extensions:
-            filters.append(ByExtension(extensions))
 
         result = self._mfs.grep(
             binding.namespace,
@@ -767,6 +763,12 @@ def _termination_signals(signal_module: Any) -> tuple[Any, ...]:
 def main() -> int:
     import atexit
     import signal
+
+    # Own the wire encoding here as well as in the launcher: frozen runtimes
+    # and direct launches must not decode Node's UTF-8 JSON with an ANSI locale.
+    sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+    sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
 
     parser = argparse.ArgumentParser(description="StashBase public-MFS sidecar")
     parser.add_argument("--store-root", required=True)

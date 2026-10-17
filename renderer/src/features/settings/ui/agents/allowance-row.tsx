@@ -1,3 +1,4 @@
+import { reservedCreditsDetail } from '@/features/settings/domain/agent-allowance';
 import type { AgentAllowance } from '@/features/settings/domain/agent-catalog';
 import { ProgressBar, SettingsRow } from '@/features/settings/ui/rows';
 import { clamp } from '@/shared/utils/clamp';
@@ -11,11 +12,13 @@ export function AllowanceRow({ allowance }: { allowance: AgentAllowance }) {
       })
     : null;
 
+  const reserved = reservedCreditsDetail(allowance);
+
   return (
     <SettingsRow
       as="li"
-      detail={`${percent}% remaining${reset ? ` · Refills ${reset}` : ' · Resets every 7 days from first use'}`}
-      title="Agent credits"
+      detail={`${percent}% available${reserved ? ` · ${reserved}` : ''} · Refills ${reset ?? '7 days after first use'}`}
+      title="Credits"
     >
       <ProgressBar value={percent} />
     </SettingsRow>

@@ -4,10 +4,10 @@
  * so `image.ts` and any future converter share one interpreter-discovery
  * path instead of each re-implementing the packaged-vs-dev venv probe.
  *
- * Packaged apps install a verified PyInstaller extractor on first demand. If a
- * packaged/runtime Python is explicitly present we can use it, but dev
- * mode must prefer the repo's live `.venv.nosync` so stale packaged
- * artifacts never shadow source edits.
+ * Packaged apps ship no Python interpreter: the index daemon is a bundled
+ * PyInstaller binary and the extractor installs on first demand. Development
+ * runs the repo's live `.venv.nosync` so built artifacts never shadow source
+ * edits.
  */
 import { existsSync, statSync, promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -23,7 +23,7 @@ export const PROJECT_ROOT = process.env.STASHBASE_APP_ROOT
   ? path.resolve(process.env.STASHBASE_APP_ROOT)
   : path.resolve(__dirname, '..');
 
-const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
+export const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
   ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
   : PROJECT_ROOT;
 const DEVELOPMENT_RUNTIME = isDevelopmentRuntime();
@@ -68,23 +68,21 @@ export async function prepareExtractorRuntime(
 }
 
 /** Absolute path to the Python interpreter to spawn. Honours
- *  `STASHBASE_PYTHON`, then the packaged runtime, then the dev venv,
- *  then bare `python3`. */
+ *  `STASHBASE_PYTHON`, then the dev venv populated by `pnpm setup:python`,
+ *  then bare `python3`. Packaged apps ship no interpreter; they run the
+ *  PyInstaller daemon and extractor binaries instead. */
 export function pythonBin(): string {
   if (process.env.STASHBASE_PYTHON) return process.env.STASHBASE_PYTHON;
-  const packagedCandidates = DEVELOPMENT_RUNTIME
-    ? []
-    : [
-        ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')),
-        ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv')),
-      ];
-  for (const candidate of [
-    ...packagedCandidates,
-    ...pythonCandidates(path.join(PROJECT_ROOT, 'python', '.venv.nosync')),
-  ]) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return 'python3';
+  const venv = path.join(PROJECT_ROOT, 'python', '.venv.nosync');
+  const candidates = process.platform === 'win32'
+    ? [path.join(venv, 'Scripts', 'python.exe'), path.join(venv, 'bin', 'python')]
+    : [path.join(venv, 'bin', 'python'), path.join(venv, 'Scripts', 'python.exe')];
+  return candidates.find((candidate) => existsSync(candidate)) ?? 'python3';
+}
+
+/** A PyInstaller --onedir executable: `<root>/<name>/<name>[.exe]`. */
+export function sidecarExecutable(root: string, name: string): string {
+  return path.join(root, name, process.platform === 'win32' ? `${name}.exe` : name);
 }
 
 /** Absolute path to a sidecar script under `python/` (e.g.
@@ -115,9 +113,10 @@ export function extractorSpawn(
 ): { cmd: string; args: string[] } {
   const bin = process.env.STASHBASE_EXTRACT_BIN || resolvePackagedExtractBin();
   if (bin) return { cmd: bin, args: [mode, ...args] };
+  if (usesManagedExtractor()) throw new Error('PDF/OCR component is not ready yet.');
   const cmd = pythonBin();
   const script = pythonScript(scriptName);
-  if (isPackagedRuntime() && isSystemPythonFallback(cmd)) {
+  if (isPackagedRuntime() && cmd === 'python3') {
     throw new Error(
       'PDF/OCR component is not ready yet.',
     );
@@ -125,43 +124,19 @@ export function extractorSpawn(
   return { cmd, args: [script, ...args] };
 }
 
-function pythonCandidates(root: string): string[] {
-  return process.platform === 'win32'
-    ? [
-        path.join(root, 'Scripts', 'python.exe'),
-        path.join(root, 'bin', 'python'),
-      ]
-    : [
-        path.join(root, 'bin', 'python'),
-        path.join(root, 'Scripts', 'python.exe'),
-      ];
-}
-
 function resolvePackagedExtractBin(): string | undefined {
   if (DEVELOPMENT_RUNTIME) return undefined;
   if (isPackagedRuntime()) return extractorRuntime.current();
-  const name = 'stashbase-extract';
-  const exe = process.platform === 'win32' ? `${name}.exe` : name;
-  const candidates = [
-    path.join(RESOURCES_ROOT, 'python', 'sidecar', name, exe),
-    path.join(RESOURCES_ROOT, 'python', 'sidecar', exe),
-    path.join(PROJECT_ROOT, 'python', 'sidecar.nosync', name, exe),
-    path.join(PROJECT_ROOT, 'python', 'sidecar.nosync', exe),
-  ];
-  return candidates.find(isFile);
+  return [
+    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-extract'),
+    sidecarExecutable(path.join(PROJECT_ROOT, 'python', 'sidecar.nosync'), 'stashbase-extract'),
+  ].find(isFile);
 }
 
 function isPackagedRuntime(): boolean {
   return !DEVELOPMENT_RUNTIME && RESOURCES_ROOT !== PROJECT_ROOT;
 }
 
-function isSystemPythonFallback(cmd: string): boolean {
-  return !process.env.STASHBASE_PYTHON
-    && cmd === 'python3'
-    && !pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')).some(existsSync)
-    && !pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv')).some(existsSync);
-}
-
-function isFile(candidate: string): boolean {
+export function isFile(candidate: string): boolean {
   try { return statSync(candidate).isFile(); } catch { return false; }
 }

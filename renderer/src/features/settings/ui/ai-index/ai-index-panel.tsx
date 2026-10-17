@@ -12,7 +12,6 @@ import { InputField, InputGroup } from '@/components/ui/input-group';
 import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import {
-  describeEmbedderSource,
   EMBEDDER_PROVIDER_LABELS,
   EMBEDDER_PROVIDERS,
   keyIsActive,
@@ -32,9 +31,8 @@ import { FailureNotice } from '@/shared/ui/failure-notice';
 
 /** The pane keeps its title and lede while the read is in flight or has
  *  failed, so the section never collapses into a bare sentence. */
-const TITLE = 'Search by Meaning';
-const LEDE =
-  'Find files by meaning, even when the words differ. Keyword search works without a key.';
+const TITLE = 'Search by meaning';
+const LEDE = 'Find files by meaning, even when the words differ.';
 
 export interface AiIndexPanelProps {
   embedderApi: EmbedderPort;
@@ -67,7 +65,7 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
     <SettingsRow
       detail={
         state.hasKey
-          ? `${label} API key saved`
+          ? `${label} key saved`
           : 'Use an OpenAI or OpenRouter key. Your provider bills indexing and search to your account.'
       }
       title={
@@ -99,7 +97,7 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
       }
     >
       {editing && (
-        <form className="flex max-w-[440px] flex-col items-start gap-2.5" onSubmit={submit}>
+        <form className="flex flex-col items-start gap-2.5" onSubmit={submit}>
           <TabsSubtle
             aria-label="Key provider"
             onSelect={(index) => setProvider(EMBEDDER_PROVIDERS[index] ?? 'openai')}
@@ -183,8 +181,11 @@ export function AiIndexPanel({ embedderApi }: AiIndexPanelProps) {
   return (
     <SettingsPane lede={LEDE} title={TITLE}>
       {/* No group heading: the pane's title names the setting, the row names
-          the key, and a third heading between them says nothing. */}
-      <SettingsGroup hint={describeEmbedderSource(state)}>
+          the key, and a third heading between them says nothing. Once a key
+          is saved, the row's Active chip already says search is on. */}
+      <SettingsGroup
+        hint={keyIsActive(state) ? undefined : 'Search by meaning is off. Add a key to turn it on.'}
+      >
         <SettingsList>
           <KeyRow embedder={embedder} state={state} />
         </SettingsList>

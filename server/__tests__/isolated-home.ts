@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// Also suppress descendants whose launchers strip test-runner markers.
+process.env.STASHBASE_TELEMETRY_DISABLED = '1';
+
 const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agent-test-home-'));
 
 process.env.HOME = isolatedRoot;

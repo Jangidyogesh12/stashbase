@@ -146,6 +146,7 @@ function toAllowance(wire: HostedAgentAllowanceWire): AgentAllowance {
     inputTokens: wire.inputTokens,
     outputTokens: wire.outputTokens,
     remainingPercent: wire.remainingPercent,
+    ...(wire.reservedPercent !== undefined ? { reservedPercent: wire.reservedPercent } : {}),
     windowEndsAt: wire.windowEndsAt,
   };
 }
@@ -172,30 +173,19 @@ function toBillingStatus(wire: HostedBillingStatusWire): BillingStatus {
   };
 }
 
-const BILLING_INVALID = 'Billing returned an invalid response.';
-
 function runtime(
   path: string,
   signal: AbortSignal,
-  invalid: string,
   extra?: { body?: unknown; method?: TransportCall['method'] },
 ): TransportRequest {
   return requestOptions({
     ...extra,
     error: AgentRuntimeError,
     failureSchema: agentRuntimeFailureSchema,
-    messages: {
-      'invalid-response': invalid,
-      'scope-lost': 'Agent runtimes are unavailable.',
-      unauthorized: 'Agent runtimes are unavailable.',
-      unavailable: 'Agent runtimes are unavailable.',
-    },
     path,
     signal,
   });
 }
-
-const CATALOG_INVALID = 'Agent catalog returned an invalid response.';
 
 async function catalog(
   client: HttpClient,
@@ -205,7 +195,7 @@ async function catalog(
 ): Promise<AgentCatalog> {
   return toAgentCatalog(
     await request(client, {
-      ...runtime(path, signal, CATALOG_INVALID, extra),
+      ...runtime(path, signal, extra),
       schema: agentsResponseSchema,
     }),
   );
@@ -231,19 +221,14 @@ export function createAgentRuntimeAdapter(client: HttpClient): AgentRuntimePort 
     async getAllowance(signal) {
       return toAllowance(
         await request(client, {
-          ...runtime(
-            '/api/account/agent-usage',
-            signal,
-            'Agent allowance returned an invalid response.',
-            { method: 'GET' },
-          ),
+          ...runtime('/api/account/agent-usage', signal, { method: 'GET' }),
           schema: hostedAgentAllowanceSchema,
         }),
       );
     },
     async getBillingPlans(signal) {
       const answer = await request(client, {
-        ...runtime('/api/account/billing/plans', signal, BILLING_INVALID, { method: 'GET' }),
+        ...runtime('/api/account/billing/plans', signal, { method: 'GET' }),
         schema: hostedBillingPlansSchema,
       });
       return answer.plans.map(toBillingPlan);
@@ -251,14 +236,14 @@ export function createAgentRuntimeAdapter(client: HttpClient): AgentRuntimePort 
     async getBillingStatus(signal) {
       return toBillingStatus(
         await request(client, {
-          ...runtime('/api/account/billing/status', signal, BILLING_INVALID, { method: 'GET' }),
+          ...runtime('/api/account/billing/status', signal, { method: 'GET' }),
           schema: hostedBillingStatusSchema,
         }),
       );
     },
     async startCheckout(priceId, signal) {
       const answer = await request(client, {
-        ...runtime('/api/account/billing/checkout', signal, BILLING_INVALID, {
+        ...runtime('/api/account/billing/checkout', signal, {
           body: hostedBillingCheckoutRequestSchema.parse({ priceId }),
           method: 'POST',
         }),
@@ -268,7 +253,7 @@ export function createAgentRuntimeAdapter(client: HttpClient): AgentRuntimePort 
     },
     async openBillingPortal(signal) {
       const answer = await request(client, {
-        ...runtime('/api/account/billing/portal', signal, BILLING_INVALID, { method: 'POST' }),
+        ...runtime('/api/account/billing/portal', signal, { method: 'POST' }),
         schema: hostedBillingRedirectSchema,
       });
       return answer.url;

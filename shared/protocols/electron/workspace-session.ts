@@ -15,14 +15,14 @@ const absolutePathSchema = persistedPathSchema;
 const relativePathSchema = persistedPathSchema;
 const identitySchema = z.string().trim().min(1).max(128);
 
-export const workspaceSessionTabSchema = z
+const workspaceSessionTabSchema = z
   .object({
     id: identitySchema,
     path: relativePathSchema,
   })
   .strict();
 
-export const workspaceSessionFolderSchema = z
+const workspaceSessionFolderSchema = z
   .object({
     activeTabId: identitySchema.nullable(),
     expandedPaths: z.array(relativePathSchema).max(2_048),
@@ -53,11 +53,11 @@ export const workspaceSessionSnapshotSchema = z
     'Workspace session exceeds its persistence bound.',
   );
 
-export const workspaceSessionReadSuccessSchema = z
+const workspaceSessionReadSuccessSchema = z
   .object({ ok: z.literal(true), session: workspaceSessionSnapshotSchema.nullable() })
   .strict();
 
-export const workspaceSessionWriteSuccessSchema = z.object({ ok: z.literal(true) }).strict();
+const workspaceSessionWriteSuccessSchema = z.object({ ok: z.literal(true) }).strict();
 
 export const workspaceSessionFailureSchema = z
   .object({

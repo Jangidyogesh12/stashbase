@@ -1,8 +1,5 @@
-/** The conversation as it reads: prompts, replies, thinking, notices and
- *  activity groups in order, with day breaks between prompts and a quiet
- *  hover row under each prompt and each settled reply — when it happened,
- *  copy, and edit on the latest prompt. Blocks arrive already shaped by the
- *  session domain; this module only decides how each one is presented. */
+/** Presents shaped conversation blocks in order, with day breaks and a quiet
+ *  action row for settled prompts and replies. */
 import { Check, Copy, Pencil } from 'lucide-react';
 import { Fragment, memo, useCallback, useMemo, useState } from 'react';
 
@@ -10,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ChatMessage, ChatMessageAction } from '@/components/ui/chat-message';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { ThinkingIndicator } from '@/components/ui/thinking-indicator';
+import { agentRoleCallView } from '@/features/agent/domain/agent-role-call';
 import { segmentFileMentions, type AgentContextItem } from '@/features/agent/domain/context';
 import { agentQuestions } from '@/features/agent/domain/question';
 import { latestUserBlock, type AgentTranscriptBlock } from '@/features/agent/domain/session';
@@ -20,34 +18,28 @@ import {
   startOfLocalDay,
   transcriptDayBreaks,
 } from '@/features/agent/domain/time';
+import type { AgentModelRefreshView } from '@/features/agent/hooks/use-agent-model-refresh';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
+import { CollapsibleUserText } from '@/features/agent/ui/transcript/collapsible-user-text';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { writeToClipboard } from '@/shared/ui/clipboard';
 import { basePathName } from '@/shared/utils/file-path';
 
-import {
-  AgentActivityGroup,
-  AgentPermissionCard,
-  visibleActivitySteps,
-  type AgentActivityStep,
-} from './activity';
+import { AgentActivityGroup, AgentPermissionCard, visibleActivitySteps } from './activity';
 import { DayDivider } from './day-divider';
 import { AgentMarkdown } from './markdown';
 import { AgentQuestionCard } from './question-card';
-import { closingReplies } from './transcript-order';
+import { AgentRoleCall } from './role-call';
+import { closingReplies, transcriptGroups } from './transcript-order';
 import { AgentTurnChangesCard, type AgentTurnChangeReview } from './turn-changes-card';
 import { TurnFailure } from './turn-failure';
 
 export { closingReplies } from './transcript-order';
 
 const TRANSCRIPT_PAGE_SIZE = 200;
-
-type TranscriptGroup =
-  | AgentTranscriptBlock
-  | { kind: 'activity'; id: string; steps: AgentActivityStep[] };
 
 /** Copies the untouched source text; the glyph confirms for a moment. */
 function CopyAction({ label, text }: { label: string; text: string }) {
@@ -72,22 +64,6 @@ function CopyAction({ label, text }: { label: string; text: string }) {
   );
 }
 
-function transcriptGroups(blocks: AgentTranscriptBlock[]): TranscriptGroup[] {
-  const groups: TranscriptGroup[] = [];
-  let activity: Extract<TranscriptGroup, { kind: 'activity' }> | null = null;
-  for (const block of blocks) {
-    if (block.kind === 'user') activity = null;
-    if (block.kind === 'thinking' || (block.kind === 'tool' && block.status !== 'awaiting')) {
-      if (!activity) {
-        activity = { kind: 'activity', id: `activity-${block.id}`, steps: [] };
-        groups.push(activity);
-      }
-      activity.steps.push(block);
-    } else groups.push(block);
-  }
-  return groups;
-}
-
 /** Context as it was sent, or the replayed attachments a native history
  *  record kept when this renderer never bound them. */
 function sentContext(block: Extract<AgentTranscriptBlock, { kind: 'user' }>): AgentContextItem[] {
@@ -105,6 +81,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   block,
   closing,
   editable,
+  modelRefresh,
   now,
   onEditPrompt,
   onOpenExternal,
@@ -123,6 +100,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   /** This prompt is the latest and its turn has settled, so it can be taken
    *  back into the composer. */
   editable: boolean;
+  modelRefresh?: AgentModelRefreshView | undefined;
   now: number;
   onEditPrompt?: ((blockId: string) => void) | undefined;
   onOpenExternal(href: string): void;
@@ -176,30 +154,32 @@ const TranscriptBlock = memo(function TranscriptBlock({
           from="user"
           time={block.at === undefined ? undefined : promptTimeLabel(block.at, now)}
         >
-          <span className="sr-only">You: </span>
-          {segments.map((segment) =>
-            segment.kind === 'text' ? (
-              segment.text
-            ) : (
-              <span
-                className={cn(
-                  'mx-px inline-flex max-w-full items-center gap-1 bg-foreground/8 px-1.5 py-px align-baseline font-medium',
-                  shape.chip,
-                )}
-                key={`${segment.start}:${segment.path}`}
-                title={segment.path}
-              >
-                <FileTypeIcon
-                  aria-hidden="true"
-                  className="shrink-0"
-                  path={segment.path}
-                  size={12}
-                />
-                <span className="truncate">{basePathName(segment.path)}</span>
-                <span className="sr-only"> (file mention: {segment.path})</span>
-              </span>
-            ),
-          )}
+          <CollapsibleUserText>
+            <span className="sr-only">You: </span>
+            {segments.map((segment) =>
+              segment.kind === 'text' ? (
+                segment.text
+              ) : (
+                <span
+                  className={cn(
+                    'mx-px inline-flex max-w-full items-center gap-1 bg-foreground/8 px-1.5 py-px align-baseline font-medium',
+                    shape.chip,
+                  )}
+                  key={`${segment.start}:${segment.path}`}
+                  title={segment.path}
+                >
+                  <FileTypeIcon
+                    aria-hidden="true"
+                    className="shrink-0"
+                    path={segment.path}
+                    size={12}
+                  />
+                  <span className="truncate">{basePathName(segment.path)}</span>
+                  <span className="sr-only"> (file mention: {segment.path})</span>
+                </span>
+              ),
+            )}
+          </CollapsibleUserText>
         </ChatMessage>
       </div>
     );
@@ -243,7 +223,14 @@ const TranscriptBlock = memo(function TranscriptBlock({
     );
   }
   if (block.kind === 'error') {
-    return <TurnFailure block={block} onRetry={onRetry} runtimeUpdate={runtimeUpdate} />;
+    return (
+      <TurnFailure
+        block={block}
+        modelRefresh={modelRefresh}
+        onRetry={onRetry}
+        runtimeUpdate={runtimeUpdate}
+      />
+    );
   }
   const questions = agentQuestions(block.name, block.input);
   if (questions) {
@@ -255,6 +242,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
 export const AgentTranscript = memo(function AgentTranscript({
   activeTurn,
   blocks,
+  modelRefresh,
   onEditPrompt,
   onOpenExternal,
   onOpenSource,
@@ -267,6 +255,9 @@ export const AgentTranscript = memo(function AgentTranscript({
 }: {
   activeTurn: boolean;
   blocks: AgentTranscriptBlock[];
+  /** Reads the hosted models again, offered on a turn refused because the
+   *  chosen model's configuration changed. Absent where no hosted list exists. */
+  modelRefresh?: AgentModelRefreshView | undefined;
   /** Takes a sent prompt back into the composer. Absent when there is no
    *  composer to take it, so no edit control renders. */
   onEditPrompt?: ((blockId: string) => void) | undefined;
@@ -329,7 +320,10 @@ export const AgentTranscript = memo(function AgentTranscript({
       ? tailGroup
       : null;
   const tail = blocks.at(-1);
-  const narrated = liveGroup !== null || (tail?.kind === 'tool' && tail.status === 'awaiting');
+  const narrated =
+    liveGroup !== null ||
+    (tail?.kind === 'tool' && tail.status === 'awaiting') ||
+    (tailGroup?.kind === 'role-call' && tailGroup.tool.status === 'running');
   return (
     <>
       {hiddenCount > 0 && (
@@ -343,7 +337,13 @@ export const AgentTranscript = memo(function AgentTranscript({
         </Button>
       )}
       {groups.map((group) =>
-        group.kind === 'activity' ? (
+        group.kind === 'role-call' ? (
+          <AgentRoleCall
+            key={group.id}
+            status={group.tool.status}
+            view={agentRoleCallView(group.tool, group.role)}
+          />
+        ) : group.kind === 'activity' ? (
           <AgentActivityGroup
             focusToolId={decidedToolId}
             key={group.id}
@@ -361,6 +361,7 @@ export const AgentTranscript = memo(function AgentTranscript({
               block={group}
               closing={closing.has(group.id)}
               editable={group.id === editableId}
+              modelRefresh={modelRefresh}
               now={now}
               onEditPrompt={onEditPrompt}
               onOpenExternal={onOpenExternal}

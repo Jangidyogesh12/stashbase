@@ -9,6 +9,7 @@ import {
 } from '../../shared/protocols/http/agent-sessions.ts';
 import { agentAdapter, resolveAgentSessionScope } from '../agent-contract.ts';
 import { agentPersonaLibrary } from '../agent-persona.ts';
+import { forgetCrewChat } from '../default-agent-tools.ts';
 import { registeredFolderRoots } from '../folder.ts';
 import { sendError } from '../http.ts';
 
@@ -80,6 +81,7 @@ export function mount(app: express.Express): void {
     try {
       await historyFor(req.params.agent).remove(req.params.id, historyFolderOf(req));
       try { agentPersonaLibrary().forgetChat(req.params.agent, req.params.id); } catch { /* an orphan record is harmless */ }
+      if (req.params.agent === 'stashbase') forgetCrewChat(req.params.id);
       res.json(agentSessionEmptyResponseSchema.parse({}));
     } catch (err) {
       sendError(res, err);

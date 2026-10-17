@@ -37,6 +37,7 @@ import {
   FileTree,
   ProjectSidebar,
   type ActiveProjectFolder,
+  type ProjectEntry,
   type FileTreeRowMarker,
   type WorkspaceRuntime,
 } from '@/features/workspace/public';
@@ -65,6 +66,8 @@ export interface WorkspaceSidebarProps {
   navigator: SidebarNavigatorState;
   /** Opens the Gallery over this window. The folder stays where it is. */
   onBrowseGallery(): void;
+  /** The window's entry operation, which the folder header's switcher starts. */
+  projectEntry: ProjectEntry;
   updateNotice?: ReactNode;
   onReprocess(source: SourceReference): void;
   settings: SettingsCommand;
@@ -81,6 +84,7 @@ export function WorkspaceSidebar({
   onBrowseGallery,
   updateNotice,
   onReprocess,
+  projectEntry,
   settings,
   sources,
   workspace,
@@ -116,6 +120,7 @@ export function WorkspaceSidebar({
       <ProjectSidebar
         api={dependencies.project.api}
         contentId={folderContentId}
+        entry={projectEntry}
         onNewFile={creates ? requestCreate?.('draft') : undefined}
         onNewFolder={creates ? requestCreate?.('folder') : undefined}
         onCollapseAll={creates && workspace ? () => workspace.collapseAll() : undefined}

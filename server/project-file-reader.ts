@@ -7,7 +7,7 @@ import {
   fileStatVersionAsync,
   pathExistsAsync,
   readUtf8FileBoundedAsync,
-} from './files.ts';
+} from './active-file-operations.ts';
 import { currentPreparedTextPathAsync } from './conversion-dispatch.ts';
 import { derivedHtmlPathForDocx } from './docx.ts';
 import {

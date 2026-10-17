@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { embedderState, keyedEmbedderState } from '@/test/fakes/settings';
 
-import { describeEmbedderSource, keyIsActive } from './embedder';
+import { embedderSummary, keyIsActive } from './embedder';
 
 describe('embedder domain', () => {
   it('uses key presence for both providers without an independent authorization state', () => {
@@ -12,12 +12,8 @@ describe('embedder domain', () => {
     }
   });
 
-  it('describes the configured provider without claiming connectivity', () => {
-    expect(describeEmbedderSource(embedderState())).toBe(
-      'Search by meaning is off. Add a key to turn it on.',
-    );
-    expect(describeEmbedderSource(keyedEmbedderState({ provider: 'openrouter' }))).toBe(
-      'Search by meaning is on. Indexing and searches use your OpenRouter key.',
-    );
+  it('names the configured provider without claiming connectivity', () => {
+    expect(embedderSummary(embedderState())).toBe('Off · Needs an API key');
+    expect(embedderSummary(keyedEmbedderState({ provider: 'openrouter' }))).toBe('On · OpenRouter');
   });
 });

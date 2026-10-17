@@ -23,7 +23,7 @@ import {
   shouldIndexFilePath,
 } from './indexable.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
-import { folderRoot, resolveSafe, resolveSafeAsync } from './file-paths.ts';
+import { folderRoot, resolveSafeAsync } from './file-paths.ts';
 import type {
   WorkspaceEntryAvailability,
   WorkspaceFileKind,
@@ -172,13 +172,6 @@ function unreadableFileEntry(entry: fs.Dirent, rel: string): FileEntry {
   };
 }
 
-function scanWorkspaceFileSync(entry: fs.Dirent, rel: string, full: string): FileEntry {
-  let st: fs.Stats;
-  try { st = fs.lstatSync(full); }
-  catch { return unreadableFileEntry(entry, rel); }
-  return finishWorkspaceFileEntry(entry, rel, full, st, (size, format) => readTextPrefix(full, size, format));
-}
-
 async function scanWorkspaceFileAsync(entry: fs.Dirent, rel: string, full: string): Promise<FileEntry> {
   let st: fs.Stats;
   try { st = await fs.promises.lstat(full); }
@@ -198,32 +191,6 @@ function workspaceFileBase(entry: fs.Dirent, rel: string, st: fs.Stats): FileEnt
     imported_at: st.mtime.toISOString(),
     ...(entryKind === 'regular' ? {} : { entryKind }),
   };
-}
-
-function finishWorkspaceFileEntry(
-  entry: fs.Dirent,
-  rel: string,
-  full: string,
-  st: fs.Stats,
-  readPrefix: (size: number, format: FileFormat) => string,
-): FileEntry {
-  const base = workspaceFileBase(entry, rel, st);
-  if (base.format === 'generic') return base;
-  if (base.format === 'pdf' || base.format === 'image' || base.format === 'docx' || base.format === 'audio') {
-    previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at: base.imported_at });
-    return base;
-  }
-  const cached = previewCache.get(full);
-  if (cached && cached.mtimeMs === st.mtimeMs) {
-    return { ...base, heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
-  }
-  try {
-    const { heading, snippet } = preview(readPrefix(st.size, base.format as FileFormat), base.format);
-    previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at: base.imported_at });
-    return { ...base, heading, snippet };
-  } catch {
-    return { ...base, format: 'generic', availability: 'unreadable' };
-  }
 }
 
 async function finishWorkspaceFileEntryAsync(
@@ -249,49 +216,6 @@ async function finishWorkspaceFileEntryAsync(
   } catch {
     return { ...base, format: 'generic', availability: 'unreadable' };
   }
-}
-
-function scanDirectory(dir: string, prefix: string, opts: FolderListingOptions): ScanResult {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return {
-      isKept: Boolean(prefix),
-      files: [],
-      folders: prefix ? [{ path: prefix, kind: 'unreadable' }] : [],
-    };
-  }
-
-  const files: FileEntry[] = [];
-  const folders: FolderEntry[] = [];
-
-  for (const e of workspaceDirectoryEntries(entries, opts)) {
-    const rel = prefix ? `${prefix}/${e.name}` : e.name;
-    const full = path.join(dir, e.name);
-
-    if (e.isDirectory()) {
-      if (isIndexExcludedDirName(e.name)) {
-        folders.push({ path: rel, kind: 'excluded' });
-        continue;
-      }
-      const subResult = scanDirectory(full, rel, opts);
-      if (subResult.isKept) {
-        files.push(...subResult.files);
-        folders.push(...subResult.folders);
-      }
-      continue;
-    }
-    files.push(scanWorkspaceFileSync(e, rel, full));
-  }
-
-  if (prefix) folders.push({ path: prefix });
-
-  return {
-    isKept: true,
-    files,
-    folders,
-  };
 }
 
 interface AsyncScanState {
@@ -364,58 +288,19 @@ function finishFolderListing(root: string, scanResult: ScanResult): FolderListin
   };
 }
 
-export function listFilesAndFolders(opts: FolderListingOptions = {}): FolderListing {
-  const root = folderRoot();
-  return finishFolderListing(root, scanDirectory(root, '', opts));
-}
-
 export async function listFilesAndFoldersAsync(opts: FolderListingOptions = {}): Promise<FolderListing> {
   const root = folderRoot();
   const scanResult = await scanDirectoryAsync(root, '', { entriesSinceYield: 0 }, opts);
   return finishFolderListing(root, scanResult);
 }
 
-export function listFiles(): FileEntry[] {
-  return listFilesAndFolders().files;
-}
-
 export async function listFilesAsync(): Promise<FileEntry[]> {
   return (await listFilesAndFoldersAsync()).files;
-}
-
-export function listFolders(): FolderEntry[] {
-  return listFilesAndFolders().folders;
 }
 
 /** Directory-tool listing seam. It inspects only the requested directory and
  * directory names beneath immediate children; it never reads file contents or
  * scans unrelated branches of the member root. */
-export function listImmediateDirectory(relPrefix = ''): ImmediateDirectoryEntry[] {
-  const prefix = relPrefix ? normalizeFolderRelativePath(relPrefix, { allowQuotes: true }) : '';
-  const dir = prefix ? resolveSafe(prefix, 'existing', 'directory') : folderRoot();
-  const st = fs.statSync(dir);
-  if (!st.isDirectory()) throw new Error('directory not found');
-  const entries = visibleDirectoryEntries(fs.readdirSync(dir, { withFileTypes: true }));
-  const out: ImmediateDirectoryEntry[] = [];
-  for (const entry of entries) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (directoryTreeIsVisible(full)) out.push({ name: entry.name, path: rel, type: 'directory' });
-      continue;
-    }
-    if (!entry.isFile() || entry.name.endsWith('.tmp')) continue;
-    const format = detectViewerFormat(entry.name);
-    if (!format || !isRetrievableViewerFormat(format)) continue;
-    try {
-      out.push({ name: entry.name, path: rel, type: 'file', format, size: fs.statSync(full).size });
-    } catch { /* raced with an external filesystem mutation */ }
-  }
-  return out.sort((a, b) =>
-    a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1,
-  );
-}
-
 export async function listImmediateDirectoryAsync(relPrefix = ''): Promise<ImmediateDirectoryEntry[]> {
   const prefix = relPrefix ? normalizeFolderRelativePath(relPrefix, { allowQuotes: true }) : '';
   const dir = prefix ? await resolveSafeAsync(prefix, 'existing', 'directory') : folderRoot();
@@ -462,18 +347,6 @@ function visibleDirectoryEntries(entries: fs.Dirent[]): fs.Dirent[] {
   });
 }
 
-function directoryTreeIsVisible(dir: string): boolean {
-  let entries: fs.Dirent[];
-  try { entries = visibleDirectoryEntries(fs.readdirSync(dir, { withFileTypes: true })); }
-  catch { return false; }
-  if (entries.length === 0) return true;
-  for (const entry of entries) {
-    if (entry.isFile() && !entry.name.endsWith('.tmp') && detectViewerFormat(entry.name)) return true;
-    if (entry.isDirectory() && directoryTreeIsVisible(path.join(dir, entry.name))) return true;
-  }
-  return false;
-}
-
 async function directoryTreeIsVisibleAsync(dir: string): Promise<boolean> {
   let entries: fs.Dirent[];
   try { entries = visibleDirectoryEntries(await fs.promises.readdir(dir, { withFileTypes: true })); }
@@ -488,23 +361,6 @@ async function directoryTreeIsVisibleAsync(dir: string): Promise<boolean> {
 
 /** Text files that should be carried through a folder-level index rename.
  *  Includes legacy hidden derived notes if they still exist on disk. */
-export function listIndexableTextFilesUnder(relPrefix: string): Array<{ name: string; content: string }> {
-  const safePrefix = normalizeFolderRelativePath(relPrefix, { allowQuotes: true });
-  const start = resolveSafe(safePrefix, 'existing', 'folder');
-  const out: Array<{ name: string; content: string }> = [];
-  walk(start, safePrefix, (rel, full, ent) => {
-    if (!ent.isFile()) return;
-    if (!detectFormat(ent.name)) return;
-    if (!shouldIndexFilePath(rel)) return;
-    try {
-      if (fs.statSync(full).size > MAX_INDEXABLE_BYTES) return;
-      out.push({ name: rel, content: decodeDirectTextBytes(rel, fs.readFileSync(full)) });
-    } catch { /* unreadable files are skipped; sync can surface them later */ }
-  }, { includeDerivedNotes: true });
-  out.sort((a, b) => (a.name < b.name ? -1 : 1));
-  return out;
-}
-
 export async function listIndexableTextFilesUnderAsync(
   relPrefix: string,
 ): Promise<Array<{ name: string; content: string }>> {
@@ -535,18 +391,6 @@ export async function walkMarkdownSourcesAsync(
   });
 }
 
-function readTextPrefix(full: string, size: number, format: FileFormat): string {
-  const fd = fs.openSync(full, 'r');
-  try {
-    const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, size));
-    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
-    const prefix = buffer.subarray(0, bytesRead);
-    return format === 'txt' ? decodeDirectTextPreview(full, prefix) : prefix.toString('utf8');
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
 async function readTextPrefixAsync(full: string, size: number, format: FileFormat): Promise<string> {
   const handle = await fs.promises.open(full, 'r');
   try {
@@ -559,52 +403,14 @@ async function readTextPrefixAsync(full: string, size: number, format: FileForma
   }
 }
 
-/** Junk dot-FILES hidden from the workspace. Workspace directory visibility
- *  belongs to `workspaceDirectoryEntries`; retrieval walks skip dot-directories. */
-export const HIDDEN_DOT_FILES = new Set<string>([
+/** Junk OS files hidden from the workspace, matching Finder. `Icon\r` stores a
+ *  macOS custom folder icon (Google Drive sets one on every synced folder).
+ *  Workspace directory visibility belongs to `workspaceDirectoryEntries`;
+ *  retrieval walks skip dot-directories. */
+const HIDDEN_DOT_FILES = new Set<string>([
   '.DS_Store',
+  'Icon\r',
 ]);
-
-function walk(
-  dir: string,
-  prefix: string,
-  fn: (rel: string, full: string, ent: fs.Dirent) => void,
-  opts: { includeDerivedNotes?: boolean } = {},
-): void {
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-  catch { return; }
-  const noteStems = new Set<string>();
-  const legacyDerivedStems = new Set<string>();
-  for (const e of entries) {
-    if (!e.isFile()) continue;
-    const m = e.name.match(/^(.+)\.(md|markdown|html|htm|pdf)$/i);
-    if (m) noteStems.add(m[1]);
-    const src = e.name.match(LEGACY_DERIVED_SOURCE_RE);
-    if (src) legacyDerivedStems.add(src[1]);
-  }
-  for (const e of entries) {
-    if (isCloudPlaceholderName(e.name)) continue;
-    if (e.isDirectory() && isHiddenDirName(e.name)) continue;
-    if (e.isFile() && HIDDEN_DOT_FILES.has(e.name)) continue;
-    if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
-    if (e.isFile() && e.name.startsWith('.')) {
-      if (isDerivedScratchName(e.name)) continue;
-      if (!opts.includeDerivedNotes && isDerivedNoteName(e.name)) continue;
-      if (!opts.includeDerivedNotes && isLegacyDerivedNoteName(e.name, legacyDerivedStems)) continue;
-    }
-    if (e.isDirectory() && e.name.endsWith('_files')) {
-      const stem = e.name.slice(0, -'_files'.length);
-      if (noteStems.has(stem)) continue;
-      if (stem.startsWith('.')) continue;
-    }
-    if (e.isDirectory() && isDerivedScratchName(e.name)) continue;
-    const rel = prefix ? `${prefix}/${e.name}` : e.name;
-    const full = path.join(dir, e.name);
-    fn(rel, full, e);
-    if (e.isDirectory()) walk(full, rel, fn, opts);
-  }
-}
 
 async function walkAsync(
   dir: string,

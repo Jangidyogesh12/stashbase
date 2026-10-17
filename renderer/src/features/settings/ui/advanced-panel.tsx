@@ -4,10 +4,20 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type { McpAccessPort } from '@/features/settings/application/ports';
+import { embedderSummary } from '@/features/settings/domain/embedder';
+import { useEmbedderState } from '@/features/settings/hooks/use-embedder';
 
 import { AiIndexPanel } from './ai-index/ai-index-panel';
 import { McpAccessPanel } from './mcp/mcp-access-panel';
 import { SettingsList, SettingsPane, SettingsRow } from './rows';
+
+/** Whether search by meaning is on, read from the same query the search page
+ *  uses, so this row and the page cannot disagree. */
+function SearchSummary({ embedderApi }: { embedderApi: EmbedderPort }) {
+  const { loading, state } = useEmbedderState(embedderApi);
+  if (state) return embedderSummary(state);
+  return loading ? 'Checking…' : 'Could not load search settings.';
+}
 
 export function AdvancedPanel({
   embedderApi,
@@ -47,17 +57,20 @@ export function AdvancedPanel({
   return (
     <SettingsPane title="Advanced">
       <SettingsList>
+        {/* The row titles name each page, so both buttons say only the verb;
+            their accessible names keep the two apart. */}
         <SettingsRow
-          title="Search by Meaning"
-          detail="Use your own API key for search by meaning."
+          title="Search by meaning"
+          detail={embedderApi && <SearchSummary embedderApi={embedderApi} />}
           trail={
             <Button
+              aria-label="Configure search by meaning"
               disabled={!embedderApi}
               variant="tertiary"
               size="compact"
               onClick={() => setPage('search')}
             >
-              Configure search
+              Configure
             </Button>
           }
         />
@@ -66,12 +79,13 @@ export function AdvancedPanel({
           detail="Connect other AI apps to your projects."
           trail={
             <Button
+              aria-label="Configure external apps"
               disabled={!mcpAccessApi}
               variant="tertiary"
               size="compact"
               onClick={() => setPage('mcp')}
             >
-              Configure connection
+              Configure
             </Button>
           }
         />

@@ -6,10 +6,9 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { passageContextItem, type AgentContextItem } from '@/features/agent/domain/context';
 import { agentContextPort, agentSessionPort } from '@/test/fakes/agent';
 
-import { AgentContextError, type AgentReconnectScheduler, type AgentSessionPort } from './ports';
+import { AgentContextError } from './ports';
 import { createAgentSessionRuntime } from './session-runtime';
-
-type AgentConnectRequest = Parameters<AgentSessionPort['connect']>[0];
+import { harness } from './session-runtime.harness';
 
 const reportSource: AgentContextItem = {
   boundVersion: 4,
@@ -33,32 +32,6 @@ function derivedContextPort() {
       sourcePath: source.path,
     })),
   });
-}
-
-function harness() {
-  const waits: Array<() => void> = [];
-  const { listeners, port, sent } = agentSessionPort({
-    replay: vi.fn(async () => ({
-      effort: 'high',
-      transcript: [
-        { kind: 'user' as const, id: 'user-1', text: 'Keep this question.' },
-        { kind: 'assistant' as const, id: 'assistant-1', text: 'Keep this answer.' },
-      ],
-    })),
-  });
-  const scheduler: AgentReconnectScheduler = {
-    jitter: (value) => value,
-    wait: vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          waits.push(resolve);
-        }),
-    ),
-  };
-  /** Every connect request in order, read back off the port's own spy. */
-  const requests = (): AgentConnectRequest[] =>
-    vi.mocked(port.connect).mock.calls.map(([request]) => request);
-  return { listeners, port, requests, scheduler, sent, waits };
 }
 
 describe('AgentSessionRuntime context', () => {
@@ -85,7 +58,11 @@ describe('AgentSessionRuntime context', () => {
 
     await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
 
-    expect(context.resolve).toHaveBeenCalledWith(reportSource.source, runtime.signal);
+    expect(context.resolve).toHaveBeenCalledWith(
+      reportSource.source,
+      runtime.signal,
+      expect.any(String),
+    );
     expect(test.sent.at(-1)).toMatchObject({
       kind: 'prompt',
       skill: null,
@@ -331,4 +308,35 @@ it('Default captures attachment references for its queue and retry while preserv
   } finally {
     runtime.dispose();
   }
+});
+
+it('finishes a stale manual retry as blocked and gives the next retry its own turn ID', async () => {
+  const test = harness();
+  const recordUsage = vi.fn();
+  const runtime = createAgentSessionRuntime({
+    agent: 'codex',
+    context: derivedContextPort(),
+    id: 'retry',
+    recordUsage,
+    environment: () => ({ listing: null, readiness: {} }),
+    port: test.port,
+    scheduler: test.scheduler,
+    scope: { kind: 'folder', path: '/project/Research' },
+  });
+  test.listeners[0]?.onEvent({ kind: 'ready' });
+  runtime.addContext(reportSource);
+  await runtime.sendPrompt('Read this');
+  test.listeners[0]?.onEvent({ kind: 'failed', message: 'Try again', failure: 'network' });
+  const failure = runtime.store.getState().transcript.find((block) => block.kind === 'error');
+  runtime.store.setState({ scope: { kind: 'folder', path: '/another' } });
+  expect(runtime.retry(failure?.id ?? '')).toBe(false);
+  const blocked = recordUsage.mock.calls.at(-1)?.[0];
+  expect(blocked).toMatchObject({
+    event: 'agent_turn_finished',
+    outcome: 'blocked',
+    reason: 'context_invalid',
+  });
+  expect(runtime.retry(failure?.id ?? '')).toBe(false);
+  expect(recordUsage.mock.calls.at(-1)?.[0].turn_id).not.toBe(blocked.turn_id);
+  runtime.dispose();
 });

@@ -16,6 +16,7 @@ export type {
   HostedOAuthStatus,
 } from '../shared/account.ts';
 import {
+  forgetAccountOfferSeen,
   getHostedAccountSession,
   markAccountOfferSeen,
   pendingAccountOffers,
@@ -223,11 +224,6 @@ export function beginHostedOAuth(
   return { flowId, provider, purpose, url: authorize.toString() };
 }
 
-export function hostedOAuthPurpose(flowId: string): HostedOAuthPurpose | null {
-  pruneOAuthFlows();
-  return pendingOAuthFlows.get(flowId)?.purpose ?? null;
-}
-
 export async function exchangeHostedOAuthCode(flowId: string, authCode: string): Promise<HostedAccountSession> {
   pruneOAuthFlows();
   const flow = pendingOAuthFlows.get(flowId);
@@ -388,6 +384,10 @@ export async function signOutHostedAccount(): Promise<void> {
   avatarCache = null;
   profileHydration = null;
   if (!session) return;
+  // Signed out, the reader is back where the sign-in banner first found them,
+  // so it shows again; a Not now from then on holds until the next sign-out.
+  // A sign-out with no session is not one, and leaves a Not now standing.
+  try { forgetAccountOfferSeen('sign-in'); } catch { /* the sign-out stands without the banner */ }
   try { await supabaseAuth('/logout?scope=local', {}, session.accessToken); } catch { /* local sign-out still succeeds */ }
 }
 
@@ -478,7 +478,7 @@ export async function fetchHostedAgentAllowance(
   options: { forceRefreshToken?: boolean } = {},
 ): Promise<HostedAgentAllowance> {
   const token = await hostedAccessToken({ forceRefresh: options.forceRefreshToken });
-  const response = await fetch(`${STASHBASE_API_URL}/v1/agent/usage`, {
+  const response = await fetch(`${STASHBASE_API_URL}/v1/agent/usage?include=reservations`, {
     headers: {
       authorization: `Bearer ${token}`,
       'x-stashbase-client-version': CLIENT_VERSION,
@@ -488,7 +488,12 @@ export async function fetchHostedAgentAllowance(
   if (response.status === 401 && !options.forceRefreshToken) {
     return fetchHostedAgentAllowance({ forceRefreshToken: true });
   }
-  if (!response.ok) throw new Error(messageOf(payload, `The Agent credits service failed (HTTP ${response.status}).`));
+  if (!response.ok) throw Object.assign(new Error(messageOf(payload, `The Agent credits service failed (HTTP ${response.status}).`)), {
+    http_status: response.status,
+    code: payload?.code,
+    request_id: response.headers.get('x-request-id') ?? undefined,
+    content_type: response.headers.get('content-type') ?? undefined,
+  });
   return payload as HostedAgentAllowance;
 }
 
@@ -496,7 +501,7 @@ export async function fetchHostedAgentAllowance(
 // refused before it can reach the system browser.
 const STRIPE_BILLING_HOSTS = new Set(['checkout.stripe.com', 'billing.stripe.com']);
 
-export function stripeBillingUrl(value: unknown): string {
+function stripeBillingUrl(value: unknown): string {
   let url: URL;
   try { url = new URL(String(value)); } catch { throw new Error('Billing returned an unexpected page.'); }
   if (url.protocol !== 'https:' || !STRIPE_BILLING_HOSTS.has(url.hostname) || url.username || url.password) {

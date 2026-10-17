@@ -6,7 +6,8 @@ export type AgentUsageEvent =
       event: 'agent_turn_finished';
       turn_id?: string;
       runtime: AgentId;
-      outcome: 'success' | 'failed' | 'cancelled' | 'blocked';
+      outcome: 'success' | 'failed' | 'cancelled' | 'blocked' | 'interrupted';
+      reason?: 'context_invalid' | 'connection_lost';
       duration: 'under_10s' | '10s_to_60s' | '1m_to_5m' | 'over_5m';
     };
 
@@ -21,7 +22,10 @@ export function createAgentUsage(
   let interrupted = false;
   let turnId = '';
   let turnRuntime: AgentId | null = null;
-  const finish = (outcome: 'success' | 'failed' | 'cancelled' | 'blocked') => {
+  const finish = (
+    outcome: 'success' | 'failed' | 'cancelled' | 'blocked' | 'interrupted',
+    reason?: 'context_invalid' | 'connection_lost',
+  ) => {
     if (startedAt === null || turnRuntime === null) return;
     const elapsed = now() - startedAt;
     startedAt = null;
@@ -30,6 +34,7 @@ export function createAgentUsage(
       runtime: turnRuntime,
       turn_id: turnId,
       outcome,
+      ...(reason ? { reason } : {}),
       duration:
         elapsed < 10000
           ? 'under_10s'
@@ -41,7 +46,7 @@ export function createAgentUsage(
     });
   };
   return {
-    correlation: () => (turnId ? { telemetryTurnId: turnId } : {}),
+    correlation: () => (startedAt !== null && turnId ? { telemetryTurnId: turnId } : {}),
     start() {
       if (startedAt !== null) return;
       interrupted = false;
@@ -61,6 +66,8 @@ export function createAgentUsage(
     action(action: AgentSessionAction) {
       if (action.kind === 'settle-turn')
         finish(interrupted ? 'cancelled' : action.isError ? 'failed' : 'success');
+      else if (action.kind === 'schedule-reconnect')
+        finish(interrupted ? 'cancelled' : 'interrupted', 'connection_lost');
       else if (action.kind === 'turn-fail' || action.kind === 'fail' || action.kind === 'close')
         finish(interrupted ? 'cancelled' : 'failed');
       else if (action.kind === 'retire' || action.kind === 'dispose') finish('cancelled');

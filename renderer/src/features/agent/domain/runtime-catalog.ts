@@ -6,6 +6,9 @@ export interface AgentModel {
   id: string;
   label: string;
   description?: string;
+  /** The release an alias resolves to ("Opus 5.5" for Claude's "Opus"),
+   *  where the runtime names models by alias. */
+  release?: string;
   /** Effort levels this model accepts; a model that names none runs only at
    *  whatever the runtime defaults to. */
   supportedEfforts?: string[];
@@ -14,6 +17,9 @@ export interface AgentModel {
   /** Whether the runtime runs this model when none is chosen. Codex flags its
    *  newest model; a runtime that says nothing leaves every entry unflagged. */
   isDefault?: boolean;
+  /** Price relative to the runtime's default model (1). Only the hosted
+   *  Default Agent reports it; the picker flags models well above 1. */
+  relativeCost?: number;
 }
 
 export interface AgentSkill {

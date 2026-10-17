@@ -67,7 +67,7 @@ describe('RuntimeRow', () => {
 
     cleanup();
     renderRow(codex({ installed: true, ownership: 'system', preparation: { kind: 'ready' } }));
-    expect(screen.getByText('Ready to chat · Installed on your system')).not.toBeNull();
+    expect(screen.getByText('Ready')).not.toBeNull();
   });
 
   it('keeps a command failure on the row it belongs to', () => {

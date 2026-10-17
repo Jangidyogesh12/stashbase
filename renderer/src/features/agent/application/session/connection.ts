@@ -50,6 +50,7 @@ export function createDefaultScheduler(): AgentReconnectScheduler {
 }
 
 export interface AgentTransportOptions {
+  telemetryTurnId?(): string | undefined;
   disposed(): boolean;
   /** Delivers one server event, already known to belong to the live socket. */
   onEvent(event: AgentSessionEvent): void;
@@ -83,6 +84,7 @@ export interface AgentTransport {
 }
 
 export function createAgentTransport({
+  telemetryTurnId,
   disposed,
   onEvent,
   port,
@@ -126,6 +128,7 @@ export function createAgentTransport({
   function listenerFor(capturedGeneration: number): AgentConnectionListener {
     const current = () => !disposed() && capturedGeneration === generation;
     return {
+      ...(telemetryTurnId ? { telemetryTurnId } : {}),
       onClose() {
         if (!current() || closeExpected || exitReceived) return;
         scheduleReconnect(capturedGeneration);
@@ -165,6 +168,7 @@ export function createAgentTransport({
           effort: session.effort ?? undefined,
           model: session.model ?? undefined,
           persona: session.persona ?? undefined,
+          ...(session.agent === 'stashbase' ? { crew: session.nativeSessionId ?? session.id } : {}),
           resume: options.resume,
           scope: session.scope,
         },

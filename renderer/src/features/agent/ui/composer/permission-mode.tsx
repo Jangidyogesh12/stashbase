@@ -2,14 +2,13 @@
  *  next turn runs under. The rows describe the promise, never one runtime's
  *  behavior, and only the promises the runtime declares it honors are
  *  offered; the state reads on the trigger without opening the menu. */
-import { Bolt, ChevronDown, Compass, FilePenLine, MessageCircleQuestion } from 'lucide-react';
+import { Bolt, Compass, FilePenLine, MessageCircleQuestion } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
+import { DropdownContent, DropdownMenu } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
-import { Tooltip } from '@/components/ui/tooltip';
 import { AGENT_ACCESS_MODES, type AgentAccessMode } from '@/features/agent/domain/access';
 
+import { ComposerMenuTrigger } from './menu-trigger';
 import { NARROW_LABEL, NARROW_TRIGGER } from './narrow';
 
 const MODE_TEXT = {
@@ -46,24 +45,16 @@ export function AgentPermissionMode({
   const offered = AGENT_ACCESS_MODES.filter((entry) => modes.includes(entry));
   return (
     <DropdownMenu>
-      <Tooltip content={`Permission mode: ${active.label}`} side="top">
-        <DropdownTrigger
-          render={
-            <Button
-              aria-label={`Permission mode: ${active.label}. ${active.description}`}
-              className={NARROW_TRIGGER}
-              disabled={disabled}
-              leadingIcon={MODE_ICONS[mode]}
-              size="compact"
-              trailingIcon={ChevronDown}
-              variant="ghost"
-            >
-              <span className={NARROW_LABEL}>{active.label}</span>
-            </Button>
-          }
-        />
-      </Tooltip>
-      <DropdownContent align="start" className="w-80" selectionAppearance="none" side="top">
+      <ComposerMenuTrigger
+        className={NARROW_TRIGGER}
+        description={active.description}
+        disabled={disabled ?? false}
+        icon={MODE_ICONS[mode]}
+        label={`Permission mode: ${active.label}`}
+      >
+        <span className={NARROW_LABEL}>{active.label}</span>
+      </ComposerMenuTrigger>
+      <DropdownContent align="end" className="w-80" selectionAppearance="none" side="top">
         {offered.map((entry) => (
           <MenuItem
             checked={entry === mode}

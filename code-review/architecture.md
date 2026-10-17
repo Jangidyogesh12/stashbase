@@ -179,8 +179,11 @@ release archive in Python requirements and constraints; setup verifies both its
 source URL and installed package version.
 
 - Completion is format-specific and current-source-bound: PDF needs its terminal
-  marker; DOCX needs sanitized marked output with text. Empty completed OCR is a
-  successful non-searchable result. Checkpoints are not completion. Media playback never creates prepared text.
+  marker; DOCX needs sanitized marked output with text. Empty completed PDF/image
+  OCR is a successful non-searchable result with no synthetic title. Missing PDF
+  page text falls back to native text and then direct local OCR inside the bounded
+  batch worker. OCR failure or timeout cannot publish empty success. Checkpoints
+  are not completion. Media playback never creates prepared text.
 - One process scheduler owns capacity and prioritizes explicit interaction, open
   projects, then background work. Cooperative yield preserves task identity while
   releasing capacity. Status storage errors fail closed and reject cancellation
@@ -192,7 +195,10 @@ source URL and installed package version.
 - Reconcile is folder-explicit and rediscovers lost in-memory work. Boot binds
   every registered folder and reconciles none; a folder reconciles when a window
   opens it, offering sources in bounded batches that yield the shared event loop.
-  Apply common hidden/dependency exclusions before traversal and mutation-triggered scheduling.
+  Apply common hidden/dependency exclusions to paths relative to the owning
+  registered folder before traversal and mutation-triggered scheduling. The
+  MFS adapter repeats that check against its longest bound folder; ancestors
+  outside the project must not affect eligibility.
   An incomplete directory scan fails reconciliation before unseen projections can
   be removed. Queuing invalidates stale final output; source removal retires all
   owned artifacts.
@@ -214,6 +220,9 @@ source URL and installed package version.
   checks. Apply namespace/path/type narrowing before bounded results; report
   truncation and partial reads. Remap all evidence to visible sources. A legacy
   derived-path request must resolve through its live source before authorization.
+- Node/Python JSON-RPC is UTF-8 in both directions. The launcher pins the
+  process encoding; the daemon also configures its standard streams so direct
+  and frozen launches cannot inherit a Windows ANSI code page.
 - Resource ceilings must stay finite and aligned across Node/Python. No-op reconcile
   spends no embeddings but still transfers text for MFS revision classification.
   A rename is not a zero-reembedding guarantee. Ranking changes need J05 evaluation.
@@ -221,7 +230,9 @@ source URL and installed package version.
 ### Optional Local Components
 
 One PDF/OCR installation owner shares demand and waiters. Cost/status reads never
-start downloads. Waiting conversions yield their lane. A process makes one
+start downloads. PDF cost probes discover already installed components through
+that owner and return unknown cost while unavailable; packaged probes never fall
+back to development scripts. Waiting conversions yield their lane. A process makes one
 automatic demand attempt; failure has no timer retry. A durable demand latch
 permits one next-launch attempt; Retry beside a waiting PDF/image starts one shared attempt.
 Cancellation removes source demand and clears the durable latch when its last
@@ -230,7 +241,10 @@ survive source cancellation. Shutdown retains unfinished demand.
 
 Only the app's embedded version/platform/asset/size/hash manifest authorizes
 bytes. Verify before confined, bounded extraction and atomic versioned publication;
-validate links and never execute partial staging. Installed versions work offline.
+validate links and never execute partial staging. Component identity is independent
+of the desktop version: an application update pinning the same component reuses
+the verified installation offline. A changed component still requires its exact
+embedded manifest; remote release metadata never authorizes runtime bytes.
 Signing and release publication belong to [Release Runbook](release-pipeline.md).
 Native component compatibility belongs to `server/native-component-support.ts`.
 An unsupported component rejects only its own operation; it must not block server
@@ -269,7 +283,9 @@ stable status without download, retry, or a new durable demand latch.
   share the per-executable/file-version result.
   Both providers' status commands gate readiness and their login commands own
   browser sign-in. Native authentication refusals restore the sign-in action;
-  they never delete credentials. Setup errors retain bounded stdout/stderr and
+  they never delete credentials. A provider that refuses a signed-in account
+  (`AgentAccountRefusedError`, code `account-refused`) offers a recheck
+  instead, because signing in again cannot change its answer. Setup errors retain bounded stdout/stderr and
   nested network causes, with Agent/action/stage context. Settings and chat
   update surfaces preserve HTTP diagnostics as well as bootstrap failures.
 - User-installed CLIs keep their native account/history ownership. StashBase discovers provider-owned
@@ -291,18 +307,58 @@ stable status without download, retry, or a new durable demand latch.
   shaped leaves every runtime unchanged. The offer is advisory and shares the
   existing native update flow; it never gates a turn, a session, or a model
   choice.
+- Generated stdio MCP launchers retain the generating host's HTTP port. Explicit
+  launcher arguments may override it; a custom-port runtime must never call a
+  different app instance on the default port.
 - Codex MCP setup parses TOML and replaces only StashBase table ranges, preserving
   unrelated configuration. Invalid or unsupported configuration fails untouched.
   `server/agent-config-paths.ts` owns configuration identity for setup and Claude
   model metadata; MCP writes respect the same `CODEX_HOME` / `CLAUDE_CONFIG_DIR`
   inherited by provider processes.
+- Antigravity has no configuration-directory override, so its StashBase MCP and
+  hook entries live in `~/.gemini/config/mcp_config.json` and
+  `~/.gemini/config/hooks.json`, which its CLI, IDE, and app share. Setup replaces only the `stashbase` entry
+  in each and leaves an unparseable file untouched; an empty file, which an
+  earlier install can leave behind, counts as an empty configuration. The generated `PreToolUse`
+  launcher (`~/.stashbase/bin/stashbase-antigravity-hook`) answers `allow` when
+  no StashBase session id is in its environment, which leaves that run's own
+  permission rules in charge. Inside a StashBase chat it asks the generating
+  host and denies when the host cannot answer.
+- `server/native-agents.ts` owns each bring-your-own CLI's names, executable
+  overrides, npm package, official installer, and Windows bin directory.
+  Discovery, installation, readiness, and the CLI listing read them there.
+  Antigravity readiness runs `agy --output-format json -p /usage`, which needs
+  the cached sign-in but starts no turn. `agy` has no login command, so its
+  sign-in gives an interactive `agy` a pseudo-terminal (`script`) or, on Windows,
+  its own console, polls readiness, and retires that run after success,
+  cancellation, or the shared ten-minute deadline.
 - Each OpenQuill chat owns an authenticated loopback OpenCode process; each Codex
-  chat owns its app-server/thread. History readers have separate ownership. All Codex app-server
+  chat owns its app-server/thread. After a Default turn, the host may prepare one
+  unused OpenCode process and its MCP connection for the next chat. Claiming that
+  spare transfers exclusive ownership, including its private attribution id;
+  active chats never share it. Window, project, account, persona and instruction
+  path must match; a fresh model catalog and current attached tools must match
+  its configuration or it is retired and started again. Prewarming creates no
+  native chat or model request. Subsequent matching turns refresh its idle
+  deadline or replace an expired spare. One app-wide spare expires after two idle minutes
+  and is retired on window close, project removal, or shutdown. Startup cancellation
+  cannot resurrect a retired process, and shutdown awaits already-retiring servers.
+  History readers have separate ownership. All Codex app-server
   owners share retirement that waits for exit and escalates process-tree termination;
   shutdown also awaits readers and already-retiring processes.
   Process death settles pending RPCs/turns, and generation guards reject late
   messages. An ambiguous timed-out start retires its generation before retry.
   Claude replacement waits for native iterator/query cleanup after verifying scope.
+- Each Antigravity chat owns one `agy` stream-json process, started by its
+  first prompt with the chat's mode, model, and effort as launch flags. A change
+  to any of them, Stop, or process exit retires it, and the next prompt resumes
+  the same conversation with `--conversation`. `agy` accepts no caller system
+  prompt, so the routing policy and persona ride ahead of each process's first
+  message. Like a Claude session, each chat reads the runtime's current models
+  when it starts; because one `agy` read takes 10–20 seconds, it opens on the
+  remembered list and replaces it when the read lands, and chats opened within
+  a minute share one read. A `SUCCESS` result with no text, response, or tool fails the turn;
+  `AGY_ERROR` and `error:` stderr lines supply a failed turn's message.
 - Claude requests native session-state events and ends a turn at `idle`, using
   its latest result for success/failure. Intermediate results while background
   agents run do not release the turn or its queue. Native runtimes that emit no
@@ -311,6 +367,20 @@ stable status without download, retry, or a new durable demand latch.
 - OpenQuill retains native finish reasons; an unknown final completion is a
   failed turn. Native errors during execution wait for idle, and message events
   retain their originating turn so trailing error updates cannot fail a new turn.
+  Its translator coalesces identical retry status messages within a turn while
+  preserving native retries and distinct causes; the final short-term usage
+  refusal, including an accounting-recovery refusal, classifies as a rate limit.
+  Retry notices alone do not settle the turn; native idle releases it after failure.
+  The hosted broker forwards the gateway's
+  `Retry-After` on 429/503 responses to the native runtime.
+  `hosted-agent-stream.ts` owns bounded SSE inspection for the broker. Empty
+  responses and the gateway's `agent_provider_unavailable` stream errors share
+  one recovery attempt before output. Exhaustion becomes HTTP 422; after output,
+  that error becomes a terminal SSE envelope whose code cannot trigger native
+  overload retries. Original gateway errors remain in diagnostics. The translator
+  unwraps only this owned terminal envelope and consumes native text/reasoning
+  delta events, reconciling final snapshots without duplicating output. Stale
+  deltas cannot cross session, message, or turn boundaries.
 - Project Agent preferences are explicit choices in Node-owned app config, keyed
   by registered project scope. Readiness and history restore never write them.
   Thinking effort is stored separately per Agent in that project. Composer choices
@@ -335,8 +405,14 @@ stable status without download, retry, or a new durable demand latch.
   Mounted titles carry a manual-rename flag; first submissions supply a fallback
   title hint. Rename mutations serialize before publishing confirmed titles.
 - Native history is authoritative. Native cwd determines project ownership; no
-  override store or live session migration exists. History and WebSocket startup
+  override store or live session migration exists. Antigravity is the exception:
+  it exposes no history interface, so `server/antigravity-history.ts` records the
+  conversations StashBase chats start, keyed by native conversation id and scoped
+  by project. Remove deletes only that record. History and WebSocket startup
   require a registered project; no aggregate history endpoint is exposed.
+  A missing Codex executable reports `412 AGENT_NOT_INSTALLED` at its process
+  owner; history reads and mutations preserve that prerequisite instead of
+  reporting empty history or HTTP 500. Installed-runtime failures still propagate.
 - Transcript presentation omits failed tools from activity rows and summaries
   without deleting native history or inferring recovery from later calls.
   Empty activity groups render nothing. Turn failures and permission decisions
@@ -370,15 +446,7 @@ stable status without download, retry, or a new durable demand latch.
   Stop and disposal retire preparation before another model request can be sent.
   The local hosted broker maps inline PDF file parts to Gemini-compatible
   `image_url` data parts; it does not fetch URLs, store cloud files, or change
-  accounting. The hosted API's OpenRouter adapter normalizes that PDF shape back
-  to native file input, owns provider routing and price ceilings, and meters
-  OpenRouter's actual charge in the existing allowance ledger. Credentials and
-  commercial cost fields never enter the desktop. `hosted-agent-models.ts` reads
-  authenticated catalog metadata; the OpenCode adapter publishes it through the
-  shared model protocol and sends the selected profile to the broker for each
-  turn. Native model IDs preserve that selection in history. Catalogs are never
-  persisted with account tokens, and stale account reads cannot replace another
-  account's displayed catalog. Native history retains content for follow-ups, while replay hides
+  accounting. Native history retains content for follow-ups, while replay hides
   synthetic extraction text and recovers the original attachment cards.
 - Attachment age cleanup excludes batches created by the active server process;
   drafts, queues, and retries may retain them until process exit. They remain
@@ -406,22 +474,60 @@ stable status without download, retry, or a new durable demand latch.
   MCP Edit-mode approval predicate with Codex in `server/agent-file-permissions.ts`; OpenQuill denies the
   native edit permission shared by edit/write/patch. Codex has no independently
   verified native-edit disable switch in the current app-server integration, so
-  its routing remains guidance. Shells and subagents are not a filesystem
+  its routing remains guidance, as it does for Antigravity's native writes. Shells and subagents are not a filesystem
   isolation guarantee. Turn review therefore continues to detect all scanned
   Markdown changes regardless of the writing tool. External MCP clients have no
   app-owned turn socket and do not receive Chat turn-review cards.
 - Codex modes use on-request approval with mode-specific sandbox/review policy;
-  Claude maps native modes. Default maps Ask/Edit/Plan to OpenCode profiles;
-  Edit shares `agent-file-permissions.ts` with the other adapters, granting only
+  Claude maps native modes. Headless `agy` cannot ask the reader, so Antigravity
+  runs with `--dangerously-skip-permissions` and every tool call passes the
+  approval hook. `server/routes/antigravity-hook.ts` reviews a call only for the
+  live Antigravity session named by the private attribution id its process
+  inherited, from that session's conversation, during its running turn; an
+  unknown or retired id is denied, and another runtime's id is left to that
+  run's own rules. `server/antigravity-protocol.ts` owns the policy: reads pass,
+  Edit passes ordinary writes inside the bound project through
+  `agent-file-permissions.ts`, Auto adds read-only command lines
+  (`isReadOnlyCommand`: known programs, pipes only, no chaining, substitution
+  or redirection), web searches and query-free page reads, Plan denies anything
+  that could change the project, and the rest becomes an approval card. A card
+  withdrawn by the hook, Stop, turn end, or disposal denies. Auto launches
+  `agy` like Edit; native Auto is never used, because it decides inside the CLI
+  past the hook and refuses StashBase's MCP tools. Default maps Ask/Edit/Plan to OpenCode profiles;
+  Auto uses the Edit profile with host-owned review. Edit and Auto share
+  `agent-file-permissions.ts` with the other adapters, granting only
   ordinary StashBase document writes inside the bound project (including
   realpath checks). Plan denies unlisted tools in the native profile and rejects
-  unexpected mutating permission requests. Default offers no Auto reviewer.
+  unexpected mutating permission requests. `default-agent-permissions.ts`
+  reviews Auto's routine commands, web fetches, and external reads with the
+  default hosted model, no tools, and the same turn's accounting. Only an exact
+  ALLOW answer grants the pending action; uncertain output, errors, or a
+  five-second deadline return to manual approval. Destructive and unfamiliar
+  tools bypass review and still ask. Stop, disposal, and turn retirement cancel
+  approval authority and undispatched reviews. After dispatch, the broker drains
+  the tool-free classification with a 256-token output cap and a 30-second
+  transport deadline, retaining its original turn for accounting. The five-second
+  decision deadline never aborts that active request. Broker shutdown cancels
+  remaining drains; late answers cannot approve a later turn's action. Main Agent
+  and Crew requests still abort when their turn ends.
   Approval replies grant once, require a pending request id, and never persist
   an `always` grant across modes. Options stay frozen while a turn runs.
   The bundled runtime filters inherited credentials and injection flags while
   using `agentCliPath` to restore CLI directories omitted by desktop launchers.
   Its private home does not provide the user's interactive shell setup;
   commands still require their dependencies to be installed and discoverable.
+- `server/opencode-runtime.ts` owns Default's project-only skill discovery.
+  Its private home/config and disabled native external/upward config discovery
+  prevent importing user-global and ancestor skills from non-Git writing folders.
+  Native skill paths are explicitly relative to the bound project. Because the
+  upward config flag also suppresses instruction discovery, the runtime supplies
+  the project's first existing `AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md` path;
+  OpenCode reads its contents. Project OpenCode configuration cannot add external
+  skill sources. Native skill invocation and permission checks remain in OpenCode;
+  the Codex and Claude adapters keep their own discovery behavior. On Windows,
+  the private OpenCode process receives the packaged ripgrep directory on PATH
+  because native skill reads use `rg.exe`; the app does not rely on a user
+  installation or an on-demand runtime download.
 - Turn failure settles once without destroying a live session. Advisory notices
   never become terminal errors. Recover by structured kind: authentication needs
   process/session refresh, credits/restrictions need account recovery, transient
@@ -467,41 +573,86 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   saved credentials. Network, timeout, rate-limit, and server failures preserve them.
 - Avatar proxying is restricted to validated HTTPS provider hosts with bounded
   redirects/time/bytes/type; it is not a general fetch endpoint.
-- OpenQuill receives a random session-local model broker credential, not account
-  secrets. Model calls require an active submitted turn, retain its id/idempotency
-  across the one auth-refresh retry, and cannot expose account tokens in history.
-  Turn/channel retirement cancels body reads and pending upstream work; awaited
-  credential acquisition cannot forward a request after retirement.
-  The broker buffers a bounded empty SSE prefix and retries an empty model call
-  once with the same body and turn, including completed tool results. The new
-  model attempt gets a fresh accounting key. Any output, tool-call data, provider
-  error, or unrecognized event disables replay; ordinary output still streams.
-  Repeated empty responses fail without native automatic retries. Cancellation
-  retires both prefix buffering and recovery before another upstream call.
-  The hosted ledger sizes output under its account lock against available
-  account and turn budgets, preserving the conservative input reservation.
-  Estimated settlement releases concurrency but retains unresolved spending
-  capacity across account, turn, minute, provider-day, and paid-month budgets.
-  The broker carries the catalog profile version on every request; the gateway
-  refuses stale versions before reservation/dispatch, including publication races.
-  Existing turns keep their pinned version. A structured stale-model refusal
-  ends the failed turn and retires its native runtime with a terminal exit.
-  The existing Reconnect action refreshes the catalog and native context/output
-  configuration, preserving history/draft/paused queue without replaying work.
-  Its approved output limit travels to the provider; the desktop never computes
-  a budget from the displayed percentage. Hosted quota failures distinguish
-  insufficient request credits from insufficient turn budget and preserve their
-  recovery classification through the native runtime message boundary.
-  Hosted quota/accounting and Stripe billing stay external; the desktop exposes
-  bounded usage, plans, and subscription status. The host requests Checkout and
-  Portal pages with the account session and hands the renderer only a verified
-  Stripe-hosted URL; desktop account tokens never appear in links or Stripe
-  configuration. Billing HTTP calls share a twenty-second deadline across retries;
-  authentication refresh retains its existing ten-second bound. Native browser acknowledgement is bounded to ten seconds;
-  renderer billing retains the result to report launch failures. The exact,
-  data-free `stashbase://billing-return` link only focuses a window and cannot
-  grant rights or acknowledge an OAuth flow. Website billing uses its own browser session.
-  Child environment and AppData HOME/config isolate ambient secrets and user config.
+- OpenQuill receives a random session-local model broker credential, not
+  account secrets. Model calls require an active submitted turn, retain its
+  id/idempotency across the one auth-refresh retry, and cannot expose account
+  tokens in history. Turn/channel retirement cancels main Agent/Crew body reads
+  and pending upstream work. Already dispatched Auto classifications drain under
+  the bounded permission-review lifecycle above; awaited credential acquisition cannot forward a request after
+  retirement. The broker buffers a bounded empty SSE prefix and retries an
+  empty model call once with the same body and turn, including completed tool
+  results. The new model attempt gets a fresh accounting key. Any output,
+  tool-call data, provider error, or unrecognized event disables replay;
+  ordinary output still streams. Repeated empty responses fail without native
+  automatic retries. Cancellation retires both prefix buffering and recovery
+  before another upstream call. The hosted ledger sizes output under its
+  account lock against available funds. UTF-8 profiles can buffer half the input
+  estimate at platform risk when a useful output budget cannot fit; provider-day
+  exposure retains the full input estimate and approved output. User charging
+  is capped by its separate reservation. Unknown user fees are refunded after
+  five minutes from first uncertainty, on recovery sweeps, allowance reads or
+  retries; late accounting only adjusts platform cost. Its approved output limit travels to the
+  provider; the desktop never computes a budget from the displayed percentage.
+  Hosted quota failures distinguish insufficient request credits from
+  insufficient turn budget and preserve their recovery classification through
+  the native runtime message boundary. `server/hosted-agent-models.ts` reads
+  the approved model profiles. Each OpenQuill chat reads them once at start
+  and configures its OpenCode process with the same list, so stored prompts
+  name their profile and compaction uses that profile's limits. The main agent
+  always runs on the service's default profile. `server/agent-tool-catalog.ts`
+  reads the tool catalog (`GET /v2/agent/tools`): the tools, their published
+  names and descriptions, and a tool model pool independent of the main
+  Agent's profiles, cached per account with the service's ETag (304 reuses it,
+  a failed refresh keeps a valid copy, sign-out clears it; without a copy,
+  selected Crew blocks startup and a chat without Crew can proceed). `server/default-agent-tools.ts` holds no tool of
+  its own: it resolves the chat's choices in app config `agentCrewChats` against a catalog.
+  `defaultAgentTools` seeds new chats only; a draft key transfers to the native
+  session id before it is announced. Deletion removes the chat's choices. It never
+  replaces an unusable pick or disabled default with another model, and owns
+  the rules every tool shares (the briefing, the brief format, and the tool
+  prompt, which uses the published responsibility and output description).
+  Shared instructions express the selected division of work, current-task
+  precedence, and necessary context, including unsaved drafts and evidence. Each chat takes a
+  catalog snapshot at start; each root turn copies it, so every role shares
+  one catalog version, and only a turn not yet bound by an accepted call may
+  move to a newer catalog, for the same tool on the same model, after
+  `agent_tool_version_changed`. An enabled tool reaches the main agent as a
+  StashBase MCP tool registered by the stdio host its chat spawns
+  (`STASHBASE_AGENT_TOOLS`, the catalog's function names and descriptions; a
+  name that collides with a built-in tool is not registered), with the shared
+  briefing added to the main agent's instructions; `task` is denied, so
+  OpenCode starts no sub-agent. A call goes to
+  `/api/project/agent-tools/:tool` under the chat's project scope; it runs far
+  longer than the runtime's per-request MCP timeout, so the MCP host sends a
+  progress notification every few seconds, which the runtime takes as a reason
+  to restart that timeout, and a cancelled request aborts the call. Turn identity and its abort signal
+  are captured before file reads and retained through catalog refresh/retry;
+  the host reads the named files there and the broker sends one completion to
+  `/v2/agent/chat/completions` under the root turn id, selected by the tool,
+  tool version, tool model, and tool model version headers and never by a main
+  profile. Direct completion requires a stop finish reason and the SSE DONE
+  marker; truncated and interrupted output fails instead of becoming a draft.
+  `server/agent-crew-history.ts` persists member/model attribution by native
+  session and call id in app data, independent of the mutable catalog. The
+  WebSocket and history protocols carry that metadata to standalone Crew cards.
+  Deleting the native chat removes its attribution. OpenCode's own requests and the Auto permission review run on the
+  turn's main profile over v1. Changed or withdrawn main profiles leave the
+  broker as 422, outside native retries, and classify as `model-changed`; tool
+  refusals keep the service code and never fall back to another model.
+  Versions, limits, and upstream identity stay in the host; the listing keeps
+  the hosted catalog in memory only. Hosted quota/accounting and Stripe
+  billing stay external; the desktop exposes bounded usage, plans, and
+  subscription status. The host requests Checkout and Portal pages with the
+  account session and hands the renderer only a verified Stripe-hosted URL;
+  desktop account tokens never appear in links or Stripe configuration.
+  Billing HTTP calls share a twenty-second deadline across retries;
+  authentication refresh retains its existing ten-second bound. Native browser
+  acknowledgement is bounded to ten seconds; renderer billing retains the
+  result to report launch failures. The exact, data-free
+  `stashbase://billing-return` link only focuses a window and cannot grant
+  rights or acknowledge an OAuth flow. Website billing uses its own browser
+  session. Child environment and AppData HOME/config isolate ambient secrets
+  and user config.
 - Built-in HTTP and external MCP share Project Operations. Streamable HTTP checks
   the current Settings token on every POST; rotation invalidates old tokens.
   Loopback is default; Docker opt-in exposes only the separate MCP listener.
@@ -517,6 +668,15 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   because Claude otherwise defers MCP definitions behind its tool search once a
   user's other connectors grow, leaving the model a tool name with no description. External clients copy their setup manually. No second client-config
   or credentials store belongs in StashBase.
+
+Credit snapshots are shared through Settings' query owner. App composition
+invalidates that query on Default turn completion independently of telemetry
+transport; account-menu opening, focus and bounded polling refresh the same key.
+The hosted usage endpoint exposes reservation percentages only with explicit
+`include=reservations`, preserving the strict response contract of installed
+clients. The percentage includes active and unsettled reservations and never
+adds them back to the available balance. Admission refusals carry their locked
+allowance snapshot to the gateway so their explanation reflects held capacity.
 
 ## Usage Statistics
 
@@ -544,8 +704,13 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
 - Foreground input and document/Agent engagement establish activity, not timers,
   background work or streamed output. All windows share category suppression and
   sessions. Save/project/billing work captures initiating identity before await;
-  turn correlation retains identity/session through terminal signals. Unknown
-  terminal turns after restart or opt-out cannot manufacture completion.
+  turn correlation persists identity/session, original version and observation times.
+  Each admitted pending turn reserves a terminal queue slot; terminal insertion
+  and pending removal are one atomic config write and bypass ordinary event rate
+  limiting. Renderer preparation and host execution facts converge by turn ID.
+  Restart recovery reports an interrupted unknown result, never inferred success
+  or a fabricated end time/duration. Unknown terminal IDs cannot manufacture starts;
+  opt-out clears pending turns and bounded recent-completion IDs.
 - Settings General discloses account linking and controls both usage and errors.
   Opt-out stops this process even if saving fails, cancels transport, and on a
   successful save removes the queue and all local analytics state. There is no
@@ -554,17 +719,43 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   not deleted by this switch.
 - `STASHBASE_TELEMETRY_DISABLED=1` suppresses collection and queue delivery before
   startup without changing saved preferences/identity. Electron passes it to Node;
-  Settings cannot override it. Unpackaged builds never collect. Automated and
-  manual packaged tests use the override; collection tests replace transport and
-  never send to production PostHog.
+  Settings cannot override it. Unpackaged builds never collect. The host, Electron
+  and MCP native entry points share `server/telemetry-environment.ts`: Node test
+  workers, `NODE_ENV=test`, Vitest and Jest markers suppress admission even with
+  an inherited packaged flag. The isolated host-test fixture also sets the override
+  for descendants. Manual packaged checks must still set it; collection tests
+  explicitly simulate production only with replaced transport.
 - Automatic diagnostics use this same owner, suppression and opt-out. Node emits
   bounded original messages, unknown as well as known codes, nested causes and
   actionable stacks through `shared/protocols/diagnostics.ts`. HTTP request IDs and
   method/route context connect failed results with their diagnostic. Agent turns
-  carry the renderer turn ID and initiating identity; setup stages share attempt
+  carry the renderer turn ID and initiating identity. Shared socket connection IDs
+  exist before the first prompt. Context-read HTTP requests explicitly propagate
+  their submitting turn ID; unrelated HTTP calls never inherit one globally.
+  Native adapters report host acceptance, dispatch, permissions, tool boundaries
+  and terminal facts independently of renderer delivery. The owned model broker
+  reports request/response boundaries and failures directly. Only stage transitions
+  persist, never each streamed token; last stage is evidence, not inferred cause.
+  Tool failures contain bounded call IDs/categories, not inputs or results, and do
+  not themselves settle a turn. Setup stages share attempt
   and retry IDs. Background diagnostics retain the operation sentence. HTTP, Agent,
   background and renderer failures converge here without throwing into operations,
   recursively reporting analytics failures, or creating another privacy setting.
+  A runtime error immediately followed by an exit with the same explanation
+  contributes one diagnostic, retaining the original cause; both protocol events
+  still reach the renderer. Closed sessions cannot publish late discovery failures.
+  Allowance-query diagnostics retain the original network cause or upstream
+  status/request ID separately from the local HTTP result. Unexpected daemon
+  and Agent startup exits retain bounded, credential-filtered stderr and the
+  available exit code/signal, without serializing process configuration.
+  Renderer JSON-body failures retain the original cause, status (including 2xx),
+  content type and host-issued response request ID. Requested cancellation stays
+  cancellation; empty HEAD/204/205 responses are not decode failures. The Agent
+  broker observes bounded SSE framing metadata and explicit upstream errors,
+  never retains model text/tools, and supplies the current request trace to the
+  native adapter's error diagnostic before the turn retires. Unknown completion
+  includes the native message ID, finish reason and token counts; no new turn
+  inherits a prior request trace.
   Native startup, crash, MCP stdio and updater errors use the bounded private
   `server/native-diagnostics.ts` spool when the host is unavailable. Native code
   never creates analytics identity or sends network requests. The host drains it
@@ -733,8 +924,18 @@ exited during main's quit sequence.
   throttled focus does not postpone periodic checks. Manual checks bypass the
   automatic preference, while timers/focus/wake honor it. Disposal prevents new
   requests and retires the timer.
-- Renderer requests never choose feed, path, or phase. Automatic checks do not
-  authorize downloads/install. Production exposes no development simulator.
+  The update manager classifies only recognized connectivity failures during
+  checking as warnings, including GitHubProvider's known latest-release wrappers.
+  Feed XML is never classification evidence; all other phases and failures retain error severity.
+  Native diagnostics spool that severity. The host aggregates identical check
+  warnings in hourly windows by captured identity, version and diagnostic,
+  preserving the first report and counted repeats. Replay follows occurrence
+  time, and shutdown drains the spool before flushing repeat counts. Collection
+  suppression and opt-out apply to both initial reports and rollups.
+- Renderer requests never choose feed, path, or phase. A check that finds a
+  release starts its download in main; only an explicit restart from the ready
+  phase installs, and a completed download never installs or relaunches on its
+  own. Production exposes no development simulator.
   Update offers render in the sidebar footer. The separate development tools
   ask app composition to close their dialog, expand the sidebar, and render an
   Updates-owned visual override in that same slot. Preview state belongs to the
@@ -800,12 +1001,12 @@ before committing. Release-specific evidence stays in the [Release Runbook](rele
 | Boundary | Primary owners | Focused commands |
 |---|---|---|
 | Window/process lifetime, trust, updates | `electron/main.cjs`, `electron/window/lifecycle.ts`, `electron/renderer/requests.cjs`, `electron/update-window-barrier.cjs` | `pnpm test:electron`, `pnpm test:electron:smoke`, `pnpm test:updates` |
-| Project paths, source transactions, import/recovery | `server/folder.ts`, `server/filesystem-path.ts`, `server/text-file-transaction.ts`, `server/project-file-mutations.ts` | `pnpm test:project-files` |
-| Preparation, daemon, retrieval | `server/conversion-scheduler.ts`, `server/sync.ts`, `server/mfs-daemon.ts`, `python/stashbase_daemon.py` | `pnpm test:conversion-scheduler`, `pnpm test:retrieval`, `pnpm test:python` |
-| Agent processes and protocol | `server/agent-contract.ts`, `server/agent-runtime-installer.ts`, `server/agent-adapters.ts` | `pnpm test:agent`, `pnpm test:agent:native`, `pnpm test:opencode:native`, `pnpm test:protocols` |
-| Settings/account/MCP | `server/app-config.ts`, `server/hosted-account.ts`, `server/mcp-http-settings.ts`, `server/project-operations/index.ts` | `pnpm test:config`, `pnpm test:mcp`, `pnpm test:project-files` |
+| Project paths, source transactions, import/recovery | `server/folder.ts`, `server/filesystem-path.ts`, `server/text-file-transaction.ts`, `server/project-file-mutations.ts` | `pnpm test:server` |
+| Preparation, daemon, retrieval | `server/conversion-scheduler.ts`, `server/sync.ts`, `server/mfs-daemon.ts`, `python/stashbase_daemon.py` | `pnpm test:server`, `pnpm test:python` |
+| Agent processes and protocol | `server/agent-contract.ts`, `server/agent-runtime-installer.ts`, `server/agent-adapters.ts` | `pnpm test:server`, `pnpm test:agent:native`, `pnpm test:opencode:native`, `pnpm test:protocols` |
+| Settings/account/MCP | `server/app-config.ts`, `server/hosted-account.ts`, `server/mcp-http-settings.ts`, `server/project-operations/index.ts` | `pnpm test:server` |
 | Renderer ownership and mechanics | `renderer/src/app/dependencies.ts`, `renderer/renderer-architecture.json`, `scripts/renderer/check-web.mjs` | Focused `pnpm test:renderer <path>`; Story checks `pnpm test:renderer:a11y`; complete `pnpm check:web`; wire changes add `pnpm test:protocols` |
-| Bug report / Gallery | `electron/bug-report-service.cjs`, `electron/bug-report-handoff.cjs`, `server/routes/gallery.ts` | `pnpm test:electron`, `pnpm test:electron:smoke`, `pnpm test:project-files`, focused renderer tests |
+| Bug report / Gallery | `electron/bug-report-service.cjs`, `electron/bug-report-handoff.cjs`, `server/routes/gallery.ts` | `pnpm test:electron`, `pnpm test:electron:smoke`, `pnpm test:server`, focused renderer tests |
 
 Source tests, controlled native smokes, model quality, and packaged delivery
 prove different things. Story accessibility checks execute each story's

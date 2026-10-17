@@ -1,5 +1,5 @@
 /** Codex history follows the native thread cwd. */
-import { deleteCodexSession, getCodexSessionMessages, listCodexSessions, renameCodexSession } from './codex-agent.ts';
+import { deleteCodexSession, getCodexSessionMessages, listCodexSessions, renameCodexSession } from './codex-history.ts';
 import type { AgentHistoryActions } from './agent-contract.ts';
 
 export function codexHistoryActions(): AgentHistoryActions {

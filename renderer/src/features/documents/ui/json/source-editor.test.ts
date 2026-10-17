@@ -4,26 +4,13 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { createJsonSourceEditor, textMatches } from './source-editor';
+import { createJsonSourceEditor } from './source-editor';
 
 afterEach(() => {
   globalThis.document.body.replaceChildren();
 });
 
 describe('JSON source editor', () => {
-  it('finds malformed source with case and whole-word options', () => {
-    const malformed = '{"Alpha": 1, "alpha_beta": 2, "alpha":';
-    expect(textMatches(malformed, 'alpha', { caseSensitive: false, wholeWord: false })).toEqual([
-      { from: 2, to: 7 },
-      { from: 14, to: 19 },
-      { from: 31, to: 36 },
-    ]);
-    expect(textMatches(malformed, 'alpha', { caseSensitive: false, wholeWord: true })).toEqual([
-      { from: 2, to: 7 },
-      { from: 31, to: 36 },
-    ]);
-  });
-
   it('keeps invalid JSON editable and distinguishes external source patches', async () => {
     const host = globalThis.document.createElement('div');
     globalThis.document.body.append(host);

@@ -27,6 +27,7 @@ import {
   projectPrepareFolderRemovalResponseSchema,
   projectSetActiveFolderRequestSchema,
 } from '../../shared/protocols/electron/project.ts';
+import { createAckCoordinator } from '../ack-coordinator.ts';
 import { authorizeSender, type SenderAuthorization } from './dialog.ts';
 
 export { PROJECT_LIFECYCLE_CAPABILITY };
@@ -59,69 +60,32 @@ const failure = (
 ): ProjectFolderDialogFailure => ({ ok: false, failure: { kind, message } });
 
 export function createFolderRemovalCoordinator({
-  createRequestId = () => crypto.randomUUID(),
-  timeoutMs = 5_000,
+  createRequestId,
+  timeoutMs,
 }: {
   createRequestId?: () => string;
   timeoutMs?: number;
 } = {}) {
-  const pendingByWebContents = new Map<
-    number,
-    {
-      folderPath: string;
-      promise: Promise<boolean>;
-      requestId: string;
-      resolve: (ready: boolean) => void;
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
-
-  const settle = (webContentsId: number, ready: boolean) => {
-    const pending = pendingByWebContents.get(webContentsId);
-    if (!pending) return false;
-    pendingByWebContents.delete(webContentsId);
-    clearTimeout(pending.timer);
-    pending.resolve(ready);
-    return true;
-  };
+  const acks = createAckCoordinator({
+    channel: PROJECT_FOLDER_REMOVAL_REQUESTED_CHANNEL,
+    message: (folderPath, requestId) => ({ folderPath, requestId }),
+    createRequestId,
+    timeoutMs,
+  });
 
   return {
     request(window: LifecycleWindow, folderPath: string): Promise<boolean> {
       if (window.isDestroyed() || window.webContents.isDestroyed()) return Promise.resolve(true);
-      const webContentsId = window.webContents.id;
-      const existing = pendingByWebContents.get(webContentsId);
-      if (existing)
-        return existing.folderPath === folderPath ? existing.promise : Promise.resolve(false);
-
-      const requestId = createRequestId();
-      let resolve!: (ready: boolean) => void;
-      const promise = new Promise<boolean>((done) => {
-        resolve = done;
-      });
-      const timer = setTimeout(() => settle(webContentsId, false), timeoutMs);
-      timer.unref?.();
-      pendingByWebContents.set(webContentsId, {
-        folderPath,
-        promise,
-        requestId,
-        resolve,
-        timer,
-      });
-      window.webContents.send(PROJECT_FOLDER_REMOVAL_REQUESTED_CHANNEL, { folderPath, requestId });
-      return promise;
+      return acks.request(window.webContents, folderPath);
     },
     settle(webContentsId: number, payload: unknown): boolean {
       const response = projectFolderRemovalReadySchema.safeParse(payload);
-      const pending = pendingByWebContents.get(webContentsId);
-      if (
-        !response.success ||
-        !pending ||
-        pending.requestId !== response.data.requestId ||
-        pending.folderPath !== response.data.folderPath
-      ) {
-        return false;
-      }
-      return settle(webContentsId, response.data.ready);
+      return response.success && acks.acknowledge(
+        webContentsId,
+        response.data.requestId,
+        response.data.folderPath,
+        response.data.ready,
+      );
     },
   };
 }

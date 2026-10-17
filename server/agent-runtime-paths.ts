@@ -14,7 +14,7 @@ export type {
   AgentTurnFailureSimulation,
 } from '../shared/agent-runtime.ts';
 
-export type NativeAgentId = 'claude' | 'codex';
+export type NativeAgentId = 'claude' | 'codex' | 'antigravity';
 const SETUP_FAILURE_SIMULATIONS = new Set<AgentSetupFailureSimulation>(['none', 'installation', 'authentication', 'mcp']);
 const TURN_FAILURE_SIMULATIONS = new Set<AgentTurnFailureSimulation>([
   'none', 'rate-limit', 'quota', 'auth-expired', 'network', 'crash',
@@ -23,7 +23,7 @@ const TURN_FAILURE_SIMULATIONS = new Set<AgentTurnFailureSimulation>([
 let nextFailure: AgentSetupFailureSimulation = 'none';
 let nextTurnFailure: AgentTurnFailureSimulation = 'none';
 
-export function agentRuntimeDebugEnabled(): boolean {
+function agentRuntimeDebugEnabled(): boolean {
   return isDevelopmentRuntime() || process.env.STASHBASE_AGENT_DEBUG === '1';
 }
 

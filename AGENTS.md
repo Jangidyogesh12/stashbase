@@ -50,6 +50,7 @@ Respect the requested scope, including whether frontend UI is excluded.
 | Review a user journey | Select its Jxx section in [Journey Coverage](code-review/journey-coverage.md). Follow its renderer and host/service entries through the operation, failure, cancellation, and recovery paths. Read the linked product intent and boundaries. |
 | Review a branch, commit, PR, or working tree | Pin the comparison point; include relevant uncommitted/new files. Follow the [diff-first route](code-review/README.md#diff-first-review), expanding through callers and crossed boundaries. |
 | Diagnose or fix a bug | Find the affected journey/boundary, reproduce the failure, and trace its state owner. Verify the fix at the lowest useful layer and through the affected runtime flow when needed. |
+| Measure or improve performance | Run the matching scenario in [scripts/profiling](scripts/profiling/README.md) before and after the change, and report the compared ranges. Add a scenario when none covers the task. |
 | Simplify code or audit shared infrastructure | Start from [Engineering Boundaries](code-review/architecture.md). Trace real callers and the purpose they serve; absence from a journey map alone is not proof of dead code. |
 
 ## Vertical and Horizontal Review
@@ -206,9 +207,10 @@ release.
 When the user asks to release or package a build, read and follow
 [`code-review/release-pipeline.md`](code-review/release-pipeline.md) in full.
 The only question is the patch/minor/major version choice; everything after it
-runs unattended. Tidy and push focused commits first, gate the tag on source CI
-for the exact version-bump commit, then hand off GitHub Release publication and
-verify all platform assets plus residual packaged UI sanity.
+runs unattended. Tidy focused commits, make the version bump the final commit,
+and push `main` once. Successful exact-commit source CI triggers tagging and publication; do not
+create a second release branch. Then verify all platform assets plus residual
+packaged UI sanity.
 
 Packaging is release-only. `pnpm dist:brew` is a local macOS fallback, not the
 default. Never commit packaged artifacts; outputs belong in `release.nosync/`.

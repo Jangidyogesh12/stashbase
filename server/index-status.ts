@@ -11,18 +11,6 @@ import { getIndexWarning, indexer } from './state.ts';
 import type { IndexStatus, PreparationFailure, SemanticIndexingState } from '../shared/index-status.ts';
 import type { IndexerStatus } from './indexer.ts';
 
-/** The `/api/index-status` wire contract lives in `shared/index-status.ts` so
- * the renderer can import it without pulling this module's server-only graph
- * (`node:fs`, the conversion scheduler, the indexer) into the browser bundle.
- * Re-exported here so server-side callers keep one import site. */
-export type {
-  IndexStatus,
-  IndexWarning,
-  PreparationFailure,
-  SemanticIndexingState,
-  SemanticIndexingStatus,
-} from '../shared/index-status.ts';
-
 type SchedulerSnapshot = ReturnType<typeof getConversionSchedulerSnapshot>;
 
 export function semanticIndexingState(input: {
@@ -123,7 +111,7 @@ function pendingVisibleFiles(sourcePaths: string[], folderRootAbs: string, folde
   return [...pendingSet].sort();
 }
 
-export function preparationFailuresForFolder(folderRoot: string): PreparationFailure[] {
+function preparationFailuresForFolder(folderRoot: string): PreparationFailure[] {
   const root = filesystemPath.absolute(folderRoot);
   const out: PreparationFailure[] = [];
   for (const { path: sourcePath, entry } of listPreparationProblems()) {

@@ -45,8 +45,7 @@ const PORT_ERROR = `Enter a port from ${MCP_DOCKER_PORT_RANGE.min} to ${MCP_DOCK
 /** The pane keeps its title and lede while the read is in flight or has
  *  failed, so the section never collapses into a bare sentence. */
 const TITLE = 'External apps (MCP)';
-const LEDE =
-  'Connect external AI apps to search, read, and edit supported files in your registered projects.';
+const LEDE = 'Let other AI apps search, read, and edit files in your projects.';
 
 /** Fixed width rather than one dot per character: the row must not change
  *  shape when a rotation lands, and a mask that counts out the credential is
@@ -190,8 +189,8 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
         }}
         size="compact"
       >
-        <TabsSubtleItem label="Standard" />
-        <TabsSubtleItem label="HTTP" />
+        <TabsSubtleItem label="Command" />
+        <TabsSubtleItem label="URL" />
       </TabsSubtle>
       {connection === 0 ? (
         <SettingsGroup hint="Copy this JSON into your client's MCP settings, then restart the client.">
@@ -206,7 +205,7 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
                 />
               }
             >
-              <pre className="m-0 max-h-80 overflow-auto font-mono text-caption leading-snug whitespace-pre text-foreground">
+              <pre className="m-0 max-h-80 overflow-auto font-mono text-caption leading-snug wrap-anywhere whitespace-pre-wrap text-foreground">
                 {access.config}
               </pre>
             </SettingsRow>
@@ -216,7 +215,7 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
         <>
           <SettingsGroup
             hint="Use the local URL and bearer token for clients that connect over HTTP."
-            title="URL access"
+            title="Local access"
           >
             <SettingsList>
               {http.settingsError !== null && (
@@ -284,13 +283,13 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
           >
             <SettingsList>
               <SettingsRow
-                detail="Allow containers on this computer to connect to MCP."
-                title="Docker access"
+                detail="Lets containers on this computer connect to MCP."
+                title="Allow containers"
                 trail={
                   <Switch
                     checked={http.dockerAccess}
                     disabled={mcp.busy || unreadable}
-                    label="Docker access"
+                    label="Allow containers"
                     labelHidden
                     onToggle={() => mcp.setDockerAccess(!http.dockerAccess)}
                   />

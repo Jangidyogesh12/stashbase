@@ -77,6 +77,17 @@ export function contextItemName(item: AgentContextItem): string {
     : basePathName(item.source.path);
 }
 
+const PASSAGE_EXCERPT_WORDS = 6;
+
+/** A passage's first words, without the Markdown marker its first line opens
+ *  with ("1.", "-", "#", ">", a task box), which would read as part of it. */
+export function passageExcerpt(quote: string): string {
+  const text = quote.replace(/^(?:\s*(?:[-*+]|\d+[.)]|#{1,6}|>|\[[ xX]\])(?=\s))+\s*/u, '');
+  const words = text.split(/\s+/u).filter(Boolean);
+  const head = words.slice(0, PASSAGE_EXCERPT_WORDS).join(' ');
+  return words.length > PASSAGE_EXCERPT_WORDS ? `${head}…` : head;
+}
+
 /** A passage of `source`, or null when the selection holds no text. */
 export function passageContextItem(
   source: SourceReference,
@@ -176,29 +187,6 @@ export interface MentionQuery {
   /** Index of the marker that opens the query. */
   from: number;
   query: string;
-}
-
-const MENTION_QUERY_RE = /(^|\s)@([^\s@]*)$/u;
-
-export function mentionQueryAt(text: string, caret: number): MentionQuery | null {
-  const match = MENTION_QUERY_RE.exec(text.slice(0, caret));
-  if (!match) return null;
-  const query = match[2] ?? '';
-  return { from: caret - query.length - 1, kind: 'mention', query };
-}
-
-export function applyMention(
-  text: string,
-  query: MentionQuery,
-  path: string,
-): { text: string; caret: number } {
-  const end = query.from + 1 + query.query.length;
-  const next = text[end];
-  const run = `@${path}${next === undefined || !/\s/u.test(next) ? ' ' : ''}`;
-  return {
-    caret: query.from + run.length,
-    text: text.slice(0, query.from) + run + text.slice(end),
-  };
 }
 
 function escapeRegExp(value: string): string {

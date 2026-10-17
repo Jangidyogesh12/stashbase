@@ -2,6 +2,22 @@ const DEFAULT_RELEASE_URL = 'https://github.com/liliu-z/stashbase/releases/lates
 const DEFAULT_STARTUP_DELAY_MS = 30_000;
 const DEFAULT_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const UPDATE_SIMULATIONS = new Set(['off', 'available', 'downloading', 'ready', 'installing', 'error']);
+const CHECK_NETWORK_ERRORS = new Set([
+  'ERR_INTERNET_DISCONNECTED', 'ERR_NETWORK_CHANGED',
+  'ERR_NETWORK_IO_SUSPENDED', 'ERR_NAME_NOT_RESOLVED',
+]);
+
+function checkNetworkError(error) {
+  const code = error?.code ?? /^net::(ERR_[A-Z_]+)(?:\s|$)/.exec(errorMessage(error))?.[1];
+  if (CHECK_NETWORK_ERRORS.has(code)) return true;
+  // GitHubProvider wraps the request failure, sometimes twice, and appends
+  // the release XML. Inspect only its known request wrapper, never feed text
+  // or arbitrary errors (in particular integrity/certificate failures).
+  if (!['ERR_UPDATER_INVALID_RELEASE_FEED', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND'].includes(code)) return false;
+  const explanation = errorMessage(error).split('\nXML:', 1)[0];
+  const nested = /Unable to find latest version on GitHub \([^\r\n]+\), please ensure a production release exists: Error: net::(ERR_[A-Z_]+)(?:\s|$)/.exec(explanation)?.[1];
+  return CHECK_NETWORK_ERRORS.has(nested);
+}
 
 function nextPatchVersion(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version));
@@ -141,7 +157,8 @@ function createUpdateManager(options) {
   function onError(error) {
     if (!error || typeof error !== 'object' || !reportedErrors.has(error)) {
       if (error && typeof error === 'object') reportedErrors.add(error);
-      try { onDiagnostic(error, { stage: state.phase, target_version: state.availableVersion }); } catch { /* reporting is optional */ }
+      const severity = state.phase === 'checking' && checkNetworkError(error) ? 'warning' : 'error';
+      try { onDiagnostic(error, { stage: state.phase, target_version: state.availableVersion }, severity); } catch { /* reporting is optional */ }
     }
     if (state.phase === 'installing') {
       installAttempt = null;
@@ -173,6 +190,9 @@ function createUpdateManager(options) {
     if (startPromise) return startPromise;
     if (disposed) return Promise.resolve(snapshot());
     started = true;
+    // check() starts each download itself: electron-updater's own autoDownload
+    // hands back a download promise nobody awaits, so a failure would escape
+    // onError as an unhandled rejection.
     updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
     updater.allowPrerelease = false;
@@ -222,6 +242,9 @@ function createUpdateManager(options) {
     const work = Promise.resolve().then(async () => {
       try {
         await updater.checkForUpdates();
+        // A found release downloads in the background. The check itself
+        // ends here; the download reports through its own phases.
+        void download();
       } catch (error) {
         onError(error);
       } finally {
@@ -266,24 +289,22 @@ function createUpdateManager(options) {
     return snapshot();
   }
 
-  async function primaryAction() {
-    await start();
-    if (checking) await checking;
-    if (disposed) return snapshot();
-    if (state.phase === 'ready') return installReadyUpdate();
-    if (!state.availableVersion) return snapshot();
-    if (state.phase === 'downloading' || state.phase === 'installing') return snapshot();
+  async function download() {
+    if (state.phase !== 'available') return;
     publish({ phase: 'downloading', percent: 0, message: undefined });
     try {
       await updater.downloadUpdate();
-      // electron-updater emits update-downloaded before downloadUpdate()
-      // resolves. One explicit click therefore grants consent for this whole
-      // download/install/relaunch operation.
-      if (state.phase === 'ready') await installReadyUpdate();
     } catch (error) {
       onError(error);
     }
-    return snapshot();
+  }
+
+  async function primaryAction() {
+    await start();
+    if (disposed) return snapshot();
+    // A finished download only waits. Restarting is always the reader's own
+    // click, never a consequence of the download completing.
+    return installReadyUpdate();
   }
 
   async function openDownloadPage() {
@@ -320,8 +341,5 @@ function createUpdateManager(options) {
 }
 
 module.exports = {
-  DEFAULT_CHECK_INTERVAL_MS,
-  DEFAULT_RELEASE_URL,
-  DEFAULT_STARTUP_DELAY_MS,
   createUpdateManager,
 };

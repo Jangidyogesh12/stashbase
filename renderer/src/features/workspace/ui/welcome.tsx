@@ -25,6 +25,7 @@ import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/shared/brand/logo';
 import { FailureLine } from '@/shared/ui/failure-notice';
+import { PathTail } from '@/shared/ui/path-tail';
 import { holdsTextSelection } from '@/shared/utils/click-intent';
 
 import { RemoveFolderDialog } from './remove-folder-dialog';
@@ -37,6 +38,25 @@ export interface ProjectWelcomeProps {
   gallery?: ReactNode;
   isRestoringSession?: boolean;
   lifecycle: ProjectLifecyclePort;
+}
+
+/** One of the screen's two framed columns: paper, hairline, and a caption
+ *  header, so Start and Recent read as one titled pair. */
+function FramedColumn({ children, title }: { children: ReactNode; title: string }) {
+  const shape = useShape();
+  return (
+    <div
+      className={cn(
+        'flex min-w-0 flex-col border border-border bg-surface-2 shadow-surface-2',
+        shape.card,
+      )}
+    >
+      <h2 className="border-b border-border px-4 py-3 text-caption font-medium tracking-wide text-muted-foreground uppercase">
+        {title}
+      </h2>
+      {children}
+    </div>
+  );
 }
 
 /** The row's one action, shown on hover: a direct ✕ that asks the remove
@@ -90,15 +110,14 @@ export function ProjectWelcome({
   const project = useQuery(projectQuery(api));
   const removal = useRemoveFolder(api, lifecycle);
   const importDialog = folders.importDialog;
-  const shape = useShape();
   const sizeClasses = useSize();
 
   if (!project.data || project.data.activeFolder || isRestoringSession) return null;
 
   const { homeDirectory } = project.data;
   // The list is a memory of the places the reader works, so the scratch
-  // directories a smoke test or an import registers stay out of it. They
-  // remain projects, and the sidebar's chooser still lists them.
+  // directories a smoke test or an import registers stay out of it, as they
+  // do from the sidebar's switcher. They remain projects.
   const recent = project.data.projects.filter((member) => !isTemporaryFolderPath(member.path));
   const creating = folders.pendingRequest?.kind === 'create';
   const opening = folders.pendingRequest?.kind === 'open';
@@ -119,7 +138,7 @@ export function ProjectWelcome({
           Open
         </Button>
       ),
-      detail: 'Choose a local folder. Your files stay where they are.',
+      detail: 'Choose a local folder.',
       title: 'Open a project',
     },
     {
@@ -135,7 +154,7 @@ export function ProjectWelcome({
           Create
         </Button>
       ),
-      detail: 'Create a folder, then open it as a project.',
+      detail: 'Create a new folder.',
       title: 'Create a project',
     },
     {
@@ -150,7 +169,7 @@ export function ProjectWelcome({
           Import
         </Button>
       ),
-      detail: 'Create a new local project from a public repository.',
+      detail: 'Copy a public repository to your computer.',
       title: 'Import from GitHub',
     },
   ];
@@ -168,8 +187,7 @@ export function ProjectWelcome({
             <h1 className="brand-wordmark text-display">StashBase</h1>
           </div>
           <p className="mt-3 text-body leading-relaxed text-muted-foreground">
-            Turn your local files into a wiki, then write with Claude and Codex using your own
-            sources.
+            Stash your notes and resources. Put them to work with your agent.
           </p>
         </div>
 
@@ -188,16 +206,8 @@ export function ProjectWelcome({
         <section aria-label="Choose a project" className="mt-10 w-full max-w-5xl">
           <div className="grid grid-cols-1 gap-6 @min-[44rem]:grid-cols-2">
             {/* Rules run edge to edge, as they do in every framed list in the
-             * app, so the inset lives on the rows rather than the frame. The
-             * header mirrors Recent's, so the two framed columns read as one
-             * titled pair. */}
-            <div
-              className={cn(
-                'flex min-w-0 flex-col border border-border bg-surface-2 shadow-surface-2',
-                shape.card,
-              )}
-            >
-              <h2 className="border-b border-border px-4 py-3 text-body font-medium">Start</h2>
+             * app, so the inset lives on the rows rather than the frame. */}
+            <FramedColumn title="Start">
               <ul
                 aria-label="Add a project"
                 className="flex flex-1 flex-col divide-y divide-border"
@@ -214,28 +224,26 @@ export function ProjectWelcome({
                   </li>
                 ))}
               </ul>
-            </div>
+            </FramedColumn>
 
             {/* The list gets a frame of its own, the same paper and hairline
              * as the card beside it, so the column's weight is the box and
              * not however long the reader's paths happen to be: a short path
              * no longer leaves the right half empty, and a long one truncates
              * at the frame instead of running off. */}
-            <div
-              className={cn(
-                'flex min-w-0 flex-col border border-border bg-surface-2 shadow-surface-2',
-                shape.card,
-              )}
-            >
-              <h2 className="border-b border-border px-4 py-3 text-body font-medium">Recent</h2>
+            <FramedColumn title="Recent">
               {recent.length > 0 ? (
                 /* Five 2.75rem rows plus the ring padding, so the list ends on
                  * a whole row: the fade at its foot then sits in the blank
                  * below the fifth row's text, never across a sliver of the
-                 * sixth. Keep this sum in step with the row height below. */
+                 * sixth. Keep this sum in step with the row height below.
+                 * The rows share the list's two columns through subgrid, so
+                 * every path starts on one line. The split is fixed at two to
+                 * three rather than sized to the longest name, so opening or
+                 * removing a project never moves every path. */
                 <ul
                   aria-label="Recent projects"
-                  className="scroll-fade max-h-[14.25rem] overflow-y-auto p-1 [--scroll-fade-size:1rem]"
+                  className="scroll-fade grid max-h-[14.25rem] grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 overflow-y-auto p-1 [--scroll-fade-size:1rem]"
                 >
                   {recent.map((member) => {
                     const name = folderName(member.path);
@@ -243,18 +251,21 @@ export function ProjectWelcome({
                       folders.pendingRequest?.kind === 'select' &&
                       folders.pendingRequest.path === member.path;
                     return (
-                      <li className="group relative" key={member.path}>
+                      <li
+                        className="group relative col-span-2 grid grid-cols-subgrid"
+                        key={member.path}
+                      >
                         <button
                           className={cn(
                             // One line, no leading glyph: every row here is
                             // a folder, so the name carries the row and the
-                            // path sits at the far edge in the caption
-                            // voice — the two-line stack read as a dense
-                            // text block against the card's empty right.
+                            // path follows in the caption voice. The two-line
+                            // stack read as a dense text block against the
+                            // card's empty right.
                             // group-hover, not hover: the remove control is the row's sibling,
                             // outside this button, so the tint follows the pointer
                             // over the whole row, the ✕ included.
-                            'flex h-11 w-full cursor-pointer items-center gap-3 pr-12 pl-4 text-left transition-colors duration-fast outline-none group-hover:bg-hover disabled:pointer-events-none disabled:opacity-50',
+                            'col-span-2 grid h-11 cursor-pointer grid-cols-subgrid items-center pr-12 pl-4 text-left transition-colors duration-fast outline-none group-hover:bg-hover disabled:pointer-events-none disabled:opacity-50',
                             // The row is 44px, taller than the 28px sidebar
                             // row `shape.item` is cut for, so it takes the
                             // ladder's own corner for a full-size control.
@@ -277,24 +288,27 @@ export function ProjectWelcome({
                               default, and the name and the path beneath the
                               pointer are exactly what a reader reaches for
                               when they want to paste this project somewhere. */}
-                          <span className="max-w-[70%] shrink-0 truncate text-body font-medium select-text">
-                            {name}
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="min-w-0 truncate text-body font-medium select-text">
+                              {name}
+                            </span>
+                            {isOpening && (
+                              <LoaderCircle
+                                aria-label="Opening"
+                                className="size-3.5 shrink-0 motion-safe:animate-spin"
+                                strokeWidth={1.5}
+                              />
+                            )}
                           </span>
-                          {isOpening && (
-                            <LoaderCircle
-                              aria-label="Opening"
-                              className="size-3.5 shrink-0 motion-safe:animate-spin"
-                              strokeWidth={1.5}
-                            />
-                          )}
-                          {/* The path trails the name in the caption voice —
-                           * one left-anchored phrase, because pushing it to
+                          {/* The path trails the name in the caption voice,
+                           * left-anchored in its column, because pushing it to
                            * the card's far edge leaves a dead gap this wide
                            * card cannot close. It stops at the directory the
                            * folder sits in; the name is already the row. */}
-                          <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground select-text">
-                            {displayFolderPath(parentFolderPath(member.path), homeDirectory)}
-                          </span>
+                          <PathTail
+                            className="text-caption text-muted-foreground select-text"
+                            path={displayFolderPath(parentFolderPath(member.path), homeDirectory)}
+                          />
                         </button>
                         <RecentFolderActions
                           disabled={folders.isPending || removal.isPending}
@@ -310,7 +324,7 @@ export function ProjectWelcome({
                   Projects you open will appear here.
                 </p>
               )}
-            </div>
+            </FramedColumn>
           </div>
           {folders.failure && (
             <FailureLine className="mt-3" tone="input">
@@ -327,11 +341,8 @@ export function ProjectWelcome({
         {gallery && (
           <section className="mt-10 w-full max-w-5xl">
             <h2 className="text-title font-medium">Or start from a project in the Gallery</h2>
-            {/* The tagline's measure, so a sentence of this length stays on one
-             * line instead of folding under the title. */}
-            <p className="mt-1 max-w-2xl text-body leading-relaxed text-muted-foreground">
-              Explore how people organize files and write with agents. Find ideas for your own
-              workflow.
+            <p className="mt-1 text-body leading-relaxed text-muted-foreground">
+              Find ideas for your own workflow.
             </p>
             <div className="mt-4">{gallery}</div>
           </section>

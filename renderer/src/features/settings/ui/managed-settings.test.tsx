@@ -46,13 +46,13 @@ it('keeps preferences in General and reaches both optional configurations throug
     expect(within(nav).getByRole('button', { name })).toBeDefined();
   }
   await user.click(within(nav).getByRole('button', { name: 'Advanced' }));
-  await user.click(screen.getByRole('button', { name: 'Configure search' }));
+  await user.click(screen.getByRole('button', { name: 'Configure search by meaning' }));
   await screen.findByPlaceholderText('Paste your API key');
   await user.click(screen.getByRole('button', { name: 'Back to Advanced' }));
-  await user.click(screen.getByRole('button', { name: 'Configure connection' }));
+  await user.click(screen.getByRole('button', { name: 'Configure external apps' }));
   await screen.findByRole('button', { name: 'Copy configuration' });
   expect(screen.queryByRole('button', { name: 'Show token' })).toBeNull();
-  await user.click(screen.getByRole('tab', { name: 'HTTP' }));
+  await user.click(screen.getByRole('tab', { name: 'URL' }));
   expect(screen.getByRole('button', { name: 'Show token' })).toBeDefined();
 });
 
@@ -60,5 +60,5 @@ it('opens the search configuration directly and can return to the Advanced index
   withQueryClient(<Harness initial="search" />);
   await screen.findByPlaceholderText('Paste your API key');
   await userEvent.setup().click(screen.getByRole('button', { name: 'Back to Advanced' }));
-  expect(screen.getByRole('button', { name: 'Configure connection' })).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Configure external apps' })).toBeDefined();
 });

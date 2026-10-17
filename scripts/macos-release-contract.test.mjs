@@ -81,7 +81,8 @@ test('macOS package configuration requires Developer ID signing and notarization
   );
   assert.equal(Object.hasOwn(mac, 'identity'), false);
   assert.equal(mac.hardenedRuntime, true);
-  assert.equal(mac.notarize, true);
+  assert.equal(mac.notarize, false);
+  assert.equal(pkg.build.afterSign, 'scripts/notarize-macos.cjs');
   assert.equal(mac.entitlements, 'build/entitlements.mac.plist');
   assert.equal(mac.entitlementsInherit, 'build/entitlements.mac.inherit.plist');
   assert.equal(mac.sign, 'scripts/sign-macos-app.cjs');
@@ -158,6 +159,8 @@ test('macOS release adapters preserve the final signature and require its verifi
   assert.match(verifier, /allow-unsigned-executable-memory/);
   assert.match(verifier, /spctl/);
   assert.match(verifier, /stapler/);
+  assert.match(source('scripts/notarize-macos.cjs'), /notarize\(/);
+  assert.match(source('scripts/notarize-macos.cjs'), /stapler\('validate'/);
 
   for (const removed of [
     'build/dmg-scripts/Fix.sh',

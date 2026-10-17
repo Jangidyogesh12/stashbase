@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import type { AppearancePort, SystemTextPort } from '@/features/settings/application/ports';
 import type { AppearancePreferences } from '@/features/settings/domain/appearance';
+import { SettingsPane } from '@/features/settings/ui/rows';
 import { appearanceSurface } from '@/test/fakes/settings';
 
 import { AppearancePanel } from './appearance-panel';
@@ -28,8 +29,14 @@ const appearancePort: AppearancePort = {
   update: async (change) => ({ ...saved, ...change }),
 };
 
+/** The panel's groups live in General's pane, a column; drawn bare, they
+ *  would sit side by side in the canvas. */
 function AppearanceHarness() {
-  return <AppearancePanel appearanceApi={appearancePort} systemTextApi={systemText} />;
+  return (
+    <SettingsPane title="General">
+      <AppearancePanel appearanceApi={appearancePort} systemTextApi={systemText} />
+    </SettingsPane>
+  );
 }
 
 const meta = {

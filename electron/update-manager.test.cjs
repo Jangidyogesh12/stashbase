@@ -42,7 +42,7 @@ function harness(overrides = {}) {
   return { updater, scheduled, states, manager };
 }
 
-test('configures explicit user-controlled downloads and schedules default-on checks', async () => {
+test('keeps downloads and installs under manager control and schedules default-on checks', async () => {
   const { updater, scheduled, manager } = harness();
   await manager.start();
   assert.equal(manager.getState().autoCheckEnabled, true);
@@ -65,26 +65,41 @@ test('an explicit opt-out cancels automatic checks but manual checks still work'
   assert.equal(manager.getState().phase, 'checking');
 });
 
-test('one explicit action downloads, crosses the save barrier, installs, and relaunches', async () => {
+test('a found release downloads in the background and installs only on an explicit restart', async () => {
   const { updater, manager, states } = harness();
-  await manager.start();
-  updater.emit('update-available', { version: '2.1.0', releaseDate: '2026-08-17' });
+  updater.checkForUpdates = async () => {
+    updater.checks++;
+    updater.emit('update-available', { version: '2.1.0', releaseDate: '2026-08-17' });
+  };
+  await manager.check({ manual: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(updater.downloads, 1);
+  assert.equal(updater.installs, 0);
+  assert.equal(manager.getState().phase, 'ready');
   assert.equal(manager.getState().availableVersion, '2.1.0');
   await manager.primaryAction();
-  assert.equal(updater.downloads, 1);
   assert.equal(updater.installs, 1);
   assert.deepEqual(
-    states.filter((state) => ['downloading', 'ready', 'installing'].includes(state.phase)).map((state) => state.phase),
-    ['downloading', 'downloading', 'ready', 'installing'],
+    states.filter((state) => ['available', 'downloading', 'ready', 'installing'].includes(state.phase)).map((state) => state.phase),
+    ['available', 'downloading', 'downloading', 'ready', 'installing'],
   );
   assert.equal(manager.getState().phase, 'installing');
+});
+
+test('restart does nothing until a download has finished', async () => {
+  const { updater, manager } = harness();
+  await manager.start();
+  updater.emit('update-available', { version: '2.1.0' });
+  assert.equal((await manager.primaryAction()).phase, 'available');
+  assert.equal(updater.downloads, 0);
+  assert.equal(updater.installs, 0);
 });
 
 test('keeps a downloaded update ready when a renderer save barrier declines', async () => {
   let mayInstall = false;
   const { manager, updater } = harness({ beforeInstall: async () => mayInstall });
   await manager.start();
-  updater.emit('update-available', { version: '2.1.0' });
+  updater.emit('update-downloaded', { version: '2.1.0' });
   await manager.primaryAction();
   assert.equal(updater.installs, 0);
   assert.equal(manager.getState().phase, 'ready');
@@ -100,7 +115,7 @@ test('reports installation failure and revokes prepared close approval', async (
     afterInstallFailure: () => { rollbacks += 1; },
   });
   await manager.start();
-  updater.emit('update-available', { version: '2.1.0' });
+  updater.emit('update-downloaded', { version: '2.1.0' });
   await manager.primaryAction();
   assert.equal(manager.getState().phase, 'error');
   assert.match(manager.getState().message, /installer rejected/);
@@ -120,7 +135,7 @@ test('rolls back once when a platform adapter emits and throws one install failu
   });
   updater = setup.updater;
   await setup.manager.start();
-  updater.emit('update-available', { version: '2.1.0' });
+  updater.emit('update-downloaded', { version: '2.1.0' });
   await setup.manager.primaryAction();
   assert.equal(setup.manager.getState().phase, 'error');
   assert.equal(rollbacks, 1);
@@ -239,8 +254,9 @@ test('a resident application discovers releases periodically without a restart',
   assert.equal(scheduled[0].delay, 15 * 60_000);
   scheduled.shift().fn();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(manager.getState().phase, 'available');
-  assert.equal(updater.downloads, 0);
+  assert.equal(manager.getState().phase, 'ready');
+  assert.equal(updater.downloads, 1);
+  assert.equal(updater.installs, 0);
   manager.dispose();
 });
 
@@ -294,28 +310,6 @@ test('focus cannot restart a check after availability was announced but the requ
   manager.dispose();
 });
 
-test('an explicit Update click waits for a foreground check before deciding what to download', async () => {
-  let finish;
-  const { manager, updater } = harness();
-  updater.checkForUpdates = async () => {
-    updater.checks++;
-    await new Promise((resolve) => { finish = resolve; });
-    updater.emit('update-not-available');
-  };
-  await manager.start();
-  updater.emit('update-available', { version: '2.1.0' });
-  const check = manager.checkOnActivity();
-  await new Promise((resolve) => setImmediate(resolve));
-  const action = manager.primaryAction();
-  assert.equal(updater.downloads, 0);
-  finish();
-  await Promise.all([check, action]);
-  assert.equal(updater.downloads, 0);
-  assert.equal(manager.getState().phase, 'current');
-  manager.dispose();
-});
-
-
 test('updater reports the original error and stage once across emit and rejection', async () => {
   const reported = [];
   const { manager, updater } = harness({ onDiagnostic: (error, context) => reported.push({ error, context }) });
@@ -324,5 +318,75 @@ test('updater reports the original error and stage once across emit and rejectio
   await manager.check();
   assert.deepEqual(reported, [{ error: failure, context: { stage: 'checking', target_version: undefined } }]);
   assert.equal(manager.getState().phase, 'error');
+  manager.dispose();
+});
+
+test('expected check network failures are warnings, while retries still update state and schedule checks', async () => {
+  const reported = [];
+  const { manager, updater, scheduled } = harness({
+    onDiagnostic: (error, context, severity) => reported.push({ error, context, severity }),
+  });
+  for (const code of ['ERR_INTERNET_DISCONNECTED', 'ERR_NETWORK_CHANGED', 'ERR_NETWORK_IO_SUSPENDED', 'ERR_NAME_NOT_RESOLVED']) {
+    const failure = new Error(`net::${code}`);
+    updater.checkForUpdates = async () => { updater.emit('error', failure); throw failure; };
+    await manager.check();
+    assert.equal(reported.at(-1).severity, 'warning');
+    assert.equal(reported.at(-1).error, failure);
+    assert.equal(reported.at(-1).context.stage, 'checking');
+    assert.equal(manager.getState().message, failure.message);
+    assert.equal(scheduled.at(-1).delay, 15 * 60_000);
+  }
+  assert.equal(reported.length, 4, 'emit and rejection are one occurrence');
+  updater.checkForUpdates = async () => updater.emit('update-available', { version: '2.1.0' });
+  await manager.check();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(manager.getState().phase, 'ready');
+  assert.equal(manager.getState().message, undefined);
+  manager.dispose();
+});
+
+test('check certificates and integrity failures, and network failures during downloads/install, remain errors', async () => {
+  const reported = [];
+  const { manager, updater } = harness({
+    onDiagnostic: (error, context, severity) => reported.push({ error, context, severity }),
+    installUpdate: () => { throw new Error('net::ERR_INTERNET_DISCONNECTED'); },
+  });
+  for (const failure of [new Error('net::ERR_CERT_AUTHORITY_INVALID'),
+    Object.assign(new Error('Checksum mismatch: net::ERR_NAME_NOT_RESOLVED'), { code: 'ERR_SHA512' })]) {
+    updater.checkForUpdates = async () => { throw failure; };
+    await manager.check();
+    assert.equal(reported.at(-1).severity, 'error');
+  }
+  updater.checkForUpdates = async () => updater.emit('update-available', { version: '2.1.0' });
+  updater.downloadUpdate = async () => { throw new Error('net::ERR_INTERNET_DISCONNECTED'); };
+  await manager.check();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(reported.at(-1).severity, 'error');
+  assert.equal(reported.at(-1).context.stage, 'downloading');
+  assert.equal(manager.getState().phase, 'error');
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  await manager.primaryAction();
+  assert.equal(reported.at(-1).severity, 'error');
+  assert.equal(reported.at(-1).context.stage, 'installing');
+  manager.dispose();
+});
+
+test('GitHub release wrappers retain the severity of the actual check failure, never feed contents', async () => {
+  const reported = [];
+  const { manager, updater } = harness({ onDiagnostic: (error, context, severity) => reported.push({ error, context, severity }) });
+  const latest = 'Unable to find latest version on GitHub (https://github.com/liliu-z/stashbase/releases/latest), please ensure a production release exists: Error: net::ERR_NETWORK_IO_SUSPENDED';
+  for (const [code, message, severity] of [
+    ['ERR_UPDATER_INVALID_RELEASE_FEED', `Cannot parse releases feed: Error: ${latest}\n    at request\nXML:\n<feed/>`, 'warning'],
+    ['ERR_UPDATER_LATEST_VERSION_NOT_FOUND', latest, 'warning'],
+    ['ERR_UPDATER_INVALID_RELEASE_FEED', 'Cannot parse releases feed: Error: Invalid XML\nXML:\n<entry>net::ERR_NETWORK_IO_SUSPENDED</entry>', 'error'],
+    ['ERR_UPDATER_INVALID_RELEASE_FEED', latest.replace('ERR_NETWORK_IO_SUSPENDED', 'ERR_CERT_AUTHORITY_INVALID'), 'error'],
+    ['ERR_SHA512', latest, 'error'],
+  ]) {
+    const failure = Object.assign(new Error(message), { code });
+    updater.checkForUpdates = async () => { throw failure; };
+    await manager.check();
+    assert.equal(reported.at(-1).severity, severity);
+    assert.equal(reported.at(-1).error, failure);
+  }
   manager.dispose();
 });

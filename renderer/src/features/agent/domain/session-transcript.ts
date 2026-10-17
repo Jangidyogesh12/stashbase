@@ -7,6 +7,13 @@ import type { AgentContextItem } from '@/features/agent/domain/context';
 
 type AgentToolStatus = 'running' | 'awaiting' | 'done' | 'error' | 'denied' | 'cancelled';
 
+export interface AgentCrewCall {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly model: string;
+}
+
 /** Why a turn failed, as this feature names it. The session adapter maps the
  *  wire vocabulary onto these names, so the domain never reads a protocol. */
 export type AgentTurnFailureReason =
@@ -16,17 +23,20 @@ export type AgentTurnFailureReason =
   | 'access-restricted'
   | 'auth-expired'
   | 'network'
-  | 'runtime-outdated';
+  | 'runtime-outdated'
+  | 'model-changed';
 
-/** Whether a failed turn may be sent again as it is: a transient failure, or
- *  a runtime too old for its model once that runtime's update ran. Anything
- *  else needs its repair first, and a resend would only fail the same way. */
+/** Whether a failed turn may be sent again as it is: a transient failure, a
+ *  runtime too old for its model once that runtime's update ran, or a hosted
+ *  model choice once its list was refreshed. Anything else needs its repair
+ *  first, and a resend would only fail the same way. */
 export function agentTurnFailureIsRetryable(failure: AgentTurnFailureReason | undefined): boolean {
   return (
     failure === undefined ||
     failure === 'network' ||
     failure === 'rate-limit' ||
-    failure === 'runtime-outdated'
+    failure === 'runtime-outdated' ||
+    failure === 'model-changed'
   );
 }
 
@@ -81,6 +91,7 @@ export type AgentTranscriptBlock =
       id: string;
       name: string;
       input: Record<string, unknown>;
+      crew?: AgentCrewCall | undefined;
       status: AgentToolStatus;
       permissionId?: string | undefined;
       permissionRequested?: boolean | undefined;
@@ -122,13 +133,25 @@ export function appendBlock(
 
 export function startTool(
   transcript: AgentTranscriptBlock[],
-  tool: { id: string; name: string; input: Record<string, unknown> },
+  tool: {
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    crew?: AgentCrewCall | undefined;
+  },
 ): AgentTranscriptBlock[] {
   const index = transcript.findIndex((block) => block.kind === 'tool' && block.id === tool.id);
   if (index < 0) {
     return [
       ...transcript,
-      { id: tool.id, input: tool.input, kind: 'tool', name: tool.name, status: 'running' },
+      {
+        id: tool.id,
+        input: tool.input,
+        kind: 'tool',
+        name: tool.name,
+        crew: tool.crew,
+        status: 'running',
+      },
     ];
   }
   const next = transcript.slice();
@@ -138,6 +161,7 @@ export function startTool(
     next[index] = {
       ...current,
       input: tool.input,
+      crew: tool.crew ?? current.crew,
       name: tool.name,
       status: current.status === 'awaiting' ? 'awaiting' : 'running',
     };

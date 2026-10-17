@@ -3,9 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { filesystemPath } from './filesystem-path.ts';
 import { syncIndex } from './sync.ts';
 import type { Indexer } from './indexer.ts';
-import { prepareForIndex } from './indexer.mfs.ts';
+import { MfsIndexer, prepareForIndex } from './indexer.mfs.ts';
+import { getDaemon } from './mfs-daemon.ts';
 import {
   hasNoExtractableText,
   indexableFileSizeError,
@@ -114,6 +116,38 @@ test('reconcile offers text to MFS for exact search without an embedding key', a
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('reconcile admits sources beneath a hidden cloud parent while excluding hidden project directories', async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-cloud-parent-'));
+  const root = path.join(scratch, '.shortcut-targets-by-id', 'drive-id', 'Project');
+  const nested = path.join(root, '.private', 'OtherProject');
+  fs.mkdirSync(path.join(root, 'notes'), { recursive: true });
+  fs.mkdirSync(nested, { recursive: true });
+  fs.writeFileSync(path.join(root, 'notes', 'visible.md'), 'ReplaySSM appears here');
+  fs.writeFileSync(path.join(root, '.private', 'hidden.md'), 'Do not index this');
+  fs.writeFileSync(path.join(nested, 'owned.md'), 'Visible within the nested project');
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+
+  const calls: Array<{ op: string; path: string }> = [];
+  t.mock.method(getDaemon(), 'knownBindings', () => new Map([
+    [root, { provider: 'openai' as const }],
+    [nested, { provider: 'openai' as const }],
+  ]));
+  t.mock.method(getDaemon(), 'call', async (op: string, args: Record<string, unknown>) => {
+    calls.push({ op, path: String(args.path) });
+    return { outcome: 'added', total_ms: 1 };
+  });
+
+  const indexer = new MfsIndexer();
+  t.mock.method(indexer, 'listDocuments', async () => []);
+  const result = await syncIndex(indexer, root);
+  assert.deepEqual(result, { added: ['notes/visible.md'], modified: [], removed: [], failed: [] });
+  assert.deepEqual(calls, [{ op: 'upsert', path: filesystemPath.absolute(path.join(root, 'notes', 'visible.md')) }]);
+  assert.deepEqual(await indexer.upsertFile(path.join(root, '.private', 'hidden.md'), 'hidden'), { outcome: 'removed' });
+  assert.deepEqual(calls.at(-1), { op: 'delete', path: filesystemPath.absolute(path.join(root, '.private', 'hidden.md')) });
+  assert.deepEqual(await indexer.upsertFile(path.join(nested, 'owned.md'), 'nested'), { outcome: 'added' });
+  assert.deepEqual(calls.at(-1), { op: 'upsert', path: filesystemPath.absolute(path.join(nested, 'owned.md')) });
 });
 
 

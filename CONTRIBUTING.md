@@ -70,7 +70,9 @@ check architecture, or collect coverage. `pnpm check:web` is the complete
 renderer gate, including coverage, accessibility, static checks, and both builds.
 Build and lint commands do only their named work.
 
-Automated Electron and packaged-server smoke launches disable production telemetry.
+Host test workers automatically suppress production telemetry, including when
+`STASHBASE_PACKAGED=1` is inherited. The shared isolated fixture also suppresses
+child processes. Automated Electron and packaged-server smoke launches disable it too.
 Manual packaged checks must set `STASHBASE_TELEMETRY_DISABLED=1` before launching;
 see [testing packaged builds](docs/usage-statistics.md#testing-packaged-builds).
 
@@ -91,11 +93,26 @@ Real-provider evaluations and packaged verification stay in the
 [release workflow](code-review/release-pipeline.md); a passing source gate does
 not establish model quality or a complete user journey.
 
+## Profiling
+
+To measure a performance change, run a profiling scenario before and after it
+and compare the results. The harness launches an isolated development app and
+drives it over the DevTools Protocol; see
+[scripts/profiling/README.md](scripts/profiling/README.md) for the workflow,
+the scenarios, and how to add one.
+
 ## Debugging
 
 - Renderer logs: **View -> Toggle Developer Tools**
 - Packaged-app server logs: `~/Library/Logs/StashBase/`
 - Useful env vars: `STASHBASE_LOG=debug`, `STASHBASE_PYTHON=/path/to/python`, `STASHBASE_BUILD_EXTRACT=1`
+
+With `STASHBASE_LOG=debug`, Default Agent logs model-catalog and native connection
+times, spare-runtime readiness, and each model request's headers, first bytes,
+first visible text, and elapsed time. Requests include the profile and turn id;
+input/output and cache token counts appear when the gateway supplies them.
+These measurements contain no prompt or generated text. Gateway timing includes
+network and upstream work; it does not isolate the provider's own latency.
 
 API keys are configured in Settings, not environment variables.
 

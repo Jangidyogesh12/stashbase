@@ -1,4 +1,4 @@
-import { beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 import { isStashbaseWorkspaceEdit, isWorkspaceFileChange } from './agent-file-permissions.ts';
 import { retireAgentProcess } from './agent-process.ts';
 /**
@@ -9,7 +9,6 @@ import { retireAgentProcess } from './agent-process.ts';
  */
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import readline from 'node:readline';
 import type { WebSocket } from 'ws';
 import { resolveAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import {
@@ -20,10 +19,10 @@ import {
 import { agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { agentBootstrapCoordinator } from './agent-runtime-installer.ts';
 import {
-  disposeSessionsBoundToFolder,
   isAgentAccessMode,
   resolveSessionBinding,
   type AgentAccessMode,
+  type AgentConnectionOptions,
   type AgentModel,
   type AgentSkill,
   type AgentClientEvent,
@@ -36,10 +35,13 @@ import {
   commandApprovalInput,
   fileChangeApprovalInput,
   mcpToolApprovalFromElicitation,
+  notificationMessage,
+  protocolNoticeFromParams,
   requestedPermissions,
+  usefulMessage,
 } from './codex-approval.ts';
 import { rememberAgentDefaultModel, rememberAgentModels } from './agent-model-catalog.ts';
-import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
+import { spawnCodexAppServerProcess } from './codex-app-server-process.ts';
 import { loadCodexModelCatalog } from './codex-model-catalog.ts';
 import {
   codexTurnStatus,
@@ -51,16 +53,18 @@ import {
   type ThreadItem,
 } from './codex-protocol.ts';
 import {
-  CodexRpcPeer,
+  connectCodexAppServer,
   CodexRpcRequestTimeoutError,
   CODEX_RPC_REQUEST_TIMEOUT_MS,
+  type CodexAppServerConnection,
 } from './codex-rpc-transport.ts';
 import {
+  liveSessionSet,
   registerAttributedAgentSession,
   unregisterAttributedAgentSession,
   type AttributedAgentSession,
 } from './agent-session-registry.ts';
-import { getCurrentFolder, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, normalizeWindowId, runWithWindowId } from './folder.ts';
 import { errorMessage, logger } from './log.ts';
 
 const log = logger('codex-agent');
@@ -83,8 +87,6 @@ export class CodexSession implements AttributedAgentSession {
   private appServerReady = false;
   private retirement: Promise<void> = Promise.resolve();
   private proc: ChildProcessWithoutNullStreams | null = null;
-  private stdout: readline.Interface | null = null;
-  private stderr: readline.Interface | null = null;
   private cwd: string | null = null;
   /** The library persona this Chat runs under, read when its thread starts. */
   persona: string | undefined;
@@ -98,7 +100,7 @@ export class CodexSession implements AttributedAgentSession {
   private busy = false;
   private interruptRequested = false;
   private interruptingTurnId: string | null = null;
-  private rpc: CodexRpcPeer | null = null;
+  private appServer: CodexAppServerConnection | null = null;
   private pendingApprovals = new Map<string, PendingApproval>();
   /** The native catalog is resolved once. `selectedModel` may then change
    * only through an explicit idle `set-model` event; a catalog refresh or
@@ -175,11 +177,15 @@ export class CodexSession implements AttributedAgentSession {
     // cannot select a model for that first turn.
     try {
       await this.ensureAppServer();
+      if (this.closed) return;
       await this.resolveModel();
+      if (this.closed) return;
       await this.publishSkills();
+      if (this.closed) return;
       // Loading a historic thread is what lets the native app-server return
       // its persisted model metadata before the panel becomes interactive.
       if (this.resumeThreadId) await this.ensureThread();
+      if (this.closed) return;
       this.ready = true;
       this.send({ t: 'ready' });
     } catch (err: unknown) {
@@ -192,21 +198,9 @@ export class CodexSession implements AttributedAgentSession {
     if (this.closed) throw new Error('Codex session closed.');
     if (this.appServerReady) return;
     if (!this.cwd) throw new Error('No folder open.');
-    this.spawnAppServer(this.cwd);
+    const appServer = this.spawnAppServer(this.cwd);
     try {
-      await this.request('initialize', {
-        clientInfo: { name: 'StashBase', title: null, version: appVersion() },
-        capabilities: {
-          experimentalApi: true,
-          requestAttestation: false,
-          // Guardian also emits a prose summary for every automatic review.
-          // Prefer the structured completion event below so successful Auto
-          // reviews stay quiet while denied or interrupted reviews remain
-          // visible. Older app-servers that ignore this capability continue
-          // through the legacy guardianWarning handler.
-          optOutNotificationMethods: ['guardianWarning'],
-        },
-      });
+      await appServer.initialize();
       this.appServerReady = true;
     } catch (err: unknown) {
       this.disposeAppServer();
@@ -214,7 +208,7 @@ export class CodexSession implements AttributedAgentSession {
     }
   }
 
-  private spawnAppServer(cwd: string): void {
+  private spawnAppServer(cwd: string): CodexAppServerConnection {
     this.modelsWithoutMetadata.clear();
     const proc = this.spawnProcess(cwd, {
       STASHBASE_WINDOW_ID: this.windowId,
@@ -223,56 +217,20 @@ export class CodexSession implements AttributedAgentSession {
       STASHBASE_AGENT_SESSION_ID: this.attributionId,
     });
     this.proc = proc;
-    const rpc = new CodexRpcPeer((line) => {
-      if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
-      proc.stdin.write(`${line}\n`);
-    }, {
+    const appServer = connectCodexAppServer(proc, {
       requestTimeoutMs: this.requestTimeoutMs,
       onRequest: ({ id, method, params }) => this.onServerRequest({ id, method, params }),
       onNotification: (method, params) => this.onNotification(method, params),
+      onExit: (error) => {
+        // A retired generation's exit belongs to nobody once a newer one exists.
+        if (this.appServer !== appServer) return;
+        this.appServer = null;
+        this.proc = null;
+        if (!this.closed) this.handleAppServerExit(error.message);
+      },
     });
-    this.rpc = rpc;
-
-    const stdout = readline.createInterface({ input: proc.stdout });
-    this.stdout = stdout;
-    stdout.on('line', (line) => rpc.receiveLine(line));
-
-    const stderr = readline.createInterface({ input: proc.stderr });
-    this.stderr = stderr;
-    stderr.on('line', (line) => {
-      const clean = line.trim();
-      if (clean) log.debug(clean);
-    });
-
-    proc.once('error', (err) => {
-      rpc.close(err);
-      if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
-      if (!this.closed) this.handleAppServerExit(errorMessage(err));
-    });
-    proc.once('close', (code, signal) => {
-      const error = new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`);
-      rpc.close(error);
-      if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
-      if (!this.closed) {
-        this.handleAppServerExit(error.message);
-      }
-    });
-  }
-
-  private releaseAppServerGeneration(
-    proc: ChildProcessWithoutNullStreams,
-    rpc: CodexRpcPeer,
-    stdout: readline.Interface,
-    stderr: readline.Interface,
-  ): boolean {
-    if (this.proc !== proc || this.rpc !== rpc) return false;
-    this.proc = null;
-    this.rpc = null;
-    if (this.stdout === stdout) this.stdout = null;
-    if (this.stderr === stderr) this.stderr = null;
-    stdout.close();
-    stderr.close();
-    return true;
+    this.appServer = appServer;
+    return appServer;
   }
 
   private onMessage(text: string): void {
@@ -358,6 +316,7 @@ export class CodexSession implements AttributedAgentSession {
       this.throwIfInterruptedBeforeTurn();
       const threadId = await this.ensureThread(titleHint);
       this.throwIfInterruptedBeforeTurn();
+      agentDiagnosticStage(this.ws, 'runtime_dispatched');
       const startTurn = (override: string | undefined) => this.request('turn/start', {
         threadId,
         cwd: this.activeCwd(),
@@ -527,10 +486,12 @@ export class CodexSession implements AttributedAgentSession {
   }
 
   private async publishSkills(forceReload = false): Promise<void> {
+    if (this.closed) return;
     const cwd = this.activeCwd();
     if (!cwd) return;
     try {
       const result = await this.request('skills/list', { cwds: [cwd], ...(forceReload ? { forceReload: true } : {}) }) as JsonObject;
+      if (this.closed) return;
       const entries = Array.isArray(result.data) ? result.data : [];
       const entry = entries.find((item) => stringValue((item as JsonObject).cwd) === cwd) as JsonObject | undefined;
       const raw = Array.isArray(entry?.skills) ? entry.skills : [];
@@ -546,7 +507,12 @@ export class CodexSession implements AttributedAgentSession {
         skills.push({ id, label: stringValue(value.displayName) || name, ...(stringValue(value.shortDescription) || stringValue(value.description) ? { description: stringValue(value.shortDescription) || stringValue(value.description) } : {}) });
       }
       this.send({ t: 'skills', skills, state: skills.length ? 'available' : 'empty' });
-    } catch (err) { this.skills.clear(); this.send({ t: 'skills', skills: [], state: 'failed', error: errorMessage(err) }); log.warn('load Codex skills failed:', err); }
+    } catch (err) {
+      if (this.closed) return;
+      this.skills.clear();
+      this.send({ t: 'skills', skills: [], state: 'failed', error: errorMessage(err) });
+      log.warn('load Codex skills failed:', err);
+    }
   }
 
   private async ensureThread(titleHint = ''): Promise<string> {
@@ -636,13 +602,13 @@ export class CodexSession implements AttributedAgentSession {
   }
 
   private request(method: string, params: unknown): Promise<unknown> {
-    return this.rpc?.request(method, params)
+    return this.appServer?.rpc.request(method, params)
       ?? Promise.reject(new Error('Codex app-server is not running.'));
   }
 
   private respond(id: JsonRpcId, result: unknown): void {
     try {
-      this.rpc?.respond(id, result);
+      this.appServer?.rpc.respond(id, result);
     } catch (err: unknown) {
       log.warn(`failed responding to Codex app-server request:`, err);
     }
@@ -650,7 +616,7 @@ export class CodexSession implements AttributedAgentSession {
 
   private rejectRequest(id: JsonRpcId, message: string, code = -32603): void {
     try {
-      this.rpc?.reject(id, message, code);
+      this.appServer?.rpc.reject(id, message, code);
     } catch (err: unknown) {
       log.warn(`failed rejecting Codex app-server request:`, err);
     }
@@ -957,6 +923,7 @@ export class CodexSession implements AttributedAgentSession {
   }
 
   private send(obj: AgentServerEvent, cause?: unknown): void {
+    if (this.closed) return;
     reportAgentRuntimeError('codex', obj, this.ws, cause);
     if (this.ws.readyState !== 1 /* OPEN */) return;
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
@@ -986,17 +953,11 @@ export class CodexSession implements AttributedAgentSession {
 
   private disposeAppServer(): void {
     this.appServerReady = false;
-    const rpc = this.rpc;
+    const appServer = this.appServer;
     const proc = this.proc;
-    const stdout = this.stdout;
-    const stderr = this.stderr;
-    this.rpc = null;
+    this.appServer = null;
     this.proc = null;
-    this.stdout = null;
-    this.stderr = null;
-    rpc?.close(new Error('Codex session closed.'));
-    stdout?.close();
-    stderr?.close();
+    appServer?.close(new Error('Codex session closed.'));
     if (proc) this.retirement = retireAgentProcess(proc);
   }
 
@@ -1039,28 +1000,6 @@ function outputDeltaText(value: unknown): string {
   return stringValue(obj.text) || stringValue(obj.content) || stringValue(obj.output);
 }
 
-function protocolNoticeFromParams(params: JsonObject): string {
-  const message = notificationMessage(params);
-  if (message) return message;
-  const prompt = stringValue(params.prompt) || stringValue(params.message);
-  return prompt;
-}
-
-function notificationMessage(params: JsonObject): string {
-  const direct = usefulMessage(params.message);
-  if (direct) return direct;
-  const error = params.error;
-  if (error && typeof error === 'object') {
-    const fromError = usefulMessage((error as JsonObject).message);
-    if (fromError) return fromError;
-  }
-  const summary = usefulMessage(params.summary);
-  const details = usefulMessage(params.details);
-  if (summary && details && details !== summary) return `${summary}\n\n${details}`;
-  if (summary || details) return summary || details;
-  return '';
-}
-
 function autoApprovalReviewNotice(params: JsonObject): string {
   const review = params.review;
   if (!review || typeof review !== 'object') return '';
@@ -1081,11 +1020,6 @@ function autoApprovalReviewNotice(params: JsonObject): string {
 
 function isAlreadyIdleInterruptError(err: unknown): boolean {
   return errorMessage(err).trim().toLowerCase() === 'no active turn to interrupt';
-}
-
-function usefulMessage(value: unknown): string {
-  const message = stringValue(value);
-  return message.trim() ? message : '';
 }
 
 function toolNameFromRequest(params: JsonObject): string {
@@ -1120,38 +1054,19 @@ function titleFromPrompt(prompt: string): string {
   return compact.length > 60 ? `${compact.slice(0, 60).trimEnd()}…` : compact;
 }
 
+const sessions = liveSessionSet<CodexSession>();
 
-
-
-const sessions = new Set<CodexSession>();
-
-export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string, persona?: string): void {
-  const session = new CodexSession(ws, windowId, effort, resume, access, model, folder, (s) => sessions.delete(s));
-  session.persona = persona;
+export function attachCodexWebSocket(ws: WebSocket, options: AgentConnectionOptions): void {
+  const session = new CodexSession(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder, (s) => sessions.delete(s));
+  session.persona = options.persona;
   sessions.add(session);
   session.begin();
 }
 
 /** Kill live Codex sessions (optionally for one window). Called on window
- * close / retire and app shutdown — never on a folder switch; sessions are
- * folder-bound and survive the window moving elsewhere. */
-export function killActiveCodex(windowId?: string): void {
-  for (const session of [...sessions]) {
-    if (!windowId || session.windowId === windowId) {
-      session.dispose();
-      sessions.delete(session);
-    }
-  }
-}
+ * close / retire and app shutdown. */
+export const killActiveCodex = sessions.killWindow;
 
 /** Kill the live Codex sessions bound to one member folder, across all
- * windows. Project removal calls this so a removed folder cannot keep
- * running sessions. */
-export function killCodexSessionsForFolder(folderAbs: string): void {
-  disposeSessionsBoundToFolder(sessions, folderAbs);
-}
-
-function normalizeWindowId(windowId: string | null | undefined): string {
-  const raw = typeof windowId === 'string' ? windowId.trim() : '';
-  return raw ? raw.slice(0, 128) : 'default';
-}
+ * windows, so a removed folder cannot keep running sessions. */
+export const killCodexSessionsForFolder = sessions.killFolder;

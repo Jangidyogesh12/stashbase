@@ -16,11 +16,11 @@ it('requests a sidebar preview only when asked, defaulting to ready to install',
   await user.click(screen.getByRole('button', { name: 'Preview in sidebar' }));
   expect(show).toHaveBeenLastCalledWith({ phase: 'ready', version: '9.9.9' });
   await user.click(screen.getByRole('combobox', { name: 'Update state' }));
-  await user.click(screen.getByRole('option', { name: 'Downloading' }));
+  await user.click(screen.getByRole('option', { name: 'Installing' }));
   await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
   expect(show).toHaveBeenCalledTimes(1);
   await user.click(screen.getByRole('button', { name: 'Preview in sidebar' }));
-  expect(show).toHaveBeenLastCalledWith({ phase: 'downloading', version: '9.9.9', percent: 42 });
+  expect(show).toHaveBeenLastCalledWith({ phase: 'installing', version: '9.9.9' });
   await user.click(screen.getByRole('button', { name: 'Stop preview' }));
   expect(stop).toHaveBeenCalledOnce();
 });

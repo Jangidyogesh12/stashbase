@@ -26,7 +26,9 @@ export type AgentBootstrapFailureCode =
   | 'runtime-unavailable'
   | 'account-required'
   | 'authentication-required'
-  | 'authentication-check-failed';
+  | 'authentication-check-failed'
+  /** Signed in, but the provider refuses the account (region, eligibility). */
+  | 'account-refused';
 
 export type AgentBootstrapManualRecovery = 'install-command' | 'mcp-settings';
 export type AgentBootstrapAction = 'bootstrap' | 'login' | 'update';
@@ -131,9 +133,4 @@ export interface Agent {
   catalog?: AgentModelCatalog;
   /** Present only while the runtime names a model it is too old to run. */
   upgrade?: AgentUpgradeOffer;
-}
-
-export interface AgentsResponse {
-  clis: Agent[];
-  debug?: AgentRuntimeDebugState;
 }

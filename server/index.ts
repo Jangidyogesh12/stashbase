@@ -71,7 +71,9 @@ import { mount as mountMcpRoutes } from './routes/mcp.ts';
 import { createMcpHttpService } from './mcp-http-service.ts';
 import { runShutdownCleanup } from './shutdown-cleanup.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
+import { mount as mountAntigravityHookRoutes } from './routes/antigravity-hook.ts';
 import { mount as mountAgentPreferencesRoutes } from './routes/agent-preferences.ts';
+import { mount as mountAgentToolRoutes } from './routes/agent-tools.ts';
 import { mount as mountAgentPersonaRoutes } from './routes/agent-persona.ts';
 import { isAgentPersonaId } from '../shared/agent-persona.ts';
 import { createRendererOriginPolicy } from './middleware/renderer-origin.ts';
@@ -84,6 +86,7 @@ import {
 import { createClientErrorHandler } from './client-error.ts';
 import { stopOpenCodeRuntime } from './opencode-runtime.ts';
 import { cancelAllGitHubImports } from './github-import.ts';
+import { parsePortArg } from '../shared/port-arg.ts';
 
 const log = logger('server');
 installHostErrorReporting();
@@ -111,14 +114,6 @@ setDerivedNoteIndexer(async (sourceAbs, derivedAbs) => {
   return result;
 });
 
-function parsePortArg(argv: string[], fallback: number): number {
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith('--port=')) return Number(a.slice(7)) || fallback;
-    if (a === '--port') return Number(argv[i + 1]) || fallback;
-  }
-  return fallback;
-}
 const PORT = parsePortArg(process.argv.slice(2), 8090);
 const SERVER_PROTOCOL_VERSION = 1;
 const VITE_PORT = Number(process.env.VITE_PORT ?? 5173);
@@ -246,7 +241,7 @@ app.get('/api/health', (_req, res) => {
 
 mountInternalShutdownRoute(app, {
   token: process.env.STASHBASE_SHUTDOWN_TOKEN ?? '',
-  shutdown: () => { void shutdown('Electron request'); },
+  shutdown: (reason) => { void shutdown(reason); },
 });
 
 // Static layer is mounted before the API routes for renderer bundle
@@ -320,11 +315,13 @@ mountFoldersRoutes(app);
 mountUploadRoutes(app);
 mountAttachRoutes(app);
 mountProjectFileRoutes(app);
+mountAgentToolRoutes(app); // after the project scope it reads files under
 mountTurnChangeRoutes(app);
 mountTerminalRoutes(app);
 mountMcpRoutes(app, mcpHttpService);
 mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in and MCP-only
 mountAgentSessionsRoutes(app); // shared contract history surface for the built-in panel
+mountAntigravityHookRoutes(app); // approval for each tool call a StashBase Antigravity chat makes
 mountAgentPersonaRoutes(app);
 mountAgentPreferencesRoutes(app); // global + explicit member-folder Chat guidance
 
@@ -453,7 +450,10 @@ function agentIdOf(req: import('node:http').IncomingMessage): string {
 }
 
 function connectionOptionsOf(req: import('node:http').IncomingMessage): AgentConnectionOptions {
-  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req), model: modelOf(req), persona: personaOf(req) };
+  const query = new URL(req.url ?? '', 'http://localhost').searchParams;
+  const crew = query.get('crew');
+  const connectionId = query.get('telemetryConnectionId');
+  return { ...(connectionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(connectionId) ? { telemetryConnectionId: connectionId } : {}), windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req), model: modelOf(req), persona: personaOf(req), ...(crew && /^[a-zA-Z0-9_-]{1,512}$/.test(crew) ? { crew } : {}) };
 }
 
 /** Model ids are opaque native identifiers. Keep only a small URL safety bound;
@@ -546,6 +546,7 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 onClose((_oldRoot, windowId) => {
   stopAgentRuntime('claude', windowId);
   stopAgentRuntime('codex', windowId);
+  stopAgentRuntime('antigravity', windowId);
   stopAgentRuntime('stashbase', windowId);
 });
 server.on('upgrade', createWebSocketUpgradeHandler({
@@ -572,12 +573,13 @@ let shuttingDown = false;
 async function shutdown(reason: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  telemetry.close();
+  telemetry.close(reason === 'app_update' ? 'app_update' : reason === 'app_shutdown' ? 'app_shutdown' : 'host_shutdown');
   log.info(`shutdown: ${reason}`);
   // Stop accepting new connections immediately; in-flight ones drain.
   try { server.close(); } catch { /* already gone */ }
   try { stopAgentRuntime('claude'); } catch { /* swallow */ }
   try { stopAgentRuntime('codex'); } catch { /* swallow */ }
+  try { stopAgentRuntime('antigravity'); } catch { /* swallow */ }
   try { stopAgentRuntime('stashbase'); } catch { /* swallow */ }
   // Hard ceiling: conversion cancellation may spend up to 2.5 s waiting for
   // extractor process groups to exit, and the daemon close ladder can spend

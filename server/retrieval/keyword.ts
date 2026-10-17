@@ -2,7 +2,7 @@ import { filesystemPath } from '../filesystem-path.ts';
 import { remapKeywordFilesForDisplay, type KeywordHitFile } from '../search-display.ts';
 import type { SourceEvidence } from './evidence.ts';
 
-export function keywordEvidence(files: KeywordHitFile[], folderRoot: string): SourceEvidence[] {
+function keywordEvidence(files: KeywordHitFile[], folderRoot: string): SourceEvidence[] {
   const evidence: SourceEvidence[] = [];
   for (const file of files) {
     const sourcePath = filesystemPath.absolute(file.path, folderRoot);

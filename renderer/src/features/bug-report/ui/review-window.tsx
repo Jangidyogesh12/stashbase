@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
+import { useStore } from 'zustand';
 
 import { Button } from '@/components/ui/button';
 import type { BugReportReviewRuntime } from '@/features/bug-report/application/review-runtime';
-import { useReviewSession } from '@/features/bug-report/hooks/use-review-session';
 
 import { ReadyView } from './ready-view';
 import { ReviewForm } from './review-form';
@@ -15,7 +15,7 @@ export interface BugReportReviewProps {
 /** The whole review window. Loads the draft once on mount, then shows the
  *  form or the handoff for whatever state the session is in. */
 export function BugReportReview({ runtime }: BugReportReviewProps) {
-  const session = useReviewSession(runtime);
+  const session = useStore(runtime.store);
 
   useEffect(() => {
     void runtime.load();

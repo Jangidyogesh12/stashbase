@@ -1,13 +1,10 @@
 /** Selecting an Agent records project preference; access is requested on Send. */
-import { ChevronDown } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
-import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
+import { DropdownContent, DropdownMenu } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
-import { Tooltip } from '@/components/ui/tooltip';
 import { type Agent } from '@/features/agent/domain/agent-catalog';
 import { AGENT_ICONS } from '@/shared/brand/agent-icons';
 
+import { ComposerMenuTrigger } from './menu-trigger';
 import { NARROW_LABEL, NARROW_TRIGGER } from './narrow';
 
 export function AgentProviderControl({
@@ -25,28 +22,17 @@ export function AgentProviderControl({
   disabled: boolean;
   onAgentChange(agent: Agent['id']): void;
 }) {
-  const ActiveAgentIcon = AGENT_ICONS[activeAgent.id];
-
   return (
     <DropdownMenu disabled={disabled}>
-      <Tooltip content={`Provider: ${activeAgent.label}`} side="top">
-        <DropdownTrigger
-          render={
-            <Button
-              aria-label={`Provider: ${activeAgent.label}`}
-              className={NARROW_TRIGGER}
-              disabled={disabled}
-              leadingIcon={ActiveAgentIcon}
-              size="compact"
-              trailingIcon={ChevronDown}
-              variant="ghost"
-            >
-              <span className={NARROW_LABEL}>{activeAgent.label}</span>
-            </Button>
-          }
-        />
-      </Tooltip>
-      <DropdownContent align="start" className="w-52" selectionAppearance="none" side="top">
+      <ComposerMenuTrigger
+        className={NARROW_TRIGGER}
+        disabled={disabled}
+        icon={AGENT_ICONS[activeAgent.id]}
+        label={`Provider: ${activeAgent.label}`}
+      >
+        <span className={NARROW_LABEL}>{activeAgent.label}</span>
+      </ComposerMenuTrigger>
+      <DropdownContent align="end" className="w-52" selectionAppearance="none" side="top">
         {agents.map((agent) => (
           <MenuItem
             checked={agent.id === activeAgent.id}

@@ -28,7 +28,7 @@ export { FileTree, type FileTreeRowMarker } from './ui/file-tree';
 export { ProjectSidebar } from './ui/sidebar';
 export { ProjectWelcome } from './ui/welcome';
 
-export { useProjectEntry } from './hooks/use-project-entry';
+export { useProjectEntry, type ProjectEntry } from './hooks/use-project-entry';
 export { useProjectEntryReceiver } from './hooks/use-project-entry-receiver';
 export { ImportGitHubDialog } from './ui/import-github-dialog';
 

@@ -69,6 +69,7 @@ export function agentAllowanceQuery(port: AgentRuntimePort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.getAllowance(signal),
     queryKey: settingsQueryKeys.agentAllowance,
+    refetchInterval: 30_000,
     retry: false,
   } as const;
 }

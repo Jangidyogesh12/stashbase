@@ -1,6 +1,6 @@
 import { runWithFolderRoot } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { listImmediateDirectoryAsync } from './files.ts';
+import { listImmediateDirectoryAsync } from './file-listing.ts';
 import {
   normalizeProjectDirectoryPath,
   routeError,

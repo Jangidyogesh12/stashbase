@@ -19,6 +19,7 @@ import {
 } from '@/features/documents/domain/document';
 import type { DocumentRevision } from '@/features/documents/domain/revision';
 import { useDocumentSource } from '@/features/documents/hooks/use-document-source';
+import { DocumentBanner } from '@/features/documents/ui/banner';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
@@ -151,10 +152,10 @@ export function TextSurface({
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-document-access={access}>
       {access === 'read-only' && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2 text-caption text-muted-foreground">
+        <DocumentBanner className="flex shrink-0 items-center gap-2 text-muted-foreground">
           <LockKeyhole aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
           Read-only source from another project folder
-        </div>
+        </DocumentBanner>
       )}
       {source.isFetching && (
         <span className="sr-only" role="status">
@@ -162,7 +163,7 @@ export function TextSurface({
         </span>
       )}
       {source.isError && (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
+        <DocumentBanner className="flex shrink-0 items-center justify-between gap-3">
           <span className="text-destructive" role="status">
             {source.error instanceof Error &&
             'kind' in source.error &&
@@ -173,15 +174,15 @@ export function TextSurface({
           <Button onClick={() => void source.refetch()} size="compact" variant="tertiary">
             Retry
           </Button>
-        </div>
+        </DocumentBanner>
       )}
       {mutationPending && (
-        <div className="border-b border-border px-4 py-2 text-caption" role="status">
+        <DocumentBanner role="status">
           Waiting for the file operation to finish. If it failed, retry it in Files.
-        </div>
+        </DocumentBanner>
       )}
       {editor?.save.kind === 'merging' && (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
+        <DocumentBanner className="flex shrink-0 items-center justify-between gap-3">
           <span role="status">
             {editor.save.message ?? 'Merge in progress. Autosave is paused until you finish.'}
           </span>
@@ -193,7 +194,7 @@ export function TextSurface({
           >
             Finish merge
           </Button>
-        </div>
+        </DocumentBanner>
       )}
       <div className="relative min-h-0 flex-1">
         <Suspense fallback={<DocumentPending label={`Loading ${editorLabel}`} />}>

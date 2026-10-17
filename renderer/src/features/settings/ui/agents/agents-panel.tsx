@@ -1,4 +1,5 @@
-/** Each Agent owns its connection controls; Default groups account and credits. */
+/** Each Agent owns its connection controls; the Default Agent leads its group,
+ *  followed by the account, credits, and plan it runs on. */
 import { Button } from '@/components/ui/button';
 import type { AgentRuntimePort } from '@/features/settings/application/ports';
 import { accountLabel } from '@/features/settings/domain/account';
@@ -39,7 +40,7 @@ function AccountRow({ account }: { account: AccountViewModel }) {
             ? [account.account.displayName, account.account.email]
                 .filter((part): part is string => part !== null)
                 .join(' · ') || accountLabel(account.account)
-            : 'Sign in for free Agent credits.'
+            : 'Sign in for free Agent credits every week.'
       }
       title="Account"
       trail={
@@ -95,16 +96,26 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
   const onAction = (action: AgentRuntimeAction, runtime: AgentRuntime) => {
     if (action.kind === 'login') runtimes.login(runtime.id);
     else if (action.kind === 'update') runtimes.update(runtime.id);
-    else if (action.kind === 'install' || action.kind === 'retry') runtimes.install(runtime.id);
-    else account.signIn();
+    else runtimes.install(runtime.id);
   };
 
   const { allowance, catalog } = runtimes;
 
   return (
-    <SettingsPane lede="Manage your Agent connections." title="Agents">
-      <SettingsGroup title="Default">
+    <SettingsPane title="Agents">
+      <SettingsGroup title="Default Agent">
         <SettingsList as="ul">
+          {catalog.runtimes
+            .filter((runtime) => runtime.id === 'stashbase')
+            .map((runtime) => (
+              <RuntimeRow
+                key={runtime.id}
+                runtime={runtime}
+                busy={runtimes.busy(runtime.id) || account.busy}
+                failure={runtimes.failure(runtime.id)}
+                onAction={onAction}
+              />
+            ))}
           <AccountRow account={account} />
           {signedIn && (allowance.allowance || allowance.failed) && (
             <>
@@ -120,18 +131,6 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
             </>
           )}
           {signedIn && <SubscriptionRows billing={billing} />}
-          {catalog.runtimes
-            .filter((runtime) => runtime.id === 'stashbase')
-            .map((runtime) => (
-              <RuntimeRow
-                key={runtime.id}
-                runtime={runtime}
-                busy={runtimes.busy(runtime.id) || account.busy}
-                failure={runtimes.failure(runtime.id)}
-                onAction={onAction}
-                hideAccountAction
-              />
-            ))}
         </SettingsList>
       </SettingsGroup>
 

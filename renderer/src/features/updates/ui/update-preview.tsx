@@ -5,17 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import type { UpdateStatus } from '@/features/updates/domain/update-status';
 
 const VERSION = '9.9.9';
+/** The phases the sidebar announces. Finding and downloading a release stay quiet. */
 const PREVIEWS: ReadonlyArray<{ label: string; value: string; status: UpdateStatus }> = [
-  {
-    label: 'Update available',
-    value: 'available',
-    status: { phase: 'available', version: VERSION },
-  },
-  {
-    label: 'Downloading',
-    value: 'downloading',
-    status: { phase: 'downloading', version: VERSION, percent: 42 },
-  },
   { label: 'Ready to install', value: 'ready', status: { phase: 'ready', version: VERSION } },
   { label: 'Installing', value: 'installing', status: { phase: 'installing', version: VERSION } },
   { label: 'Update failed', value: 'error', status: { phase: 'error' } },

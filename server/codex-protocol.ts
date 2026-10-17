@@ -101,7 +101,7 @@ export function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-export function exitSummary(value: unknown): string {
+function exitSummary(value: unknown): string {
   return typeof value === 'number' ? `Command exited with code ${value}.` : '';
 }
 

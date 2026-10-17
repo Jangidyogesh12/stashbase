@@ -29,9 +29,11 @@ export function oauthResultPage({
   // Lucide geometry at the renderer's own stroke weight, so the glyph is the
   // same drawing the app would make: `check` for the result, `circle-alert`
   // for the failure.
+  // It sits in a soft disc, so the result reads as one mark rather than a
+  // hairline floating over the title.
   const icon = isSuccess
-    ? '<svg class="result-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>'
-    : '<svg class="result-mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>';
+    ? '<span class="result-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>'
+    : '<span class="result-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 6v7.5M12 17.5h.01"/></svg></span>';
 
   return `<!doctype html>
 <html lang="en">
@@ -112,10 +114,16 @@ export function oauthResultPage({
     /* A card is a level-3 surface: the shadow's first layer is the hairline
        edge, so the card draws no border of its own. */
     .card { padding: 24px; border-radius: 32px; background: var(--surface); box-shadow: var(--surface-shadow); }
-    .result-mark { display: block; width: 20px; height: 20px; margin: 0 auto 12px; fill: none; stroke: ${isSuccess ? 'currentColor' : 'var(--destructive)'}; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .result-mark {
+      display: grid; place-items: center; width: 36px; height: 36px; margin: 4px auto 14px; border-radius: 50%;
+      background: color-mix(in oklab, ${isSuccess ? 'var(--foreground) 6%' : 'var(--destructive) 12%'}, transparent);
+    }
+    .result-mark svg { width: 18px; height: 18px; fill: none; stroke: ${isSuccess ? 'currentColor' : 'var(--destructive)'}; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     h1 { margin: 0; font-size: 16px; line-height: 1.25; font-weight: 700; font-variation-settings: 'wght' 700; }
     .message { margin: 6px 0 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.5; }
-    .return-area { margin-top: 20px; padding-top: 20px; border-top: var(--hairline) solid var(--border); }
+    /* The status and the button follow the message directly: a rule between
+       them read as a second, unrelated notice. */
+    .return-area { margin-top: 16px; }
     /* The live region holds its line once it has something to say, so later
        status changes do not move the button. Before the first one it
        collapses, so the failure card is not a gap under its own rule. */
@@ -125,7 +133,7 @@ export function oauthResultPage({
        trailing glyph, 13px label at the body weight. */
     .button {
       display: inline-flex; height: 36px; align-items: center; justify-content: center; gap: 6px;
-      margin-top: 10px; padding: 0 10px 0 16px; border-radius: 16px;
+      margin-top: 12px; padding: 0 10px 0 16px; border-radius: 16px;
       color: var(--background); background: var(--foreground);
       font-size: 13px; text-decoration: none;
       transition: background-color var(--motion-fast) ease;
@@ -149,7 +157,7 @@ export function oauthResultPage({
         <h1 id="result-title">${safeTitle}</h1>
         <p class="message">${safeMessage}</p>
         <div class="return-area">
-          <p class="status" id="return-status" aria-live="polite">${autoReturn ? 'Returning you to the app…' : ''}</p>
+          <p class="status" id="return-status" aria-live="polite">${autoReturn ? 'Returning you to StashBase…' : ''}</p>
           <a class="button" id="return-button" href="${APP_RETURN_URL}"${autoReturn ? ' hidden' : ''}>
             Open StashBase
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -190,19 +198,26 @@ export function oauthResultPage({
         window.setTimeout(pollAcknowledgement, 300);
       };
 
-      const beginReturnAttempt = () => {
+      // One line at a time says where the return stands. Only a press of the
+      // button earns "once more"; a missed automatic attempt says so and
+      // offers the button.
+      const beginReturnAttempt = (pressed) => {
         if (!returnAttempted) {
           returnAttempted = true;
           void pollAcknowledgement();
         }
         status.textContent = 'Opening StashBase…';
         window.setTimeout(() => {
-          if (!handedOff) status.textContent = 'Could not open automatically. Try the button again.';
+          if (handedOff) return;
+          button.hidden = false;
+          status.textContent = pressed
+            ? 'Still not open. Try once more.'
+            : 'StashBase didn’t open on its own.';
         }, 1600);
       };
 
-      const openStashBase = async () => {
-        beginReturnAttempt();
+      const openStashBase = async (pressed) => {
+        beginReturnAttempt(pressed);
         if (returnIntentUrl) {
           try { await fetch(returnIntentUrl, { method: 'POST', cache: 'no-store' }); }
           catch { /* the native fallback can still open the app */ }
@@ -212,7 +227,7 @@ export function oauthResultPage({
 
       button.addEventListener('click', (event) => {
         event.preventDefault();
-        void openStashBase();
+        void openStashBase(true);
       });
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') void pollAcknowledgement();
@@ -221,13 +236,14 @@ export function oauthResultPage({
       if (!autoReturn) return;
       window.setTimeout(() => {
         if (!handedOff && document.visibilityState === 'visible' && document.hasFocus()) {
-          void openStashBase();
+          void openStashBase(false);
         }
       }, 1200);
+      // A page that never tried (out of focus) still offers the button.
       window.setTimeout(() => {
-        if (handedOff) return;
+        if (handedOff || returnAttempted) return;
         button.hidden = false;
-        status.textContent = 'Didn’t return automatically?';
+        status.textContent = 'StashBase didn’t open on its own.';
       }, 2800);
     })();
   </script>

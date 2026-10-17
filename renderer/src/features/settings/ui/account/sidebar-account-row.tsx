@@ -3,11 +3,12 @@
  *
  * Signed out it is one button that starts the browser sign-in; what the
  * account is worth (the bundled Agent's free credits) is stated in
- * Settings → Agents rather than inside this row. Signed in the row and its
- * menu wear the same initials disc — the theme's ink around the name's first
- * letters, never a provider picture — and the menu holds the credits, Plans
- * and billing (the subscription in Settings → Agents), Settings, and sign-out. The same sign-in the Agents section runs, through
- * the same port, so the two entries can never disagree.
+ * Settings → Agents rather than inside this row. It is the same sign-in the
+ * Agents section runs, through the same port, so the two entries can never
+ * disagree. Signed in, the row leads with the same person glyph as every
+ * other sidebar row, and its menu opens on the initials disc, then the
+ * credits, Plans and billing (the plan in Settings → Agents), Settings, and
+ * sign-out.
  */
 import { useQuery } from '@tanstack/react-query';
 import { CreditCard, Gauge, LogOut, Settings as SettingsIcon, UserRound, X } from 'lucide-react';
@@ -28,10 +29,12 @@ import {
 import type { AgentRuntimePort } from '@/features/settings/application/ports';
 import { agentAllowanceQuery } from '@/features/settings/application/queries';
 import { accountLabel } from '@/features/settings/domain/account';
+import { reservedCreditsDetail } from '@/features/settings/domain/agent-allowance';
 import { useAccountView } from '@/features/settings/hooks/account-context';
 import { ProgressBar } from '@/features/settings/ui/rows';
 import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
+import { useWindowFocus } from '@/shared/runtime/use-window-focus';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 import { clamp } from '@/shared/utils/clamp';
 
@@ -66,6 +69,8 @@ export function SidebarAccountRow({
   const person = account.account;
   const signedIn = person?.signedIn ?? false;
   const credits = useQuery({ ...agentAllowanceQuery(agentRuntimeApi), enabled: signedIn });
+
+  useWindowFocus(credits.refetch, signedIn);
 
   if (!person || !signedIn) {
     return (
@@ -117,19 +122,28 @@ export function SidebarAccountRow({
 
   const label = accountLabel(person);
   const percent =
-    credits.data === undefined ? null : clamp(Math.round(credits.data.remainingPercent), 0, 100);
+    credits.isError || credits.data === undefined
+      ? null
+      : clamp(Math.round(credits.data.remainingPercent), 0, 100);
+  const reserved = percent !== null && credits.data ? reservedCreditsDetail(credits.data) : null;
   return (
     <SidebarMenuItem>
-      <DropdownMenu disabled={account.busy}>
+      <DropdownMenu
+        disabled={account.busy}
+        onOpenChange={(open) => {
+          if (open) void credits.refetch();
+        }}
+      >
         <DropdownTrigger
           render={
             <SidebarMenuButton
               aria-label={`Account: ${label}`}
               label={label}
-              // 20px in the 16px glyph slot: the negative margins keep the
-              // slot's footprint (and the label column) while the disc
-              // overhangs a pixel each side, so two letters get room.
-              leading={<AccountAvatar account={person} className="-mx-0.5" size={20} />}
+              // The same glyph as the signed-out row: the name beside it says
+              // who, so the row needs no initials disc of its own, and it keeps
+              // the column's glyph-and-label rhythm. The menu's header keeps
+              // the disc, where it heads the account's details.
+              icon={UserRound}
             />
           }
         />
@@ -165,6 +179,14 @@ export function SidebarAccountRow({
               </span>
             </span>
             {percent !== null && <ProgressBar className="mt-1.5" value={percent} />}
+            {reserved && (
+              <span
+                className="mt-1.5 block text-muted-foreground"
+                title="Reserved for active requests or fees awaiting confirmation. These credits are excluded from the available balance."
+              >
+                {reserved}
+              </span>
+            )}
           </DropdownLabel>
           <MenuItem
             className={SIDEBAR_ROW}

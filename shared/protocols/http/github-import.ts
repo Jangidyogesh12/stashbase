@@ -3,7 +3,7 @@ import { z } from 'zod';
 /** Why an import was refused, as one code per refusal a reader can act on.
  *  The renderer switches on the code to choose its sentence; it never parses
  *  the server's prose. */
-export const githubImportErrorCodeSchema = z.enum([
+const githubImportErrorCodeSchema = z.enum([
   'INVALID_GITHUB_URL',
   'INVALID_FOLDER_NAME',
   'DESTINATION_EXISTS',
@@ -44,4 +44,3 @@ export const githubImportFailureSchema = z
   .strip();
 
 export type GitHubImportErrorCode = z.infer<typeof githubImportErrorCodeSchema>;
-export type GitHubImportResultWire = z.infer<typeof githubImportResultSchema>;

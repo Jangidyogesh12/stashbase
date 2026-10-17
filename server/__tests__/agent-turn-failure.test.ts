@@ -34,6 +34,7 @@ test('live provider messages classify by their vocabulary', () => {
   assert.equal(classifyAgentTurnFailure("You've reached your usage limit. It resets at 5pm."), 'quota');
   assert.equal(classifyAgentTurnFailure('429 insufficient_quota: You exceeded your current quota'), 'quota');
   assert.equal(classifyAgentTurnFailure('Free Agent credits are exhausted. Reset next week.'), 'allowance-exhausted');
+  assert.equal(classifyAgentTurnFailure('agent_allowance_reserved'), 'allowance-exhausted');
   // Old runtimes and persisted messages retain their wire vocabulary.
   assert.equal(classifyAgentTurnFailure('StashBase weekly Agent allowance exhausted.'), 'allowance-exhausted');
   assert.equal(classifyAgentTurnFailure('quota_exhausted: StashBase weekly Agent allowance exhausted'), 'allowance-exhausted');
@@ -42,6 +43,7 @@ test('live provider messages classify by their vocabulary', () => {
   assert.equal(classifyAgentTurnFailure('Hosted AI access is restricted for this account.'), 'access-restricted');
   // Transient rate limiting.
   assert.equal(classifyAgentTurnFailure('429 rate_limit_error: Too many requests'), 'rate-limit');
+  assert.equal(classifyAgentTurnFailure('Too many Agent requests or too much short-term usage.'), 'rate-limit');
   assert.equal(classifyAgentTurnFailure('Rate limit reached for requests'), 'rate-limit');
   assert.equal(classifyAgentTurnFailure('overloaded_error: The API is temporarily overloaded'), 'rate-limit');
   // Connectivity.
@@ -56,6 +58,12 @@ test('live provider messages classify by their vocabulary', () => {
     ),
     'runtime-outdated',
   );
+});
+
+test('a hosted model refusal asks for a model refresh; a chat waiting for a choice does not', () => {
+  assert.equal(classifyAgentTurnFailure('The selected model configuration has changed. Refresh the models, then review and send again.'), 'model-changed');
+  assert.equal(classifyAgentTurnFailure('The selected model is no longer available. Refresh the models and choose another one.'), 'model-changed');
+  assert.equal(classifyAgentTurnFailure('Choose a model for this chat, then send again. The model it used is no longer available.'), null);
 });
 
 test('an unmatched message stays unclassified and adds no failure field', () => {
