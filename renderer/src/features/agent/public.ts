@@ -20,3 +20,13 @@ export type { AgentWorkspaceRuntime } from './application/workspace-runtime';
 
 export { createAgentPreferencesAdapter } from './infrastructure/agent-preferences-api';
 export type { AgentPreferencesPort } from './application/ports';
+
+export {
+  focusAgentRequest,
+  pendingAgentRequests,
+  subscribeAgentAttention,
+} from './application/attention';
+
+export { attentionId } from './domain/attention';
+
+export { observeAgentOutcomes } from './application/outcome-notifications';

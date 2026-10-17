@@ -21,7 +21,7 @@ Agent history; supplied environment variables do not configure BYOK access.
 
 Settings owns lasting preferences and connection configuration:
 
-- **General:** appearance, updates, and usage statistics, in that order. Appearance is user-wide
+- **General:** appearance, notifications, updates, and usage statistics, in that order. Appearance is user-wide
   and grouped as:
   - **Theme:** a mode (match system, light, dark) plus a light theme and a dark
     theme chosen separately from published palettes (StashBase, Catppuccin,
@@ -47,6 +47,16 @@ Settings owns lasting preferences and connection configuration:
   the included default. The installed-font list never leaves the device.
   Custom colors, custom CSS, imported editor themes, and per-project
   appearance are out of scope.
+  Notifications has a persisted "Enable desktop notifications" switch
+  shared across desktop windows, enabled by default. Separate "Needs confirmation",
+  "Task completed" and "Task failed" switches also default on. The master switch
+  preserves these choices when turned off. Changing one category preserves other
+  windows' category changes. Notifications cover pending Agent approvals/questions
+  and submitted task outcomes while the app is in the background; user-requested
+  stops stay quiet. Disabled outcome notifications are not replayed later.
+  The status explains
+  unsupported systems and failed delivery; it does not equate API support with OS
+  authorization. System settings and Focus/Do Not Disturb remain authoritative.
 - **Agents:** group account, credit balance/refill, and connection state under
   Default, with the account's subscription and the plans it can buy; manage Codex, Claude, and Antigravity individually. An installed runtime shows its
   version and offers Update when StashBase can select the resulting installation.

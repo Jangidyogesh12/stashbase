@@ -463,6 +463,44 @@ stable status without download, retry, or a new durable demand latch.
 - Models/effort/modes follow runtime capabilities. Catalogs seed drafts, not live
   identity. No catalog-order default or global CLI rewrite; active turns freeze
   changes. Skills use native invocation, not concatenated skill-file contents.
+- `electron/notifications/center.ts` owns notification lifetime, background-only
+  delivery, coalescing and deduplication by owner, kind and ID. Each producer
+  replaces only its own kind's snapshot; retiring a window clears every kind.
+  `ipc.ts` authorizes main-frame/capability senders and binds them to windows;
+  `preferences.ts` atomically persists the user-wide master and category switches;
+  IPC applies one field per update so peer windows cannot overwrite unrelated
+  choices. The typed
+  protocol registers bounded event variants, and `catalog.ts` owns presentation.
+  To add a notification kind, register its wire variant and presentation, then
+  wire its producer's snapshot and activation handler in composition. Keep its
+  live target validation in the owning feature; delivery needs no new routing
+  rules. Do not accept arbitrary URLs, permission decisions or tool/document data.
+- The Agent producer observes all retained sessions through
+  `agent/application/attention.ts`. Its opaque notification IDs map to pending
+  session/request identities inside the Agent feature. Clicks restore the owner
+  and return only kind/ID; the feature rechecks the pending target before navigation
+  and focus. Stop, resolution, navigation, renderer loss and window close revoke
+  stale targets. Notification delivery never grants permission.
+- `agent/application/observe-sessions.ts` owns retained-session subscriptions for
+  both attention and outcome projections. `outcome-notifications.ts` observes
+  submission/live-turn transitions, never transcript history alone. It retains
+  the latest outcome per chat with a distinct ID for each run/retry and a result
+  block target. Stop intent remains latched through cancellation timeout/failure;
+  startup failure settles after synchronous cancellation transitions. Closing,
+  replacing or retiring a session revokes its targets. Outcome clicks recheck the
+  result block, expose its transcript page and focus it; startup failures retain
+  the composer. Pending notifications may wait for background; event notifications
+  are consumed while foreground or disabled, without later replay. The catalog
+  selects this delivery policy; the center implements it independently of Agent
+  state. All variants use the existing renderer platform adapter and native driver.
+- `electron/notifications/native.ts` uses Electron's common title/body,
+  show/close and click APIs on macOS, Windows and Linux. Windows sets the AUMID to
+  the packaged `build.appId`; NSIS creates the corresponding Start Menu shortcut.
+  Linux uses the desktop notification service (deb declares `libnotify4`), while
+  macOS uses system notification authorization for the signed app. No platform-only
+  actions or custom toast markup form the contract. Support and delivery events do
+  not establish OS authorization or visible banners. Native presentation and click
+  behavior remain platform package checks in the release checklist.
 - Pending approvals require the exact request id; abort/disposal denies them.
   Read/orientation/reindex may use the low-risk path. Document writes remain
   permissioned and Review never grants a write in advance. Edit policy grants only its
@@ -783,6 +821,14 @@ leaf, platform owns host mechanisms, and the installed kit reaches no product
 policy. `test-support.ts` is test-only. Repository contracts/wire schemas cross
 registered host boundaries; renderer shared types are a different layer.
 
+- Desktop notification transport belongs to
+  `renderer/src/platform/electron/notifications.ts`, alongside the existing host
+  adapters. App composition injects its shared ports into notification producers
+  and Settings; features and UI never select operating systems or access the
+  Electron bridge. Native OS operations stay behind this adapter in Electron main
+  (`electron/notifications/native.ts`), where Windows application identity and
+  notification availability are handled. New notification kinds reuse this
+  platform boundary rather than adding platform branches to product code.
 - Capture scope and generation before await; reject stale completion even for
   same-folder subtree mutation. Separate request lanes cannot cancel unrelated work.
   Stores, query caches, timers, subscriptions, workers, and URLs have explicit

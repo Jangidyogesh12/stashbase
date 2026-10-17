@@ -7,6 +7,7 @@ import type { SettingsProps } from './settings-types';
 import { SettingsShell, type SettingsSectionDef } from './shell';
 
 export default function ManagedSettings({
+  notifications,
   agentRuntimeApi,
   appearanceApi,
   embedderApi,
@@ -29,6 +30,7 @@ export default function ManagedSettings({
       label: 'General',
       render: () => (
         <GeneralPanel
+          notifications={notifications}
           appearanceApi={appearanceApi}
           systemTextApi={systemTextApi}
           telemetryApi={telemetryApi}

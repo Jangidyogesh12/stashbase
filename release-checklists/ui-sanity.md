@@ -87,6 +87,24 @@ Never use production PostHog as the test event sink.
   harmless Agent turn. Confirm streaming/activity, one permission or stop
   interaction when available, completion, and a clean close. Never use a real
   user workspace or capture credentials in evidence.
+- [ ] **J06** — On each platform, enable desktop notifications in General, then
+  background/minimize the app while an Agent awaits approval or an answer. Confirm
+  one native notification, click it physically, and verify the owning window/chat
+  and pending card receive focus without approving anything. Repeat with an
+  inactive chat and a second window. Foreground requests stay quiet; resolution,
+  Stop, window close and opting out revoke stale clicks. Relaunch to check opt-out
+  persistence. Test Windows from the NSIS-installed Start Menu shortcut, macOS from
+  the signed installed app, and Linux AppImage/deb with a desktop notification
+  service. Record the Linux desktop environment. Also test system permission denial
+  or Do Not Disturb: work must remain usable and Settings must not claim banners
+  are authorized just because the native API is available.
+- [ ] **J06** — Background the app for a successful turn and a failed turn; confirm
+  the matching notification opens its result/error. Stop during startup and during
+  a running turn; neither should notify, even if cancellation later fails. Disable
+  each notification category independently, verify other categories still work,
+  then relaunch and check persistence. Foreground outcomes, disabled outcomes and
+  loaded history must not appear later when backgrounding or re-enabling. Check
+  a result from an inactive chat and an earlier transcript page.
 - [ ] **J05 / J07 / J10** — In a disposable project with one non-sensitive source and
   one Markdown Canvas, confirm searching by meaning returns the source, ask the
   real Agent to use that evidence and write an accepted result into the Canvas,

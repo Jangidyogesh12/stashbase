@@ -161,6 +161,25 @@ permissions, with current model and tool choices checked before use.
   Chat's next message; a deleted persona leaves its Chats running none. A
   persona is distinct from permissions, requests, and user-owned native
   instruction files, which own how the Agent works.
+- When the desktop app is in the background or minimized, a pending approval
+  or clarifying question sends a local system notification. Requests arriving
+  together are grouped per window, and each pending request is announced once.
+  The notification names only the project and conversation, not tool inputs or
+  document contents. Clicking restores the owning window and focuses the exact
+  pending card; it never approves an operation. Resolved, stopped, retired, and
+  closed requests invalidate their notifications. Foreground work stays quiet.
+  General settings provides a user-wide opt-out, enabled by default. This behavior
+  applies to macOS, Windows and Linux desktops. Delivery depends on system
+  notification settings; app availability is not OS permission.
+- Completed turns and failed submissions/turns also notify while the app is in
+  the background. Unexpected connection loss asks the reader to inspect the
+  conversation; it does not imply that work was rolled back. A user-requested
+  stop stays quiet, including startup cancellation and a later cancellation
+  timeout or failure. Loading history never announces old outcomes. Foreground
+  outcomes and outcomes in disabled categories are not replayed on backgrounding
+  or re-enabling notifications. Each chat retains its latest outcome notification
+  until replaced, opened or retired. Clicking opens that chat and focuses the
+  result/error when present; a startup failure opens the retained input instead.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.

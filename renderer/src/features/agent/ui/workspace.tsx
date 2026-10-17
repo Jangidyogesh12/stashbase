@@ -22,6 +22,7 @@ import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
 import { useAgentModelRefresh } from '@/features/agent/hooks/use-agent-model-refresh';
 import { useAgentPersona } from '@/features/agent/hooks/use-agent-persona';
 import { useAgentRuntimeUpdate } from '@/features/agent/hooks/use-agent-runtime-update';
+import { useAttentionFocus } from '@/features/agent/hooks/use-attention-focus';
 import { useRenameConversation } from '@/features/agent/hooks/use-conversation-history';
 import { useRotatingPrompt } from '@/features/agent/hooks/use-rotating-prompt';
 import { cn } from '@/lib/utils';
@@ -167,6 +168,7 @@ function ChatWorkspace({
   );
   const logRef = useRef<HTMLDivElement>(null);
   const scroll = useStickToBottom(logRef, activeId);
+  const focusBlockId = useAttentionFocus(runtime, activeId, logRef);
   const renaming = useRenameConversation(runtime);
 
   return (
@@ -206,6 +208,7 @@ function ChatWorkspace({
             <AgentTranscript
               activeTurn={activeTurn}
               blocks={state.transcript}
+              focusBlockId={focusBlockId}
               key={activeId}
               modelRefresh={modelRefresh}
               onEditPrompt={composerShown ? editPrompt : undefined}

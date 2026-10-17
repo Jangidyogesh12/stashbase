@@ -9,7 +9,7 @@
  * bundled, typed preload bridge.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, powerMonitor, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, nativeTheme, net, powerMonitor, protocol, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -150,6 +150,7 @@ let windowLifecycleCapability = null;
 let externalNavigationCapability = null;
 let updatesCapability = null;
 let textServicesCapability = null;
+let notificationsCapability = null;
 let replacementWindowLifecycle = null;
 let replacementAppearance = null;
 let replacementEditableContextMenu = null;
@@ -254,6 +255,21 @@ function installReplacementBoundary() {
     'updates',
     'ipc.cjs',
   ));
+  const notifications = require(path.join(PROJECT_ROOT, 'dist', 'electron', 'notifications', 'ipc.cjs'));
+  const nativeNotifications = require(path.join(PROJECT_ROOT, 'dist', 'electron', 'notifications', 'native.cjs'))
+    .createNativeNotifications({ platform: process.platform, app, Notification });
+  notificationsCapability = notifications.NOTIFICATIONS_CAPABILITY;
+  const notificationService = notifications.registerNotifications({
+    BrowserWindow, ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => replacementWindowCapabilities.get(win)?.has(capability) === true,
+    filePath: path.join(app.getPath('userData'), 'notifications.json'),
+    supported: nativeNotifications.supported,
+    isAppFocused: () => BrowserWindow.getFocusedWindow() !== null,
+    createNotification: nativeNotifications.create,
+  });
+  app.once('will-quit', () => notificationService.dispose());
   projectFolderDialogCapability = boundary.PROJECT_FOLDER_DIALOG_CAPABILITY;
   projectLifecycleCapability = lifecycle.PROJECT_LIFECYCLE_CAPABILITY;
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
@@ -893,7 +909,8 @@ async function createWindow() {
     windowLifecycleCapability &&
     externalNavigationCapability &&
     updatesCapability &&
-    textServicesCapability
+    textServicesCapability &&
+    notificationsCapability
   ) {
     replacementWindowCapabilities.set(
       win,
@@ -905,6 +922,7 @@ async function createWindow() {
         externalNavigationCapability,
         updatesCapability,
         textServicesCapability,
+        notificationsCapability,
       ]),
     );
   }

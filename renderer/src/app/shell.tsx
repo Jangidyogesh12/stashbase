@@ -58,6 +58,7 @@ import { WorkspaceNoticeStrip } from './composition/layout/workspace-notice-stri
 import { WorkspacePanes } from './composition/layout/workspace-panes';
 import { WorkspaceSidebar } from './composition/layout/workspace-sidebar';
 import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
+import { useAgentNotifications } from './composition/use-agent-notifications';
 import { useAgentUsage } from './composition/use-agent-usage';
 import { useAppearanceSurface } from './composition/use-appearance-surface';
 import { useDesktopUsage } from './composition/use-desktop-usage';
@@ -163,6 +164,12 @@ function WorkspaceWindow() {
     revisions,
     session,
     workspace,
+  });
+
+  useAgentNotifications(runtime, dependencies.notifications, () => {
+    chrome.settings.close();
+    chrome.quickOpen.close();
+    chrome.navigator.selectMode('chats');
   });
 
   useDesktopUsage(

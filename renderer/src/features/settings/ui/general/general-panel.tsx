@@ -12,12 +12,15 @@ import {
   SettingsPane,
   SettingsRow,
 } from '@/features/settings/ui/rows';
+import type { NotificationPreferencesPort } from '@/shared/domain/notifications';
 import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
+import { NotificationsGroup } from './notifications-group';
 import { TelemetryGroup } from './telemetry-group';
 
 export interface GeneralPanelProps {
+  notifications?: NotificationPreferencesPort | undefined;
   appearanceApi?: AppearancePort | undefined;
   systemTextApi?: SystemTextPort | undefined;
   revisionPreview?: ReactNode;
@@ -28,6 +31,7 @@ export interface GeneralPanelProps {
 }
 
 export function GeneralPanel({
+  notifications,
   appearanceApi,
   revisionPreview,
   softwareUpdate,
@@ -37,12 +41,13 @@ export function GeneralPanel({
 }: GeneralPanelProps) {
   return (
     <SettingsPane title="General">
-      {/* Appearance leads, the thing a reader adjusts most; updates follow,
+      {/* Appearance leads, followed by attention notifications and updates,
        *  checked now and then; then Privacy, set once. Developer, which only a
        *  development build shows, closes the page. */}
       {appearanceApi && (
         <AppearancePanel appearanceApi={appearanceApi} systemTextApi={systemTextApi} />
       )}
+      {notifications && <NotificationsGroup port={notifications} />}
       {softwareUpdate && (
         <SettingsGroup
           hint={

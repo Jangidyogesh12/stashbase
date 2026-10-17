@@ -1,3 +1,5 @@
+import { createNotificationsPreload } from '../notifications/preload.ts';
+
 import { contextBridge, ipcRenderer } from 'electron';
 
 import { createExternalNavigationPreload } from '../external-navigation/preload.ts';
@@ -15,6 +17,7 @@ contextBridge.exposeInMainWorld(
   'stashbase',
   Object.freeze({
     externalNavigation: createExternalNavigationPreload(ipcRenderer),
+    notifications: createNotificationsPreload(ipcRenderer),
     runtime: createRuntimeConfig(process.argv),
     project: createProjectPreload(ipcRenderer),
     textServices: createTextServicesPreload(ipcRenderer),

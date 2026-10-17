@@ -66,6 +66,7 @@ export function WorkspaceDialogs({
         />
       )}
       <Settings
+        notifications={dependencies.notifications}
         agentRuntimeApi={dependencies.settings.agentRuntimeApi}
         appearanceApi={dependencies.settings.appearanceApi}
         systemTextApi={dependencies.settings.systemTextApi}

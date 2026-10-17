@@ -833,6 +833,63 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Background confirmation notifications (2026-10-17):** The Agent attention
+projection observes inactive sessions as well as the visible chat. Electron owns
+background detection, coalescing, durable opt-out, and notification lifetime via
+the product-independent notification center. The protocol/catalog register event
+kinds; Agent composition maps opaque IDs back to live pending targets. Click
+navigation rechecks the pending request and focuses its decision card.
+`electron/notifications/*.test.cjs` covers sender isolation, foreground suppression,
+coalescing, stale clicks, cancellation, navigation/crash/close, opt-out and delivery
+failure. Center tests exercise independent producers with overlapping IDs and
+window-wide retirement. Native adapter contract tests exercise macOS, Windows and
+Linux branches, Windows installed shortcut identity, and unavailable desktop
+services; these mocks do not establish native behavior on those platforms.
+Renderer attention tests cover inactive chats, subsequent requests,
+historical requests and stopping; Settings tests cover opt-out, peer updates and
+failed persistence. The transcript focus regression includes a pending card older
+than its normal 200-block page. The full renderer gate passed architecture,
+coverage, accessibility, size, duplication, lint, format, types and both builds;
+the initial unused-export and rejection-comment failures were corrected, with
+unused-code, conventions, format, lint and types rerun successfully. Host types,
+Electron contracts, docs, inventory and the built Electron smoke passed.
+
+An isolated macOS Electron pass used the production native adapter, notification
+IPC/preload, attention composition, Settings group and transcript with controlled sessions. It
+reported two native `show` events, verified foreground suppression, injected the
+native click event to select an inactive chat and focus its approval, clicked Allow
+through the rendered card, and verified cancellation and durable opt-out. The focused
+card and Settings layout were inspected by eye. This establishes local integration,
+not a real-provider turn or a physical notification-center click. OS notification
+permission is not exposed reliably by Electron; support does not establish that
+banners are permitted. Packaged notification presentation on macOS, Windows and
+Linux remains unverified.
+
+**Task outcome notifications and category controls (2026-10-17):** The same
+notification center, renderer platform adapter and native driver now carry
+`agent-completed` and `agent-failed` events. `outcome-notifications.test.ts`
+exercises real session transitions for successful turns, failed turns, retries,
+automatic queue continuation, unexpected exit, startup failure, startup stop and
+stop timeout followed by a failure. History and repeated terminal signals do not
+announce results. UI focus coverage includes a result before the ordinary
+transcript page and keeps that page exposed after focus is consumed. IPC tests
+exercise category isolation, durable preference fields, peer-window updates,
+revocation and the absence of foreground/disabled outcome replay. Settings tests
+exercise independent category controls, master opt-out and persistence failure.
+These controlled tests do not establish provider or packaged OS behavior.
+The renderer's full gate passed coverage, accessibility, architecture and both
+builds; its size/lint failures were corrected by extracting transcript pagination
+and removing unsafe test assertions. All ten affected gates then passed again.
+Host types, Electron contracts, docs/inventory and the final built Electron smoke
+also passed. A macOS Electron pass reused the production platform adapter,
+notification center, outcome composition, Settings and transcript with controlled
+session events. It observed three native `show` events; simulated native clicks
+opened the correct completion/error blocks, whose layouts were inspected by eye.
+It also exercised foreground suppression without later replay, active stop,
+independent category controls, re-enable without replay and master opt-out through
+the rendered controls. Physical notification-center clicks and packaged Windows,
+Linux and macOS delivery remain release-checklist evidence gaps.
+
 **Closed startup and duplicate diagnostics (2026-10-16):** Codex regressions close
 the socket during model/skill discovery and verify no subsequent requests,
 readiness or failure diagnostics. OpenCode's error/exit pair still reaches the UI
