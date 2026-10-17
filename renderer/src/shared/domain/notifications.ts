@@ -19,11 +19,13 @@ export interface NotificationStatus {
   enabled: boolean;
   categories: Record<NotificationKind, boolean>;
   supported: boolean;
+  systemSettings: { canOpen: boolean; instructions: string };
   /** Delivery is evidence of a send, not permission or proof the user saw it. */
   delivery: 'unknown' | 'sent' | 'failed';
 }
 export interface NotificationPreferencesPort {
   read(): Promise<NotificationStatus>;
+  openSettings(): Promise<void>;
   setEnabled(enabled: boolean): Promise<NotificationStatus>;
   setCategory(kind: NotificationKind, enabled: boolean): Promise<NotificationStatus>;
   onChanged(handler: (status: NotificationStatus) => void): () => void;

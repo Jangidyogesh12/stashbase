@@ -57,6 +57,14 @@ Settings owns lasting preferences and connection configuration:
   The status explains
   unsupported systems and failed delivery; it does not equate API support with OS
   authorization. System settings and Focus/Do Not Disturb remain authoritative.
+  An always-available system permission row explains how to allow notifications
+  after declining. Its button opens the notification settings on macOS, Windows,
+  GNOME or KDE; other Linux desktops or missing settings applications receive
+  manual instructions. Launch failures retain those steps and offer Retry.
+  Returning to the app refreshes notification-service availability and the
+  settings entry point. OS authorization remains explicitly unknown: opening
+  settings or delivering a notification does not establish permission. Recovery
+  neither changes the app's switches nor replays old task outcomes.
 - **Agents:** group account, credit balance/refill, and connection state under
   Default, with the account's subscription and the plans it can buy; manage Codex, Claude, and Antigravity individually. An installed runtime shows its
   version and offers Update when StashBase can select the resulting installation.

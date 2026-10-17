@@ -17,10 +17,16 @@ it('saves opt out, receives peer window changes and preserves the confirmed valu
     categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true },
     supported: true,
     delivery: 'unknown',
+    systemSettings: {
+      canOpen: true,
+      instructions:
+        'In System Settings → Notifications, select StashBase and turn on Allow notifications.',
+    },
   };
   let receive: (status: NotificationStatus) => void = vi.fn();
   const unsubscribe = vi.fn();
   const port: NotificationPreferencesPort = {
+    openSettings: async () => {},
     read: async () => saved,
     setEnabled: vi.fn(async (enabled) => ({ ...saved, enabled })),
     setCategory: vi.fn(async (kind, enabled) => ({
@@ -58,4 +64,62 @@ it('saves opt out, receives peer window changes and preserves the confirmed valu
   expect(toggle.getAttribute('aria-checked')).toBe('true');
   view.unmount();
   expect(unsubscribe).toHaveBeenCalled();
+});
+
+it('keeps recovery available while disabled, retries launch failure and accepts refreshed system guidance', async () => {
+  const saved: NotificationStatus = {
+    enabled: false,
+    categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true },
+    supported: false,
+    delivery: 'unknown',
+    systemSettings: {
+      canOpen: true,
+      instructions: 'Select StashBase in system notification settings.',
+    },
+  };
+  let receive: (value: NotificationStatus) => void = vi.fn();
+  const openSettings = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('Settings unavailable'))
+    .mockResolvedValue(undefined);
+  const setEnabled = vi.fn(async () => saved);
+  const port: NotificationPreferencesPort = {
+    read: async () => saved,
+    openSettings,
+    setEnabled,
+    setCategory: async () => saved,
+    onChanged: (handler) => {
+      receive = handler;
+      return () => {};
+    },
+  };
+  withQueryClient(<NotificationsGroup port={port} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Open system settings' }));
+  await screen.findByText(/System settings could not be opened/);
+  await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  await waitFor(() => expect(screen.queryByText(/System settings could not be opened/)).toBeNull());
+  expect(openSettings).toHaveBeenCalledTimes(2);
+  expect(setEnabled).not.toHaveBeenCalled();
+  expect(screen.getByText(/Permission cannot be checked here/)).toBeTruthy();
+  openSettings.mockRejectedValueOnce(new Error('Settings app removed'));
+  await userEvent.click(screen.getByRole('button', { name: 'Open system settings' }));
+  await screen.findByText(/System settings could not be opened/);
+  act(() =>
+    receive({
+      ...saved,
+      supported: true,
+      systemSettings: {
+        canOpen: false,
+        instructions: 'Open your desktop notification settings manually.',
+      },
+    }),
+  );
+  await screen.findByText(/Open your desktop notification settings manually/);
+  expect(screen.queryByRole('button', { name: 'Open system settings' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  expect(
+    screen
+      .getByRole('switch', { name: 'Enable desktop notifications' })
+      .getAttribute('aria-checked'),
+  ).toBe('false');
 });

@@ -1,6 +1,7 @@
 import {
   NOTIFICATIONS_ACTIVATE, NOTIFICATIONS_CHANGED, NOTIFICATIONS_READ,
   NOTIFICATIONS_SET_ENABLED, NOTIFICATIONS_SYNC,
+  NOTIFICATIONS_OPEN_SETTINGS,
   notificationBatchSchema, notificationActivationSchema, notificationUpdateSchema,
   notificationStatusSchema, type NotificationBatch, type NotificationActivation,
   type NotificationStatus, type NotificationKind,
@@ -27,6 +28,9 @@ export function createNotificationsPreload(ipc: IpcRenderer) {
     },
     async read(): Promise<NotificationStatus> {
       return notificationStatusSchema.parse(await ipc.invoke(NOTIFICATIONS_READ));
+    },
+    async openSettings(): Promise<void> {
+      await ipc.invoke(NOTIFICATIONS_OPEN_SETTINGS);
     },
     async setEnabled(enabled: boolean): Promise<NotificationStatus> {
       return notificationStatusSchema.parse(await ipc.invoke(

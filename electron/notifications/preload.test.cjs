@@ -6,7 +6,7 @@ const { createNotificationsPreload } = require('../../dist/electron/notification
 test('validates incoming navigation and unsubscribes exactly its listener', async () => {
   const ipc = new EventEmitter();
   const calls = [];
-  ipc.invoke = async (...args) => { calls.push(args); return { enabled: true, categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true }, supported: true, delivery: 'unknown' }; };
+  ipc.invoke = async (...args) => { calls.push(args); return { enabled: true, categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true }, supported: true, settingsTarget: 'macos', delivery: 'unknown' }; };
   const bridge = createNotificationsPreload(ipc);
   const targets = [];
   const stop = bridge.onActivate((target) => targets.push(target));

@@ -501,6 +501,15 @@ stable status without download, retry, or a new durable demand latch.
   actions or custom toast markup form the contract. Support and delivery events do
   not establish OS authorization or visible banners. Native presentation and click
   behavior remain platform package checks in the release checklist.
+  `system-settings.ts` selects fixed OS settings destinations and detects
+  supported Linux launchers. The no-argument settings IPC uses the same sender
+  authorization as notification preferences; renderer input cannot supply URLs
+  or commands. Window focus republishes fresh service/launcher availability and
+  preserves delivery evidence and app preferences. The existing renderer
+  platform adapter translates the typed settings target into instructions and
+  an open capability; Settings contains no OS branches. Electron's common API
+  cannot read notification authorization, so this flow never claims granted or
+  denied status. Unsupported desktops and launch failures retain manual recovery.
 - Pending approvals require the exact request id; abort/disposal denies them.
   Read/orientation/reindex may use the low-risk path. Document writes remain
   permissioned and Review never grants a write in advance. Edit policy grants only its

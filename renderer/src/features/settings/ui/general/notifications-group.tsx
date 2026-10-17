@@ -10,6 +10,8 @@ import {
 } from '@/features/settings/ui/rows';
 import type { NotificationKind, NotificationPreferencesPort } from '@/shared/domain/notifications';
 
+import { NotificationSystemSettings } from './notification-system-settings';
+
 const categories: { kind: NotificationKind; title: string; detail: string }[] = [
   {
     kind: 'agent-confirmation',
@@ -126,6 +128,7 @@ export function NotificationsGroup({ port }: { port: NotificationPreferencesPort
                 }
               />
             ))}
+            <NotificationSystemSettings port={port} settings={status.systemSettings} />
             {status.delivery === 'failed' && (
               <SettingsMessage message="The last notification could not be delivered. Check StashBase in your system notification settings." />
             )}

@@ -899,6 +899,22 @@ controlled save failure. Native notification titles identify the event while the
 body names the project and chat; OS chrome supplies the application identity.
 The notification host tests and renderer gate cover this presentation change.
 
+**Notification permission recovery (2026-10-17):** General settings now retains
+platform-specific instructions and a system-settings action even when app
+notifications are disabled. The existing platform adapter maps host-owned
+macOS/Windows/GNOME/KDE destinations; unknown Linux desktops and missing launchers
+fall back to manual steps. Host tests exercise fixed destinations, launch failure,
+sender rejection and focus-driven availability refresh without notification
+replay. Settings tests exercise launch retry, unchanged preferences and refreshed
+manual guidance. The full renderer gate, 21 notification host tests, 96 protocol
+tests, host boundary types and built Electron smoke passed. An isolated macOS
+Electron pass used the production General panel, adapter, preload, IPC and native
+settings launcher: clicking opened the OS Notifications page, verified through
+its accessibility tree. Returning refreshed availability; controlled launch
+failure and manual fallback were exercised, and light/dark layouts inspected.
+System permission was not changed or inferred. Packaged Windows/Linux settings
+navigation and denied-to-allowed recovery remain release-checklist checks.
+
 **Closed startup and duplicate diagnostics (2026-10-16):** Codex regressions close
 the socket during model/skill discovery and verify no subsequent requests,
 readiness or failure diagnostics. OpenCode's error/exit pair still reaches the UI

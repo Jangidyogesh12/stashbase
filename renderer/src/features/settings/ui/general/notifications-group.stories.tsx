@@ -17,9 +17,15 @@ function notificationPort(
     categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true },
     supported: true,
     delivery: 'unknown',
+    systemSettings: {
+      canOpen: true,
+      instructions:
+        'In System Settings → Notifications, select StashBase and turn on Allow notifications.',
+    },
     ...overrides,
   };
   return {
+    openSettings: async () => {},
     read: async () => status,
     setEnabled: async (enabled) => (status = { ...status, enabled }),
     setCategory: async (kind, enabled) =>
@@ -51,6 +57,7 @@ export const LoadFailed: Story = {
   args: {
     port: {
       ...notificationPort(),
+      openSettings: async () => {},
       read: async () => {
         throw new Error('Unavailable preferences');
       },
@@ -73,4 +80,25 @@ export const InGeneral: Story = {
       }}
     />
   ),
+};
+export const ManualSettings: Story = {
+  args: {
+    port: notificationPort({
+      systemSettings: {
+        canOpen: false,
+        instructions:
+          'Open your desktop’s notification settings and allow StashBase. Check Do Not Disturb and your notification service too.',
+      },
+    }),
+  },
+};
+export const SettingsLaunchFailed: Story = {
+  args: {
+    port: {
+      ...notificationPort(),
+      openSettings: async () => {
+        throw new Error('Settings unavailable');
+      },
+    },
+  },
 };

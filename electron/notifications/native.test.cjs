@@ -13,7 +13,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
       show() { this.emit('show'); }
       close() { calls.push(['close']); }
     }
-    const driver = createNativeNotifications({ platform, app: { setAppUserModelId: (id) => calls.push(['identity', id]) }, Notification: Native });
+    const driver = createNativeNotifications({ platform, desktop: '', openExternal: async () => {}, app: { setAppUserModelId: (id) => calls.push(['identity', id]) }, Notification: Native });
     assert.equal(driver.supported(), true);
     const notice = driver.create({ title: 'Task needs attention', body: 'Research' });
     let clicks = 0;
@@ -33,6 +33,6 @@ test('Linux without a usable notification service reports unsupported and does n
   class Unavailable {
     static isSupported() { throw new Error('No desktop notification service'); }
   }
-  const driver = createNativeNotifications({ platform: 'linux', app: {}, Notification: Unavailable });
+  const driver = createNativeNotifications({ platform: 'linux', desktop: '', openExternal: async () => {}, app: {}, Notification: Unavailable });
   assert.equal(driver.supported(), false);
 });

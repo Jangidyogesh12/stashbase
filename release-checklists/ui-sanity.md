@@ -98,6 +98,13 @@ Never use production PostHog as the test event sink.
   service. Record the Linux desktop environment. Also test system permission denial
   or Do Not Disturb: work must remain usable and Settings must not claim banners
   are authorized just because the native API is available.
+- [ ] **J06** — After declining or disabling system notifications, use General's
+  system permission row to open the OS notification settings and allow StashBase.
+  Return to the app and verify availability refreshes without changing app switches
+  or replaying old outcomes; authorization remains unknown in the UI. Check macOS,
+  Windows, Linux GNOME and KDE. On an unsupported Linux desktop or with its settings
+  app missing, verify manual instructions. A failed launch must offer quiet recovery
+  and retain those instructions. Confirm a new background task can then notify.
 - [ ] **J06** — Background the app for a successful turn and a failed turn; confirm
   the matching notification opens its result/error. Stop during startup and during
   a running turn; neither should notify, even if cancellation later fails. Disable

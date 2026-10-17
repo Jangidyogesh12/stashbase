@@ -7,7 +7,7 @@ const path = require('node:path');
 const { registerNotifications } = require('../../dist/electron/notifications/ipc.cjs');
 
 const request = (id = 'one') => ({ kind: 'agent-confirmation', id: JSON.stringify(['chat', id]), project: 'Research', conversation: 'Draft' });
-function harness(t, { corrupt = false } = {}) {
+function harness(t, { corrupt = false, openSettings = async () => {}, supported = () => true } = {}) {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-notifications-'));
   const filePath = path.join(directory, 'notifications.json');
@@ -22,7 +22,9 @@ function harness(t, { corrupt = false } = {}) {
     expectedOrigins: new Set(['app://renderer']),
     isLiveWindow: (win) => !win.destroyed,
     hasCapability: (win) => win.capable,
-    supported: () => true,
+    supported,
+    settingsTarget: () => 'macos',
+    openSettings,
     isAppFocused: () => focused,
     createNotification: (options) => {
       const notice = new EventEmitter();
@@ -205,4 +207,25 @@ test('foreground and disabled outcomes are consumed, while pending approvals can
   sync('agent-completed', 'master-disabled'); h.tick();
   h.invoke('set-enabled', { enabled: true }); h.tick();
   assert.equal(h.notices.length, 2);
+});
+
+test('settings launch is authorized, takes no destination, and focus refreshes availability without granting permission', async (t) => {
+  let available = true;
+  let opens = 0;
+  const h = harness(t, { supported: () => available, openSettings: async () => { opens++; throw new Error('Cannot open settings'); } });
+  assert.throws(() => h.invoke('open-settings', undefined, h.win, { url: 'app://renderer/' }));
+  assert.throws(() => h.invoke('open-settings', { url: 'https://evil.example' }));
+  h.win.capable = false;
+  assert.throws(() => h.invoke('open-settings'));
+  assert.equal(opens, 0);
+  h.win.capable = true;
+  await assert.rejects(h.invoke('open-settings'), /Cannot open settings/);
+  assert.equal(opens, 1);
+  available = false;
+  h.win.emit('focus');
+  assert.deepEqual(h.win.sent.at(-1), ['notifications:changed', {
+    enabled: true, categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true },
+    supported: false, settingsTarget: 'macos', delivery: 'unknown',
+  }]);
+  assert.equal(h.notices.length, 0, 'returning to the app never sends a notification or replays an outcome');
 });

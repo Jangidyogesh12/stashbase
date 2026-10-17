@@ -114,6 +114,8 @@ app
       isLiveWindow, hasCapability,
       filePath: path.join(smokeRoot, 'notifications.json'),
       supported: () => false,
+      settingsTarget: () => 'manual',
+      openSettings: async () => { throw new Error('No settings launcher in smoke'); },
       isAppFocused: () => BrowserWindow.getFocusedWindow() !== null,
       createNotification: () => { throw new Error('This smoke has no native notification provider'); },
     });
@@ -312,7 +314,7 @@ app
       externalNavigation: { ok: true },
       externalNavigationFrozen: true,
       notificationsFrozen: true,
-      notificationsRead: { enabled: true, categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true }, supported: false, delivery: 'unknown' },
+      notificationsRead: { enabled: true, categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true }, supported: false, settingsTarget: 'manual', delivery: 'unknown' },
       folderResult: { ok: true, folderPath: null },
       globalKeys: [
         'externalNavigation',

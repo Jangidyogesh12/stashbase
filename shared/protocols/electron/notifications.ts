@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const NOTIFICATIONS_CAPABILITY = 'notifications';
 export const NOTIFICATIONS_SYNC = 'notifications:sync';
 export const NOTIFICATIONS_READ = 'notifications:read';
+export const NOTIFICATIONS_OPEN_SETTINGS = 'notifications:open-settings';
 export const NOTIFICATIONS_SET_ENABLED = 'notifications:set-enabled';
 export const NOTIFICATIONS_CHANGED = 'notifications:changed';
 export const NOTIFICATIONS_ACTIVATE = 'notifications:activate';
@@ -49,8 +50,11 @@ export const notificationUpdateSchema = z.object({
   kind: notificationKindSchema.optional(),
 }).strict();
 export type NotificationPreferences = z.infer<typeof notificationPreferenceSchema>;
+export const notificationSettingsTargetSchema = z.enum(['macos', 'windows', 'gnome', 'kde', 'manual']);
+export type NotificationSettingsTarget = z.infer<typeof notificationSettingsTargetSchema>;
 export const notificationStatusSchema = notificationPreferenceSchema.extend({
   supported: z.boolean(),
+  settingsTarget: notificationSettingsTargetSchema,
   delivery: z.enum(['unknown', 'sent', 'failed']),
 }).strict();
 export type NotificationKind = z.infer<typeof notificationKindSchema>;

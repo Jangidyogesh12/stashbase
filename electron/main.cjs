@@ -257,7 +257,10 @@ function installReplacementBoundary() {
   ));
   const notifications = require(path.join(PROJECT_ROOT, 'dist', 'electron', 'notifications', 'ipc.cjs'));
   const nativeNotifications = require(path.join(PROJECT_ROOT, 'dist', 'electron', 'notifications', 'native.cjs'))
-    .createNativeNotifications({ platform: process.platform, app, Notification });
+    .createNativeNotifications({ platform: process.platform, app, Notification,
+      desktop: process.env.XDG_CURRENT_DESKTOP || process.env.DESKTOP_SESSION || '',
+      openExternal: (url) => shell.openExternal(url),
+    });
   notificationsCapability = notifications.NOTIFICATIONS_CAPABILITY;
   const notificationService = notifications.registerNotifications({
     BrowserWindow, ipcMain,
@@ -266,6 +269,8 @@ function installReplacementBoundary() {
     hasCapability: (win, capability) => replacementWindowCapabilities.get(win)?.has(capability) === true,
     filePath: path.join(app.getPath('userData'), 'notifications.json'),
     supported: nativeNotifications.supported,
+    settingsTarget: nativeNotifications.settingsTarget,
+    openSettings: nativeNotifications.openSettings,
     isAppFocused: () => BrowserWindow.getFocusedWindow() !== null,
     createNotification: nativeNotifications.create,
   });
