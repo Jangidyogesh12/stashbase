@@ -1,26 +1,30 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { SettingsGroup, SettingsList, SettingsRow } from '@/features/settings/ui/rows';
+import {
+  SettingsGroup,
+  SettingsList,
+  SettingsMessage,
+  SettingsRow,
+} from '@/features/settings/ui/rows';
 import type { NotificationKind, NotificationPreferencesPort } from '@/shared/domain/notifications';
 
 const categories: { kind: NotificationKind; title: string; detail: string }[] = [
   {
     kind: 'agent-confirmation',
     title: 'Needs confirmation',
-    detail: 'An Agent needs approval or an answer.',
+    detail: 'When an Agent needs approval or an answer.',
   },
   {
     kind: 'agent-completed',
     title: 'Task completed',
-    detail: 'An Agent finishes a turn successfully.',
+    detail: 'When an Agent finishes a task.',
   },
   {
     kind: 'agent-failed',
     title: 'Task failed',
-    detail: 'An Agent turn fails or loses its connection. Stopping a task does not notify you.',
+    detail: 'When a task cannot finish. Stopped tasks stay quiet.',
   },
 ];
 type Change = { enabled: boolean; kind?: NotificationKind };
@@ -54,70 +58,88 @@ export function NotificationsGroup({ port }: { port: NotificationPreferencesPort
     }
   };
   const status = query.data;
+  // Use the shared Settings grammar: system failures stay quiet, disabled
+  // choices recede, and OS guidance belongs below the list.
   return (
-    <SettingsGroup title="Notifications">
+    <SettingsGroup
+      title="Notifications"
+      hint={
+        status &&
+        (!status.supported
+          ? 'System notifications are unavailable on this device.'
+          : !status.enabled
+            ? 'Your choices are saved while notifications are off.'
+            : 'System notification settings and Do Not Disturb also apply.')
+      }
+    >
       <SettingsList>
-        <SettingsRow
-          title="Enable desktop notifications"
-          detail="Show system notifications while StashBase is in the background."
-          trail={
-            <Switch
-              label="Enable desktop notifications"
-              labelHidden
-              checked={status?.enabled ?? false}
-              disabled={busy || !status || !status.supported}
-              onToggle={() => {
-                if (status) void change({ enabled: !status.enabled });
-              }}
+        {(!status || query.isError) && (
+          <SettingsMessage
+            message={
+              query.isError
+                ? 'Notification preferences could not be loaded.'
+                : 'Loading notification preferences…'
+            }
+            {...(query.isError
+              ? {
+                  onRetry: () => {
+                    void query.refetch();
+                  },
+                }
+              : {})}
+          />
+        )}
+        {status && (
+          <>
+            <SettingsRow
+              title="Enable desktop notifications"
+              titleTone={!status.supported ? 'muted' : 'default'}
+              detail="Show system notifications while StashBase is in the background."
+              trail={
+                <Switch
+                  label="Enable desktop notifications"
+                  labelHidden
+                  checked={status.enabled}
+                  disabled={busy || !status.supported}
+                  onToggle={() => {
+                    void change({ enabled: !status.enabled });
+                  }}
+                />
+              }
             />
-          }
-        />
-        {categories.map(({ kind, title, detail }) => (
-          <SettingsRow
-            key={kind}
-            title={title}
-            detail={detail}
-            trail={
-              <Switch
-                label={title}
-                labelHidden
-                checked={status?.categories[kind] ?? false}
-                disabled={busy || !status?.enabled || !status.supported}
-                onToggle={() => {
-                  if (status) void change({ kind, enabled: !status.categories[kind] });
+            {categories.map(({ kind, title, detail }) => (
+              <SettingsRow
+                key={kind}
+                title={title}
+                titleTone={!status.enabled || !status.supported ? 'muted' : 'default'}
+                detail={detail}
+                trail={
+                  <Switch
+                    label={title}
+                    labelHidden
+                    checked={status.categories[kind]}
+                    disabled={busy || !status.enabled || !status.supported}
+                    onToggle={() => {
+                      void change({ kind, enabled: !status.categories[kind] });
+                    }}
+                  />
+                }
+              />
+            ))}
+            {status.delivery === 'failed' && (
+              <SettingsMessage message="The last notification could not be delivered. Check StashBase in your system notification settings." />
+            )}
+            {failed && (
+              <SettingsMessage
+                message="Notification preferences could not be saved."
+                onRetry={() => {
+                  void change(failed);
                 }}
               />
-            }
-          />
-        ))}
-        <SettingsRow
-          title="System notifications"
-          detail={
-            !status
-              ? 'Checking notification availability…'
-              : !status.supported
-                ? 'System notifications are unavailable on this device.'
-                : status.delivery === 'failed'
-                  ? 'The last notification could not be delivered. Check your system notification settings for StashBase.'
-                  : 'Allow StashBase in your system notification settings. Focus or Do Not Disturb may silence alerts; system permission cannot be checked here.'
-          }
-        />
+            )}
+          </>
+        )}
       </SettingsList>
-      {(failed || query.isError) && (
-        <p role="alert" className="text-caption text-destructive">
-          Notification preferences could not be {failed ? 'saved' : 'loaded'}.
-          <Button
-            variant="ghost"
-            size="compact"
-            onClick={() => {
-              if (failed) void change(failed);
-              else void query.refetch();
-            }}
-          >
-            Retry
-          </Button>
-        </p>
-      )}
     </SettingsGroup>
   );
 }

@@ -6,16 +6,16 @@ import type { NotificationContent, PreparedNotification } from './center.ts';
 function describe(event: NotificationEvent, count: number): NotificationContent {
   switch (event.kind) {
     case 'agent-confirmation': return {
-      title: 'StashBase needs your attention',
-      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} requests waiting` : ' — Waiting for your confirmation'}`,
+      title: 'Needs confirmation',
+      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} requests waiting` : ''}`,
     };
     case 'agent-completed': return {
-      title: 'StashBase task completed',
-      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} tasks completed` : ' — Your task is complete'}`,
+      title: 'Task completed',
+      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} tasks completed` : ''}`,
     };
     case 'agent-failed': return {
-      title: 'StashBase task failed',
-      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} tasks need attention` : ' — Open the conversation to review what happened'}`,
+      title: 'Task failed',
+      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} tasks need attention` : ''}`,
     };
   }
 }

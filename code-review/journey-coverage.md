@@ -890,6 +890,15 @@ independent category controls, re-enable without replay and master opt-out throu
 the rendered controls. Physical notification-center clicks and packaged Windows,
 Linux and macOS delivery remain release-checklist evidence gaps.
 
+Notification settings reuse the shared Settings groups, rows, switches and quiet
+retry messages; OS guidance sits below the list and disabled categories recede.
+An isolated macOS Electron pass rendered the production General panel alongside
+Software updates and inspected light, dark, disabled and persistence-failure
+states. It exercised the real platform adapter and preference IPC, with a
+controlled save failure. Native notification titles identify the event while the
+body names the project and chat; OS chrome supplies the application identity.
+The notification host tests and renderer gate cover this presentation change.
+
 **Closed startup and duplicate diagnostics (2026-10-16):** Codex regressions close
 the socket during model/skill discovery and verify no subsequent requests,
 readiness or failure diagnostics. OpenCode's error/exit pair still reaches the UI

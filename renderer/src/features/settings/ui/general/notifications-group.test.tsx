@@ -54,7 +54,7 @@ it('saves opt out, receives peer window changes and preserves the confirmed valu
     throw new Error('write failed');
   };
   await userEvent.click(toggle);
-  await screen.findByRole('alert');
+  await screen.findByText('Notification preferences could not be saved.');
   expect(toggle.getAttribute('aria-checked')).toBe('true');
   view.unmount();
   expect(unsubscribe).toHaveBeenCalled();

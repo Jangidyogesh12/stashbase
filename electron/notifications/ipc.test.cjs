@@ -194,7 +194,7 @@ test('foreground and disabled outcomes are consumed, while pending approvals can
   // Background before the coalescing timer still cannot replay a foreground result.
   h.foreground(false); h.win.emit('blur'); h.tick();
   assert.equal(h.notices.length, 1);
-  assert.match(h.notices[0].options.body, /confirmation/);
+  assert.match(h.notices[0].options.title, /confirmation/);
   h.invoke('set-enabled', { kind: 'agent-failed', enabled: false });
   sync('agent-failed', 'disabled'); h.tick();
   h.invoke('set-enabled', { kind: 'agent-failed', enabled: true }); h.tick();
