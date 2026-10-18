@@ -358,8 +358,8 @@ stable status without download, retry, or a new durable demand latch.
   first prompt with the chat's mode, model, and effort as launch flags. A change
   to any of them, Stop, or process exit retires it, and the next prompt resumes
   the same conversation with `--conversation`. `agy` accepts no caller system
-  prompt, so the routing policy and persona ride ahead of each process's first
-  message. Like a Claude session, each chat reads the runtime's current models
+  prompt, so the Agent role, persona, and routing policy ride ahead of each
+  process's first message. Like a Claude session, each chat reads the runtime's current models
   when it starts; because one `agy` read takes 10–20 seconds, it opens on the
   remembered list and replaces it when the read lands, and chats opened within
   a minute share one read. A `SUCCESS` result with no text, response, or tool fails the turn;
@@ -427,7 +427,10 @@ stable status without download, retry, or a new durable demand latch.
   may have changed, and the shell reconciles it the same way. Reads, listings,
   searches, and questions report nothing.
 - A persona is per-Chat guidance resolved at native mount and composed
-  with internal routing policy. That policy is the one text every runtime always
+  with internal routing policy. A native runtime reads StashBase's one-sentence
+  Agent role ahead of both, because each provider's own system prompt casts it
+  as a coding assistant; the bundled Agent states its role in its own
+  configuration. That policy is the one text every runtime always
   sees, so it owns which StashBase tool orients and reads prepared text, and that
   existing documents use `edit_file` while new documents use `write_file`; a tool description alone
   cannot own a rule, because a runtime may defer it. Neither is a permission,

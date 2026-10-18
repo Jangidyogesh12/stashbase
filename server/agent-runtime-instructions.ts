@@ -18,14 +18,20 @@ const STASHBASE_AGENT_RUNTIME_POLICY = [
   '</stashbase_runtime_policy>',
 ].join('\n');
 
+/** Who a native runtime is while it works here. Each provider's own system
+ * prompt casts it as a coding assistant, which is not this product; the
+ * reader's persona, after it, can still give the Agent a narrower role. The
+ * bundled Agent states its own role in its configuration. */
+const STASHBASE_AGENT_ROLE = "You are an Agent working in StashBase, the user's second brain: where they keep notes and documents, think, and write. Their project is a folder of their files, not necessarily code.";
+
 export function composeAgentRuntimeInstructions(persona?: string): string {
   return persona
     ? `${persona}\n\n${STASHBASE_AGENT_RUNTIME_POLICY}`
     : STASHBASE_AGENT_RUNTIME_POLICY;
 }
 
-/** The instructions a session starts with: its Chat's persona, if any, then
- * the routing policy. */
+/** The instructions a native session starts with: StashBase's role for the
+ * Agent, its Chat's persona, if any, then the routing policy. */
 export function resolveAgentRuntimeInstructions(persona: string | undefined): string {
-  return composeAgentRuntimeInstructions(resolveAgentPersona(persona));
+  return `${STASHBASE_AGENT_ROLE}\n\n${composeAgentRuntimeInstructions(resolveAgentPersona(persona))}`;
 }
