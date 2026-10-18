@@ -41,8 +41,10 @@ app.whenReady().then(async () => {
   const reply = await send();
   assert.equal(reply.status, 502);
   assert.equal((await reply.json()).errorCode, 'ERR_TUNNEL_CONNECTION_FAILED');
-  assert.ok(tunnels.length > 0, 'Chromium must use the PAC-selected proxy');
-  assert.ok(tunnels.every(host => host === 'vqtfigkoihpuziaimluf.supabase.co:443'));
+  // Assert the Auth request itself: Chromium can also probe connections through
+  // the configured proxy. Relay destination restrictions have their own tests.
+  assert.ok(tunnels.includes('vqtfigkoihpuziaimluf.supabase.co:443'),
+    `Chromium must send Auth through the PAC-selected proxy; observed ${JSON.stringify(tunnels)}`);
   await authSession.closeAllConnections();
   await new Promise(resolve => proxy.close(resolve));
   await authSession.setProxy({ mode: 'fixed_servers', proxyRules: `http=127.0.0.1:${proxyPort};https=127.0.0.1:${proxyPort}` });
