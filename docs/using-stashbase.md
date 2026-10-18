@@ -14,8 +14,11 @@ it does not start a conversation automatically.
 Choose Claude, Codex, or Antigravity and sign in with your provider account.
 A missing runtime waits for **Connect Claude**, **Connect Codex**, or
 **Connect Antigravity** before installation. If Claude is too old for the model
-you chose, the failed turn offers **Update Claude**. **Settings → Agents** shows each installed runtime's
-version with an **Update** that runs the runtime's own updater in place.
+you chose, the failed turn offers **Update Claude**. When a newer release of
+your runtime is out, the model menu offers **Update** for it. **Settings → Agents**
+shows each installed runtime's version, any newer release, and an **Update**
+that runs the runtime's own updater in place. Release checks follow
+**Check for updates automatically**.
 
 Antigravity asks before changing files or running commands the same way the
 others do, and offers Auto, Ask, Edit, and Plan. Its Auto is StashBase's: it

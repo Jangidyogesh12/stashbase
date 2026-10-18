@@ -185,6 +185,8 @@ reader to current credits rather than claiming all credits are spent.
   in Settings, and waits for affected document saves. Failure
   leaves the current application and downloaded update recoverable. Relaunch waits
   for the previous local service to release its port before opening the replacement.
+  The same choice governs the background checks for newer Agent runtime
+  releases ([Agent Sessions](agent-sessions.md)).
   Development notification previews have no authority to invoke the updater.
   Offline, network-change, suspended-network and DNS failures during a check
   remain retryable and report as warnings. Repeated identical check warnings

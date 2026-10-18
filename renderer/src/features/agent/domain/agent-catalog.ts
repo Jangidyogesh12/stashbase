@@ -47,6 +47,8 @@ export interface Agent {
   readonly preparing?: boolean;
   /** Whether the host can update this runtime. */
   readonly updatable?: boolean;
+  /** A newer release the host found for this runtime, when it found one. */
+  readonly availableVersion?: string;
   readonly setupFailure?: AgentSetupFailure;
   readonly abilities: AgentAbilities;
   /** The catalog the service remembers for this runtime, so a fresh chat can
@@ -108,6 +110,18 @@ export const AGENT_ORDER: readonly AgentId[] = AGENT_RUNTIMES.map((entry) => ent
 
 export function agentLabel(id: AgentId): string {
   return AGENT_RUNTIMES.find((entry) => entry.id === id)?.label ?? id;
+}
+
+/** Whether the model menu offers the runtime's update: once a newer release
+ *  is known, and still while an update runs or after one failed. */
+export function offersRuntimeUpdate(
+  agent: Agent,
+  update: { readonly busy: boolean; readonly failure: string | null },
+): boolean {
+  return (
+    agent.updatable === true &&
+    (agent.availableVersion !== undefined || update.busy || update.failure !== null)
+  );
 }
 
 /** A runtime the catalog has not described yet: selectable by name, ready

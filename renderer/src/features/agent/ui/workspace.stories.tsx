@@ -117,6 +117,7 @@ const agents: Agent[] = [
     needsSignIn: false,
     ready: true,
     updatable: true,
+    availableVersion: '0.163.0',
   },
   { abilities, id: 'claude', label: 'Claude', models: [], needsSignIn: false, ready: true },
   { abilities, id: 'stashbase', label: 'Default', models: [], needsSignIn: false, ready: true },

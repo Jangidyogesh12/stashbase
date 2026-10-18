@@ -83,6 +83,9 @@ export interface AgentRuntime {
   readonly version: string | null;
   /** Whether the host can update the runtime's native installation. */
   readonly updatable: boolean;
+  /** A newer release the host found for the runtime, or null when it found
+   *  none or did not look. */
+  readonly availableVersion: string | null;
   /** A model the runtime says it is too old to run, when it says so. Null is
    *  the normal state, and a runtime that reports nothing reads the same as
    *  one with nothing to report, because the row says nothing extra either

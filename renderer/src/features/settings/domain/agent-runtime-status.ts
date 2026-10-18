@@ -90,12 +90,14 @@ export function describeRuntime(
       ? 'Ready'
       : 'Installed';
   // An installed runtime names its version, so an update the reader runs from
-  // here has a visible before and after. Only the bundled one says where it
-  // came from; every other row is the reader's own install.
+  // here has a visible before and after, and the newer release when one is
+  // known. Only the bundled one says where it came from; every other row is
+  // the reader's own install.
   const parts = [
     lead,
     runtime.ownership === 'bundled' ? 'Included with StashBase' : null,
     runtime.version,
+    runtime.availableVersion ? `${runtime.availableVersion} available` : null,
   ];
   return {
     description: parts.filter(Boolean).join(' · '),

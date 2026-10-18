@@ -261,8 +261,12 @@ an outdated runtime. Updating is a recovery attempt, not a promise of model
 access; the original error remains visible and another model can be selected.
 
 The model picker also offers the installed runtime's updater before any turn
-fails, so a reader missing a new model can update where they choose models.
-Updating keeps the draft, disables sending during the update, and reconnects
+fails, but only once a newer release than the installed one is known: the
+host reads the release feed the provider's installer installs from, in the
+background, about hourly and only while automatic update checks are on. An
+unknown installed version or an unreadable feed offers nothing. The runtime's
+Settings row names the newer release and keeps Update available as the manual
+path. Updating keeps the draft, disables sending during the update, and reconnects
 to read the runtime's model list again. It sends no draft automatically.
 Update failures stay visible in the picker and leave the conversation intact.
 

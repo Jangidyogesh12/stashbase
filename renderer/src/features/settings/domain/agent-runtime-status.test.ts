@@ -172,7 +172,7 @@ describe('describeRuntime', () => {
     });
   });
 
-  it('offers Update for an installed runtime that the host can update, naming the installed version', () => {
+  it('offers Update for an installed runtime that the host can update, naming the installed and newer versions', () => {
     const display = describeRuntime(
       codex({
         id: 'claude',
@@ -182,11 +182,12 @@ describe('describeRuntime', () => {
         preparation: { kind: 'ready' },
         updatable: true,
         version: '2.1.220',
+        availableVersion: '2.1.302',
       }),
       false,
     );
     expect(display).toEqual({
-      description: 'Ready · 2.1.220',
+      description: 'Ready · 2.1.220 · 2.1.302 available',
       stage: 'ready',
       action: { kind: 'update', label: 'Update' },
     });

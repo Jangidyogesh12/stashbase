@@ -8,7 +8,12 @@ import type { QueuedMessage } from '@/components/ui/input-message';
 import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import { honoredAccessMode } from '@/features/agent/domain/access';
-import { agentGate, undescribedAgent, type Agent } from '@/features/agent/domain/agent-catalog';
+import {
+  agentGate,
+  offersRuntimeUpdate,
+  undescribedAgent,
+  type Agent,
+} from '@/features/agent/domain/agent-catalog';
 import { changedSource } from '@/features/agent/domain/file-change';
 import {
   agentSkills,
@@ -272,10 +277,8 @@ function ChatWorkspace({
                 id,
                 text,
               }))}
-              // Left, what goes into the writing beside the attachments: the
-              // persona it is written in. Right, what follows the Agent: who
-              // runs the turn, under what permissions, on which model at
-              // what level; changing the Agent changes that whole group.
+              // Persona stays beside attachments. Provider, permissions and
+              // model controls stay together when the Agent changes.
               leftSlot={
                 <AgentPersonaControl disabled={busy} onBrowse={onBrowsePersonas} picker={persona} />
               }
@@ -306,7 +309,9 @@ function ChatWorkspace({
                       onEffortChange={active.setEffort}
                       onModelChange={active.setModel}
                       onRequestCatalog={active.start}
-                      runtimeUpdate={readyAgent.updatable ? runtimeUpdate : undefined}
+                      runtimeUpdate={
+                        offersRuntimeUpdate(readyAgent, runtimeUpdate) ? runtimeUpdate : undefined
+                      }
                       state={{ ...state, activeTurn: busy || preferencesUnavailable }}
                       tools={{
                         api: toolsApi,

@@ -20,6 +20,7 @@ const codex: AgentRuntime = {
   preparation: { kind: 'ready' },
   upgrade: null,
   updatable: true,
+  availableVersion: null,
   version: '0.155.0',
 };
 
@@ -31,6 +32,7 @@ const claude: AgentRuntime = {
   preparation: { kind: 'ready' },
   upgrade: null,
   updatable: true,
+  availableVersion: '2.1.302',
   version: '2.1.276',
 };
 
@@ -42,6 +44,7 @@ const stashbase: AgentRuntime = {
   preparation: { kind: 'ready' },
   upgrade: null,
   updatable: false,
+  availableVersion: null,
   version: null,
 };
 

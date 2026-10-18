@@ -619,8 +619,13 @@ stable status without download, retry, or a new durable demand latch.
   retaining the native error. Neither signal alone changes failure recovery;
   no version minimum or account entitlement is inferred. A replacement process
   starts with no remembered metadata warnings.
-  The model picker exposes an updater only when the host advertises `updatable`.
-  This explicit action shares the failed-turn update owner, but has no request
+  The model picker exposes an updater only when the host advertises `updatable`
+  and an `availableVersion`. `server/agent-runtime-releases.ts` owns that
+  answer: discovery reads its last result for the installed `--version` and
+  starts the next feed read when due (hourly, 15 minutes after a failure),
+  never waiting on the network, and only while automatic update checks are on.
+  Each feed is the one the provider's installer reads (Claude's channel from
+  its own user settings). Test runners never reach the feeds. This explicit action shares the failed-turn update owner, but has no request
   to resend. Reconnection reads models from the replacement native process;
   catalog memory never supplies a fabricated new model. The composer retains
   drafts and blocks Send and provider changes during the update.

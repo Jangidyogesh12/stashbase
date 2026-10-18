@@ -12,6 +12,7 @@ import { CLIS } from './terminal.ts';
 import { agentCliVersion, resolveAgentCli } from './agent-cli.ts';
 import { isNativeAgentId, nativeAgentCliSpec } from './native-agents.ts';
 import { agentSupportsInAppUpdate, agentBootstrapStatus } from './agent-runtime-installer.ts';
+import { agentReleases } from './agent-runtime-releases.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import { rememberedCatalogFor } from './agent-model-catalog.ts';
 import { claudeUpgradeOffer } from './claude-model-catalog.ts';
@@ -197,6 +198,9 @@ export interface AgentRuntimeDescriptor {
   version?: string | null;
   /** Whether the official native installation can be updated from the app. */
   updatable?: boolean;
+  /** A newer release than the installed one, when the last background
+   *  check of the provider's release feed found one. */
+  availableVersion?: string;
   error?: string;
   capabilities: AgentCapabilities;
   /** The runtime's remembered model catalog, once one has been read. */
@@ -264,6 +268,10 @@ export async function discoverAgentRuntimes(): Promise<AgentRuntimeDescriptor[]>
     const executable = adapter.id === 'stashbase' ? null : agentExecutableFor(adapter.id);
     const descriptor = runtimeDescriptorFor(adapter, executable);
     if (executable) descriptor.version = await agentCliVersion(executable);
+    const availableVersion = adapter.id !== 'stashbase' && descriptor.updatable && descriptor.version
+      ? agentReleases.availableUpdate(adapter.id, descriptor.version)
+      : null;
+    if (availableVersion) descriptor.availableVersion = availableVersion;
     const catalog = rememberedCatalogFor(descriptor);
     // Claude is the only runtime that reports a model it is too old to run;
     // Codex's catalog simply omits what its app-server does not offer.

@@ -103,6 +103,9 @@ export interface Agent {
   version?: string | null;
   /** Whether StashBase can update this runtime through its official native installer. */
   updatable?: boolean;
+  /** A newer release than the installed version, when a background check
+   *  found one. Absent when there is none or nothing is known. */
+  availableVersion?: string;
   bootstrap?: AgentBootstrapStatus;
   /** Full shell command the panel feeds to the shell once it's ready
    *  (e.g. `claude --theme light`). Built by the server from the agent

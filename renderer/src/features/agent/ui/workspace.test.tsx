@@ -227,11 +227,31 @@ describe('Agent workspace', () => {
     ).not.toBeNull();
   });
 
+  it('offers no runtime update in the model picker until a newer release is known', async () => {
+    const { listeners, port } = agentSessionPort();
+    renderWorkspace(port, [{ ...CODEX_AGENT, updatable: true }]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Provider: Default' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Model and thinking: Default' }));
+    act(() => {
+      listeners[0]?.onEvent({
+        kind: 'models',
+        activeModel: null,
+        fallback: null,
+        models: [{ id: 'current-model', label: 'Current model', isDefault: true }],
+      });
+      listeners[0]?.onEvent({ kind: 'ready' });
+    });
+    await userEvent.click(await screen.findByRole('button', { name: 'Model: Current model' }));
+    expect(await screen.findByRole('menuitemradio', { name: 'Current model' })).not.toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Update Codex/u })).toBeNull();
+  });
+
   it.each(['success', 'failure'])(
     'updates Codex from the model picker before sending: %s preserves the draft',
     async (outcome) => {
       const { listeners, port, sent } = agentSessionPort();
-      const codex = { ...CODEX_AGENT, updatable: true };
+      const codex = { ...CODEX_AGENT, updatable: true, availableVersion: '0.163.0' };
       let finishUpdate!: () => void;
       const updating = new Promise<void>((resolve) => {
         finishUpdate = resolve;

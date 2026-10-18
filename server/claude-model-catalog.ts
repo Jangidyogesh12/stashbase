@@ -16,11 +16,13 @@ import type { AgentModel } from '../shared/agent-protocol.ts';
 import { agentCliEnv, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { claudeConfigPath } from './agent-config-paths.ts';
 
-/** The two persisted choices this read cares about; everything else in the
- * file is the CLI's own business. */
+/** The persisted choices StashBase reads; everything else in the file is the
+ * CLI's own business. */
 export interface ClaudeUserSettings {
   model?: string;
   effortLevel?: string;
+  /** The release channel `claude install` follows; absent means `latest`. */
+  autoUpdatesChannel?: 'stable' | 'latest';
 }
 
 /** What the SDK handshake says about one model. Named here rather than
@@ -49,6 +51,9 @@ export function readClaudeUserSettings(file = claudeSettingsPath()): ClaudeUserS
     return {
       ...(typeof parsed.model === 'string' && parsed.model ? { model: parsed.model } : {}),
       ...(typeof parsed.effortLevel === 'string' && parsed.effortLevel ? { effortLevel: parsed.effortLevel } : {}),
+      ...(parsed.autoUpdatesChannel === 'stable' || parsed.autoUpdatesChannel === 'latest'
+        ? { autoUpdatesChannel: parsed.autoUpdatesChannel }
+        : {}),
     };
   } catch {
     return {};

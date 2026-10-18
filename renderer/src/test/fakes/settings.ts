@@ -140,6 +140,7 @@ export function agentRuntime(overrides: Partial<AgentRuntime> = {}): AgentRuntim
     preparation: { kind: 'ready' },
     upgrade: null,
     updatable: false,
+    availableVersion: null,
     version: null,
     ...overrides,
   };

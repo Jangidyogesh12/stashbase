@@ -1628,6 +1628,14 @@ they do not establish which models a real updated Codex account can access.
 The built Storybook model picker was inspected in Chrome: the update action
 appears below the model choices. This is a
 source UI check with controlled ports, not an installed Codex update.
+Since 2026-10-18 the entry appears only with a known newer release: the
+workspace regression asserts no Update Codex row without `availableVersion`.
+`server/__tests__/agent-runtime-releases.test.ts` covers version ordering,
+feed parsing, background refresh, retry after failure, and the automatic-check
+choice with a fake feed. A one-off read of the three live feeds returned
+Claude 2.1.302, Codex 0.163.0, and Antigravity 1.4.0, matching the installed
+Antigravity 1.4.0 that previously still showed Update. A packaged pass that
+watches the entry appear after a real release is unproven.
 
 **Newer-model offer (2026-09-23):** Claude learns from its server which models
 an account may use, including ones the installed build is too old to run, and

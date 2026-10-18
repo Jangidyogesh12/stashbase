@@ -136,6 +136,7 @@ const agentSchema = z
     source: agentSourceSchema.nullable().optional(),
     version: z.string().max(64).nullable().optional(),
     updatable: z.boolean().optional(),
+    availableVersion: z.string().min(1).max(64).optional(),
     upgrade: agentUpgradeOfferSchema.optional(),
     bootstrap: agentBootstrapStatusSchema.optional(),
     launchCommand: z.string().max(2000),

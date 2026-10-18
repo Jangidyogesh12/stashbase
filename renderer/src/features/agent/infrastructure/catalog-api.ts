@@ -78,6 +78,7 @@ function toAgent(wire: AgentWire): Agent {
       : {}),
     ready: wire.bootstrap?.phase === 'ready' && wire.state !== 'failed',
     updatable: wire.updatable === true,
+    ...(wire.availableVersion ? { availableVersion: wire.availableVersion } : {}),
     ...(wire.upgrade ? { upgrade: wire.upgrade } : {}),
   };
 }

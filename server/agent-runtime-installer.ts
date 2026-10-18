@@ -788,7 +788,7 @@ function codexInstallerScriptRunner(
   });
 }
 
-async function fetchBoundedText(url: string, signal: AbortSignal, maxBytes: number): Promise<string> {
+export async function fetchBoundedText(url: string, signal: AbortSignal, maxBytes: number): Promise<string> {
   const bounded = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
   try {
     const response = await fetch(url, { signal: bounded, redirect: 'follow' });
