@@ -71,6 +71,7 @@ export const unhandledHttpError: ErrorRequestHandler = (error: unknown, _req, re
 const validTurnId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 const agentStates = new WeakMap<object, { interrupted: boolean; closing: boolean; finished?: boolean; lastError?: string; stage?: AgentTurnStage; tools?: Map<string, 'read' | 'write' | 'shell' | 'search' | 'agent' | 'other'> }>();
 const agentCaptures = new WeakMap<object, ReturnType<typeof telemetry.scoped>>();
+const agentProcessSnapshots = new WeakMap<object, () => NonNullable<ErrorContext['context']>>();
 const agentDiagnostics = new WeakMap<object, Omit<ErrorContext, 'source' | 'operation' | 'runtime'>>();
 /** Installed before runtime listeners; connection identity exists even if setup fails. */
 export function attachAgentDiagnostics(connection: WebSocket, runtime: NonNullable<ErrorContext['runtime']>, connectionId?: string): void {
@@ -82,23 +83,51 @@ export function attachAgentDiagnostics(connection: WebSocket, runtime: NonNullab
       const event = agentClientEventSchema.parse(JSON.parse(raw.toString()));
       const state = agentStates.get(connection)!;
       if (event.t === 'interrupt') state.interrupted = true;
-      if (event.t === 'close') state.closing = true;
+      if (event.t === 'close') {
+        state.closing = true;
+        updateAgentDiagnosticContext(connection, { close_initiator: 'client', close_reason: 'client_close' });
+      }
     } catch { /* Runtime validation owns invalid commands. */ }
   });
+  connection.once('error', () => updateAgentDiagnosticContext(connection, { close_initiator: 'unknown', close_reason: 'socket_error' }));
   connection.once('close', (code) => {
+    updateAgentDiagnosticContext(connection, agentProcessSnapshots.get(connection)?.() ?? {});
     const details = agentDiagnostics.get(connection);
     const state = agentStates.get(connection);
     const intentional = state?.closing === true;
+    const closedContext = { ...details?.context, ...(typeof code === 'number' ? { close_code: code } : {}),
+      close_initiator: details?.context?.close_initiator ?? 'unknown' as const,
+      close_reason: details?.context?.close_reason ?? 'socket_closed' as const };
+    agentCaptures.get(connection)?.({ event: 'agent_connection_closed', runtime, ...details, context: closedContext });
     if (details?.turn_id && !state?.finished) {
       if (!intentional) agentCaptures.get(connection)?.({ event: 'application_error', source: 'agent', runtime,
-        operation: 'connection', ...details, context: { ...details.context, close_code: code, close_initiator: 'unknown' },
+        operation: 'connection', ...details, context: closedContext,
         diagnostic: { message: 'Agent WebSocket closed during an active turn', code: 'AGENT_CONNECTION_LOST' } });
       telemetry.observeTurn(details.turn_id, { outcome: intentional ? 'cancelled' : 'interrupted', reason: intentional ? 'session_closed' : 'connection_lost' });
     }
+    agentProcessSnapshots.delete(connection);
     agentDiagnostics.delete(connection);
     agentCaptures.delete(connection);
     agentStates.delete(connection);
   });
+}
+
+/** Read pending method names at socket closure, before the runtime disposes RPCs. */
+export function setAgentProcessSnapshot(connection: object, snapshot: () => NonNullable<ErrorContext['context']>): void {
+  agentProcessSnapshots.set(connection, snapshot);
+}
+
+/** Process generation and closure evidence enrich the existing socket identity. */
+export function updateAgentDiagnosticContext(connection: object, context: NonNullable<ErrorContext['context']>): void {
+  const details = agentDiagnostics.get(connection);
+  if (details) details.context = { ...details.context, ...context };
+}
+
+export function markAgentDiagnosticClosing(connection: object, reason: NonNullable<ErrorContext['context']>['close_reason']): void {
+  const state = agentStates.get(connection);
+  const details = agentDiagnostics.get(connection);
+  if (state) state.closing = true;
+  if (!details?.context?.close_reason) updateAgentDiagnosticContext(connection, { close_initiator: 'server', close_reason: reason });
 }
 
 export function agentDiagnosticStage(connection: object, stage: AgentTurnStage): void {
@@ -128,11 +157,12 @@ export function reportAgentRuntimeError(runtime: NonNullable<ErrorContext['runti
   if (connection) {
     if (event.t === 'tool') {
       agentDiagnosticStage(connection, 'tool_running');
-      const category = /^(read|read_file)$/i.test(event.name) ? 'read'
-        : /^(write|edit|apply_patch|write_file|edit_file)$/i.test(event.name) ? 'write'
-        : /^(bash|shell)$/i.test(event.name) ? 'shell'
-        : /^(grep|glob|search|websearch|webfetch)$/i.test(event.name) ? 'search'
-        : /^(task|agent)$/i.test(event.name) ? 'agent' : 'other';
+      const name = event.name.replace(/^mcp__[^_]+__|^stashbase_/i, '');
+      const category = /^(read|read_file)$/i.test(name) ? 'read'
+        : /^(write|edit|apply_patch|write_file|edit_file)$/i.test(name) ? 'write'
+        : /^(bash|shell)$/i.test(name) ? 'shell'
+        : /^(grep|glob|search|search_project|semantic_search|keyword_search|websearch|webfetch)$/i.test(name) ? 'search'
+        : /^(task|agent)$/i.test(name) ? 'agent' : 'other';
       if (state) {
         state.tools ??= new Map();
         if (state.tools.size >= 100) state.tools.delete(state.tools.keys().next().value!);

@@ -26,7 +26,7 @@ installation identity.
 
 ## Events and interpretation
 
-Schema version 5 carries an event UUID, occurrence time, app version, OS,
+Schema version 6 carries an event UUID, occurrence time, app version, OS,
 installation ID, anonymous ID, installation first-observed time, and, when signed
 in, the account ID. Active work also establishes a session ID shared across
 windows; 30 minutes without reported activity starts another session. The first
@@ -42,6 +42,8 @@ date. Older builds do not supply the same activity or identity evidence.
 | `agent_turn_started` | User submission or manual retry begins preparation | `runtime`, random `turn_id` |
 | `agent_turn_stage` | Host observes a significant execution boundary | `runtime`, `turn_id`, `stage`, per-turn `sequence`, bounded correlation context |
 | `agent_turn_finished` | Submission completes, fails, is blocked, cancelled or interrupted | `runtime`, `turn_id`, `outcome`, `source`, optional `reason`, last stage, sequence and observation times; duration only for an observed end |
+| `agent_runtime_start_result` | One Default/OpenCode startup attempt settles, including history and prewarm | `purpose`, `outcome`, `stage`, `attempt_id`, optional `retry_of`, exact `elapsed_ms`/`first_output_ms`, runtime version and optional diagnostic |
+| `agent_connection_closed` | Host observes socket closure, including idle and intentional closes | `runtime`, shared `context.connection_id`, close code/initiator/reason and available process evidence |
 | `document_write_result` | Versioned editor save settles | `outcome`; success includes `changed` |
 | `account_login_started` | A browser sign-in flow starts | None |
 | `account_login_result` | Sign-in completes or fails | `outcome` |
@@ -98,6 +100,30 @@ follow-up investigation rather than implying a known root cause.
 Allowance-query failures keep the local response status separate from the
 upstream status/request ID or original network cause. Daemon and Agent startup
 exit diagnostics retain a bounded stderr tail and available exit code/signal.
+OpenCode startup stages are `prepare`, `spawn`, `waiting_ready`, `ready`, and
+`cleanup` (retirement failed). Elapsed time covers preparation through settlement,
+including failed-process retirement; first-output time is absent if no output was
+observed. Successful starts are retained as the latency denominator. A listening
+announcement confirms the expected local address, not usable models or completed
+work. Each physical retry has a new attempt ID and points to its failed attempt;
+concurrent callers sharing a startup do not each emit a result. The history-list
+entry retries a timeout/early exit once after retirement, without replaying tasks.
+Use request ID to join its startup attempts to a terminal HTTP failure. Do not
+count a recovered startup attempt as a failed user turn.
+
+Host readiness failures carry `probe_result`, `probe_count`, `probe_duration_ms`,
+`elapsed_ms`, and, when available, `probe_http_status`, `probe_mismatch` and
+`process_start_id`. Results distinguish connection refusal, connect timeout,
+response timeout, transport error, HTTP error, invalid JSON, identity mismatch
+and explicit not-ready health. A listening log alone does not establish readiness.
+
+Codex process errors retain stderr and exit code/signal in the original cause.
+`process_start_id` and `process_generation` distinguish replacements inside one
+connection; `pending_rpc_methods` contains at most twenty method names and no
+arguments. Host connection-close observations carry the same connection ID as
+renderer errors. Known client/server closures have an explicit reason; unknown
+socket loss remains unknown. Closure after a successful turn is not a failed turn.
+
 An Agent error immediately followed by an exit with the same explanation is
 one diagnostic with the original cause; both notifications still reach the UI.
 
@@ -152,6 +178,10 @@ requests never inherit a foreground chat's ID. A WebSocket 1006 is a lost close
 handshake, not a diagnosis of network or process failure. Model failures are
 reported at the broker even when the native adapter cannot relay them. Tool
 failure facts exclude arguments/results and can coexist with a successful turn.
+For task failure rates, use `agent_turn_finished.outcome`; join tool failures by
+`turn_id` to inspect recovery. Count tool failures separately by category. A
+failed meaning-search tool followed by a successful terminal is tool degradation,
+not task failure. Missing terminal evidence is unknown, not inferred success.
 Error context may include native session IDs and diagnostic paths; turn events
 contain no conversation content.
 

@@ -73,7 +73,7 @@ export function createTelemetry(options: {
     occurrenceTimer = undefined;
     earlyTurns.clear();
   };
-  const sanitizeContext = (context: Record<string, unknown>) => Object.fromEntries(Object.entries(context).map(([key, value]) => [key, typeof value === 'string' ? diagnosticText(value, 500) : value]));
+  const sanitizeContext = (context: Record<string, unknown>) => Object.fromEntries(Object.entries(context).map(([key, value]) => [key, typeof value === 'string' ? diagnosticText(value, 500) : Array.isArray(value) ? value.map(item => typeof item === 'string' ? diagnosticText(item, 100) : item) : value]));
   const send = async (queued: QueuedUsage, controller: AbortController) => {
     const timeout = setTimeout(() => controller.abort(), 2000);
     timeout.unref();
@@ -177,7 +177,7 @@ export function createTelemetry(options: {
     if (!occurrences.size) { clearInterval(occurrenceTimer); occurrenceTimer = undefined; }
   };
   const withScope = (input: TelemetryEvent, scope: DiagnosticScope = diagnosticScope.getStore() ?? {}): TelemetryEvent => {
-    if (!['application_error', 'application_warning', 'account_login_result', 'billing_checkout_result', 'billing_portal_result', 'project_entry_result', 'document_write_result', 'agent_setup_result', 'agent_setup_stage'].includes(input.event)) return input;
+    if (!['application_error', 'application_warning', 'account_login_result', 'billing_checkout_result', 'billing_portal_result', 'project_entry_result', 'document_write_result', 'agent_setup_result', 'agent_setup_stage', 'agent_runtime_start_result'].includes(input.event)) return input;
     return { ...scope, ...input, ...('context' in input || scope.context ? { context: { ...scope.context, ...('context' in input ? input.context : {}) } } : {}) } as TelemetryEvent;
   };
   const capture = (input: TelemetryEvent, captured?: UsageIdentity, capturedGeneration = generation, rollup = false, native?: NativeDiagnostic): boolean | undefined => {

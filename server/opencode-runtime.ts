@@ -1,4 +1,4 @@
-import { agentProcessExitDiagnostic } from './agent-process.ts';
+import { agentProcessExitDiagnostic, ownAgentProcess, retireAgentProcess } from './agent-process.ts';
 /**
  * App-scoped owner of the pinned OpenCode headless server.
  *
@@ -63,10 +63,12 @@ import {
 import { latestToolCatalog, type ToolCatalog } from './agent-tool-catalog.ts';
 import { OpenCodeWarmSlot } from './opencode-warm-slot.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import { telemetry } from './telemetry.ts';
+import { errorDiagnostic, type TelemetryEvent } from '../shared/protocols/http/telemetry.ts';
+import { waitForOpenCodeServer, retryOpenCodeHistoryStartup, retireFailedOpenCode } from './opencode-startup.ts';
 
 const log = logger('opencode-runtime');
 export const BUNDLED_OPENCODE_VERSION = '1.18.19';
-const START_TIMEOUT_MS = 15_000;
 const OPEN_CODE_RUNTIME_ENV_KEYS = new Set([
   'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
   'TMP', 'TEMP', 'TMPDIR',
@@ -338,6 +340,7 @@ class OpenCodeRuntime {
   private startingProcess: RunningOpenCode['process'] | null = null;
   private closing: Promise<void> | null = null;
   private generation = 0;
+  private retirementFailure: unknown;
   private readonly exitListeners = new Set<(error: Error) => void>();
 
   constructor(
@@ -347,6 +350,7 @@ class OpenCodeRuntime {
     private readonly agentSessionId = 'history',
     private readonly profiles: () => readonly HostedAgentProfile[] = () => [],
     private readonly tools: () => readonly EnabledAgentTool[] = () => [],
+    private readonly purpose: 'history' | 'chat' | 'prewarm' = 'chat',
   ) {
     runtimes.add(this);
   }
@@ -401,8 +405,8 @@ class OpenCodeRuntime {
     };
   }
 
-  async client(directory: string): Promise<OpencodeClient> {
-    const running = await this.start(directory);
+  async client(directory: string, retryHistoryStartup = false): Promise<OpencodeClient> {
+    const running = await this.start(directory, retryHistoryStartup);
     return createOpencodeClient({
       baseUrl: running.url,
       directory,
@@ -427,79 +431,106 @@ class OpenCodeRuntime {
     this.running = null;
     this.startingProcess = null;
     releaseHostedAgentChannel(this.agentSessionId);
-    if (process) {
-      process.kill('SIGTERM');
-      const timeout = setTimeout(() => {
-        if (process.exitCode == null && process.signalCode == null) process.kill('SIGKILL');
-      }, 1_500);
-      timeout.unref?.();
-      await new Promise<void>((resolve) => {
-        if (process.exitCode != null || process.signalCode != null) resolve();
-        else process.once('exit', () => resolve());
-      });
-      clearTimeout(timeout);
-    }
+    if (process) await retireAgentProcess(process);
+    // Also wait for preparation that had not spawned yet, and for a startup
+    // failure already retiring its child. The generation fence prevents retry.
+    await this.starting?.catch(() => {});
     runtimes.delete(this);
   }
 
-  private async start(directory: string): Promise<RunningOpenCode> {
+  private async start(directory: string, retryHistoryStartup: boolean): Promise<RunningOpenCode> {
     if (this.closing) throw new Error('OpenCode startup was cancelled.');
+    if (this.retirementFailure) throw this.retirementFailure;
     runtimes.add(this);
-    if (this.running && this.running.process.exitCode == null) return this.running;
+    if (this.running && this.running.process.exitCode == null && this.running.process.signalCode == null) return this.running;
     if (this.starting) return this.starting;
     const generation = this.generation;
-    this.starting = this.spawn(generation, directory).finally(() => { this.starting = null; });
+    const firstAttemptId = crypto.randomUUID();
+    const attempt = (index: number) => this.spawn(generation, directory,
+      index === 0 ? firstAttemptId : crypto.randomUUID(), index === 0 ? undefined : firstAttemptId);
+    const starting = retryHistoryStartup && this.purpose === 'history'
+      ? retryOpenCodeHistoryStartup(attempt, () => generation !== this.generation)
+      : attempt(0);
+    this.starting = starting.finally(() => { this.starting = null; });
     return this.starting;
   }
 
-  private async spawn(generation: number, directory: string): Promise<RunningOpenCode> {
-    const executable = bundledOpenCodeExecutable();
-    if (!executable) throw new Error('The bundled OpenCode runtime is missing.');
-    if (this.requireAccount && !getHostedAccountSession()) {
-      throw new Error('Sign in to StashBase to use the Default Agent.');
-    }
-    await startHostedAgentBroker();
-    if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
-    const port = await availablePort();
-    if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
-    const username = 'stashbase';
-    const password = cryptoRandomSecret();
-    const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-    const model = hostedAgentRuntime(this.agentSessionId);
-    if (!model) throw new Error('The Agent model broker is not running.');
-    const child = spawn(executable, [
-      'serve',
-      '--hostname=127.0.0.1',
-      `--port=${port}`,
-      '--pure',
-      '--log-level=WARN',
-    ], {
-      env: openCodeRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona, this.profiles(), directory, this.tools()), username, password),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    const exitDiagnostic = agentProcessExitDiagnostic(child);
-    this.startingProcess = child;
-
+  private async spawn(generation: number, directory: string, attemptId: string, retryOf?: string): Promise<RunningOpenCode> {
+    const capture = telemetry.scoped();
+    const started = performance.now();
+    let stage: Extract<TelemetryEvent, { event: 'agent_runtime_start_result' }>['stage'] = 'prepare';
+    let firstOutputMs: number | undefined;
+    let failure: unknown;
     try {
-      const url = await waitForOpenCodeServer(child, port, exitDiagnostic);
+      const executable = bundledOpenCodeExecutable();
+      if (!executable) throw new Error('The bundled OpenCode runtime is missing.');
+      if (this.requireAccount && !getHostedAccountSession()) {
+        throw new Error('Sign in to StashBase to use the Default Agent.');
+      }
+      await startHostedAgentBroker();
       if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
-      this.startingProcess = null;
-      const running = { process: child, url, authorization };
-      this.running = running;
-      child.once('exit', (code, signal) => {
-        if (this.running?.process !== child) return;
-        this.running = null;
-        const reason = code ?? signal ?? 'unknown';
-        const error = exitDiagnostic(`The included Agent runtime exited unexpectedly (${reason}).`, code, signal);
-        log.warn(error.message);
-        for (const listener of this.exitListeners) listener(error);
+      const port = await availablePort();
+      if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
+      const username = 'stashbase';
+      const password = cryptoRandomSecret();
+      const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+      const model = hostedAgentRuntime(this.agentSessionId);
+      if (!model) throw new Error('The Agent model broker is not running.');
+      stage = 'spawn';
+      const child = ownAgentProcess(spawn(executable, [
+        'serve',
+        '--hostname=127.0.0.1',
+        `--port=${port}`,
+        '--pure',
+        '--log-level=WARN',
+        '--print-logs',
+      ], {
+        env: openCodeRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona, this.profiles(), directory, this.tools()), username, password),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        detached: process.platform !== 'win32',
+      }));
+      const exitDiagnostic = agentProcessExitDiagnostic(child);
+      this.startingProcess = child;
+
+      try {
+        stage = 'waiting_ready';
+        const url = await waitForOpenCodeServer(child, port, exitDiagnostic, {
+          onFirstOutput: () => { firstOutputMs = Math.round(performance.now() - started); },
+        });
+        if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
+        this.startingProcess = null;
+        const running = { process: child, url, authorization };
+        this.running = running;
+        stage = 'ready';
+        child.once('exit', (code, signal) => {
+          if (this.running?.process !== child) return;
+          this.running = null;
+          const reason = code ?? signal ?? 'unknown';
+          const error = exitDiagnostic(`The included Agent runtime exited unexpectedly (${reason}).`, code, signal);
+          log.warn(error.message);
+          for (const listener of this.exitListeners) listener(error);
+        });
+        return running;
+      } catch (error) {
+        try { return await retireFailedOpenCode(child, error); }
+        catch (retiredError) {
+          if (retiredError !== error) { this.retirementFailure = retiredError; stage = 'cleanup'; }
+          throw retiredError;
+        } finally {
+          if (!this.retirementFailure && this.startingProcess === child) this.startingProcess = null;
+        }
+      }
+    } catch (error) { failure = error; throw error; }
+    finally {
+      capture({ event: 'agent_runtime_start_result', runtime: 'stashbase', purpose: this.purpose,
+        outcome: generation !== this.generation ? 'cancelled' : failure ? 'failed' : 'success',
+        stage, attempt_id: attemptId, ...(retryOf ? { retry_of: retryOf } : {}),
+        elapsed_ms: Math.round(performance.now() - started),
+        ...(firstOutputMs === undefined ? {} : { first_output_ms: firstOutputMs }),
+        context: { runtime_version: BUNDLED_OPENCODE_VERSION, process_start_id: attemptId },
+        ...(failure ? { diagnostic: errorDiagnostic(failure) } : {}),
       });
-      return running;
-    } catch (error) {
-      if (this.startingProcess === child) this.startingProcess = null;
-      child.kill('SIGKILL');
-      throw error;
     }
   }
 }
@@ -508,49 +539,11 @@ function cryptoRandomSecret(): string {
   return crypto.randomBytes(32).toString('base64url');
 }
 
-export function waitForOpenCodeServer(
-  child: ChildProcessByStdio<null, Readable, Readable>,
-  expectedPort: number,
-  exitDiagnostic: ReturnType<typeof agentProcessExitDiagnostic>,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let output = '';
-    let settled = false;
-    const finish = (error?: Error, url?: string) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (error) reject(error);
-      else resolve(url!);
-    };
-    const inspect = (chunk: Buffer) => {
-      output = (output + chunk.toString('utf8')).slice(-16_384);
-      const match = output.match(/opencode server listening on (https?:\/\/[^\s]+)/);
-      if (!match) return;
-      const url = new URL(match[1]);
-      if (url.hostname !== '127.0.0.1' || Number(url.port) !== expectedPort) {
-        finish(new Error('OpenCode bound an unexpected address.'));
-        return;
-      }
-      finish(undefined, url.toString().replace(/\/$/, ''));
-    };
-    child.stdout.on('data', inspect);
-    child.stderr.on('data', inspect);
-    child.once('error', (error) => finish(error));
-    child.once('exit', (code, signal) => finish(exitDiagnostic(
-      `OpenCode exited during startup (${code ?? signal ?? 'unknown'}). ${output.trim()}`, code, signal,
-    )));
-    const timeout = setTimeout(() => {
-      finish(new Error(`OpenCode did not start within ${START_TIMEOUT_MS}ms. ${output.trim()}`));
-    }, START_TIMEOUT_MS);
-  });
-}
-
 const runtimes = new Set<OpenCodeRuntime>();
 // History is local OpenCode state and remains readable while signed out. The
 // loopback model broker is configured so the pinned server can start, but it
 // cannot reach the hosted gateway without a later authenticated model call.
-const historyRuntime = new OpenCodeRuntime({}, undefined, false);
+const historyRuntime = new OpenCodeRuntime({}, undefined, false, 'history', undefined, undefined, 'history');
 
 export interface OpenCodeSessionRuntime {
   /** A prewarmed process already has its own private MCP/broker identity. */
@@ -683,7 +676,7 @@ export function createOpenCodeSessionRuntime(context: OpenCodeContext): OpenCode
     const nextId = crypto.randomUUID();
     const nextRuntime = new OpenCodeRuntime({
       STASHBASE_WINDOW_ID: context.windowId, STASHBASE_AGENT_SESSION_ID: nextId,
-    }, persona, true, nextId, () => profiles, () => tools);
+    }, persona, true, nextId, () => profiles, () => tools, 'prewarm');
     const next: PreparedOpenCode = {
       key, windowId: context.windowId, directory: context.directory,
       attributionId: nextId, profiles, tools, runtime: nextRuntime,
@@ -761,7 +754,7 @@ export const discardWarmOpenCodeForWindow = (windowId?: string): Promise<void> =
 export const discardWarmOpenCodeForFolder = (directory: string): Promise<void> =>
   warmSlot.clear((entry) => filesystemPath.equal(entry.directory, directory));
 
-export const openCodeClient = (directory: string): Promise<OpencodeClient> => historyRuntime.client(directory);
+export const openCodeClient = (directory: string, retryStartup = false): Promise<OpencodeClient> => historyRuntime.client(directory, retryStartup);
 export const openCodeRuntimeAvailability = () => historyRuntime.availability();
 export async function stopOpenCodeRuntime(): Promise<void> {
   await warmSlot.clear();

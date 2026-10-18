@@ -24,7 +24,10 @@ import {
   openCodeRuntimeEnvironment,
   createOpenCodeSessionRuntime,
   stopOpenCodeRuntime,
+  openCodeClient,
 } from '../opencode-runtime.ts';
+import { telemetry } from '../telemetry.ts';
+import { telemetryEventSchema, type TelemetryEvent } from '../../shared/protocols/http/telemetry.ts';
 import { setHostedAccountSession } from '../app-config.ts';
 import { setDefaultAgentTool } from '../default-agent-tools.ts';
 import { parseToolCatalog } from '../agent-tool-catalog.ts';
@@ -685,6 +688,11 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
 });
 
 test('prewarmed native chats retain exclusive attribution and refresh changed models and tools', { timeout: 30_000 }, async (t) => {
+  const starts: Extract<TelemetryEvent, { event: 'agent_runtime_start_result' }>[] = [];
+  t.mock.method(telemetry, 'scoped', () => (input: TelemetryEvent) => {
+    const event = telemetryEventSchema.parse(input);
+    if (event.event === 'agent_runtime_start_result') starts.push(event);
+  });
   const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-warm-native-')));
   setHostedAccountSession({
     userId: 'warm-fixture', email: 'fixture@example.invalid', accessToken: 'fixture-only', refreshToken: 'fixture-only',
@@ -762,4 +770,19 @@ test('prewarmed native chats retain exclusive attribution and refresh changed mo
   assert.equal(fourthConfig.provider!.stashbase!.models!['stashbase-agent-default']!.limit!.output, 4096);
   assert.equal(reads, 4, 'a new chat must revalidate the service catalog before using a spare');
   await assert.rejects(fourth.client(path.dirname(root)), /another project/);
+  const beforeHistory = starts.length;
+  const [historyA, historyB] = await Promise.all([openCodeClient(root, true), openCodeClient(root, true)]);
+  await historyA.session.list({ throwOnError: true });
+  await historyB.session.list({ throwOnError: true });
+  assert.equal(starts.length, beforeHistory + 1, 'concurrent history readers share one physical startup');
+  assert.equal(starts.at(-1)?.purpose, 'history');
+  assert.ok(starts.some(event => event.purpose === 'chat' && event.outcome === 'success'));
+  assert.ok(starts.some(event => event.purpose === 'prewarm' && event.outcome === 'success'));
+  for (const event of starts.filter(event => event.outcome === 'success')) {
+    assert.equal(event.stage, 'ready');
+    assert.equal(event.context?.runtime_version, BUNDLED_OPENCODE_VERSION);
+    assert.equal(event.context?.process_start_id, event.attempt_id);
+    assert.ok(event.first_output_ms !== undefined && event.first_output_ms <= event.elapsed_ms);
+  }
+  assert.equal(new Set(starts.map(event => event.attempt_id)).size, starts.length);
 });

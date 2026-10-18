@@ -17,6 +17,8 @@ import { BUILT_IN_AGENT_ADAPTERS } from '../agent-adapters.ts';
 import { CodexSession } from '../codex-session-runtime.ts';
 import { agentPersonaLibrary } from '../agent-persona.ts';
 import { clearCurrentFolder, runWithWindowId, openProjectFolder } from '../folder.ts';
+import { attachAgentDiagnostics } from '../error-reporting.ts';
+import { errorDiagnostic, telemetryEventSchema, type TelemetryEvent } from '../../shared/protocols/http/telemetry.ts';
 
 class FakeCodexProcess extends EventEmitter {
   stdin = new PassThrough();
@@ -137,6 +139,60 @@ test('closing Codex during startup discovery stops work without a late skills fa
     assert.equal(native.proc.killed, true);
     assert.equal(native.requests.length, before);
     assert.deepEqual(captured, []);
+    assert.equal(ws.sent.some(value => JSON.parse(value).t === 'ready'), false);
+  });
+});
+
+test('Codex process and socket exits retain one shared identity and pending RPC names without request content', async (t) => {
+  for (const cause of ['process', 'socket', 'client'] as const) await t.test(cause, async (t) => {
+    const { telemetry } = await import('../telemetry.ts');
+    const captured: TelemetryEvent[] = [];
+    t.mock.method(telemetry, 'scoped', () => (event: TelemetryEvent) => captured.push(telemetryEventSchema.parse(event)));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-diagnostic-'));
+    await runWithWindowId('diagnostic-window', () => openProjectFolder(folder));
+    let release!: () => void;
+    const native = catalogProcess([], { skillsGate: new Promise<void>(resolve => { release = resolve; }) });
+    const ws = new FakeWebSocket();
+    const connectionId = crypto.randomUUID();
+    attachAgentDiagnostics(ws as unknown as WebSocket, 'codex', connectionId);
+    const session = new CodexSession(ws as unknown as WebSocket, 'diagnostic-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+    t.after(() => {
+      session.dispose(); release();
+      runWithWindowId('diagnostic-window', () => clearCurrentFolder());
+      fs.rmSync(folder, { recursive: true, force: true });
+    });
+    session.begin();
+    await settle();
+    assert.ok(native.requests.some(request => request.method === 'skills/list'));
+    if (cause === 'process') {
+      native.proc.stderr.write('failed native service token=PRIVATE_SECRET\n');
+      native.proc.emit('close', 23, null);
+    } else if (cause === 'socket') {
+      ws.readyState = 3;
+      ws.emit('close', 1006);
+    } else {
+      ws.emit('message', Buffer.from('{"t":"close"}'));
+    }
+    await settle();
+    const closure = captured.find(event => event.event === 'agent_connection_closed');
+    assert.ok(closure?.event === 'agent_connection_closed');
+    assert.equal(closure.context?.connection_id, connectionId);
+    assert.equal(closure.context?.process_generation, 1);
+    assert.match(closure.context?.process_start_id ?? '', /^[0-9a-f-]{36}$/);
+    assert.deepEqual(closure.context?.pending_rpc_methods, ['skills/list']);
+    assert.equal(closure.context?.close_reason, cause === 'process' ? 'process_exit' : cause === 'client' ? 'client_close' : 'socket_closed');
+    const errors = captured.filter(event => event.event === 'application_error');
+    if (cause === 'process') {
+      assert.equal(errors.length, 1);
+      assert.equal(errors[0].context?.process_start_id, closure.context?.process_start_id);
+      assert.equal(errors[0].context?.connection_id, connectionId);
+      const diagnostic = errorDiagnostic(errors[0].diagnostic);
+      assert.equal(diagnostic.causes?.[0]?.exit_code, 23);
+      assert.match(diagnostic.causes?.[0]?.stderr ?? '', /failed native service/);
+      assert.doesNotMatch(JSON.stringify(captured), /PRIVATE_SECRET/);
+    } else assert.deepEqual(errors, [], 'idle or expected closure does not invent a failed turn');
+    release(); await settle();
+    assert.equal(captured.filter(event => event.event === 'application_error').length, errors.length);
     assert.equal(ws.sent.some(value => JSON.parse(value).t === 'ready'), false);
   });
 });

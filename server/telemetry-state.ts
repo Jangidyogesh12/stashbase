@@ -113,7 +113,7 @@ export function usagePayload(entry: QueuedUsage) {
       installation_first_seen_at: entry.firstSeenAt,
       ...(entry.sessionId ? { $session_id: entry.sessionId } : {}),
       ...(event === '$identify' ? { $anon_distinct_id: entry.anonymousId } : {}),
-      app_version: entry.version, os: entry.os, schema_version: 5,
+      app_version: entry.version, os: entry.os, schema_version: 6,
       $process_person_profile: Boolean(entry.userId), $geoip_disable: true, $ip: null,
     },
   };

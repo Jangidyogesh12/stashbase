@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const {
+  probeServerHealth,
   createServerArguments,
   isCompatibleServerHealth,
   startServer,
@@ -129,6 +130,56 @@ test('readiness times out when only a prior instance answers', async () => {
   await assert.rejects(startServer(fixture.options), /did not come up/);
   assert.equal(fixture.elapsed(), 500);
   assert.equal(fixture.child.listenerCount('error'), 0);
+});
+
+test('readiness timeout retains the last probe, count and elapsed time without relaxing identity', async () => {
+  const fixture = startupFixture();
+  const probe = fixture.options.probe;
+  fixture.options.probe = async (instanceId) => instanceId ? {
+    compatible: false, occupied: true, probe_result: 'identity_mismatch', probe_mismatch: 'instanceId',
+    probe_duration_ms: 12, probe_http_status: 200,
+  } : probe();
+  await assert.rejects(startServer(fixture.options), error => {
+    assert.equal(error.startupContext.probe_count, 4);
+    assert.equal(error.startupContext.probe_result, 'identity_mismatch');
+    assert.equal(error.startupContext.probe_mismatch, 'instanceId');
+    assert.equal(error.startupContext.probe_duration_ms, 12);
+    assert.equal(error.startupContext.elapsed_ms, 500);
+    assert.equal(error.startupContext.process_start_id, fixture.spawnedId());
+    return true;
+  });
+});
+
+test('real loopback probes distinguish refusal, stalled response, bad HTTP, bad JSON and wrong identity', async (t) => {
+  const http = require('node:http');
+  let mode = 'ready';
+  const server = http.createServer((_req, res) => {
+    if (mode === 'stall') return;
+    if (mode === 'http') { res.writeHead(503); res.end('{}'); return; }
+    if (mode === 'json') { res.end('not json'); return; }
+    res.end(JSON.stringify(health(mode === 'identity' ? 'old-instance' : 'expected-instance')));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  for (const [nextMode, expectedResult] of [
+    ['ready', 'ready'], ['stall', 'response_timeout'], ['http', 'http_error'],
+    ['json', 'invalid_json'], ['identity', 'identity_mismatch'],
+  ]) {
+    mode = nextMode;
+    const result = await probeServerHealth(port, 1000, { ...identity, instanceId: 'expected-instance' });
+    assert.equal(result.probe_result, expectedResult);
+    assert.equal(result.compatible, nextMode === 'ready');
+    assert.ok(result.probe_duration_ms >= 0);
+    if (nextMode === 'stall') { assert.equal(result.occupied, true); assert.equal(result.transient, true); }
+    if (nextMode === 'identity') assert.equal(result.probe_mismatch, 'instanceId');
+    assert.equal('body' in result, false);
+  }
+  server.closeAllConnections();
+  await new Promise(resolve => server.close(resolve));
+  const refused = await probeServerHealth(port, 100, identity);
+  assert.equal(refused.probe_result, 'connection_refused');
+  assert.equal(refused.occupied, false);
 });
 
 test('child environment replaces inherited instance identity and health rejects missing ownership', () => {

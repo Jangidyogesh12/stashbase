@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
+const http = require('node:http');
 
 /** Capture only the tail of Electron's own host log after a startup/crash
  * failure, including failures that happened before the host collector loaded. */
@@ -17,15 +18,89 @@ function readServerLogTail(filePath) {
 }
 
 
+function serverHealthMismatch(body, expected) {
+  const wanted = { app: 'stashbase', ok: true, ...expected };
+  for (const key of ['app', 'ok', 'protocolVersion', 'appRoot', 'resourcesPath', 'instanceId']) {
+    if (key === 'instanceId' && expected.instanceId === undefined) continue;
+    if (!body || typeof body !== 'object' || body[key] !== wanted[key]) return key;
+  }
+  return undefined;
+}
+
 function isCompatibleServerHealth(body, expected) {
-  if (!body || typeof body !== 'object') return false;
-  if (body.app !== 'stashbase') return false;
-  if (body.ok !== true) return false;
-  if (body.protocolVersion !== expected.protocolVersion) return false;
-  if (body.appRoot !== expected.appRoot) return false;
-  if (body.resourcesPath !== expected.resourcesPath) return false;
-  if (expected.instanceId !== undefined && body.instanceId !== expected.instanceId) return false;
-  return true;
+  return serverHealthMismatch(body, expected) === undefined;
+}
+
+/** One bounded request; keep transport evidence instead of folding every
+ * failure into unreachable. Never retain the health body in diagnostics. */
+function requestJson(port, requestPath, timeoutMs, options = {}) {
+  return new Promise((resolve) => {
+    const started = performance.now();
+    let connected = false;
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      resolve({ ...result, connected, durationMs: Math.round(performance.now() - started) });
+    };
+    const failed = (result) => finish({ reachable: false, statusCode: 0, body: null, result });
+    const req = http.request({ host: '127.0.0.1', port, path: requestPath, agent: false,
+      method: options.method || 'GET', headers: options.headers }, (res) => {
+      let body = '';
+      let oversized = false;
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        oversized ||= body.length + chunk.length > 4096;
+        body = (body + chunk).slice(0, 4096);
+      });
+      res.on('error', () => failed('transport_error'));
+      res.on('end', () => {
+        try {
+          const parsed = oversized ? null : JSON.parse(body);
+          finish({ reachable: true, statusCode: res.statusCode ?? 0, body: parsed,
+            result: oversized ? 'invalid_json' : 'response' });
+        } catch {
+          finish({ reachable: true, statusCode: res.statusCode ?? 0, body: null, result: 'invalid_json' });
+        }
+      });
+    });
+    const deadline = setTimeout(() => {
+      failed(connected ? 'response_timeout' : 'connect_timeout');
+      req.destroy();
+    }, timeoutMs);
+    req.on('socket', (socket) => {
+      if (!socket.connecting) connected = true;
+      else socket.once('connect', () => { connected = true; });
+    });
+    req.on('error', (error) => failed(error.code === 'ECONNREFUSED' ? 'connection_refused' : 'transport_error'));
+    req.end();
+  });
+}
+
+async function probeServerHealth(port, timeoutMs, expected) {
+  const health = await requestJson(port, '/api/health', timeoutMs);
+  const evidence = { probe_duration_ms: health.durationMs };
+  if (!health.reachable) return { compatible: false, occupied: health.connected,
+    legacyStashBase: false, transient: health.connected,
+    ...evidence, probe_result: health.result };
+  evidence.probe_http_status = health.statusCode;
+  const mismatch = serverHealthMismatch(health.body, expected);
+  if (health.statusCode === 200 && health.result !== 'invalid_json' && !mismatch) {
+    return { compatible: true, occupied: true, legacyStashBase: false, transient: false,
+      ...evidence, probe_result: 'ready' };
+  }
+  const result = health.statusCode !== 200 ? 'http_error'
+    : health.result === 'invalid_json' ? 'invalid_json'
+      : mismatch === 'ok' ? 'not_ready' : 'identity_mismatch';
+  // Legacy detection only arbitrates an existing listener. After spawning we
+  // check the new instance alone and keep its health probe as the evidence.
+  const folder = expected.instanceId === undefined ? await requestJson(port, '/api/folder', timeoutMs) : null;
+  const legacyStashBase = !!(folder?.statusCode === 200 && folder.body && typeof folder.body === 'object'
+    && ('current' in folder.body || 'recent' in folder.body) && 'homeDir' in folder.body);
+  return { compatible: false, occupied: true, legacyStashBase, transient: false,
+    ...evidence, probe_result: result, ...(mismatch && ['identity_mismatch', 'not_ready'].includes(result)
+      ? { probe_mismatch: mismatch } : {}) };
 }
 
 /** Build the environment for the Electron-owned server process. Source
@@ -112,10 +187,21 @@ async function startServer({
   let spawnError = null;
   const onError = (error) => { spawnError = error; };
   child.on('error', onError);
-  const deadline = now() + timeoutMs;
+  const startedAt = now();
+  const deadline = startedAt + timeoutMs;
+  let probeCount = 0;
+  let lastProbe = {};
   try {
     while (now() < deadline) {
+      const probeStartedAt = now();
       const health = await probe(instanceId);
+      probeCount += 1;
+      lastProbe = {
+        probe_duration_ms: health.probe_duration_ms ?? Math.max(0, now() - probeStartedAt),
+        ...(health.probe_result ? { probe_result: health.probe_result } : {}),
+        ...(health.probe_http_status ? { probe_http_status: health.probe_http_status } : {}),
+        ...(health.probe_mismatch ? { probe_mismatch: health.probe_mismatch } : {}),
+      };
       if (spawnError) throw new Error(`server spawn failed: ${spawnError.message}`);
       if (child.exitCode != null || child.signalCode != null) {
         const detail = child.exitCode != null
@@ -127,6 +213,11 @@ async function startServer({
       await sleep(Math.min(150, Math.max(0, deadline - now())));
     }
     throw new Error(`server did not come up on :${port} within ${timeoutMs / 1000}s`);
+  } catch (error) {
+    throw Object.assign(error, { startupContext: {
+      process_start_id: instanceId, elapsed_ms: Math.max(0, now() - startedAt),
+      probe_count: probeCount, ...lastProbe,
+    } });
   } finally {
     child.removeListener('error', onError);
   }
@@ -169,6 +260,8 @@ async function waitForStableServerProbe(probe, options = {}) {
 }
 
 module.exports = {
+  probeServerHealth,
+  requestJson,
   readServerLogTail,
   createServerArguments,
   createServerChildEnvironment,

@@ -20,6 +20,13 @@ export const diagnosticContextSchema = z.object({
   tool_call_id: z.string().max(512).optional(), tool_category: z.enum(['read', 'write', 'shell', 'search', 'agent', 'other']).optional(),
   close_code: z.number().int().min(0).max(65535).optional(), was_clean: z.boolean().optional(),
   close_initiator: z.enum(['client', 'server', 'unknown']).optional(),
+  close_reason: z.enum(['client_close', 'socket_closed', 'socket_error', 'process_exit', 'session_disposed', 'scope_removed', 'rpc_timeout']).optional(),
+  process_start_id: z.string().uuid().optional(), process_generation: z.number().int().positive().optional(),
+  pending_rpc_methods: z.array(z.string().max(100)).max(20).optional(),
+  probe_count: z.number().int().nonnegative().optional(), probe_duration_ms: z.number().nonnegative().optional(),
+  probe_result: z.enum(['ready', 'connection_refused', 'connect_timeout', 'response_timeout', 'transport_error', 'http_error', 'invalid_json', 'identity_mismatch', 'not_ready']).optional(),
+  probe_http_status: z.number().int().min(100).max(599).optional(),
+  probe_mismatch: z.enum(['app', 'ok', 'protocolVersion', 'appRoot', 'resourcesPath', 'instanceId']).optional(),
   connection_id: z.string().uuid().optional(), native_session_id: z.string().max(512).optional(),
   attempt_id: z.string().uuid().optional(), retry_of: z.string().uuid().optional(),
   target_version: z.string().max(100).optional(), process: z.string().max(100).optional(),
@@ -33,7 +40,9 @@ export function boundedDiagnosticContext(input: unknown): unknown {
   const limits: Record<string, number> = { method: 16, route: 500, action: 200, stage: 100,
     model: 200, runtime_version: 100, tool_call_id: 512, native_session_id: 512, target_version: 100, process: 100, reason: 500, app_version: 100 };
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key,
-    typeof value === 'string' && limits[key] ? diagnosticText(value, limits[key]) : value]));
+    typeof value === 'string' && limits[key] ? diagnosticText(value, limits[key])
+      : key === 'pending_rpc_methods' && Array.isArray(value)
+        ? value.slice(0, 20).map(method => typeof method === 'string' ? diagnosticText(method, 100) : method) : value]));
 }
 
 const correlation = { request_id: z.string().uuid().optional(), context: diagnosticContextSchema.optional() };
@@ -88,6 +97,14 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
     ...correlation,
     failure_stage: z.enum(['discovery', 'installation', 'authentication', 'mcp']).optional(),
     diagnostic: diagnostic.optional(),
+  }).strict(),
+  z.object({ event: z.literal('agent_connection_closed'), runtime, turn_id: z.string().uuid().optional(), ...correlation }).strict(),
+  z.object({ event: z.literal('agent_runtime_start_result'), runtime, turn_id: z.string().uuid().optional(),
+    purpose: z.enum(['history', 'chat', 'prewarm']), outcome: z.enum(['success', 'failed', 'cancelled']),
+    stage: z.enum(['prepare', 'spawn', 'waiting_ready', 'ready', 'cleanup']),
+    attempt_id: z.string().uuid(), retry_of: z.string().uuid().optional(),
+    elapsed_ms: z.number().nonnegative(), first_output_ms: z.number().nonnegative().optional(),
+    diagnostic: diagnostic.optional(), ...correlation,
   }).strict(),
   z.object({ event: z.literal('agent_setup_stage'), runtime, attempt_id: z.string().uuid(), stage: z.enum(['discovery', 'installation', 'authentication', 'mcp']), outcome: z.enum(['started', 'success']), ...correlation }).strict(),
   z.object({ event: z.literal('application_error'), ...diagnosticFields }).strict(),

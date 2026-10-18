@@ -14,8 +14,12 @@ import {
   OpenCodePanelSession,
   openCodeSessionHasContent,
 } from '../opencode-agent.ts';
-import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, waitForOpenCodeServer, type OpenCodeSessionRuntime } from '../opencode-runtime.ts';
-import { agentProcessExitDiagnostic } from '../agent-process.ts';
+import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, type OpenCodeSessionRuntime } from '../opencode-runtime.ts';
+import { agentProcessExitDiagnostic, ownAgentProcess, retireAgentProcess } from '../agent-process.ts';
+import { waitForOpenCodeServer, retryOpenCodeHistoryStartup, retireFailedOpenCode } from '../opencode-startup.ts';
+import { PassThrough } from 'node:stream';
+import type { ChildProcessByStdio } from 'node:child_process';
+import type { Readable } from 'node:stream';
 import { errorDiagnostic } from '../error-diagnostics.ts';
 import { agentCliPath } from '../agent-cli.ts';
 import type { HostedAgentTurnModel } from '../hosted-agent-broker.ts';
@@ -103,6 +107,81 @@ test('OpenCode startup exit retains its code or signal and bounded stderr', asyn
       return true;
     });
     await closed;
+  }
+});
+
+test('OpenCode startup timeout preserves separate redacted output and releases every startup listener', async () => {
+  const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() }) as unknown as ChildProcessByStdio<null, Readable, Readable>;
+  const diagnostic = agentProcessExitDiagnostic(child);
+  let firstOutput = 0;
+  const waiting = waitForOpenCodeServer(child, 12345, diagnostic, { timeoutMs: 10, onFirstOutput: () => firstOutput++ });
+  (child.stdout as PassThrough).write('preparing state\n');
+  (child.stderr as PassThrough).write('database busy token=SECRET\n');
+  await assert.rejects(waiting, error => {
+    const captured = errorDiagnostic(error);
+    assert.equal(captured.code, 'OPENCODE_START_TIMEOUT');
+    assert.match(captured.stdout!, /preparing state/);
+    assert.match(captured.stderr!, /database busy/);
+    assert.doesNotMatch(JSON.stringify(captured), /SECRET/);
+    return true;
+  });
+  assert.equal(firstOutput, 1);
+  assert.equal(child.stdout.listenerCount('data'), 0);
+  assert.equal(child.stderr.listenerCount('data'), 1, 'only the lifetime stderr tail remains');
+  assert.equal(child.listenerCount('error'), 0);
+  assert.equal(child.listenerCount('exit'), 0);
+});
+
+test('OpenCode readiness waits for the complete stdout address and removes listeners on success or refusal', async () => {
+  for (const port of [12345, 12346]) {
+    const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() }) as unknown as ChildProcessByStdio<null, Readable, Readable>;
+    let ready = false;
+    const waiting = waitForOpenCodeServer(child, 12345, agentProcessExitDiagnostic(child));
+    void waiting.then(() => { ready = true; }, () => {});
+    (child.stderr as PassThrough).write('opencode server listening on http://127.0.0.1:12345\n');
+    (child.stdout as PassThrough).write('opencode server listening on http://127.0.0.1:123');
+    await settle();
+    assert.equal(ready, false);
+    (child.stdout as PassThrough).write(`${String(port).slice(3)}\n`);
+    if (port === 12345) assert.equal(await waiting, 'http://127.0.0.1:12345');
+    else await assert.rejects(waiting, /unexpected address/);
+    assert.equal(child.stdout.listenerCount('data'), 0);
+    assert.equal(child.listenerCount('exit'), 0);
+  }
+});
+
+test('history startup retry cannot overtake retirement of the failed real child', async (t) => {
+  const child = ownAgentProcess(spawn(process.execPath, ['-e', `
+    process.on('SIGTERM', () => setTimeout(() => process.exit(0), 50));
+    process.stderr.write('fixture ready'); setInterval(() => {}, 1000);
+  `], { detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] }));
+  t.after(() => retireAgentProcess(child));
+  await new Promise<void>(resolve => child.stderr.once('data', () => resolve()));
+  let closed = false;
+  child.once('close', () => { closed = true; });
+  const attempts: number[] = [];
+  const result = await retryOpenCodeHistoryStartup(async attempt => {
+    attempts.push(attempt);
+    if (attempt === 0) {
+      try { await waitForOpenCodeServer(child, 12345, agentProcessExitDiagnostic(child), { timeoutMs: 10 }); }
+      catch (error) { return retireFailedOpenCode(child, error); }
+    }
+    assert.equal(closed, true, 'the first process and its pipes must have closed');
+    return 'history readable';
+  }, () => false);
+  assert.equal(result, 'history readable');
+  assert.deepEqual(attempts, [0, 1]);
+});
+
+test('history startup retry is bounded and excludes cancellation, cleanup and prerequisite failures', async () => {
+  for (const [code, cancelled, count] of [
+    ['OPENCODE_START_TIMEOUT', false, 2], ['AGENT_PROCESS_EXIT', false, 2],
+    ['OPENCODE_START_TIMEOUT', true, 1], ['OPENCODE_CLEANUP_FAILED', false, 1], ['ENOENT', false, 1],
+  ] as const) {
+    let attempts = 0;
+    const error = Object.assign(new Error(code), { code });
+    await assert.rejects(retryOpenCodeHistoryStartup(async () => { attempts++; throw error; }, () => cancelled), error);
+    assert.equal(attempts, count);
   }
 });
 

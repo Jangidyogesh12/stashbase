@@ -48,6 +48,14 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Readiness evidence (2026-10-18):** `electron/main-probe.cjs` owns bounded fresh
+loopback probes and preserves the final result, identity mismatch field, count
+and timing in startup diagnostics. `main-probe.test.cjs` drives real HTTP
+refusal/stall/status/JSON/identity cases and verifies timeout evidence without
+weakening spawned-instance ownership. The production Windows 8.5-second listen
+followed by a ten-second readiness timeout remains unexplained; the new evidence
+separates its possible causes on subsequent occurrences.
+
 **Diagnostic follow-up (2026-10-16):** updater regressions cover recognized network
 errors inside GitHub's latest-release/feed wrappers, while certificate, integrity
 and genuine feed errors remain errors; strings inside feed XML cannot downgrade
@@ -980,6 +988,35 @@ Template and colored tray assets were inspected at normal and enlarged sizes;
 colored attention uses the app's fixed badge-red with a transparent separation
 around the dot, while macOS retains native template contrast. Physical menu clicks, packaged Windows overlays and Linux
 tray/launcher availability remain explicit release checks.
+**Startup recovery and correlation (2026-10-18):** `opencode-startup.ts` removes
+startup listeners and makes failure rejection wait for process retirement.
+`opencode-runtime.ts` retains single-flight ownership through cleanup and fences
+failed cleanup; only history listing requests one retry on timeout/early exit.
+`opencode-agent.test.ts` covers split ready output, timeout evidence/listeners,
+real child retirement before retry, bounded retry and cancellation/prerequisites.
+The native smoke checks concurrent history readers share a startup and successful
+chat/prewarm/history samples retain attempt IDs and timing. Codex transport/session
+regressions correlate process exit and socket/client closure with connection ID,
+process generation, pending RPC names and credential-filtered exit evidence,
+without late skills errors. Telemetry tests preserve a search-tool failure followed
+by a successful turn and delivery/opt-out of startup samples. These fixtures do
+not reproduce the reported Windows cold-start failure or establish that a
+WebSocket 1006 was caused by network loss.
+
+Validation: Agent tests (369), telemetry/native-diagnostic/error tests (43), native
+OpenCode checks (3), Electron/protocol checks, host/renderer types, docs, service
+and renderer builds, and the built Electron smoke passed. An isolated macOS
+Electron run used the built host/renderer with controlled child failures: a silent
+first child timed out at 15 seconds, closed, and was replaced 3 ms later; history
+finished loading. Two controlled early exits exhausted the retry and kept
+"Chats unavailable for Codex, Default" with Retry visible. Manual Retry launched
+a third child, returned Default history HTTP 200 and removed Default's failure;
+the unrelated Codex prerequisite failure remained. No chat was submitted.
+`profile:default-session` (two runs per label) measured cold startup 1078–3629 ms
+before and 1184–2125 ms after; next-chat startup was 17–28 ms before and 15–25 ms
+after. This small local fixture comparison establishes no Windows performance
+improvement; startup deadlines remain unchanged. Packaged Windows and production
+telemetry delivery still need post-release evidence.
 
 **Closed startup and duplicate diagnostics (2026-10-16):** Codex regressions close
 the socket during model/skill discovery and verify no subsequent requests,

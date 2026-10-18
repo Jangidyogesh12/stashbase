@@ -1,5 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import readline from 'node:readline';
+import { agentProcessExitDiagnostic } from './agent-process.ts';
 import { appVersion } from './codex-app-server-process.ts';
 import { logger } from './log.ts';
 import {
@@ -21,6 +22,7 @@ export class CodexRpcRequestTimeoutError extends Error {
 }
 
 interface PendingRpc {
+  method: string;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer?: ReturnType<typeof setTimeout>;
@@ -48,7 +50,7 @@ export class CodexRpcPeer {
     if (this.closed) return Promise.reject(new Error('Codex app-server is not running.'));
     const id = this.nextRequestId++;
     return new Promise((resolve, reject) => {
-      const pending: PendingRpc = { resolve, reject };
+      const pending: PendingRpc = { method, resolve, reject };
       const timeoutMs = this.options.requestTimeoutMs ?? 0;
       if (timeoutMs > 0) {
         const scheduleTimeout = this.options.scheduleTimeout ?? setTimeout;
@@ -118,6 +120,10 @@ export class CodexRpcPeer {
     this.pending.clear();
   }
 
+  pendingMethods(): string[] {
+    return [...new Set([...this.pending.values()].map(({ method }) => method))].slice(0, 20);
+  }
+
   isClosed(): boolean {
     return this.closed;
   }
@@ -146,6 +152,7 @@ export interface CodexAppServerConnection {
   initialize(): Promise<unknown>;
   /** Close the RPC peer and stop reading the process streams. Idempotent. */
   close(error?: Error): void;
+  pendingMethods(): string[];
 }
 
 /** Wire a spawned app-server's stdio to a JSON-RPC peer. A process exit or
@@ -162,6 +169,8 @@ export function connectCodexAppServer(
     if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
     proc.stdin.write(`${line}\n`);
   }, options);
+  const exitDiagnostic = agentProcessExitDiagnostic(proc);
+  let finalPending: string[] = [];
   const stdout = readline.createInterface({ input: proc.stdout });
   const stderr = readline.createInterface({ input: proc.stderr });
   stdout.on('line', (line) => rpc.receiveLine(line));
@@ -173,6 +182,7 @@ export function connectCodexAppServer(
   const close = (error?: Error): boolean => {
     if (closed) return false;
     closed = true;
+    finalPending = rpc.pendingMethods();
     rpc.close(error);
     stdout.close();
     stderr.close();
@@ -183,10 +193,11 @@ export function connectCodexAppServer(
   };
   proc.once('error', (err) => exit(errorFromUnknown(err)));
   proc.once('close', (code, signal) => {
-    exit(new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`));
+    exit(exitDiagnostic(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`, code, signal));
   });
   return {
     rpc,
+    pendingMethods: () => closed ? finalPending : rpc.pendingMethods(),
     initialize: () => rpc.request('initialize', {
       clientInfo: { name: 'StashBase', title: null, version: appVersion() },
       capabilities: {

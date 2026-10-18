@@ -343,8 +343,13 @@ stable status without download, retry, or a new durable demand latch.
   deadline or replace an expired spare. One app-wide spare expires after two idle minutes
   and is retired on window close, project removal, or shutdown. Startup cancellation
   cannot resurrect a retired process, and shutdown awaits already-retiring servers.
-  History readers have separate ownership. All Codex app-server
-  owners share retirement that waits for exit and escalates process-tree termination;
+  History readers have separate ownership. OpenCode and Codex app-server
+  owners share retirement that waits for pipe closure and process-tree exit,
+  escalating termination when needed. OpenCode startup remains single-flight
+  through cleanup; failed cleanup fences further starts. Only the history-list
+  entry requests one startup retry for timeout/early exit, after retirement.
+  Preparation failures, cancellation, chat dispatch and history mutations never
+  receive this retry. Startup listeners are removed on every outcome;
   shutdown also awaits readers and already-retiring processes.
   Process death settles pending RPCs/turns, and generation guards reject late
   messages. An ambiguous timed-out start retires its generation before retry.
@@ -833,6 +838,16 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   status/request ID separately from the local HTTP result. Unexpected daemon
   and Agent startup exits retain bounded, credential-filtered stderr and the
   available exit code/signal, without serializing process configuration.
+  OpenCode reports each physical startup attempt, including success/cancellation,
+  with purpose (history/chat/prewarm), pinned version, attempt/retry identity,
+  stage, elapsed time and first output time. Ready means the expected loopback
+  address was announced on stdout, not that a model request succeeded. WARN
+  native logs also go to stderr; startup failure keeps bounded separate output
+  tails. Codex carries its original exit Error through the session boundary;
+  socket diagnostics retain process start/generation, close initiator/reason and
+  at most twenty pending RPC method names, never RPC parameters. Connection
+  closure is an observation separate from turn outcome, including idle/intentional
+  closure. These observations cannot retroactively fail a completed turn.
   Renderer JSON-body failures retain the original cause, status (including 2xx),
   content type and host-issued response request ID. Requested cancellation stays
   cancellation; empty HEAD/204/205 responses are not decode failures. The Agent
@@ -994,6 +1009,11 @@ justified and bounded. Stories/axe do not prove painted contrast or composition.
 
 Main owns launch identity, save barriers, retirement tombstones, and shutdown.
 Readiness must match the spawned instance, not merely a listener or PID.
+Each health probe uses a fresh connection and a bounded whole-response deadline.
+Startup failures retain the last probe result/duration/status or mismatched
+identity field, probe count and total elapsed time. Refusal, connect/response
+timeout, transport failure, HTTP failure and invalid JSON remain distinguishable;
+health bodies and actual identity paths are not added to probe metadata.
 Single-instance and startup arbitration prevent duplicate initial windows.
 Packaged launches own their server; bounded POSIX orphan reclaim verifies sibling
 identity and a dead parent before killing. Foreign/live-parented listeners remain untouched.

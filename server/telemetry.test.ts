@@ -131,7 +131,7 @@ test('default-on manual collection has only allowed fields and no source or acco
   f.service.capture({ event: 'project_entry_result', outcome: 'success', path: '/private' } as any);
   await tick();
   assert.equal(f.sent.length, 1);
-  assert.equal(f.sent[0].body.properties.schema_version, 5);
+  assert.equal(f.sent[0].body.properties.schema_version, 6);
   assert.equal(f.sent[0].body.properties.$process_person_profile, false);
   assert.equal(f.sent[0].body.properties.$geoip_disable, true);
   assert.equal(f.sent[0].body.properties.$ip, null);
@@ -797,7 +797,7 @@ test('tool failure can recover and interrupt acknowledgement remains cancellatio
     return id;
   };
   const first = start();
-  reportAgentRuntimeError('claude', { t: 'tool', id: 'tool-1', name: 'Read', input: { private: 'PRIVATE INPUT' } }, connection);
+  reportAgentRuntimeError('claude', { t: 'tool', id: 'tool-1', name: 'mcp__stashbase__search_project', input: { private: 'PRIVATE INPUT' } }, connection);
   reportAgentRuntimeError('claude', { t: 'tool-result', id: 'tool-1', content: 'PRIVATE OUTPUT', isError: true }, connection);
   reportAgentRuntimeError('claude', { t: 'turn-end', isError: false }, connection);
   const second = start();
@@ -806,8 +806,37 @@ test('tool failure can recover and interrupt acknowledgement remains cancellatio
   await f.service.flush();
   const outcomes = f.sent.filter(({ body }) => body.event === 'agent_turn_finished');
   assert.deepEqual(outcomes.map(({ body }) => [body.properties.turn_id, body.properties.outcome]), [[first, 'success'], [second, 'cancelled']]);
-  assert.equal(f.sent.find(({ body }) => body.properties.operation === 'tool')!.body.properties.context.tool_category, 'read');
+  assert.equal(f.sent.find(({ body }) => body.properties.operation === 'tool')!.body.properties.context.tool_category, 'search');
   assert.doesNotMatch(JSON.stringify(f.sent), /PRIVATE/);
+  f.service.close();
+});
+
+test('startup attempts retain initiating scope, successful latency and retry linkage through delivery', async () => {
+  const { diagnosticScope } = await import('./diagnostic-context.ts');
+  const { rendererTelemetryEventSchema } = await import('../shared/protocols/http/telemetry.ts');
+  const f = fixture();
+  const request_id = crypto.randomUUID();
+  const attempt_id = crypto.randomUUID();
+  const turn_id = crypto.randomUUID();
+  const capture = diagnosticScope.run({ request_id, turn_id, context: { method: 'GET', route: '/api/agents/:agent/sessions' } }, () => f.service.scoped());
+  capture({ event: 'agent_runtime_start_result', runtime: 'stashbase', purpose: 'history', outcome: 'failed',
+    stage: 'waiting_ready', attempt_id, elapsed_ms: 15_050,
+    diagnostic: { message: 'timeout', stderr: 'database busy token=PRIVATE_SECRET' } });
+  const success = { event: 'agent_runtime_start_result', runtime: 'stashbase', purpose: 'history', outcome: 'success',
+    stage: 'ready', attempt_id: crypto.randomUUID(), retry_of: attempt_id, elapsed_ms: 2100, first_output_ms: 2099 } as const;
+  capture(success);
+  assert.equal(rendererTelemetryEventSchema.safeParse(success).success, false, 'native startup is a host fact');
+  await f.service.flush();
+  const starts = f.sent.filter(({ body }) => body.event === 'agent_runtime_start_result');
+  assert.equal(starts.length, 2);
+  assert.ok(starts.every(({ body }) => body.properties.request_id === request_id && body.properties.turn_id === turn_id));
+  assert.equal(starts[1].body.properties.retry_of, attempt_id);
+  assert.equal(starts[1].body.properties.elapsed_ms, 2100);
+  assert.doesNotMatch(JSON.stringify(starts), /PRIVATE_SECRET/);
+  f.service.update({ enabled: false });
+  capture(success);
+  await f.service.flush();
+  assert.equal(f.sent.filter(({ body }) => body.event === 'agent_runtime_start_result').length, 2);
   f.service.close();
 });
 

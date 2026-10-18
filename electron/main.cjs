@@ -16,12 +16,12 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const http = require('node:http');
 const {
   readServerLogTail,
   createServerArguments,
   createServerChildEnvironment,
-  isCompatibleServerHealth,
+  probeServerHealth,
+  requestJson,
   startServer,
 } = require('./main-probe.cjs');
 const { createBugReportService } = require('./bug-report-service.cjs');
@@ -650,7 +650,7 @@ async function startOrReuseServer() {
     if (!child) console.log(`[electron] reusing existing server at ${SERVER_URL}`);
   } catch (err) {
     stopSpawnedServer(spawnedChild);
-    throw new Error(appendServerLogHint(err?.message ?? String(err)), { cause: err });
+    throw Object.assign(new Error(appendServerLogHint(err?.message ?? String(err)), { cause: err }), { startupContext: err?.startupContext });
   }
 }
 
@@ -670,81 +670,10 @@ async function ensureServer() {
   }
 }
 
-async function probeServer(port, timeoutMs, instanceId) {
-  const health = await requestJson(port, '/api/health', timeoutMs);
-  if (!health.reachable) {
-    return {
-      compatible: false,
-      occupied: health.connected,
-      legacyStashBase: false,
-      transient: health.connected,
-    };
-  }
-  if (
-    health.statusCode === 200 &&
-    isCompatibleServerHealth(health.body, {
-      protocolVersion: SERVER_PROTOCOL_VERSION,
-      appRoot: PROJECT_ROOT,
-      resourcesPath: RESOURCES_ROOT,
-      instanceId,
-    })
-  ) {
-    return { compatible: true, occupied: true, legacyStashBase: false, transient: false };
-  }
-
-  const folder = await requestJson(port, '/api/folder', timeoutMs);
-  const legacyStashBase =
-    folder.statusCode === 200 &&
-    folder.body &&
-    typeof folder.body === 'object' &&
-    ('current' in folder.body || 'recent' in folder.body) &&
-    'homeDir' in folder.body;
-  return { compatible: false, occupied: true, legacyStashBase, transient: false };
-}
-
-function requestJson(port, requestPath, timeoutMs, options = {}) {
-  return new Promise((resolve) => {
-    let connected = false;
-    let settled = false;
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      resolve({ ...result, connected });
-    };
-    const req = http.request(
-      {
-        host: SERVER_HOST,
-        port,
-        path: requestPath,
-        method: options.method || 'GET',
-        headers: options.headers,
-        timeout: timeoutMs,
-      },
-      (res) => {
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => {
-          if (body.length < 4096) body += chunk;
-        });
-        res.on('end', () => {
-          try {
-            finish({ reachable: true, statusCode: res.statusCode ?? 0, body: JSON.parse(body) });
-          } catch {
-            finish({ reachable: true, statusCode: res.statusCode ?? 0, body: null });
-          }
-        });
-      },
-    );
-    req.on('socket', (socket) => {
-      if (!socket.connecting) connected = true;
-      else socket.once('connect', () => { connected = true; });
-    });
-    req.on('error', () => finish({ reachable: false, statusCode: 0, body: null }));
-    req.on('timeout', () => {
-      req.destroy();
-      finish({ reachable: false, statusCode: 0, body: null });
-    });
-    req.end();
+function probeServer(port, timeoutMs, instanceId) {
+  return probeServerHealth(port, timeoutMs, {
+    protocolVersion: SERVER_PROTOCOL_VERSION, appRoot: PROJECT_ROOT,
+    resourcesPath: RESOURCES_ROOT, instanceId,
   });
 }
 
@@ -883,7 +812,7 @@ async function createWindow() {
   try {
     await ensureServer();
   } catch (err) {
-    nativeDiagnostics.record({ message: err?.message ?? String(err), cause: err, stderr: readServerLogTail(getServerLogPath()) }, 'startup', { process: 'host', stage: 'ready' });
+    nativeDiagnostics.record({ message: err?.message ?? String(err), cause: err, stderr: readServerLogTail(getServerLogPath()) }, 'startup', { process: 'host', stage: 'ready', ...err?.startupContext });
     const message = String(err?.message ?? err);
     // Native error boxes are not BrowserWindows and can block unattended
     // launch diagnostics. Preserve the same failure in stdout before opening

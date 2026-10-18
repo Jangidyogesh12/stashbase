@@ -794,10 +794,10 @@ async function sessionBlocks(
   ];
 }
 
-async function clientFor(folder: string) {
+async function clientFor(folder: string, retryStartup = false) {
   if (!folder) throw new Error('Open a project before reading chat history.');
   const cwd = folder;
-  return { client: await openCodeClient(cwd), cwd };
+  return { client: await openCodeClient(cwd, retryStartup), cwd };
 }
 
 async function assertSessionInScope(
@@ -815,7 +815,7 @@ async function assertSessionInScope(
 export function openCodeHistoryActions(): AgentHistoryActions {
   return {
     async list(folder) {
-      const { client, cwd } = await clientFor(folder);
+      const { client, cwd } = await clientFor(folder, true);
       const list = await client.session.list(DATA_REQUEST);
       return Promise.all(
         list.data

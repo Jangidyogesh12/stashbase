@@ -1,4 +1,4 @@
-import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { setAgentProcessSnapshot, updateAgentDiagnosticContext, markAgentDiagnosticClosing, agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 import { isStashbaseWorkspaceEdit, isWorkspaceFileChange } from './agent-file-permissions.ts';
 import { retireAgentProcess } from './agent-process.ts';
 /**
@@ -85,6 +85,7 @@ export class CodexSession implements AttributedAgentSession {
   private closed = false;
   private ready = false;
   private appServerReady = false;
+  private processGeneration = 0;
   private retirement: Promise<void> = Promise.resolve();
   private proc: ChildProcessWithoutNullStreams | null = null;
   private cwd: string | null = null;
@@ -217,6 +218,8 @@ export class CodexSession implements AttributedAgentSession {
       STASHBASE_AGENT_SESSION_ID: this.attributionId,
     });
     this.proc = proc;
+    updateAgentDiagnosticContext(this.ws, { process_start_id: randomUUID(), process_generation: ++this.processGeneration,
+      pending_rpc_methods: [], close_reason: undefined, close_initiator: undefined });
     const appServer = connectCodexAppServer(proc, {
       requestTimeoutMs: this.requestTimeoutMs,
       onRequest: ({ id, method, params }) => this.onServerRequest({ id, method, params }),
@@ -226,10 +229,14 @@ export class CodexSession implements AttributedAgentSession {
         if (this.appServer !== appServer) return;
         this.appServer = null;
         this.proc = null;
-        if (!this.closed) this.handleAppServerExit(error.message);
+        if (!this.closed) {
+          updateAgentDiagnosticContext(this.ws, { pending_rpc_methods: appServer.pendingMethods(), close_initiator: 'server', close_reason: 'process_exit' });
+          this.handleAppServerExit(error);
+        }
       },
     });
     this.appServer = appServer;
+    setAgentProcessSnapshot(this.ws, () => this.appServer ? { pending_rpc_methods: this.appServer.pendingMethods() } : {});
     return appServer;
   }
 
@@ -410,6 +417,7 @@ export class CodexSession implements AttributedAgentSession {
    */
   private fenceTimedOutTurnStart(): void {
     const threadId = this.threadId;
+    updateAgentDiagnosticContext(this.ws, { close_initiator: 'server', close_reason: 'rpc_timeout' });
     this.disposeAppServer();
     if (threadId) {
       this.threadId = null;
@@ -940,6 +948,7 @@ export class CodexSession implements AttributedAgentSession {
     if (termination?.kind === 'scope-removed') {
       this.send({ t: 'exit', reason: 'scope-removed', folder: termination.folder });
     }
+    markAgentDiagnosticClosing(this.ws, termination?.kind === 'scope-removed' ? 'scope_removed' : 'session_disposed');
     this.closed = true;
     unregisterAttributedAgentSession(this.attributionId);
     this.onDispose?.(this);
@@ -957,11 +966,12 @@ export class CodexSession implements AttributedAgentSession {
     const proc = this.proc;
     this.appServer = null;
     this.proc = null;
+    if (appServer) updateAgentDiagnosticContext(this.ws, { pending_rpc_methods: appServer.pendingMethods() });
     appServer?.close(new Error('Codex session closed.'));
     if (proc) this.retirement = retireAgentProcess(proc);
   }
 
-  private handleAppServerExit(message: string): void {
+  private handleAppServerExit(error: Error): void {
     this.appServerReady = false;
     this.busy = false;
     this.activeTurnId = null;
@@ -972,7 +982,7 @@ export class CodexSession implements AttributedAgentSession {
     // Sending a pre-ready `error` first races the renderer's state commit
     // against the immediate socket close and can replace this detail with a
     // generic connection-closed message.
-    this.finish(message);
+    this.finish(error.message, error);
   }
 }
 

@@ -221,6 +221,11 @@ repair, an outdated runtime, provider limits, transport loss, and turn failure s
 recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
+When listing Default history, a runtime startup timeout or early exit gets one
+automatic retry after the failed process has fully retired. This retries only
+startup, before reading history; it never replays a chat turn or a history edit.
+Exhausted recovery keeps the load error and manual retry available. Missing
+runtime/account prerequisites and failed cleanup do not trigger automatic retry.
 An uninstalled Agent is an installation prerequisite when reading its history,
 not a server failure or evidence that its native history is empty.
 Repeated identical native retry errors appear once per turn while retries continue;
