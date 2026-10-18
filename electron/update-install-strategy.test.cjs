@@ -82,6 +82,7 @@ test('Electron defers the Linux deb relaunch until its server child exits', asyn
   vm.runInNewContext(source.slice(start, end), {
     app,
     serverProc: child,
+    authNetworkBridge: { close: () => events.push('close-auth-network') },
     relaunchAfterServerExit: true,
     desktopUpdates: { getState: () => ({ phase: 'installing' }) },
     requestJson: async (_port, _path, _timeout, options) => {
@@ -96,10 +97,11 @@ test('Electron defers the Linux deb relaunch until its server child exits', asyn
   });
   app.emit('will-quit', { preventDefault: () => events.push('wait') });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(events, ['wait']);
+  assert.deepEqual(events, ['close-auth-network', 'wait']);
+  app.emit('will-quit', { preventDefault: () => events.push('wait-again') });
   child.exitCode = 0;
   child.emit('exit', 0);
-  assert.deepEqual(events, ['wait', 'relaunch', 'exit']);
+  assert.deepEqual(events, ['close-auth-network', 'wait', 'relaunch', 'exit']);
 });
 
 test('AppImage applies first and relaunches the final filename after process exit', () => {
