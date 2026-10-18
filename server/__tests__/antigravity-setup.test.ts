@@ -213,6 +213,11 @@ test('the hook launcher is neutral outside StashBase, asks the host inside, and 
     let out = '';
     child.stdout.on('data', (chunk) => { out += chunk; });
     child.once('error', reject);
+    // Outside StashBase the launcher exits without reading stdin. Its decision
+    // is still asserted below, even when it closes the pipe before this write.
+    child.stdin.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'EPIPE') reject(error);
+    });
     child.once('close', () => resolve(out.trim()));
     child.stdin.end(payload);
   });
