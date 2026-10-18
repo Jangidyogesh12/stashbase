@@ -265,6 +265,40 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
   assert.equal('user_metadata' in output.state, false);
 });
 
+test('OAuth callback explains transport failures without exposing login credentials', () => {
+  const result = runIsolated(`
+    const express = (await import('express')).default;
+    const account = await import('./server/hosted-account.ts');
+    const { mount } = await import('./server/routes/account.ts');
+    const localFetch = globalThis.fetch;
+    const app = express();
+    mount(app, { appReturnToken: 'test' });
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise(resolve => server.once('listening', resolve));
+    const replies = [];
+    try {
+      for (const code of ['ENOTFOUND', 'ECONNRESET', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'ERR_PROXY_CONNECTION_FAILED', 'ETIMEDOUT']) {
+        const flow = account.beginHostedOAuth('google', 'http://127.0.0.1:8090');
+        globalThis.fetch = async () => {
+          throw new TypeError('fetch failed', { cause: Object.assign(new Error('private-auth-code private-verifier'), { code }) });
+        };
+        const response = await localFetch('http://127.0.0.1:' + server.address().port + '/api/account/oauth/callback?code=private-auth-code&flow=' + flow.flowId);
+        replies.push({ code, status: response.status, html: await response.text(), flow: account.hostedOAuthStatus(flow.flowId) });
+      }
+      process.stdout.write(JSON.stringify(replies));
+    } finally { server.closeAllConnections(); server.close(); }
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  for (const reply of JSON.parse(result.stdout)) {
+    assert.equal(reply.status, 400);
+    assert.match(reply.html, /Sign-in failed/);
+    assert.match(reply.html, /exchange/i);
+    assert.ok(reply.html.includes(reply.code), reply.html);
+    assert.ok(reply.flow.error.includes(reply.code));
+    assert.doesNotMatch(reply.html, /private-auth-code|private-verifier|fetch failed/);
+  }
+});
+
 test('allowance HTTP failures preserve upstream metadata and network causes only in diagnostics', () => {
   const result = runIsolated(`
     const express = (await import('express')).default;

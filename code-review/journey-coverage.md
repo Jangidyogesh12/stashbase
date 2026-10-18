@@ -317,6 +317,22 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
   duplication passed on recheck. Real Google/Supabase login and packaged protocol
   handoff remain unproven.
 
+**Desktop sign-in proxy recovery (2026-10-18):** Auth requests now use
+`server/hosted-auth-transport.ts` and the private
+`electron/account/auth-network.ts` Chromium relay. `hosted-auth-transport.test.ts`
+covers fixed-target authority, request/response bounds, exchange/refresh/profile/
+logout, provider refusals, cancellation, shutdown and no direct fallback.
+`hosted-account.test.ts` reproduces the callback's former generic `fetch failed`
+and checks DNS, reset, certificate, proxy and timeout explanations without
+credentials. The native `electron/account/auth-network-smoke.cjs` exercises real
+Chromium PAC-selected HTTPS CONNECT and a proxy change to an unavailable listener.
+An isolated built-host/Electron pass used a local TLS Auth fixture and CONNECT
+proxy: PKCE completed, a later rejected tunnel produced the specific callback
+error, and the prior session survived. The rendered callback was inspected in a
+browser; the full diagnostic and return button fit the card. These controlled
+fixtures do not establish live Google/Supabase login, authenticated corporate
+proxies, OS settings on Windows/Linux, or the reporting user's network.
+
 ## J02: Folder
 
 **Intent:** [J02](../design-docs/journeys/README.md#j02-add-and-open-a-folder).

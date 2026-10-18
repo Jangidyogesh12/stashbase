@@ -24,12 +24,10 @@ import {
   type HostedAccountSession,
 } from './app-config.ts';
 import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
+import { hostedAuthRequest } from './hosted-auth-transport.ts';
+import { SUPABASE_URL } from '../shared/hosted-auth-network.ts';
 
 export const STASHBASE_API_URL = 'https://api.stashbase.ai';
-const SUPABASE_URL = 'https://vqtfigkoihpuziaimluf.supabase.co';
-// Supabase publishable keys are intentionally safe to ship in clients. The
-// project secret key remains server-only and must never enter this repository.
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_D-S7Ry-IWC9pTdDx6DHHHw_-mmaTp3b';
 const CLIENT_VERSION = packageJson.version;
 
 interface SupabaseUser {
@@ -132,14 +130,8 @@ function sessionFrom(value: SupabaseTokenResponse, fallback?: HostedAccountSessi
 }
 
 async function supabaseAuth(path: string, body: Record<string, unknown>, accessToken?: string): Promise<SupabaseTokenResponse> {
-  const response = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      'content-type': 'application/json',
-      ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: JSON.stringify(body),
+  const response = await hostedAuthRequest(path, {
+    body, accessToken,
     signal: AbortSignal.timeout(10_000),
   });
   const payload = await jsonBody<SupabaseTokenResponse>(response);
@@ -155,8 +147,8 @@ async function supabaseUser(accessToken: string): Promise<SupabaseUser> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROFILE_TIMEOUT_MS);
   try {
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, authorization: `Bearer ${accessToken}` },
+    const response = await hostedAuthRequest('/user', {
+      accessToken,
       signal: controller.signal,
     });
     const payload = await jsonBody<SupabaseUser & ErrorPayload>(response);
@@ -247,7 +239,7 @@ export async function exchangeHostedOAuthCode(flowId: string, authCode: string):
     flow.state = 'exchanged';
     return session;
   } catch (error: unknown) {
-    failHostedOAuth(flowId, error instanceof Error ? error.message : String(error));
+    failHostedOAuth(flowId, error);
     throw error;
   }
 }
@@ -311,16 +303,16 @@ export function noteHostedOAuthAppReturn(now = Date.now()): {
   };
 }
 
-export function failHostedOAuth(flowId: string, message: string): void {
+export function failHostedOAuth(flowId: string, error: unknown): void {
   const flow = pendingOAuthFlows.get(flowId);
   if (!flow || flow.state === 'complete') return;
   if (flow.state !== 'error') {
     telemetry.capture({ event: 'account_login_result', outcome: 'failed' });
     telemetry.capture({ event: 'agent_setup_result', runtime: 'stashbase', stage: 'login', outcome: 'failed',
-      diagnostic: errorDiagnostic(message) });
+      diagnostic: errorDiagnostic(error) });
   }
   flow.state = 'error';
-  flow.error = message;
+  flow.error = error instanceof Error ? error.message : String(error);
 }
 
 export function hostedOAuthStatus(flowId: string): HostedOAuthStatus {

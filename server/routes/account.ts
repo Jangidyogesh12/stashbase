@@ -195,7 +195,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       }));
     } catch (error: unknown) {
       const message = errorMessage(error);
-      failHostedOAuth(flowId, message);
+      failHostedOAuth(flowId, error);
       res.status(400).type('html').send(oauthResultPage({
         title: 'Sign-in failed', message, kind: 'error',
         returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,

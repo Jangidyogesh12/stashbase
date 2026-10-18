@@ -132,6 +132,12 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   new attempts and sign-out retire prior local continuations across windows.
 - Network/provider failure preserves credentials. Clear a session only on explicit
   sign-out or confirmed invalidation; repair does not implicitly send or replay work.
+- Desktop account authentication follows the operating system's proxy settings,
+  including automatic proxy configuration. Sign-in failures identify the failed
+  stage and the available DNS, connection, proxy, certificate or timeout code,
+  with recovery guidance. Authorization codes, tokens and proxy credentials
+  never appear in these diagnostics. A failed exchange requires a new sign-in
+  attempt; it is not silently retried or sent directly around a failed proxy.
 - A runtime too old for a chosen model is repaired where it failed: the turn
   offers the runtime's update, the conversation reconnects on the updated
   runtime, and the refused request is sent again. Settings offers the same

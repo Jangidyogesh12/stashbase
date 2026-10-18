@@ -18,7 +18,7 @@ if (process.platform === 'linux' && environment.CI === 'true') {
 }
 
 async function run() {
-  for (const script of ['smoke.cjs', 'request-authorization-smoke.cjs', 'bug-report-smoke.cjs']) {
+  for (const script of ['smoke.cjs', 'request-authorization-smoke.cjs', 'bug-report-smoke.cjs', '../account/auth-network-smoke.cjs']) {
     const child = spawn(
       require('electron'),
       [...electronArguments, path.join(__dirname, script)],

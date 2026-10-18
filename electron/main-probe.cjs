@@ -40,6 +40,7 @@ function createServerChildEnvironment({
   shutdownToken,
   oauthReturnToken,
   instanceId,
+  authNetwork,
 }) {
   const environment = {
     ...baseEnv,
@@ -48,6 +49,12 @@ function createServerChildEnvironment({
     STASHBASE_OAUTH_RETURN_TOKEN: oauthReturnToken,
     STASHBASE_SERVER_INSTANCE_ID: instanceId,
   };
+  delete environment.STASHBASE_AUTH_NETWORK_PORT;
+  delete environment.STASHBASE_AUTH_NETWORK_TOKEN;
+  if (authNetwork) {
+    environment.STASHBASE_AUTH_NETWORK_PORT = String(authNetwork.port);
+    environment.STASHBASE_AUTH_NETWORK_TOKEN = authNetwork.token;
+  }
   if (packaged) {
     delete environment.STASHBASE_DEV_RUNTIME;
     delete environment.STASHBASE_DEV_VITE;

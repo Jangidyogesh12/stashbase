@@ -137,6 +137,7 @@ app.on('child-process-gone', (_event, details) => {
 });
 let serverProc = null;
 let serverStartPromise = null;
+let authNetworkBridge = null;
 const mainWindows = new Set();
 let quitRequested = false;
 const bugReportReviewWindows = new Set();
@@ -586,6 +587,7 @@ function spawnServer(instanceId) {
       shutdownToken: SERVER_SHUTDOWN_TOKEN,
       oauthReturnToken: OAUTH_RETURN_TOKEN,
       instanceId,
+      authNetwork: authNetworkBridge,
     }),
     // stdin = 'ignore' is intentional: the server never reads from
     // stdin, and inheriting the parent's TTY made Node attach a real
@@ -618,6 +620,7 @@ function spawnServer(instanceId) {
   });
   const child = serverProc;
   child.on('exit', (code, signal) => {
+    if (serverProc === child) authNetworkBridge?.cancelPending();
     if (!quitRequested && (code !== 0 || signal)) nativeDiagnostics.record({ message: 'Host process exited unexpectedly', exitCode: code, signal, stderr: readServerLogTail(getServerLogPath()) }, 'native', { process: 'host', stage: 'exit' });
     if (serverProc === child) serverStartPromise = null;
     if (code != null && code !== 0) {
@@ -630,6 +633,14 @@ function spawnServer(instanceId) {
 async function startOrReuseServer() {
   let spawnedChild = null;
   try {
+    if (!authNetworkBridge) {
+      const { createAuthNetworkBridge } = require('../dist/electron/account/auth-network.cjs');
+      // An isolated in-memory session follows OS proxy/PAC changes without
+      // sharing renderer cookies, request hooks, or authentication storage.
+      const authSession = session.fromPartition('stashbase-account-network', { cache: false });
+      await authSession.setProxy({ mode: 'system' });
+      authNetworkBridge = await createAuthNetworkBridge({ fetch: (url, init) => authSession.fetch(url, init) });
+    }
     const child = await startServer({
       packaged: app.isPackaged,
       port: SERVER_PORT,
@@ -1176,6 +1187,8 @@ app.on('before-quit', () => { quitRequested = true; });
 let quitting = false;
 app.on('will-quit', (event) => {
   if (quitting) return;
+  authNetworkBridge?.close();
+  authNetworkBridge = null;
   // `.killed` only records that a signal was SENT (e.g. the spawn-timeout
   // path's SIGTERM) — the child may still be alive, and skipping the ladder
   // here would orphan it because the timeout path's SIGKILL timer is unref'd
