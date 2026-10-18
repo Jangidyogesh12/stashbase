@@ -258,7 +258,7 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
   requested project. `server/folder-startup.test.ts` owns these startup
   regressions. This pass does not establish packaged Welcome composition.
   Earlier isolated macOS built-app passes cover Welcome/Recent,
-  return without automatic project reopen, independent windows, orphan recovery,
+  independent windows, orphan recovery,
   delayed-start activation, save-refused quit and later reopen,
   and theme writes. OS URL registration/key protection are substitutes.
   Account identity/menu is tested; a seeded session did not prove live sign-in.
@@ -346,9 +346,31 @@ proxies, OS settings on Windows/Linux, or the reporting user's network.
 **Intent:** [J02](../design-docs/journeys/README.md#j02-add-and-open-a-folder).
 
 **Implementation:** Renderer: `renderer/src/features/workspace/hooks/use-project-entry.ts`, `renderer/src/features/workspace/hooks/use-project-entry-receiver.ts`, `renderer/src/features/workspace/ui/sidebar.tsx`, `renderer/src/features/workspace/application/open-folder.ts`, `renderer/src/features/workspace/application/remove-folder.ts`.
-Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-file-mutations.ts`.
+Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-file-mutations.ts`, `electron/window-restore.cjs`.
 
 **Status:** Partial and release-dependent.
+
+- **Launch reopens the last projects (2026-10-18):** main records the projects
+  its windows show and reopens them, one window each, through the project-entry
+  claim. `electron/window-restore.test.cjs` covers the record's round trip and
+  damage, failed writes, focus order, the last-closed stand-in, window reuse
+  after a refused entry, and Welcome when nothing reopens. Four isolated macOS
+  built-app launches (scratch HOME and userData, port 8097) verified: two
+  project windows recorded with the focused one last and kept through a real
+  `app.quit()`; the relaunch reopened both, the second window restoring its
+  open document tab; closing both windows with the app running kept the last one
+  closed, which the next launch reopened alone; with that folder deleted, the
+  launch stayed on Welcome, Recent kept the row, and the record cleared. An
+  update installation closes windows through Electron's installer before
+  `before-quit`; main's gate that keeps the record then (the update barrier
+  being active) has no test and was not driven, since no real update was
+  installed. Windows briefly show
+  Welcome before their project enters. After integrating the 2.16.10 mainline,
+  the complete source gate passed (the renderer size violation was corrected
+  and its affected gates rerun). A fresh isolated macOS built-app pass on port
+  18111 opened a disposable project with the native folder picker, opened a
+  kept Markdown tab, quit cleanly, and restored both project and tab on relaunch.
+  Telemetry reported unavailable, and both exits released the test port.
 
 - **Sidebar project switcher (2026-10-14):** the folder header's name opens a
   menu of recent projects plus Open, Create, and Import from GitHub, driving the

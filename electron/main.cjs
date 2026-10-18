@@ -33,6 +33,7 @@ const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs'
 const { createUpdateInstaller } = require('./update-install-strategy.cjs');
 const { createUpdateManager } = require('./update-manager.cjs');
 const { createWindowLifecycleUpdateBarrier } = require('./update-window-barrier.cjs');
+const { createWindowRestoreRecord, foldersToRestore, reopenFolders } = require('./window-restore.cjs');
 const {
   APP_ORIGIN,
   APP_URL,
@@ -157,6 +158,9 @@ let replacementAppearance = null;
 let replacementEditableContextMenu = null;
 let replacementUpdates = null;
 let workspaceSessionRestoreWindow = null;
+// Windows a launch reopened a project in also restore that project's tabs.
+const reopenedProjectWindows = new WeakSet();
+let projectEntry = null;
 let replacementBoundaryInstalled = false;
 
 // The review page is the renderer's own `bug-report.html`. It loads from the
@@ -322,7 +326,7 @@ function installReplacementBoundary() {
       replacementWindowCapabilities.get(win)?.has(capability) === true
     ),
   });
-  lifecycle.registerLifecycle({
+  projectEntry = lifecycle.registerLifecycle({
     BrowserWindow,
     ipcMain,
     expectedOrigins: new Set([RENDERER_ORIGIN]),
@@ -342,11 +346,14 @@ function installReplacementBoundary() {
         registry: windowRegistry,
         senderWindow: win,
       });
+      rememberOpenProjects();
       return result.ok ? result.action : null;
     },
     setActiveFolder: (win, folder) => {
       const windowId = windowRegistry.idForWindow(win);
-      return windowId ? windowRegistry.setFolder(windowId, folder) : false;
+      const recorded = windowId ? windowRegistry.setFolder(windowId, folder) : false;
+      if (recorded) rememberOpenProjects();
+      return recorded;
     },
     windowsForFolder: async (folder) => (await windowRegistry.windowsByFolder(folder))
       .filter((win) => isLiveMainWindow(win)),
@@ -359,7 +366,7 @@ function installReplacementBoundary() {
     hasCapability: (win, capability) => (
       replacementWindowCapabilities.get(win)?.has(capability) === true
     ),
-    claimRestore: (win) => win === workspaceSessionRestoreWindow,
+    claimRestore: (win) => win === workspaceSessionRestoreWindow || reopenedProjectWindows.has(win),
     store: workspaceSession.createWorkspaceSessionStore({
       filePath: path.join(app.getPath('userData'), 'workspace-session.json'),
     }),
@@ -418,6 +425,53 @@ function installReplacementBoundary() {
   replacementBoundaryInstalled = true;
 }
 let lastMainWindow = null;
+
+// The projects the next launch reopens. Quitting and installing an update
+// close every window; the record keeps what those windows showed instead of
+// following them closed. Nothing is recorded until the launch has read it.
+let windowRestore = null;
+let windowRestoreReady = false;
+
+function windowRestoreRecord() {
+  windowRestore ??= createWindowRestoreRecord({
+    filePath: path.join(app.getPath('userData'), 'window-restore.json'),
+  });
+  return windowRestore;
+}
+
+function rememberOpenProjects(closing = null) {
+  if (!windowRestoreReady || quitRequested || desktopUpdateWindows.isActive()) return;
+  windowRestoreRecord().write(foldersToRestore({
+    windows: [...mainWindows].filter((win) => win === closing || isLiveMainWindow(win)),
+    folderFor: (win) => windowRegistry.folderForWindow(win),
+    focused: lastMainWindow,
+    closing,
+  }));
+}
+
+async function openInitialWindows() {
+  const folders = windowRestoreRecord().read();
+  const firstWindow = await initialWindowFlight.run();
+  try {
+    if (!projectEntry || folders.length === 0) return;
+    await reopenFolders({
+      folders,
+      firstWindow,
+      createWindow: () => createWindow({ reopensProject: true }),
+      enterFolder: async (win, folder) => {
+        await projectEntry.enterFolder(win, folder);
+        windowRegistry.setFolder(windowRegistry.idForWindow(win), folder);
+      },
+      isLive: (win) => isLiveMainWindow(win),
+      onFailure: (_folder, error) => {
+        console.warn(`[electron] a project from the last session could not be reopened: ${error?.message ?? error}`);
+      },
+    });
+  } finally {
+    windowRestoreReady = true;
+    rememberOpenProjects();
+  }
+}
 
 async function readAutoUpdatePreference() {
   const response = await fetch(`${SERVER_URL}/api/updates/preferences`);
@@ -807,7 +861,7 @@ async function openBugReportReview(win) {
   }
 }
 
-async function createWindow() {
+async function createWindow({ reopensProject = false } = {}) {
   if (desktopUpdateWindows.isActive()) return;
   try {
     await ensureServer();
@@ -850,6 +904,7 @@ async function createWindow() {
   });
   const webContentsId = win.webContents.id;
   if (!workspaceSessionRestoreWindow) workspaceSessionRestoreWindow = win;
+  if (reopensProject) reopenedProjectWindows.add(win);
   win.webContents.on('render-process-gone', (_event, details) => {
     if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Renderer exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: 'renderer', reason: details.reason });
   });
@@ -891,8 +946,10 @@ async function createWindow() {
   });
   win.on('focus', () => {
     lastMainWindow = win;
+    rememberOpenProjects();
   });
   win.on('closed', () => {
+    rememberOpenProjects(win);
     bugReports.discardUnreviewedDraftsForSource(webContentsId);
     mainWindows.delete(win);
     windowRegistry.remove(windowId);
@@ -1081,7 +1138,7 @@ if (!hasSingleInstanceLock) {
       console.warn('[electron] bug-report temporary session initialization failed');
     }
     installApplicationMenu();
-    await initialWindowFlight.run();
+    await openInitialWindows();
     await desktopUpdates.start();
     app.on('browser-window-focus', () => { void desktopUpdates.checkOnActivity(); });
     powerMonitor.on('resume', () => { void desktopUpdates.checkOnActivity(); });

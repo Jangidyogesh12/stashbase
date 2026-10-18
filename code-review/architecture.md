@@ -904,7 +904,8 @@ registered host boundaries; renderer shared types are a different layer.
   Stores, query caches, timers, subscriptions, workers, and URLs have explicit
   owners and disposal. One window has one query client, not durable authority.
 - Main's one-shot folder claim and server binding decide entry, not saved layout.
-  One startup window claims restoration. Native session persistence serializes
+  The startup window, and each window a launch reopens a project in, claims
+  restoration. Native session persistence serializes
   changed records against each window's baseline, preserving peer changes;
   failed writes retain the last valid file and do not advance the baseline.
 - Tabs stay unique across asynchronous opens. First edit keeps a preview; only
@@ -1031,6 +1032,14 @@ If it stays live, startup reports the occupied port instead of racing a second b
 The Linux deb updater defers relaunch scheduling until the owned server has
 exited during main's quit sequence.
 
+- Main records which projects its windows show (`electron/window-restore.cjs`,
+  a record in Electron user data) on every folder, focus, and close change,
+  the focused project last. Quit and update installation close every window
+  without rewriting it, so it keeps what those windows showed; with no window
+  left, the last project closed stands in. Launch reads it before writing,
+  then enters each project through the same one-shot claim as a reader's
+  request. A refused entry leaves its window for the next project, and a
+  leftover window closes unless it is the only one, which stays on Welcome.
 - Close asks the owning loaded renderer and stays open on failure/timeout.
   Confirmed renderer termination releases the barrier because its buffers are
   already lost; reloading establishes a new renderer that must acknowledge. Explicit

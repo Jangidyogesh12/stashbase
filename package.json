@@ -64,7 +64,7 @@
     "test:protocols": "node --import tsx --test 'shared/protocols/**/*.test.ts'",
     "test:electron-boundary": "pnpm build:electron-boundary && node --test --test-reporter=spec 'electron/{app-protocol,window-security}.test.cjs' 'electron/{bug-report,external-navigation,notifications,project,renderer,text-services,updates,window,workspace}/*.test.cjs'",
     "test:electron-boundary:smoke": "pnpm build:web && pnpm build:electron-boundary && pnpm test:electron:smoke:built",
-    "test:electron": "pnpm test:protocols && pnpm test:electron-boundary && node --test --test-reporter=spec 'electron/{main-probe,multi-window,bug-report-*}.test.cjs'",
+    "test:electron": "pnpm test:protocols && pnpm test:electron-boundary && node --test --test-reporter=spec 'electron/{main-probe,multi-window,window-restore,bug-report-*}.test.cjs'",
     "test:electron:smoke": "pnpm test:electron-boundary:smoke",
     "typecheck:web": "vp run @stashbase/renderer#typecheck",
     "test:docs": "node scripts/check-docs.mjs",

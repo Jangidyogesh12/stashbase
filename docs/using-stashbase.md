@@ -5,7 +5,8 @@ brainstorm with an Agent, and begin drafting when ready.
 
 ## Choose a Folder and an Agent
 
-The first window opens at Welcome. Open an existing folder, create an empty
+The first launch opens at Welcome. Later launches, including a restart to
+update, reopen the projects you had open. Open an existing folder, create an empty
 project, import a public GitHub repository, or choose **Make a copy** in the
 Gallery. Chat becomes available inside the project, even if it contains no
 files. An entry's **Copy prompt** copies its build request for you to paste;

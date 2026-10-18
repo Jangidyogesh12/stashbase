@@ -14,8 +14,12 @@ usable; Agent setup and indexing are independent.
   reuse the initiating Welcome window; otherwise open another window.
 - Repeated or superseded requests cannot create duplicate copies or windows.
   Existing work remains available until a replacement entry succeeds.
-- Startup reaches Welcome without seeding projects or native instruction files.
-  Explicit entry restores saved work. Only explicit removal forgets registration.
+- Startup reopens the projects the previous run's windows showed, one window
+  each, with their saved work. Once every window was closed while the app kept
+  running, the last project closed stands in. With nothing to reopen, startup
+  reaches Welcome; a project that can no longer be entered leaves its window on
+  Welcome. Startup never seeds projects or native instruction files. Only
+  explicit removal forgets registration.
 - An occupied window keeps its project. Its sidebar's project name opens a
   switcher: recent projects, Open, Create, and Import from GitHub. Each follows
   the window rule, so another project opens in its own window or focuses the

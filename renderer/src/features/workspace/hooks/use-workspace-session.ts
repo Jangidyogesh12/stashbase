@@ -1,5 +1,6 @@
 /** Restore presentation state for the server-bound project. Project entry is
- * owned by the entry receiver; saved state never chooses a project to open. */
+ * owned by the entry receiver, through which main reopens the last session's
+ * projects at launch; this saved state never chooses a project to open. */
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { useStore } from 'zustand';
