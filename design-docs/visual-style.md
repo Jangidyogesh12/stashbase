@@ -20,7 +20,9 @@ Keep documents and conversation readable; navigation and controls stay secondary
 - Support light/dark themes, text sizes, keyboard use, visible focus, and reduced
   motion, whether the system or Settings asks for it.
 - Native status menus use the OS menu surface and typography, compact section
-  labels and conversation titles. Status marks stay small and still: a hollow
+  labels and conversation titles. Menu-bar marks use optical small-size stroke
+  weights, transparent backgrounds and tighter padding so the brand has comparable visual weight to
+  neighboring system icons at native scale. Status marks stay small and still: a hollow
   neutral ring for work, a solid dot for attention, separated from the brand mark
   by clear space. Colored tray/taskbar marks use the fixed badge-red token;
   macOS menu-bar templates keep native contrast and Dock badges keep system styling.

@@ -943,6 +943,15 @@ coverage initially hit widespread test and worker-start timeouts. Repeating only
 coverage with two workers passed all 341 files and 1,695 tests without relaxing
 assertions or timeout limits.
 
+**Menu-bar icon weight (2026-10-18):** `scripts/icons/status.mjs` uses
+tray-specific optical stroke weights for both standard and Retina assets,
+slightly lighter than the padded small app icon. The transparent menu-bar mark
+fills more of the native canvas, with a smaller separated
+attention dot. Electron-rendered comparisons covered idle, working and attention
+on light/dark surfaces, plus enlarged colored and template assets. A native
+macOS Tray loaded all three template variants with 1x/2x representations; the
+icon and documentation checks passed. This changes presentation only; native template tint and notification lifecycle are unchanged.
+
 **Session menu and attention badges (2026-10-17):** `desktop-sessions.ts`
 projects retained session selectors through the existing platform adapter into
 the native menu-bar/tray. Running contains working, waiting and stopping sessions,

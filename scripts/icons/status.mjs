@@ -3,6 +3,7 @@
 import { BrowserWindow } from 'electron';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { weightedSvg } from './encode.mjs';
 
 export async function renderStatusIcons() {
   // Fixed, theme-independent badge hue from renderer/src/globals.css (--badge-red).
@@ -20,15 +21,17 @@ export async function renderStatusIcons() {
   };
   try {
     for (const template of [false, true]) for (const state of ['idle', 'working', 'attention']) {
-      let svg = source;
+      // The enlarged tray silhouette needs less stroke compensation than a
+      // padded app icon. Keep these optical weights identical at 1x and 2x.
+      let svg = weightedSvg(source, { frame: 32, ink: 40 });
       if (template) svg = svg.replace(/<rect[^>]+\/>/, '').replace(/#[a-f0-9]{6}/gi, '#000000');
       const active = state !== 'idle';
-      // A transparent moat separates the 3.4px dot from the mark on every surface.
+      // A transparent moat separates the 3px dot from the mark on every surface.
       // Template images keep this geometry while macOS supplies contrast/tint.
-      const marker = !active ? '' : `<circle cx="430" cy="82" r="48" fill="${state === 'attention' ? (template ? '#000' : red) : 'none'}" stroke="${template ? '#000' : '#737373'}" stroke-width="${state === 'working' ? 22 : 0}"/>`;
-      const mask = '<defs><mask id="mark"><rect width="512" height="512" fill="white"/><circle cx="430" cy="82" r="78" fill="black"/></mask></defs>';
+      const marker = !active ? '' : `<circle cx="455" cy="66" r="42" fill="${state === 'attention' ? (template ? '#000' : red) : 'none'}" stroke="${template ? '#000' : '#737373'}" stroke-width="${state === 'working' ? 18 : 0}"/>`;
+      const mask = '<defs><mask id="mark"><rect width="512" height="512" fill="white"/><circle cx="455" cy="66" r="66" fill="black"/></mask></defs>';
       svg = svg.replace(/(<svg[^>]*>)/, `$1${active ? mask : ''}<g${active ? ' mask="url(#mark)"' : ''}>`)
-        .replace('<g stroke=', '<g transform="translate(0 32) scale(.9)"><g stroke=')
+        .replace('<g stroke=', '<g transform="translate(-38 -20) scale(1.12)"><g stroke=')
         .replace('</svg>', `</g></g>${marker}</svg>`);
       await render(`${state}${template ? 'Template' : ''}`, svg);
     }
