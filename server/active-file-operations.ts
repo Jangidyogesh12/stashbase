@@ -180,6 +180,16 @@ export async function pathExistsAsync(relPath: string): Promise<boolean> {
   }
 }
 
+/** True if a directory exists at the folder-relative path. */
+export async function directoryExistsAsync(relPath: string): Promise<boolean> {
+  try {
+    const target = await resolveSafeAsync(relPath, 'existing');
+    return (await fs.promises.stat(target)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /** Resolve to an absolute path if anything exists at the folder-relative
  *  location (file OR directory). Used by the reveal-in-OS route, which
  *  needs to accept both files and folders. */

@@ -1,3 +1,4 @@
+import '../__tests__/isolated-home.ts';
 import { mountFileOperationReceipts } from './file-operations.ts';
 import { withWindowContext } from '../http.ts';
 import assert from "node:assert/strict";
@@ -9,6 +10,7 @@ import test from "node:test";
 import express from "express";
 
 import { clearCurrentFolder, removeRecentAsync, openProjectFolder } from "../folder.ts";
+import { indexer } from "../state.ts";
 import { mount as mountFiles } from "./files.ts";
 import { mount as mountFolders } from "./folders.ts";
 
@@ -90,6 +92,129 @@ test("entry mutations honor an explicit folder that names the active folder and 
   }
 });
 
+test("a file moves under its own name into an existing folder and back to the root", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-entry-move-"));
+  fs.mkdirSync(path.join(root, "drafts"));
+  fs.mkdirSync(path.join(root, "archive"));
+  fs.writeFileSync(path.join(root, "plan.md"), "# Plan\n", "utf8");
+  fs.writeFileSync(path.join(root, "index.md"), "See [plan](plan.md).\n", "utf8");
+  fs.writeFileSync(path.join(root, "archive", "plan.md"), "# Old plan\n", "utf8");
+  await openProjectFolder(root);
+
+  const app = express();
+  app.use(express.json());
+  mountFiles(app);
+  const server = await listen(app);
+  const query = `?folder=${encodeURIComponent(root)}`;
+  const move = (entry: string, dir: string) =>
+    fetch(`${server.origin}/api/files/${entry}${query}`, {
+      body: JSON.stringify({ dir }),
+      headers: { "content-type": "application/json" },
+      method: "PATCH",
+    });
+
+  try {
+    const moved = await move("plan.md", "drafts");
+    assert.equal(moved.status, 200);
+    assert.equal(((await moved.json()) as { name: string }).name, "drafts/plan.md");
+    assert.equal(fs.readFileSync(path.join(root, "drafts", "plan.md"), "utf8"), "# Plan\n");
+    assert.equal(fs.existsSync(path.join(root, "plan.md")), false);
+    // Links elsewhere follow the file, as they do for a rename.
+    assert.equal(fs.readFileSync(path.join(root, "index.md"), "utf8"), "See [plan](drafts/plan.md).\n");
+
+    // A name already taken in the destination refuses and leaves both files.
+    const taken = await move("drafts/plan.md", "archive");
+    assert.equal(taken.status, 409);
+    assert.equal(fs.readFileSync(path.join(root, "archive", "plan.md"), "utf8"), "# Old plan\n");
+    assert.ok(fs.existsSync(path.join(root, "drafts", "plan.md")));
+
+    // A destination that is gone, or that is not a folder, is never created.
+    assert.equal((await move("drafts/plan.md", "gone")).status, 404);
+    assert.equal(fs.existsSync(path.join(root, "gone")), false);
+    assert.equal((await move("drafts/plan.md", "index.md")).status, 404);
+    assert.equal((await move("drafts/plan.md", "../elsewhere")).status, 400);
+
+    const back = await move("drafts/plan.md", "");
+    assert.equal(back.status, 200);
+    assert.equal(((await back.json()) as { name: string }).name, "plan.md");
+    assert.ok(fs.existsSync(path.join(root, "plan.md")));
+    // A selected existing directory is an exact identity, not a name to trim.
+    fs.mkdirSync(path.join(root, " drafts"));
+    const spaced = await move("plan.md", " drafts");
+    assert.equal(spaced.status, 200);
+    assert.equal(((await spaced.json()) as { name: string }).name, " drafts/plan.md");
+    assert.ok(fs.existsSync(path.join(root, " drafts", "plan.md")));
+    assert.equal(fs.existsSync(path.join(root, "drafts", "plan.md")), false);
+  } finally {
+    await server.close();
+    clearCurrentFolder();
+    await removeRecentAsync(root);
+    fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
+  }
+});
+
+test("a folder moves with everything inside it, never into itself, and its links follow", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-folder-move-"));
+  // No daemon is bound here; the index owner only has to hear about the move.
+  const prefixMoves: Array<[string, string]> = [];
+  t.mock.method(indexer, "renamePathPrefix", async (from: string, to: string) => {
+    prefixMoves.push([path.relative(root, from), path.relative(root, to)]);
+  });
+  t.mock.method(indexer, "upsertFile", async () => undefined);
+  fs.mkdirSync(path.join(root, "drafts", "chapter"), { recursive: true });
+  fs.mkdirSync(path.join(root, "archive", "drafts"), { recursive: true });
+  fs.mkdirSync(path.join(root, "book"));
+  fs.writeFileSync(path.join(root, "index.md"), "See [one](drafts/chapter/one.md).\n", "utf8");
+  fs.writeFileSync(path.join(root, "drafts", "chapter", "one.md"), "Back to [index](../../index.md).\n", "utf8");
+  await openProjectFolder(root);
+
+  const app = express();
+  app.use(express.json());
+  mountFolders(app);
+  const server = await listen(app);
+  const query = `?folder=${encodeURIComponent(root)}`;
+  const move = (entry: string, dir: string) =>
+    fetch(`${server.origin}/api/folders/${entry}${query}`, {
+      body: JSON.stringify({ dir }),
+      headers: { "content-type": "application/json" },
+      method: "PATCH",
+    });
+
+  try {
+    assert.equal((await move("drafts", "drafts")).status, 400);
+    assert.equal((await move("drafts", "drafts/chapter")).status, 400);
+    // The destination already holds a folder by that name.
+    assert.equal((await move("drafts", "archive")).status, 409);
+    assert.equal((await move("drafts", "gone")).status, 404);
+    assert.ok(fs.existsSync(path.join(root, "drafts", "chapter", "one.md")));
+
+    const moved = await move("drafts", "book");
+    assert.equal(moved.status, 200);
+    assert.equal(((await moved.json()) as { path: string }).path, "book/drafts");
+    assert.equal(fs.existsSync(path.join(root, "drafts")), false);
+    assert.equal(
+      fs.readFileSync(path.join(root, "index.md"), "utf8"),
+      "See [one](book/drafts/chapter/one.md).\n",
+    );
+    // A link out of the moved folder is one level deeper now.
+    assert.equal(
+      fs.readFileSync(path.join(root, "book", "drafts", "chapter", "one.md"), "utf8"),
+      "Back to [index](../../../index.md).\n",
+    );
+
+    assert.deepEqual(prefixMoves, [["drafts", path.join("book", "drafts")]]);
+
+    const back = await move("book/drafts", "");
+    assert.equal(back.status, 200);
+    assert.equal(((await back.json()) as { path: string }).path, "drafts");
+    assert.equal(fs.readFileSync(path.join(root, "index.md"), "utf8"), "See [one](drafts/chapter/one.md).\n");
+  } finally {
+    await server.close();
+    clearCurrentFolder();
+    await removeRecentAsync(root);
+    fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
+  }
+});
 
 test('a lost rename response can be confirmed without repeating its filesystem write', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-file-receipt-'));

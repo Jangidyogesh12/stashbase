@@ -62,6 +62,7 @@ describe('workspace Quick Open composition', () => {
       })),
       createEntry: vi.fn(),
       deleteEntry: vi.fn(),
+      moveEntry: vi.fn(),
       renameEntry: vi.fn(),
       reveal: vi.fn(async () => undefined),
     };
@@ -163,6 +164,7 @@ describe('workspace Quick Open composition', () => {
       })),
       createEntry: vi.fn(),
       deleteEntry: vi.fn(),
+      moveEntry: vi.fn(),
       renameEntry: vi.fn(),
       reveal: vi.fn(async () => undefined),
     };

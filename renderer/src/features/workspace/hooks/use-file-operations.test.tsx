@@ -110,6 +110,50 @@ describe('file operations', () => {
     expect(onOpenSource).not.toHaveBeenCalled();
   });
 
+  it('moves a file into another folder, opening it there, and says why a move was refused', async () => {
+    const api = operationsApi({
+      moveEntry: vi
+        .fn<FilesPort['moveEntry']>()
+        .mockImplementationOnce(async (_folder, entry, parentPath) => ({
+          path: `${parentPath}/${entry.path.split('/').pop()}`,
+        }))
+        .mockRejectedValueOnce(new FilesError('conflict', 'server sentence')),
+    });
+    const mutateSources = vi.fn(async (_entry, operation: () => Promise<string | null>) => {
+      await operation();
+      return true;
+    });
+    const { hook, runtime } = harness(api, { mutateSources });
+    act(() => runtime.store.setState((state) => selectTreePath(state, 'docs/plan.md')));
+
+    // Its own folder is where it already is, so nothing is asked of the server.
+    await act(() => hook.result.current.moveEntry(PLAN, 'docs'));
+    expect(api.moveEntry).not.toHaveBeenCalled();
+
+    await act(() => hook.result.current.moveEntry(PLAN, 'archive'));
+    expect(mutateSources).toHaveBeenCalledWith(PLAN, expect.any(Function));
+    expect(api.moveEntry).toHaveBeenCalledWith(
+      RESEARCH_FOLDER.path,
+      PLAN,
+      'archive',
+      expect.any(AbortSignal),
+    );
+    expect(runtime.store.getState()).toMatchObject({
+      expanded: { archive: true },
+      selectedPath: 'archive/plan.md',
+    });
+    expect(hook.result.current.settledPath).toBe('archive/plan.md');
+
+    await act(() =>
+      hook.result.current.moveEntry({ kind: 'file', path: 'archive/plan.md' }, 'drafts'),
+    );
+    expect(hook.result.current.failure).toEqual({
+      message: 'That folder already has an item with this name.',
+      tone: 'input',
+    });
+    expect(runtime.store.getState().selectedPath).toBe('archive/plan.md');
+  });
+
   it('creates a draft with the name it was handed, opens it at once, and hands its row a rename', async () => {
     const api = operationsApi();
     const onOpenSource = vi.fn();

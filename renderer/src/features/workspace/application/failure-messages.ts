@@ -39,6 +39,17 @@ export function filesFailure(error: unknown): FailureView {
   });
 }
 
+/** A move is refused for where it was going, not for a name the reader typed. */
+export function moveFailure(error: unknown, kind: 'file' | 'folder'): FailureView {
+  const view = filesFailure(error);
+  if (!(error instanceof FilesError)) return view;
+  if (error.kind === 'conflict') {
+    return { ...view, message: 'That folder already has an item with this name.' };
+  }
+  if (error.kind === 'rejected') return { ...view, message: `The ${kind} cannot be moved there.` };
+  return view;
+}
+
 /** What a refused saved-session read or write reads as. The desktop's own
  *  sentence names a path and travels only as the failure's cause. */
 export const SESSION_MESSAGES: Readonly<Record<'load' | 'save', string>> = {

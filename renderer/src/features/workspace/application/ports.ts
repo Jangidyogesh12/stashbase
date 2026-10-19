@@ -107,13 +107,23 @@ export interface FilesPort {
     name: string,
     signal: AbortSignal,
   ): Promise<{ path: string }>;
+  /** Moves a file or folder under its own name into `parentPath`, an existing
+   *  folder of the same project (empty for the root), and returns the settled
+   *  path. A folder never moves into itself. */
+  moveEntry(
+    folderPath: string,
+    entry: WorkspaceEntry,
+    parentPath: string,
+    signal: AbortSignal,
+  ): Promise<{ path: string }>;
   /** Deletes a file, or a folder with everything inside it, from disk. */
   deleteEntry(folderPath: string, entry: WorkspaceEntry, signal: AbortSignal): Promise<void>;
 }
 
 interface UploadFile {
   readonly blob: Blob;
-  /** Folder-relative destination path; a bare name lands at the folder root. */
+  /** The file's own name. A name with separators is a dropped folder's
+   *  layout, which lands beside existing folders rather than inside them. */
   readonly name: string;
 }
 
@@ -124,11 +134,14 @@ export interface UploadResult {
 }
 
 export interface UploadPort {
-  /** Imports into one captured project, preserving successful partial results. */
+  /** Imports into one captured project, preserving successful partial
+   *  results. Files land in `parentPath`, an existing folder of the project;
+   *  the root when empty. */
   upload(
     folderPath: string,
     files: readonly UploadFile[],
     signal: AbortSignal,
+    parentPath: string,
   ): Promise<UploadResult>;
 }
 

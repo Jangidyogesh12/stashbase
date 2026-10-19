@@ -178,6 +178,40 @@ describe('file tree menu', () => {
     expect(screen.queryByRole('menuitemcheckbox', { name: 'Show hidden files' })).toBeNull();
   });
 
+  it('shows any file or folder in the system file manager', async () => {
+    const api = treeApi();
+    renderTree(api);
+    const user = userEvent.setup();
+
+    const archive = await screen.findByRole('treeitem', {
+      name: 'archive.zip, excluded from Search and automatic Chat context',
+    });
+    fireEvent.contextMenu(archive, { clientX: 12, clientY: 12 });
+    expect(await screen.findByRole('menuitem', { name: 'Rename' })).not.toBeNull();
+    await user.click(screen.getByRole('menuitem', { name: 'Show in file manager' }));
+    await waitFor(() =>
+      expect(api.reveal).toHaveBeenCalledWith(
+        RESEARCH_FOLDER.path,
+        'archive.zip',
+        expect.any(AbortSignal),
+      ),
+    );
+
+    fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'docs' }), {
+      clientX: 12,
+      clientY: 12,
+    });
+    expect(await screen.findByRole('menuitem', { name: 'New file' })).not.toBeNull();
+    await user.click(screen.getByRole('menuitem', { name: 'Show in file manager' }));
+    await waitFor(() =>
+      expect(api.reveal).toHaveBeenLastCalledWith(
+        RESEARCH_FOLDER.path,
+        'docs',
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
   it('offers restricted entries only the reveal action', async () => {
     renderTree(treeApi());
     const user = userEvent.setup();

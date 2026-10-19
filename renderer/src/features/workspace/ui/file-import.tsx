@@ -6,39 +6,37 @@ import type { WorkspaceRuntime } from '@/features/workspace/application/runtime'
 import { useFileImport } from '@/features/workspace/hooks/use-file-import';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
-/** Native file drops here copy into the project. Chat owns its separate drops. */
+/** What the import offers the tree: the file picker, and a drop of desktop
+ *  files into one of the project's folders. */
+export interface FileImportAction {
+  disabled: boolean;
+  drop(dataTransfer: DataTransfer, parentPath: string): void;
+  run(): void;
+}
+
+/** Desktop files dropped on the Files column copy into the project, into the
+ *  folder the tree resolves under the pointer. Chat owns its separate drops. */
 export function FileImport({
   api,
   children,
   runtime,
 }: {
   api: UploadPort;
-  children: (importAction: { disabled: boolean; run(): void }) => ReactNode;
+  children: (importAction: FileImportAction) => ReactNode;
   runtime: WorkspaceRuntime;
 }) {
   const [folderDropped, setFolderDropped] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const state = useFileImport(runtime, api);
+  const drop = (dataTransfer: DataTransfer, parentPath: string) => {
+    const hasFolder = Array.from(dataTransfer.items).some(
+      (item) => item.webkitGetAsEntry()?.isDirectory,
+    );
+    setFolderDropped(hasFolder);
+    if (!hasFolder) void state.importFiles(Array.from(dataTransfer.files), parentPath);
+  };
   return (
-    <div
-      role="group"
-      aria-label="Import project files"
-      onDragOverCapture={(event) => {
-        if (!event.dataTransfer.types.includes('Files')) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = state.pending ? 'none' : 'copy';
-      }}
-      onDropCapture={(event) => {
-        if (!event.dataTransfer.types.includes('Files')) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const hasFolder = Array.from(event.dataTransfer.items).some(
-          (item) => item.webkitGetAsEntry()?.isDirectory,
-        );
-        setFolderDropped(hasFolder);
-        if (!hasFolder) void state.importFiles(Array.from(event.dataTransfer.files));
-      }}
-    >
+    <div role="group" aria-label="Import project files">
       <div className="px-2">
         <input
           aria-label="Choose files to import"
@@ -71,7 +69,7 @@ export function FileImport({
               <p>Could not import: {state.refused.map((file) => file.name).join(', ')}</p>
               <Button
                 disabled={state.pending}
-                onClick={() => void state.importFiles(state.refused)}
+                onClick={() => void state.retryRefused()}
                 size="compact"
                 variant="ghost"
               >
@@ -81,7 +79,7 @@ export function FileImport({
           )}
         </div>
       </div>
-      {children({ disabled: state.pending, run: () => input.current?.click() })}
+      {children({ disabled: state.pending, drop, run: () => input.current?.click() })}
     </div>
   );
 }

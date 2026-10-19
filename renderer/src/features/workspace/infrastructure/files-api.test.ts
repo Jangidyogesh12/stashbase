@@ -201,6 +201,45 @@ describe('files API', () => {
       api.renameEntry('/project/notes', { kind: 'file', path: 'a.md' }, 'b', signal),
     ).rejects.toMatchObject({ kind: 'rejected' });
   });
+
+  it('moves a file or folder into a folder by naming only the destination', async () => {
+    const client: HttpClient = {
+      request: vi
+        .fn()
+        .mockResolvedValueOnce({ body: { linksUpdated: 0, name: ' archive/a #1.md' }, status: 200 })
+        .mockResolvedValueOnce({ body: { path: ' archive/drafts' }, status: 200 }),
+    };
+    const signal = new AbortController().signal;
+    const api = createFilesAdapter(client);
+
+    await expect(
+      api.moveEntry(
+        '/project/notes',
+        { kind: 'file', path: ' drafts/a #1.md' },
+        ' archive',
+        signal,
+      ),
+    ).resolves.toEqual({ path: ' archive/a #1.md' });
+    expect(client.request).toHaveBeenCalledWith({
+      body: { dir: ' archive' },
+      method: 'PATCH',
+      path: expect.stringMatching(
+        /^\/api\/files\/%20drafts\/a%20%231\.md\?folder=%2Fproject%2Fnotes&operationId=[\w-]+$/u,
+      ),
+      signal,
+    });
+    await expect(
+      api.moveEntry('/project/notes', { kind: 'folder', path: 'drafts' }, ' archive', signal),
+    ).resolves.toEqual({ path: ' archive/drafts' });
+    expect(client.request).toHaveBeenLastCalledWith({
+      body: { dir: ' archive' },
+      method: 'PATCH',
+      path: expect.stringMatching(
+        /^\/api\/folders\/drafts\?folder=%2Fproject%2Fnotes&operationId=[\w-]+$/u,
+      ),
+      signal,
+    });
+  });
 });
 
 it('retains the original JSON failure and response identity for a failed listing', async () => {

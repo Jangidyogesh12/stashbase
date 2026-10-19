@@ -20,6 +20,7 @@ import {
   workspaceEntryRequestSchema,
   workspaceFailureSchema,
   workspaceFilesSchema,
+  workspaceMoveEntryRequestSchema,
   workspaceRenameEntryRequestSchema,
   workspaceRevealRequestSchema,
   workspaceRevealResponseSchema,
@@ -182,6 +183,24 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
           `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePathSegments(data.path)}?${folderQuery(data.folderPath)}`,
           signal,
           { body: { new_name: data.name }, method: 'PATCH' },
+        ),
+        schema: entryPathSchema,
+      });
+    },
+    async moveEntry(folderPath, entry, parentPath, signal) {
+      const move = workspaceMoveEntryRequestSchema.safeParse({
+        folderPath,
+        kind: entry.kind,
+        parentPath,
+        path: entry.path,
+      });
+      if (!move.success) throw new FilesError('rejected', 'That item cannot be moved.');
+      const { data } = move;
+      return mutate({
+        ...files(
+          `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePathSegments(data.path)}?${folderQuery(data.folderPath)}`,
+          signal,
+          { body: { dir: data.parentPath }, method: 'PATCH' },
         ),
         schema: entryPathSchema,
       });

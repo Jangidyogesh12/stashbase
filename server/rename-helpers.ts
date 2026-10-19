@@ -1,6 +1,7 @@
 /**
  * Shared rename machinery used by both the file and folder rename
  * routes:
+ *   - `moveTargetAsync` — where a move into another folder lands.
  *   - `renameWithRollback` — disk-first, index-second, with rollback
  *     of the disk rename if the index step fails.
  *   - `bundleRenameEntryAsync` — when a note `<stem>.{md,html}` moves, its
@@ -9,12 +10,35 @@
  *     cascade needs to rewrite external pointers into the bundle.
  */
 import express from 'express';
-import { pathExistsAsync } from './active-file-operations.ts';
+import { directoryExistsAsync, pathExistsAsync } from './active-file-operations.ts';
+import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import type { RenameEntry } from './links.ts';
 import { logger, errorMessage } from './log.ts';
 import { sendError } from './http.ts';
 
 const log = logger('rename');
+
+export type MutationTarget = { path: string } | { error: string; status: number };
+
+/** A move keeps the entry's leaf name exactly as it is on disk and changes
+ *  only its parent, which must already be a folder: a stale listing never
+ *  recreates a folder that is gone. A folder never moves into itself. */
+export async function moveTargetAsync(oldPath: string, rawDir: string): Promise<MutationTarget> {
+  const dir = rawDir.replace(/\/+$/, '');
+  if (dir) {
+    try {
+      normalizeFolderRelativePath(dir, { allowQuotes: true, label: 'dir', writable: true });
+    } catch (err: unknown) {
+      return { error: errorMessage(err), status: 400 };
+    }
+    if (dir === oldPath || dir.startsWith(`${oldPath}/`)) {
+      return { error: 'a folder cannot move into itself', status: 400 };
+    }
+    if (!(await directoryExistsAsync(dir))) return { error: 'destination folder not found', status: 404 };
+  }
+  const leaf = oldPath.slice(oldPath.lastIndexOf('/') + 1);
+  return { path: dir ? `${dir}/${leaf}` : leaf };
+}
 
 /** Two-step rename with rollback: disk first, then index. If index
  *  fails we undo disk; if undo also fails we surface a 500 with an

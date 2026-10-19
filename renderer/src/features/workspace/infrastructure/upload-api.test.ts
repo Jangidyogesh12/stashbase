@@ -5,7 +5,7 @@ import { createUploadAdapter } from './upload-api';
 const signal = new AbortController().signal;
 
 describe('upload API', () => {
-  it('posts multipart files with their folder and maps published paths', async () => {
+  it('posts multipart files with their folder and destination and maps published paths', async () => {
     const fetchRequest = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(JSON.stringify({ files: [{ file: 'image.png' }] }), { status: 200 }),
@@ -20,6 +20,7 @@ describe('upload API', () => {
         },
       ],
       signal,
+      'drafts',
     );
     expect(settled).toEqual({ paths: ['image.png'], refused: [] });
     const call = fetchRequest.mock.calls[0];
@@ -28,6 +29,7 @@ describe('upload API', () => {
     expect(String(url)).toBe('http://127.0.0.1:43123/api/upload');
     const form = init?.body as FormData;
     expect(form.get('folder')).toBe('/project/research');
+    expect(form.get('dir')).toBe('drafts');
     expect(form.getAll('paths')).toEqual(['image.png']);
     expect((form.get('files') as File).name).toBe('image.png');
   });
@@ -38,7 +40,12 @@ describe('upload API', () => {
     );
     const files = ['kept.md', 'x.bin'].map((name) => ({ name, blob: new Blob(['fixture']) }));
     await expect(
-      createUploadAdapter('http://127.0.0.1:43123', fetchRequest).upload('/project', files, signal),
+      createUploadAdapter('http://127.0.0.1:43123', fetchRequest).upload(
+        '/project',
+        files,
+        signal,
+        '',
+      ),
     ).resolves.toEqual({ paths: ['kept-2.md'], refused: [1] });
   });
 
@@ -47,7 +54,12 @@ describe('upload API', () => {
       throw new Error('response lost');
     });
     await expect(
-      createUploadAdapter('http://127.0.0.1:43123', fetchRequest).upload('/project', [], signal),
+      createUploadAdapter('http://127.0.0.1:43123', fetchRequest).upload(
+        '/project',
+        [],
+        signal,
+        '',
+      ),
     ).rejects.toMatchObject({ kind: 'outcome-unknown' });
   });
 
@@ -59,7 +71,7 @@ describe('upload API', () => {
         }),
     );
     await expect(
-      createUploadAdapter('http://127.0.0.1:43123', fetchRequest).upload('/gone', [], signal),
+      createUploadAdapter('http://127.0.0.1:43123', fetchRequest).upload('/gone', [], signal, ''),
     ).rejects.toMatchObject({ kind: 'scope-lost', message: 'folder not found' });
   });
 });

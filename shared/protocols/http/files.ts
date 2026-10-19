@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { VIEWER_FORMATS } from '../../file-formats';
 
-const relativePathSchema = z.string().trim().min(1).max(4096);
+const relativePathSchema = z.string().min(1).max(4096);
 const folderPathSchema = z.string().trim().min(1).max(4096);
 const sourceVersionSchema = z.string().trim().min(1).max(256);
 const boundedSourceTextSchema = z.string().max(8 * 1024 * 1024);
@@ -96,6 +96,19 @@ export const workspaceRenameEntryRequestSchema = z
     folderPath: folderPathSchema,
     kind: workspaceEntryKindSchema,
     name: workspaceEntryNameSchema,
+    path: relativePathSchema,
+  })
+  .strict();
+
+/** A file or folder moving under its own name into another folder of the
+ *  same project. Whether a folder would land inside itself is the server's
+ *  rule. */
+export const workspaceMoveEntryRequestSchema = z
+  .object({
+    folderPath: folderPathSchema,
+    kind: workspaceEntryKindSchema,
+    /** Folder-relative destination folder; empty for the folder root. */
+    parentPath: z.string().max(4096),
     path: relativePathSchema,
   })
   .strict();

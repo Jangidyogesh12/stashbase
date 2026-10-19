@@ -3,7 +3,11 @@ import { useStore } from 'zustand';
 
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
 import { buildTree, visibleTree, type WorkspaceListing } from '@/features/workspace/domain/tree';
-import { selectTreePath, toggleTreeFolder } from '@/features/workspace/domain/workspace';
+import {
+  expandTreeFolder,
+  selectTreePath,
+  toggleTreeFolder,
+} from '@/features/workspace/domain/workspace';
 
 export function useTree(runtime: WorkspaceRuntime, listing: WorkspaceListing) {
   const expanded = useStore(runtime.store, (state) => state.expanded);
@@ -30,6 +34,10 @@ export function useTree(runtime: WorkspaceRuntime, listing: WorkspaceListing) {
     (path: string) => apply((state) => toggleTreeFolder(state, path)),
     [apply],
   );
+  const expand = useCallback(
+    (path: string) => apply((state) => expandTreeFolder(state, path)),
+    [apply],
+  );
 
-  return { expanded, rows, select, selectedPath, toggle };
+  return { expand, expanded, rows, select, selectedPath, toggle };
 }

@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vite-plus/test';
 
 import type { UploadPort, UploadResult } from '@/features/workspace/application/ports';
 import { createWorkspaceRuntime } from '@/features/workspace/application/runtime';
+import { fireDrag } from '@/test/dom';
 import { filesApi, listing, listingFile, workspaceRuntimeOptions } from '@/test/fakes/workspace';
 import { withQueryClient } from '@/test/query';
 
@@ -52,10 +53,65 @@ it('offers import in the tree menu and shows progress only while importing', asy
     runtime.scope.folder.path,
     [{ blob: file, name: 'draft.md' }],
     runtime.signal,
+    '',
   );
   await act(async () => finish({ paths: ['draft.md'], refused: [] }));
   expect(await screen.findByText('1 file imported.')).not.toBeNull();
   expect(screen.queryByText('Importing…')).toBeNull();
+  runtime.dispose();
+  client.clear();
+});
+
+/** A desktop drag as a browser presents it: the files, under the 'Files' type
+ *  happy-dom does not list, with entries that say whether each is a folder. */
+function desktopDrag(files: readonly File[], directory = false): DataTransfer {
+  const dataTransfer = new DataTransfer();
+  for (const file of files) dataTransfer.items.add(file);
+  dataTransfer.setData('Files', '');
+  for (const item of Array.from(dataTransfer.items)) {
+    Object.assign(item, { webkitGetAsEntry: () => ({ isDirectory: directory }) });
+  }
+  return dataTransfer;
+}
+
+it('imports desktop files into the folder they are dropped on, and never a dropped folder', async () => {
+  const runtime = createWorkspaceRuntime(workspaceRuntimeOptions());
+  const upload = vi.fn<UploadPort['upload']>(async () => ({
+    paths: ['docs/scan.pdf'],
+    refused: [],
+  }));
+  const { client } = withQueryClient(
+    <FileImport api={{ upload }} runtime={runtime}>
+      {(importFiles) => (
+        <FileTree
+          api={filesApi({
+            load: vi.fn(async () => listing([listingFile({ path: 'existing.md' })], ['docs'])),
+          })}
+          importFiles={importFiles}
+          revealLabel="Show in file manager"
+          runtime={runtime}
+        />
+      )}
+    </FileImport>,
+  );
+  const docs = await screen.findByRole('treeitem', { name: 'docs' });
+
+  fireDrag(docs, 'dragover', desktopDrag([new File(['a'], 'album')], true));
+  fireDrag(docs, 'drop', desktopDrag([new File(['a'], 'album')], true));
+  expect(
+    await screen.findByText('Choose files to import. To use a whole folder, open it as a project.'),
+  ).not.toBeNull();
+  expect(upload).not.toHaveBeenCalled();
+
+  const scan = new File(['scan'], 'scan.pdf');
+  fireDrag(docs, 'drop', desktopDrag([scan]));
+  expect(upload).toHaveBeenCalledWith(
+    runtime.scope.folder.path,
+    [{ blob: scan, name: 'scan.pdf' }],
+    runtime.signal,
+    'docs',
+  );
+  expect(await screen.findByText('1 file imported.')).not.toBeNull();
   runtime.dispose();
   client.clear();
 });

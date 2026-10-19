@@ -1,5 +1,6 @@
 /** The Workbench tree's context menu: what a right click offers on a row and
- *  on the tree's own space, and the one action a restricted entry keeps. */
+ *  on the tree's own space. Every entry can be shown in the system file
+ *  manager, and that is the one action a restricted entry keeps. */
 import { ContextMenu } from '@base-ui/react/context-menu';
 import {
   Eye,
@@ -69,7 +70,8 @@ function actionsFor(
   if (target.kind === 'space') {
     const rows: MenuRow[] = create('');
     if (actions.importFiles) {
-      rows.push({ icon: Upload, label: 'Import files…', ...actions.importFiles });
+      const { disabled, run } = actions.importFiles;
+      rows.push({ disabled, icon: Upload, label: 'Import files…', run });
     }
     if (actions.hiddenFiles) {
       const { disabled, shown, toggle } = actions.hiddenFiles;
@@ -85,26 +87,28 @@ function actionsFor(
     return rows;
   }
   const { entry } = target;
-  if (target.restricted) {
-    return [{ icon: ExternalLink, label: revealLabel, run: () => actions.onReveal(entry) }];
-  }
+  // Every entry can be shown where it lives on disk; a restricted one offers
+  // nothing else.
+  const reveal: MenuAction = {
+    icon: ExternalLink,
+    label: revealLabel,
+    run: () => actions.onReveal(entry),
+  };
+  if (target.restricted) return [reveal];
   const own: MenuRow[] = [
     { icon: PencilLine, label: 'Rename', run: () => actions.onRename(entry) },
     { destructive: true, icon: Trash2, label: 'Delete', run: () => actions.onDelete(entry) },
   ];
-  if (entry.kind === 'folder') return [...create(entry.path), 'separator', ...own];
-  return target.reprocessable
-    ? [
-        {
-          icon: RefreshCw,
-          label: 'Reprocess',
-          run: () => actions.onReprocess(entry),
-          title: 'Rebuild the searchable version of this file',
-        },
-        'separator',
-        ...own,
-      ]
-    : own;
+  if (entry.kind === 'folder') {
+    return [...create(entry.path), 'separator', reveal, 'separator', ...own];
+  }
+  const reprocess: MenuAction = {
+    icon: RefreshCw,
+    label: 'Reprocess',
+    run: () => actions.onReprocess(entry),
+    title: 'Rebuild the searchable version of this file',
+  };
+  return [...(target.reprocessable ? [reprocess] : []), reveal, 'separator', ...own];
 }
 
 /**

@@ -1,12 +1,12 @@
 /**
- * The tree's two pieces of motion: the group that opens and closes under a
- * folder, and the single highlight that follows the pointer across rows.
+ * The tree's motion: the group that opens and closes under a folder, and the
+ * highlight that follows the pointer across rows or a drag across folders.
  *
  * Both are presentational. The tree hands them geometry and a settle callback
  * and never reads back from them, so nothing about focus or selection depends
  * on an animation having finished.
  */
-import { motion, useIsPresent } from 'framer-motion';
+import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import { useState, type ReactNode } from 'react';
 
 import { collapseTween, spring, tween } from '@/lib/springs';
@@ -64,24 +64,53 @@ interface TreeProximityRect {
   width: number;
 }
 
-export interface TreeProximityHighlightProps {
+export interface TreeHighlightsProps {
   className: string;
+  /** The folder a drag over the tree would land in. */
+  drop: TreeProximityRect | null;
+  /** The row under the pointer. */
+  hover: TreeProximityRect | null;
+  /** A new pointer session starts a new hover surface rather than gliding. */
+  hoverKey: number;
+  reduceMotion: boolean;
+}
+
+/** The tree's lit surface: the pointer's row, or, while a drag is over the
+ *  tree, the folder it would land in instead. The pointer does not move rows
+ *  during a drag, so its row would only be a stale second target. */
+export function TreeHighlights({ drop, hover, hoverKey, ...shared }: TreeHighlightsProps) {
+  return (
+    <AnimatePresence>
+      {drop ? (
+        <TreeHighlight {...shared} key="drop" kind="drop" rect={drop} />
+      ) : (
+        hover && <TreeHighlight {...shared} key={hoverKey} kind="hover" rect={hover} />
+      )}
+    </AnimatePresence>
+  );
+}
+
+interface TreeHighlightProps {
+  className: string;
+  kind: 'drop' | 'hover';
   rect: TreeProximityRect;
   reduceMotion: boolean;
 }
 
-/** The one hover surface, glided between rows rather than drawn per row. */
-export function TreeProximityHighlight({
-  className,
-  rect,
-  reduceMotion,
-}: TreeProximityHighlightProps) {
+/** One surface glided between rows rather than drawn per row. A drop target
+ *  wears it over its whole folder, with a hairline so the region reads as one
+ *  place rather than a stack of rows. */
+function TreeHighlight({ className, kind, rect, reduceMotion }: TreeHighlightProps) {
   return (
     <motion.div
       animate={{ ...rect, opacity: 1 }}
       aria-hidden="true"
-      className={cn('pointer-events-none absolute bg-hover', className)}
-      data-tree-proximity=""
+      className={cn(
+        'pointer-events-none absolute bg-hover',
+        kind === 'drop' && 'ring-1 ring-border ring-inset',
+        className,
+      )}
+      {...(kind === 'drop' ? { 'data-tree-drop-target': '' } : { 'data-tree-proximity': '' })}
       exit={{ opacity: 0, transition: spring.fast.exit }}
       initial={{ ...rect, opacity: 0 }}
       transition={

@@ -1,5 +1,5 @@
 /**
- * Folder CRUD: create / delete (recursive) / rename. Rename uses the
+ * Folder CRUD: create / delete (recursive) / rename and move. Both use the
  * shared `renameWithRollback` ladder + a cross-reference link cascade
  * so anchors elsewhere in the folder still resolve after the move.
  */
@@ -18,7 +18,7 @@ import { toSourcePath } from '../folder.ts';
 import { logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { guardExplicitFolder, sendError } from '../http.ts';
-import { renameWithRollback } from '../rename-helpers.ts';
+import { moveTargetAsync, renameWithRollback, type MutationTarget } from '../rename-helpers.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { clearRecordsUnder } from '../conversion-status.ts';
 import { forgetFolderTurnChanges } from '../turn-changes.ts';
@@ -81,22 +81,20 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Rename a folder. Body: { new_name }. `new_name` is the new basename
-  // (kept in the same parent); cross-parent moves are out of scope. Disk
-  // rename first, then bring the index along by re-embedding every file
-  // under the old prefix at its new path (slow — see mfs.md §B3).
-  // If the index step fails, roll back the disk rename.
+  // Rename or move a folder. Body: { new_name } is the new basename, kept
+  // in the same parent; { dir } moves the folder, under its own name, into
+  // that existing folder-relative folder ('' is the root). Disk move first,
+  // then bring the index along by re-embedding every file under the old
+  // prefix at its new path (slow — see mfs.md §B3). If the index step
+  // fails, roll back the disk move.
   app.patch('/api/folders/*', async (req, res) => {
     if (!(await guardExplicitFolder(req, res))) return;
     const oldPath = (req.params as any)[0] as string;
-    const requested = typeof req.body?.new_name === 'string' ? req.body.new_name.trim() : '';
-    if (!requested) return res.status(400).json({ error: 'new_name required' });
-    if (requested.includes('/')) {
-      return res.status(400).json({ error: 'new_name must not contain "/"' });
-    }
-    const lastSlash = oldPath.lastIndexOf('/');
-    const parent = lastSlash >= 0 ? oldPath.slice(0, lastSlash + 1) : '';
-    const newPath = sanitizeFilename(parent + requested);
+    const target = typeof req.body?.dir === 'string'
+      ? await moveTargetAsync(oldPath, req.body.dir)
+      : renameTarget(oldPath, req.body?.new_name);
+    if ('error' in target) return res.status(target.status).json({ error: target.error });
+    const newPath = target.path;
     if (newPath === oldPath) return res.json({ path: oldPath });
     if (!(await pathExistsAsync(oldPath))) return res.status(404).json({ error: 'source folder not found' });
     if ((await pathExistsAsync(newPath)) && !(await isSameExistingPathAsync(oldPath, newPath))) {
@@ -182,4 +180,13 @@ export function mount(app: express.Express): void {
       },
     });
   });
+}
+
+function renameTarget(oldPath: string, rawName: unknown): MutationTarget {
+  const requested = typeof rawName === 'string' ? rawName.trim() : '';
+  if (!requested) return { error: 'new_name required', status: 400 };
+  if (requested.includes('/')) return { error: 'new_name must not contain "/"', status: 400 };
+  const lastSlash = oldPath.lastIndexOf('/');
+  const parent = lastSlash >= 0 ? oldPath.slice(0, lastSlash + 1) : '';
+  return { path: sanitizeFilename(parent + requested) };
 }

@@ -9,6 +9,7 @@ import {
   type TreeRow,
 } from '@/features/workspace/domain/tree';
 import { SOURCE_DRAG_MIME } from '@/shared/utils/source-drag';
+import { fireDrag } from '@/test/dom';
 import { listing, listingFile, listingFolder, RESEARCH_FOLDER } from '@/test/fakes/workspace';
 
 import {
@@ -59,6 +60,8 @@ interface RowOverrides {
 function renderRow(row: TreeRow, overrides: RowOverrides = {}) {
   const spies = {
     onActivate: vi.fn<FileTreeRowProps['onActivate']>(),
+    onDragEnd: vi.fn<FileTreeRowProps['onDragEnd']>(),
+    onDragStart: vi.fn<FileTreeRowProps['onDragStart']>(),
     onFocus: vi.fn<FileTreeRowProps['onFocus']>(),
     onKeep: vi.fn<FileTreeRowProps['onKeep']>(),
     onKeyDown: vi.fn<FileTreeRowProps['onKeyDown']>(),
@@ -85,17 +88,6 @@ function renderRow(row: TreeRow, overrides: RowOverrides = {}) {
 /** The one row the harness rendered, whatever it announces itself as. */
 function rowElement(): HTMLElement {
   return screen.getAllByRole('treeitem')[0] ?? screen.getByRole('treeitem');
-}
-
-function dragTransfer() {
-  const data = new Map<string, string>();
-  return {
-    data,
-    dataTransfer: {
-      effectAllowed: 'none',
-      setData: (type: string, value: string) => void data.set(type, value),
-    },
-  };
 }
 
 afterEach(cleanup);
@@ -289,26 +281,55 @@ describe('file tree row gestures', () => {
 });
 
 describe('file tree row drag source', () => {
-  it('carries explicit source identity for a regular file', () => {
-    renderRow(rowFor('docs/plan.md'));
-    const { data, dataTransfer } = dragTransfer();
+  it('carries explicit source identity for a regular file and may move or copy it', () => {
+    const row = rowFor('docs/plan.md');
+    const { onDragEnd, onDragStart } = renderRow(row);
+    const dataTransfer = new DataTransfer();
 
     expect(rowElement().getAttribute('draggable')).toBe('true');
-    fireEvent.dragStart(rowElement(), { dataTransfer });
-    expect(JSON.parse(data.get(SOURCE_DRAG_MIME) ?? 'null')).toEqual({
+    fireDrag(rowElement(), 'dragstart', dataTransfer);
+    expect(JSON.parse(dataTransfer.getData(SOURCE_DRAG_MIME) || 'null')).toEqual({
       folderPath: RESEARCH_FOLDER.path,
       path: 'docs/plan.md',
     });
+    expect(dataTransfer.effectAllowed).toBe('copyMove');
+    expect(onDragStart).toHaveBeenCalledWith(row);
+    fireDrag(rowElement(), 'dragend', dataTransfer);
+    expect(onDragEnd).toHaveBeenCalledOnce();
   });
 
-  it('refuses to start a drag from a folder, a generic file, or a restricted entry', () => {
-    for (const path of ['docs', 'archive.zip', 'linked-file']) {
-      const { view } = renderRow(rowFor(path));
-      const { data, dataTransfer } = dragTransfer();
+  it('moves a generic file without offering it to Chat as a source', () => {
+    const { onDragStart } = renderRow(rowFor('archive.zip'));
+    const dataTransfer = new DataTransfer();
+
+    expect(rowElement().getAttribute('draggable')).toBe('true');
+    fireDrag(rowElement(), 'dragstart', dataTransfer);
+    expect(dataTransfer.types).not.toContain(SOURCE_DRAG_MIME);
+    expect(dataTransfer.effectAllowed).toBe('copyMove');
+    expect(onDragStart).toHaveBeenCalledOnce();
+  });
+
+  it('moves a folder without offering it to Chat as a source', () => {
+    const row = rowFor('docs');
+    const { onDragStart } = renderRow(row);
+    const dataTransfer = new DataTransfer();
+
+    expect(rowElement().getAttribute('draggable')).toBe('true');
+    fireDrag(rowElement(), 'dragstart', dataTransfer);
+    expect(dataTransfer.types).not.toContain(SOURCE_DRAG_MIME);
+    expect(dataTransfer.effectAllowed).toBe('copyMove');
+    expect(onDragStart).toHaveBeenCalledWith(row);
+  });
+
+  it('refuses to start a drag from a restricted file or folder', () => {
+    for (const path of ['linked-file', 'vendor']) {
+      const { onDragStart, view } = renderRow(rowFor(path));
+      const dataTransfer = new DataTransfer();
 
       expect(rowElement().getAttribute('draggable')).toBe('false');
-      expect(fireEvent.dragStart(rowElement(), { dataTransfer })).toBe(false);
-      expect(data.size).toBe(0);
+      expect(fireDrag(rowElement(), 'dragstart', dataTransfer)).toBe(false);
+      expect(dataTransfer.types).toHaveLength(0);
+      expect(onDragStart).not.toHaveBeenCalled();
       view.unmount();
     }
   });

@@ -2,8 +2,8 @@
  * The Files tree owns row visibility, gestures, and focus after mutations. A row
  * draws itself (`file-tree-rows`), a group animates itself
  * (`file-tree-group`), the keyboard contract is a pure function
- * (`file-tree-keyboard`), and the roving tab stop lives in a hook
- * (`file-tree-focus`).
+ * (`file-tree-keyboard`), the roving tab stop lives in a hook
+ * (`file-tree-focus`), and so does where a drop lands (`file-tree-drop`).
  */
 import { AnimatePresence, useReducedMotionConfig } from 'framer-motion';
 import {
@@ -21,7 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { FilesError, type FilesPort } from '@/features/workspace/application/ports';
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
-import type { TreeRow, WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';
+import type { WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';
 import type { WorkspaceScope } from '@/features/workspace/domain/workspace';
 import {
   useFileOperations,
@@ -37,16 +37,19 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 import { FailureLine, FailureNotice } from '@/shared/ui/failure-notice';
 
 import { DeleteEntryDialog } from './delete-entry-dialog';
+import type { FileImportAction } from './file-import';
 import { useTreeDraft } from './file-tree-draft';
+import { dropRegion, useTreeDrop } from './file-tree-drop';
 import { tabStopPath, useTreeRowFocus } from './file-tree-focus';
 import { treeGestures } from './file-tree-gestures';
-import { TreeGroup, TreeProximityHighlight } from './file-tree-group';
-import { FileTreeMenu, type FileTreeMenuActions, type FileTreeMenuTarget } from './file-tree-menu';
+import { TreeGroup, TreeHighlights } from './file-tree-group';
+import { FileTreeMenu, type FileTreeMenuTarget } from './file-tree-menu';
 import {
   hoverRect,
   itemKey,
   nestTreeItems,
   renderedPathKey as pathKeyOf,
+  rowAtTarget,
   treeItems,
   type RenderNode,
   type TreeItem,
@@ -67,7 +70,8 @@ export type { FileTreeRowMarker };
 
 export interface FileTreeProps {
   api: FilesPort;
-  importFiles?: FileTreeMenuActions['importFiles'];
+  /** Import from the menu, and desktop files dropped onto a folder. */
+  importFiles?: FileImportAction | undefined;
   /** Opens a source. A click browses, which opens a preview; a double click,
    *  and a file the tree just created, ask for a tab that stays. */
   onOpenSource?: ((source: SourceReference, options?: TreeOpenOptions) => void) | undefined;
@@ -159,6 +163,15 @@ export function FileTree({
 
   useTreeSpaceContextMenu(sectionElement, files.status);
 
+  const drop = useTreeDrop({
+    importDrop: importFiles,
+    listingKey: files.status,
+    operations,
+    rows: renderedRows,
+    section: sectionElement,
+    tree,
+  });
+  const dropRect = isMeasured ? dropRegion(renderedRows, itemRects, drop.target) : null;
   const activeRect = hoverRect(isMeasured, itemRects, activeIndex, renderedRows, tree.selectedPath);
 
   const endNaming = (returnTo: string | null) => {
@@ -198,30 +211,14 @@ export function FileTree({
     tree,
   });
 
-  const reprocessableRow = (row: TreeRow): boolean => {
-    const marker = row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined;
-    return Boolean(marker && onReprocess && !rowIsRestricted(row));
-  };
-
   const resolveMenuTarget = (event: MouseEvent<HTMLElement>): FileTreeMenuTarget => {
-    const path =
-      event.target instanceof Element
-        ? event.target.closest<HTMLElement>('[data-path]')?.dataset.path
-        : undefined;
-    const row = path === undefined ? undefined : renderedRows.find((r) => r.node.path === path);
+    const row = rowAtTarget(renderedRows, event.target);
     if (!row) return { kind: 'space' };
-    return {
-      entry: entryOf(row),
-      kind: 'entry',
-      reprocessable: reprocessableRow(row),
-      restricted: rowIsRestricted(row),
-    };
+    const marker = row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined;
+    const restricted = rowIsRestricted(row);
+    const reprocessable = Boolean(marker && onReprocess && !restricted);
+    return { entry: entryOf(row), kind: 'entry', reprocessable, restricted };
   };
-
-  const sourceOf = (entry: WorkspaceEntry): SourceReference => ({
-    folderPath: runtime.scope.folder.path,
-    path: entry.path,
-  });
 
   if (files.isPending) return <FileTreeLoading />;
   if (files.isError && !files.data) {
@@ -272,6 +269,8 @@ export function FileTree({
         index={index}
         marker={row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined}
         onActivate={activate}
+        onDragEnd={drop.endDrag}
+        onDragStart={drop.startDrag}
         onFocus={setRovingPath}
         onKeep={keep}
         onKeyDown={onKeyDown}
@@ -319,7 +318,8 @@ export function FileTree({
           if (row) beginRename(row);
         },
         hiddenFiles: hiddenFiles ?? null,
-        onReprocess: (entry) => onReprocess?.(sourceOf(entry)),
+        onReprocess: (entry) =>
+          onReprocess?.({ folderPath: runtime.scope.folder.path, path: entry.path }),
         onReveal: (entry) => void reveal.reveal(entry.path),
       }}
       render={
@@ -353,16 +353,13 @@ export function FileTree({
           role="tree"
           tabIndex={-1}
         >
-          <AnimatePresence>
-            {activeRect && (
-              <TreeProximityHighlight
-                className={shape.bg}
-                key={sessionRef.current}
-                rect={activeRect}
-                reduceMotion={reduceMotion}
-              />
-            )}
-          </AnimatePresence>
+          <TreeHighlights
+            className={shape.bg}
+            drop={dropRect}
+            hover={activeRect}
+            hoverKey={sessionRef.current}
+            reduceMotion={reduceMotion}
+          />
 
           {renderNodes(nodes)}
         </div>

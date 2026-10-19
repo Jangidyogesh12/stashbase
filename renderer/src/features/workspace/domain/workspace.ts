@@ -90,7 +90,16 @@ export function renameTreePath(
   entryPath: string,
   name: string,
 ): WorkspaceState {
-  const nextPath = renamedTreePath(entryPath, name);
+  return moveTreePath(state, entryPath, renamedTreePath(entryPath, name));
+}
+
+/** Moves expansion and selection with an entry that settled at `nextPath`,
+ *  under a new name or a new parent. */
+export function moveTreePath(
+  state: WorkspaceState,
+  entryPath: string,
+  nextPath: string,
+): WorkspaceState {
   if (nextPath === entryPath) return state;
   const move = (path: string) =>
     treePathWithin(path, entryPath) ? `${nextPath}${path.slice(entryPath.length)}` : path;

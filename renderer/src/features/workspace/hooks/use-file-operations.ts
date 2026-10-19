@@ -1,5 +1,5 @@
 /**
- * Create, rename, and delete for the active folder's tree.
+ * Create, rename, move, and delete for the active folder's tree.
  *
  * Every mutation captures the workspace scope before its first await and
  * settles through that token: a create that lands after the window moved to
@@ -11,7 +11,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef, useState } from 'react';
 
-import { filesFailure } from '@/features/workspace/application/failure-messages';
+import { filesFailure, moveFailure } from '@/features/workspace/application/failure-messages';
 import type { FilesPort } from '@/features/workspace/application/ports';
 import { refreshFolderListing } from '@/features/workspace/application/queries';
 import type {
@@ -26,6 +26,7 @@ import {
 import {
   expandTreeFolder,
   forgetTreePath,
+  moveTreePath,
   renameTreePath,
   selectTreePath,
   type WorkspaceState,
@@ -111,7 +112,10 @@ export function useFileOperations(
    *  sentence comes from the failure's kind; a throw that is not a files
    *  failure reads as the unavailable one. */
   const run = useCallback(
-    async <Result>(operation: (signal: AbortSignal) => Promise<Result>): Promise<Result | null> => {
+    async <Result>(
+      operation: (signal: AbortSignal) => Promise<Result>,
+      describe: (error: unknown) => FailureView = filesFailure,
+    ): Promise<Result | null> => {
       if (running.current) return null;
       running.current = true;
       // Ordinary mode changes must not turn an accepted mutation into a lost response.
@@ -122,7 +126,7 @@ export function useFileOperations(
         return await operation(signal);
       } catch (error) {
         if (!signal.aborted) {
-          setFailure(filesFailure(error));
+          setFailure(describe(error));
         }
         return null;
       } finally {
@@ -265,6 +269,34 @@ export function useFileOperations(
     ],
   );
 
+  /** Moves a file or folder under its own name into another folder of the
+   *  project. The destination opens, so the row lands where the reader can
+   *  see it, and a moved folder keeps its open branches. */
+  const moveEntry = useCallback(
+    async (entry: WorkspaceEntry, parentPath: string): Promise<void> => {
+      if (running.current || parentTreePath(entry.path) === parentPath) return;
+      const capturedScope = runtime.capture();
+      const moved = await run(
+        (signal) =>
+          mutate(
+            entry,
+            async () => (await api.moveEntry(folderPath, entry, parentPath, signal)).path,
+          ),
+        (error) => moveFailure(error, entry.kind),
+      );
+      if (!stillOpen(capturedScope) || !moved?.path) return;
+      const movedPath = moved.path;
+      update(capturedScope, (state) => {
+        const relocated = moveTreePath(state, entry.path, movedPath);
+        return parentPath ? expandTreeFolder(relocated, parentPath) : relocated;
+      });
+      await refresh();
+      if (!stillOpen(capturedScope)) return;
+      setSettledPath(movedPath);
+    },
+    [api, folderPath, mutate, refresh, run, runtime, stillOpen, update],
+  );
+
   const requestDelete = useCallback((entry: WorkspaceEntry) => {
     if (running.current) return;
     setFailure(null);
@@ -310,6 +342,7 @@ export function useFileOperations(
     createDraft,
     deleting,
     failure,
+    moveEntry,
     naming,
     pending,
     renamePath,

@@ -89,6 +89,7 @@ export function filesApi(overrides: Partial<FilesPort> = {}): FilesPort {
     createEntry: vi.fn(async () => ({ path: 'new.md' })),
     deleteEntry: vi.fn(async () => undefined),
     load: vi.fn(async () => listing()),
+    moveEntry: vi.fn(async () => ({ path: 'moved.md' })),
     renameEntry: vi.fn(async () => ({ path: 'renamed.md' })),
     reveal: vi.fn(async () => undefined),
     ...overrides,

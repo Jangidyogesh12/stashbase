@@ -12,6 +12,23 @@ export function pressKey(element: Element, key: string, init: KeyboardEventInit 
   });
 }
 
+/** Dispatches a drag event that carries `dataTransfer` itself. Testing
+ *  Library copies a given transfer onto a fresh one with read-only fields, so
+ *  the `effectAllowed` or `dropEffect` a handler sets could not be read back. */
+export function fireDrag(
+  element: Element,
+  type: 'dragend' | 'dragenter' | 'dragleave' | 'dragover' | 'dragstart' | 'drop',
+  dataTransfer: DataTransfer,
+): boolean {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+  let notCancelled = true;
+  act(() => {
+    notCancelled = element.dispatchEvent(event);
+  });
+  return notCancelled;
+}
+
 /** The Agent message field is a CodeMirror document, and happy-dom cannot
  *  type into a contenteditable, so text enters through the editor view. */
 export function editorOf(field: Element): EditorView {

@@ -29,9 +29,17 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
 - Reads, edits, search results, and file links retain project-and-path identity.
   Missing files and invalid encoding never justify substituting another source
   or rewriting bytes lossily.
-- Workbench rename/delete applies to ordinary visible files, including generic
-  files. Agent/MCP moves and writes require their own authorized capability.
-  Protected entries are reveal-only; derived data remains hidden.
+- Workbench rename, move, and delete apply to ordinary visible files, including
+  generic files. Dragging a file or folder onto a folder in Files moves it there
+  under its own name; a folder moves with everything inside it and never into
+  itself. A file row stands for its folder; the project's row and the rest of
+  the column stand for the root. A closed folder opens when a drag rests on it.
+  Links follow a move as they do for a rename, including links out of a moved
+  folder. A name already taken in the destination refuses the move.
+  Agent/MCP moves and writes require their own authorized capability.
+  Any entry's context menu shows it in the system file manager: Finder on
+  macOS, File Explorer on Windows, its containing folder elsewhere. Protected
+  entries are reveal-only; derived data remains hidden.
 - Renaming or deleting a source never migrates or deletes neighboring files
   merely because their names match retired extraction formats. Current derived
   data is owned separately in AppData.
@@ -43,7 +51,9 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
   Hidden-file visibility changes browsing only. It neither widens tool/search
   access nor discards open edits.
 - Project import creates source files; same-name imports keep both copies using
-  a new name. A partial import retries only refused files. Chat attachments are
+  a new name. Desktop files dropped on Files land in the folder the drop targets,
+  as a move would, and a dropped folder is refused. A partial import retries
+  only refused files, into the same folder. Chat attachments are
   temporary context and never become project files merely by being attached.
 - Agent writes follow runtime permissions and produce ordinary files, whether
   made through a file tool, a shell command, or a subagent. File refreshes do
@@ -70,8 +80,8 @@ discarding it or refusing in silence.
 A save acknowledgement clears only the submitted edit, preserving newer changes.
 Crash/shell-remount recovery reads saved files; newer unsaved text is not recoverable.
 
-Rename/delete coordinates affected open drafts before mutation and changes their
-identities only after confirmation. Cancelling or failing the operation preserves
+Rename, move, and delete coordinate affected open drafts before mutation and change
+their identities only after confirmation. Cancelling or failing the operation preserves
 recoverable work. Rollback must not replace newer user or external changes.
 
 ## Failure and Recovery

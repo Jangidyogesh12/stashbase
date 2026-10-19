@@ -40,9 +40,10 @@ export function createUploadAdapter(
 ): UploadPort {
   const target = new URL('/api/upload', serverOrigin);
   return {
-    async upload(folderPath, files, signal) {
+    async upload(folderPath, files, signal, parentPath) {
       const form = new FormData();
       form.set('folder', folderPath);
+      if (parentPath) form.set('dir', parentPath);
       for (const file of files) {
         form.append('files', new File([file.blob], file.name, { type: file.blob.type }));
         form.append('paths', file.name);

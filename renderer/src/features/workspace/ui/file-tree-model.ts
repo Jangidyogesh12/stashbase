@@ -2,6 +2,18 @@ import type { TreeRow, WorkspaceEntry } from '@/features/workspace/domain/tree';
 import type { FileTreeNaming } from '@/features/workspace/hooks/use-file-operations';
 import type { ItemRect } from '@/lib/proximity-geometry';
 
+/** The rendered row an event landed on, read from the nearest row element. */
+export function rowAtTarget(
+  rows: readonly TreeRow[],
+  target: EventTarget | null,
+): TreeRow | undefined {
+  const path =
+    target instanceof Element
+      ? target.closest<HTMLElement>('[data-path]')?.dataset.path
+      : undefined;
+  return path === undefined ? undefined : rows.find((row) => row.node.path === path);
+}
+
 /** One string that changes exactly when the rendered rows' paths change. */
 export function renderedPathKey(rows: readonly TreeRow[]): string {
   return rows.map((row) => row.node.path).join('\u0000');

@@ -456,10 +456,11 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
   `useFileImport` and `createUploadAdapter`. The file tree's empty-space context
   menu offers Import files; no idle import row precedes the file list.
   `file-import.test.tsx` exercises menu-to-picker wiring and pending/completed
-  feedback alongside an existing file listing. Picking or dropping files copies
-  them into the captured project root. Partial results retain successful paths
-  and allow retry of refused files only; lost responses require checking the
-  refreshed listing. Adapter/hook tests cover partial retry and project retirement.
+  feedback alongside an existing file listing. Picking files copies them into the
+  captured project root; a drop lands in the folder the tree resolves under the
+  pointer (see J03's move by drag). Partial results retain successful paths
+  and allow retry of refused files only, into the same folder; lost responses
+  require checking the refreshed listing. Adapter/hook tests cover partial retry and project retirement.
   An isolated built Electron pass supplies browser File objects through the input
   and a DOM drop, verifies actual server publication, preserves a colliding source,
   and observes confirmation/tree refresh. The context-menu follow-up also verifies
@@ -471,6 +472,40 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
   Cross-platform native-picker and signed-installer validation remain release checks.
 
 ## J03: Documents
+
+**Move by drag (2026-10-19):** `workspace/ui/file-tree-drop.ts` resolves where a
+drag over the Files column lands, from one set of listeners on the sidebar frame:
+a folder row, a file row's folder, or the root for the project's row and the rest
+of the column. It moves a tree entry through `useFileOperations.moveEntry` and
+`PATCH /api/files/*` or `/api/folders/*` with `{dir}`; the shared
+`moveTargetAsync` in `server/rename-helpers.ts` refuses a missing destination and
+a folder moving into itself. A file reuses `moveProjectFile` and a folder the
+rename route's disk-first rollback, so both keep the rename link cascade, index
+move and receipts. Desktop files go to `FileImport`'s `drop`, which uploads with
+the `dir` field. `server/routes/file-mutations.test.ts` covers file and folder
+moves into a folder and back, links into and out of the moved entry, a taken
+name, a missing or non-folder destination, a folder into itself, and traversal;
+the folder case stubs the index owner rather than binding a daemon. Existing
+destination names and returned paths retain significant whitespace. `file-tree-drop.test.tsx` covers targets,
+refusals, a folder's open branches after its move, rest-to-open, and focus. `use-file-operations.test.tsx` covers open-tab
+coordination and the move refusal sentence. `file-import.test.tsx` covers a desktop
+drop into a folder and a refused dropped folder. A built-app Electron pass drove
+Chromium's real drag pipeline over CDP (`Input.setInterceptDrags`,
+`Input.dispatchDragEvent`) in an isolated profile. It moved an open Markdown note into
+a closed folder that opened after a rest, and a link to it in another note followed.
+The tab rebound to the new path and the moved row took focus. A drop on the project
+row moved the file back to the root, and a desktop file dropped on a folder was
+imported there. A second pass dragged an open folder two levels deep: its own
+descendant was no target, and a drop on a sibling folder moved it with its open
+branches. Links into it and a link out of it were rewritten, and the open tab
+followed. The drop region was reviewed by eye in the light theme. A drag that
+first enters a row is answered at `dragenter`, which Chromium uses for that step.
+Every row's context menu also offers the platform's reveal (`fileManagerLabel`,
+`POST /api/reveal/*`); `file-tree-menu.test.tsx` covers a file and a folder.
+A second isolated pass on 2026-10-20 reused the final built renderer and host,
+repeated file/folder-target and root moves plus OS-file payload import in the dark
+theme, and inspected the drop highlight and resulting layout.
+**Gap:** a physical Finder drag is unproven, and moving has no keyboard path.
 
 **Local image preview (2026-10-12):** `electron/app-protocol.cjs` permits the
 configured server's `/asset/` image route in production CSP. Previously a valid

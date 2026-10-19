@@ -34,7 +34,8 @@ import {
   type WorkspaceEntry,
 } from '@/features/workspace/domain/tree';
 import { cn } from '@/lib/utils';
-import { writeSourceDrag } from '@/shared/utils/source-drag';
+
+import { writeTreeDrag } from './file-tree-drop';
 
 // The tree sits on the sidebar's row, the compact step: 28px tall with the
 // 14px glyph and 13px label every other row in the column has, so the
@@ -151,6 +152,10 @@ export interface FileTreeRowProps {
   index: number;
   marker?: FileTreeRowMarker | undefined;
   onActivate(row: TreeRow): void;
+  /** A drag the row started has ended, wherever it was dropped. */
+  onDragEnd(): void;
+  /** The row's own drag began; its payload is already written. */
+  onDragStart(row: TreeRow): void;
   onFocus(path: string): void;
   /** A double click on a file: the reader asking for its document to stay
    *  open rather than be the preview the next click replaces. */
@@ -171,6 +176,8 @@ export function FileTreeRow({
   index,
   marker,
   onActivate,
+  onDragEnd,
+  onDragStart,
   onFocus,
   onKeep,
   onKeyDown,
@@ -185,7 +192,9 @@ export function FileTreeRow({
   const restricted = rowIsRestricted(row);
   const editable = !restricted;
   const generic = rowIsGeneric(row);
-  const draggable = row.node.type === 'file' && !restricted && !generic;
+  // Any entry the tree may rename can move into another folder. Only a file
+  // Chat can read also carries its source identity for the composer.
+  const draggable = !restricted;
   const trailingIcon = restricted ? ExternalLink : marker ? MARKER_ICONS[marker.kind] : undefined;
 
   // A click acts at once: a folder toggle is the tree's most frequent gesture
@@ -253,15 +262,18 @@ export function FileTreeRow({
         leadingIcon={rowIcon(row, expanded)}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
+        onDragEnd={onDragEnd}
         onDragStart={(event) => {
           if (!draggable) {
             event.preventDefault();
             return;
           }
-          writeSourceDrag(event.dataTransfer, {
-            folderPath,
-            path: row.node.path,
-          });
+          writeTreeDrag(
+            event.dataTransfer,
+            row.node.path,
+            row.node.type === 'file' && !generic ? { folderPath, path: row.node.path } : null,
+          );
+          onDragStart(row);
         }}
         onFocus={() => onFocus(row.node.path)}
         onKeyDown={(event) => onKeyDown(event, row, editable)}

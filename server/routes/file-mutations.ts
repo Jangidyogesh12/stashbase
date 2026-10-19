@@ -4,29 +4,23 @@ import { toSourcePath } from '../folder.ts';
 import { detectFormat, detectViewerFormat } from '../format.ts';
 import { guardExplicitFolder, sendError } from '../http.ts';
 import { planRenameLinksAsync, type RenameEntry } from '../links.ts';
-import { bundleRenameEntryAsync } from '../rename-helpers.ts';
+import { bundleRenameEntryAsync, moveTargetAsync, type MutationTarget } from '../rename-helpers.ts';
 import { deleteProjectFile, moveProjectFile } from '../project-file-mutations.ts';
 
 export function mountFileMutationRoutes(app: express.Express): void {
   // Active-folder HTTP is only an adapter. The shared project mutation module
   // owns disk changes, link cascades, derived cleanup, file order, and index
   // completion for both UI and MCP callers.
+  // Body: { new_name } renames the file; { dir } moves it, under its own
+  // name, into that existing folder-relative folder ('' is the root).
   app.patch('/api/files/*', async (req, res) => {
     if (!(await guardExplicitFolder(req, res))) return;
     const oldName = (req.params as any)[0] as string;
-    const requested = typeof req.body?.new_name === 'string' ? req.body.new_name.trim() : '';
-    if (!requested) return res.status(400).json({ error: 'new_name required' });
-    const oldFormat = detectViewerFormat(oldName);
-    const oldStructuredFormat = detectFormat(oldName);
-    let newName = requested;
-    const requestedHasCompatibleExt = oldFormat
-      ? hasCompatibleRenameExtension(oldStructuredFormat, oldFormat, newName)
-      : opaqueRenameExtension(oldName) === opaqueRenameExtension(newName);
-    if (!requestedHasCompatibleExt) {
-      const oldExt = oldName.match(/\.[^./]+$/)?.[0] ?? '';
-      newName += oldExt;
-    }
-    newName = renameTargetPath(oldName, newName);
+    const target = typeof req.body?.dir === 'string'
+      ? await moveTargetAsync(oldName, req.body.dir)
+      : renameTarget(oldName, req.body?.new_name);
+    if ('error' in target) return res.status(target.status).json({ error: target.error });
+    const newName = target.path;
     if (newName === oldName) return res.json({ name: oldName, linksUpdated: 0 });
     try {
       const result = await moveProjectFile(toSourcePath(oldName), toSourcePath(newName), {
@@ -79,6 +73,22 @@ export function mountFileMutationRoutes(app: express.Express): void {
       sendError(res, err);
     }
   });
+}
+
+function renameTarget(oldName: string, rawName: unknown): MutationTarget {
+  const requested = typeof rawName === 'string' ? rawName.trim() : '';
+  if (!requested) return { error: 'new_name required', status: 400 };
+  const oldFormat = detectViewerFormat(oldName);
+  const oldStructuredFormat = detectFormat(oldName);
+  let newName = requested;
+  const requestedHasCompatibleExt = oldFormat
+    ? hasCompatibleRenameExtension(oldStructuredFormat, oldFormat, newName)
+    : opaqueRenameExtension(oldName) === opaqueRenameExtension(newName);
+  if (!requestedHasCompatibleExt) {
+    const oldExt = oldName.match(/\.[^./]+$/)?.[0] ?? '';
+    newName += oldExt;
+  }
+  return { path: renameTargetPath(oldName, newName) };
 }
 
 function opaqueRenameExtension(name: string): string {

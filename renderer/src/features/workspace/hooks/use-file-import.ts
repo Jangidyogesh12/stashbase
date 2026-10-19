@@ -14,9 +14,12 @@ export function useFileImport(runtime: WorkspaceRuntime, api: UploadPort) {
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<FailureView | null>(null);
   const [refused, setRefused] = useState<readonly File[]>([]);
+  /** The folder the refused files were headed for, so a retry lands them there. */
+  const [refusedParentPath, setRefusedParentPath] = useState('');
   const [imported, setImported] = useState(0);
 
-  const importFiles = async (files: readonly File[]) => {
+  /** Copies files into `parentPath`, a folder of the project; the root when empty. */
+  const importFiles = async (files: readonly File[], parentPath = '') => {
     if (running.current || files.length === 0 || runtime.signal.aborted) return;
     running.current = true;
     const captured = runtime.capture();
@@ -29,10 +32,12 @@ export function useFileImport(runtime: WorkspaceRuntime, api: UploadPort) {
         runtime.scope.folder.path,
         files.map((file) => ({ blob: file, name: file.name })),
         runtime.signal,
+        parentPath,
       );
       runtime.accept(captured, () => {
         setImported(result.paths.length);
         setRefused(files.filter((_file, index) => result.refused.includes(index)));
+        setRefusedParentPath(parentPath);
       });
     } catch (error) {
       runtime.accept(captured, () => setFailure(fileImportFailure(error)));
@@ -46,5 +51,7 @@ export function useFileImport(runtime: WorkspaceRuntime, api: UploadPort) {
     }
   };
 
-  return { failure, imported, importFiles, pending, refused };
+  const retryRefused = () => importFiles(refused, refusedParentPath);
+
+  return { failure, imported, importFiles, pending, refused, retryRefused };
 }
