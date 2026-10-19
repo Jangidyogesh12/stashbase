@@ -1,9 +1,11 @@
+import { hostedBillingChangeRequestSchema } from '../../shared/protocols/http/agent-runtime.ts';
 import express from 'express';
 import { getHostedAccountSession, markAccountOfferSeen, resetAccountOffers } from '../app-config.ts';
 import {
   beginHostedOAuth,
   createFailedHostedOAuthFlow,
   createHostedBillingPortal,
+  changeHostedBilling,
   createHostedCheckout,
   exchangeHostedOAuthCode,
   failHostedOAuth,
@@ -131,6 +133,17 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     try {
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await createHostedCheckout(priceId));
+    } catch (error: unknown) {
+      res.status(502).json({ error: errorMessage(error) });
+    }
+  });
+
+  app.post('/api/account/billing/change', async (req, res) => {
+    const input = hostedBillingChangeRequestSchema.safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: 'Choose a valid subscription change.' });
+    try {
+      if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
+      res.json(await changeHostedBilling(input.data));
     } catch (error: unknown) {
       res.status(502).json({ error: errorMessage(error) });
     }

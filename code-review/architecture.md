@@ -750,6 +750,10 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   subscription status. The host requests Checkout and Portal pages with the
   account session and hands the renderer only a verified Stripe-hosted URL;
   desktop account tokens never appear in links or Stripe configuration.
+  Downgrade, withdrawal, cancellation, and resumption use authenticated host/API
+  commands with strict action schemas. The API persists and serializes change
+  intents, owns Stripe schedules, and reconstructs paid-period funding; renderer
+  confirmation and pending indicators do not grant rights or select invoice amounts.
   Billing HTTP calls share a twenty-second deadline across retries;
   authentication refresh retains its existing ten-second bound. Native browser
   acknowledgement is bounded to ten seconds; renderer billing retains the

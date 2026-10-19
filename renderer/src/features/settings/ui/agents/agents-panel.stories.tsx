@@ -91,6 +91,7 @@ function fakePort(): AgentRuntimePort {
     listAgents: async () => catalog([codex, claude, stashbase]),
     openBillingPortal: async () => 'https://billing.stripe.com/p/session/story',
     prepareAgent: async () => catalog([codex, claude, stashbase]),
+    changeBilling: async () => {},
     startCheckout: async () => 'https://checkout.stripe.com/c/pay/story',
     updateDebug: async () => catalog([codex, claude, stashbase]),
   };
@@ -220,6 +221,24 @@ export const ReservedCredits: Story = {
         outputTokens: 0,
         cacheReadTokens: 0,
         windowEndsAt: '2026-10-18T09:06:28.329Z',
+      }),
+    },
+  },
+};
+
+export const DowngradeScheduled: Story = {
+  args: {
+    account: signedIn,
+    port: {
+      ...fakePort(),
+      getBillingStatus: async () => ({
+        cancelAtPeriodEnd: false,
+        canManage: true,
+        paidThrough: '2099-11-05T00:00:00.000Z',
+        planName: 'Pro',
+        planKey: 'pro',
+        status: 'active',
+        scheduledChange: { priceId: 'price_plus', effectiveAt: '2099-11-05T00:00:00.000Z' },
       }),
     },
   },

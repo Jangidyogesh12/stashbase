@@ -277,15 +277,23 @@ card and automatic renewal through a native Stripe trial, then renews at $5/mont
 allowance and cannot combine with other promotions. Previous subscriptions or
 trials make an account ineligible; abandoned Checkout does not. Canceling renewal
 preserves access until the current month ends. Subscription credits follow the confirmed trial period and then each successfully paid monthly billing period.
-A tier change preserves consumption within that period; an upgrade raises the
-current ceiling. Free credits use a separate calendar-month window anchored by first
-hosted use, with month-end clamping and no rollover; there is no first-week grant.
-Paid allowances replace the free ceiling: Plus costs $5/month, and Pro costs $20/month
-with ten times the Plus allowance. Customer-facing copy states no credit amounts in
-dollars. Canceling during the trial keeps Plus until it ends without a charge; upgrading
-to Pro during it ends the trial and charges Pro's full monthly price, as Stripe's
-Customer Portal does by default. Paid-tier changes use Stripe prorations. Cancellation
-retains access until paid-through, then returns to Free.
+A paid upgrade preserves consumption and adds the allowance difference in proportion
+to the settled payment over the monthly price difference, capped by the new tier.
+Free credits use a separate calendar-month window anchored by first hosted use,
+with month-end clamping and no rollover; there is no first-week grant. Paid
+allowances replace the free ceiling: Plus costs $5/month, and Pro costs $20/month
+with ten times the Plus allowance. Customer-facing copy states no credit amounts
+in dollars. Canceling during the trial keeps Plus until it ends without a charge;
+upgrading to Pro during it ends the trial, charges Pro's full monthly price and
+starts a new paid month with its full allowance after payment confirmation.
+Paid upgrades use Stripe prorations. Downgrades take effect at the next renewal:
+the current plan and allowance remain unchanged, with no current-period refund.
+Settings and the website show the scheduled target and date, with confirmed
+actions to withdraw the downgrade, cancel automatic renewal, or resume renewal.
+These account actions remain available while a Stripe schedule prevents Portal
+subscription editing. Pending changes display confirmation progress and block
+conflicting actions until the API finishes or reports a definitive failure.
+Cancellation retains access until paid-through, then returns to Free.
 A browser success redirect is not evidence of payment; pending confirmation stays
 visible until the API confirms rights. Failed billing does not discard local work.
 

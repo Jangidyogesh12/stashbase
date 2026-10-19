@@ -167,6 +167,7 @@ test('billing calls carry the desktop session, refresh once on 401, and open onl
         return Response.json({ plan: null, status: 'free', paidThrough: null, periodEnd: null, cancelAtPeriodEnd: false, canManage: false });
       }
       if (target.endsWith('/v1/billing/checkout')) return Response.json({ url: checkoutUrl });
+      if (target.endsWith('/v1/billing/change')) return Response.json({ changed: true });
       if (target.endsWith('/v1/billing/portal')) return Response.json({ url: 'https://evil.example/portal' });
       throw new Error('unexpected URL ' + url);
     };
@@ -178,6 +179,7 @@ test('billing calls carry the desktop session, refresh once on 401, and open onl
     const portal = await account.createHostedBillingPortal().then(() => 'opened', (error) => error.message);
     checkoutUrl = 'http://checkout.stripe.com/c/pay/cs_test_2';
     const insecure = await account.createHostedCheckout('price_plus').then(() => 'opened', (error) => error.message);
+    await account.changeHostedBilling({ action: 'downgrade', priceId: 'price_plus' });
     process.stdout.write(JSON.stringify({ calls: calls.filter((call) => call.url.includes('/v1/billing/')), status, checkout, portal, insecure }));
   `);
   assert.equal(result.status, 0, result.stderr);
@@ -188,6 +190,8 @@ test('billing calls carry the desktop session, refresh once on 401, and open onl
   assert.equal(output.checkout.url, 'https://checkout.stripe.com/c/pay/cs_test_1');
   assert.equal(output.portal, 'Billing returned an unexpected page.');
   assert.equal(output.insecure, 'Billing returned an unexpected page.');
+  assert.deepEqual(output.calls.at(-1).body, { action: 'downgrade', priceId: 'price_plus' });
+  assert.equal(output.calls.at(-1).authorization, 'Bearer access-2');
 });
 
 test('a stalled billing response times out and a later attempt can recover', () => {

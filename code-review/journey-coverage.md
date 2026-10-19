@@ -1442,11 +1442,45 @@ RenewalCanceled Stories were visually checked, closing the earlier preview gap
 for those states. Live card collection, public webhook delivery, production
 migration and actual reminder delivery remain deployment checks.
 
+**Subscription changes (2026-10-19):** Paid upgrades add credits corresponding to
+settled supplemental payment and retain current-period consumption. Pro-to-Plus
+changes use a Stripe schedule at renewal without current-period credits/refunds.
+Settings and the website provide confirmation, scheduled target/date, withdrawal,
+cancellation, resumption, and pending-recovery states. Host tests cover the
+signed-in change request; panel tests exercise confirmation and all renewal
+actions. API adapter/ledger tests cover idempotent funding reconstruction,
+zero-payment upgrade invoices, preserved usage, and durable intent recovery.
+Stripe test-clock verification covers unchanged current invoices/balances,
+next-period Plus collection, and trial conversion to a paid full Pro month.
+Validation passed: all 12 renderer gates, host types, host billing tests,
+protocol/Electron boundary tests, the native Electron smoke, and documentation
+checks. The built scheduled-downgrade Story and website controls were inspected.
+API verification passed 364 tests plus 7 Worker tests; the website passed 27
+account/billing tests and its 98-page build. Stripe test-clock checks additionally
+verified a funded mid-period upgrade, automatic release of the completed schedule,
+Pro-scoped coupon handling on downgrade, and an immediately ended trial with a
+declined upgrade payment returning to Free. Production deployment and actual
+reminder delivery remain separate evidence.
+
+The 2026-10-19 launch subsidy changes the configured cost allowances to Plus $5
+and Pro $50 while retaining the $5/$20 monthly selling prices. Production catalog
+and existing Pro balance checks confirmed the increase without changing usage,
+reservations, or period boundaries. The pending plan-change implementation scales
+upgrade credits by allowance difference over price difference, including a legacy
+base invoice after a no-invoice price migration. PostgreSQL tests cover partial,
+zero, and capped supplemental grants, duplicate reconciliation, and next-period
+Plus allowance. The API suite passed 367 tests (one skipped); renderer gates passed
+after correcting the policy-copy formatting, and the website's 98-page build
+passed. Final release preparation on the updated main branch passed all 12 renderer
+gates, host types, account contracts, documentation checks, Electron boundary
+tests and the built native smoke. The built scheduled-downgrade Story was
+inspected and its confirmation/back flow driven; no live payment was initiated.
+
 **Default Agent billing:** Settings -> Agents shows the subscription, reached also
 from the sidebar account menu, through
 `settings/hooks/use-billing.ts` and `settings/ui/agents/subscription-rows.tsx`.
 `server/hosted-account.ts` calls the hosted billing plans, status, Checkout, and
-Portal endpoints with the desktop session and admits only Stripe-hosted pages;
+Portal and subscription-change endpoints with the desktop session and admits only Stripe-hosted pages;
 `server/routes/account.ts` exposes them to the renderer. The hosted API owns
 Checkout, subscription state, and paid allowance ceilings; the website remains a
 separate purchase path. A host test covers the bearer token, one refresh after

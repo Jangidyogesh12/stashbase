@@ -2,7 +2,7 @@ import { telemetry } from './telemetry.ts';
 import { errorDiagnostic } from './error-diagnostics.ts';
 import packageJson from '../package.json' with { type: 'json' };
 import crypto from 'node:crypto';
-import type { HostedAccountState, HostedAgentAllowance, HostedBillingPlan, HostedBillingRedirect, HostedBillingStatus, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus } from '../shared/account.ts';
+import type { HostedBillingChange, HostedAccountState, HostedAgentAllowance, HostedBillingPlan, HostedBillingRedirect, HostedBillingStatus, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus } from '../shared/account.ts';
 
 export type {
   HostedAccountState,
@@ -565,6 +565,10 @@ export async function createHostedCheckout(priceId: string): Promise<HostedBilli
     record({ event: 'billing_checkout_result', outcome: 'failed' });
     throw error;
   }
+}
+
+export async function changeHostedBilling(input: HostedBillingChange): Promise<{ changed: boolean }> {
+  return hostedBillingRequest('/v1/billing/change', { method: 'POST', body: input });
 }
 
 export async function createHostedBillingPortal(): Promise<HostedBillingRedirect> {

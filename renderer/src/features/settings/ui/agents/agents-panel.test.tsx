@@ -107,6 +107,53 @@ describe('AgentRuntimesPanel', () => {
     expect(await screen.findByRole('button', { name: 'Sign in' })).not.toBeNull();
   });
 
+  it('confirms a next-renewal downgrade and keeps withdrawal and cancellation available', async () => {
+    let status: BillingStatus = {
+      ...FREE_BILLING,
+      planName: 'Pro',
+      planKey: 'pro',
+      status: 'active',
+      canManage: true,
+      paidThrough: '2099-11-05T00:00:00.000Z',
+    };
+    const port = agentRuntimePort({
+      getBillingStatus: vi.fn(async () => status),
+      changeBilling: vi.fn(async (input) => {
+        status = {
+          ...status,
+          scheduledChange:
+            input.action === 'downgrade'
+              ? { priceId: input.priceId, effectiveAt: '2099-11-05T00:00:00.000Z' }
+              : null,
+          cancelAtPeriodEnd: input.action === 'cancel',
+        };
+      }),
+    });
+    const rendered = renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Switch to Plus next renewal' }));
+    expect(screen.getByText(/There is no refund or credit for this period/)).not.toBeNull();
+    expect(port.changeBilling).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(port.changeBilling).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Switch to Plus next renewal' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm change' }));
+    await screen.findByText(/Switching to Plus on/);
+    expect(port.changeBilling).toHaveBeenCalledWith(
+      { action: 'downgrade', priceId: 'price_plus' },
+      expect.anything(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Keep current plan' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm change' }));
+    await screen.findByRole('button', { name: 'Switch to Plus next renewal' });
+    await user.click(screen.getByRole('button', { name: 'Cancel automatic renewal' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm change' }));
+    await user.click(await screen.findByRole('button', { name: 'Resume automatic renewal' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm change' }));
+    await screen.findByRole('button', { name: 'Cancel automatic renewal' });
+    expect(rendered.onOpenExternal).not.toHaveBeenCalled();
+  });
+
   it('opens Checkout for a plan and waits for the API to confirm rights', async () => {
     // The browser coming back proves nothing: the plans stay hidden until the
     // hosted API reports the subscription paid, then credits are read again.

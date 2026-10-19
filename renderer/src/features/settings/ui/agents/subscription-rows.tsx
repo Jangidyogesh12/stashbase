@@ -11,6 +11,8 @@ import type { BillingViewModel } from '@/features/settings/hooks/use-billing';
 import { SettingsMessage, SettingsRow } from '@/features/settings/ui/rows';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
+import { SubscriptionChanges } from './subscription-changes';
+
 function paidDate(value: string): string {
   return new Date(value).toLocaleDateString([], { dateStyle: 'medium' });
 }
@@ -32,6 +34,7 @@ function subscriptionDetail(status: BillingStatus): string {
  *  cancellation the same portal only shows billing. */
 function manageLabel(billing: BillingViewModel): string {
   const { status } = billing;
+  if (status?.scheduledChange) return 'Manage billing';
   const renewing =
     billing.confirming !== null ||
     (status !== null && billingSubscribed(status) && !status.cancelAtPeriodEnd);
@@ -102,6 +105,7 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
   if (billingSubscribed(status)) {
     return (
       <SettingsRow as="li" detail={subscriptionDetail(status)} title="Plan" trail={manage}>
+        <SubscriptionChanges billing={billing} />
         {failure}
         {browserHelp}
       </SettingsRow>

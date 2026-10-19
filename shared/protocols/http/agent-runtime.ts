@@ -192,11 +192,20 @@ export const hostedBillingStatusSchema = z
     plan: hostedBillingPlanSchema.nullable(),
     status: z.string().min(1).max(64),
     subscriptionStatus: z.string().min(1).max(64).optional(),
+    scheduledChange: z.object({ priceId: z.string(), effectiveAt: z.string() }).nullable().optional(),
+    changePending: z.boolean().optional(),
+    changeError: z.string().nullable().optional(),
     paidThrough: z.string().nullable(),
     cancelAtPeriodEnd: z.boolean(),
     canManage: z.boolean(),
   })
   .passthrough();
+
+export const hostedBillingChangeRequestSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('downgrade'), priceId: z.string().regex(/^price_[A-Za-z0-9]+$/) }).strict(),
+  z.object({ action: z.enum(['keep', 'cancel', 'resume']) }).strict(),
+]);
+export const hostedBillingChangeResponseSchema = z.object({ changed: z.boolean() });
 
 export const hostedBillingCheckoutRequestSchema = z
   .object({ priceId: z.string().regex(/^price_[A-Za-z0-9]+$/) })

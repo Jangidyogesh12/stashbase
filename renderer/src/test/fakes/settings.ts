@@ -104,7 +104,8 @@ export const IDLE_ALLOWANCE: AgentAllowance = {
 
 const BILLING_PLANS: readonly BillingPlan[] = [
   {
-    amount: 1000,
+    amount: 500,
+    planKey: 'plus',
     available: true,
     currency: 'usd',
     interval: 'month',
@@ -113,6 +114,7 @@ const BILLING_PLANS: readonly BillingPlan[] = [
   },
   {
     amount: 2000,
+    planKey: 'pro',
     available: true,
     currency: 'usd',
     interval: 'month',
@@ -155,6 +157,7 @@ export function agentRuntimePort(overrides: Partial<AgentRuntimePort> = {}): Age
     listAgents: vi.fn(async () => response),
     prepareAgent: vi.fn(async () => response),
     openBillingPortal: vi.fn(async () => 'https://billing.stripe.com/p/session/test'),
+    changeBilling: async () => {},
     startCheckout: vi.fn(async () => 'https://checkout.stripe.com/c/pay/cs_test'),
     updateDebug: vi.fn(async () => response),
     ...overrides,

@@ -21,6 +21,10 @@ export interface BillingPlan {
 
 export interface BillingStatus {
   readonly planName: string | null;
+  readonly planKey?: string | null;
+  readonly scheduledChange?: { priceId: string; effectiveAt: string } | null;
+  readonly changePending?: boolean;
+  readonly changeError?: string | null;
   readonly status: string;
   readonly paidThrough: string | null;
   readonly cancelAtPeriodEnd: boolean;
@@ -49,3 +53,7 @@ export function billingPrice(plan: BillingPlan): string {
   }).format(plan.amount / 100);
   return `${amount} a ${plan.interval}`;
 }
+
+export type BillingChange =
+  | { action: 'downgrade'; priceId: string }
+  | { action: 'keep' | 'cancel' | 'resume' };

@@ -21,6 +21,7 @@ import {
 import {
   billingPaid,
   type BillingPlan,
+  type BillingChange,
   type BillingStatus,
 } from '@/features/settings/domain/billing';
 import { anyBusy, useSettingsCommand } from '@/features/settings/hooks/use-settings-command';
@@ -48,6 +49,7 @@ export interface BillingViewModel {
   readonly failure: FailureView | null;
   subscribe(priceId: string): void;
   manage(): void;
+  change(input: BillingChange): void;
   refresh(): void;
   /** Stops the local wait; it does not cancel anything in the browser. */
   stopWaiting(): void;
@@ -69,7 +71,8 @@ export function useBilling(
   const status = useQuery({
     ...billingStatusQuery(port),
     enabled: signedIn,
-    refetchInterval: waiting ? CONFIRM_POLL_MS : false,
+    refetchInterval: (query) =>
+      waiting || query.state.data?.changePending ? CONFIRM_POLL_MS : false,
   });
   const { refetch: refetchStatus } = status;
   const refreshStatus = useCallback(() => void refetchStatus(), [refetchStatus]);
@@ -128,15 +131,22 @@ export function useBilling(
     { onStart: () => setBrowserPage('portal'), onDone: (url) => openPage(url, 'portal') },
   );
 
+  const change = useSettingsCommand(
+    'billingChange',
+    (input: BillingChange, signal) => port.changeBilling(input, signal),
+    { onSettled: refreshStatus },
+  );
+
   return {
-    busy: anyBusy(checkout, portal),
+    busy: anyBusy(checkout, portal, change) || Boolean(status.data?.changePending),
     opening: checkout.busy ? 'checkout' : portal.busy ? 'portal' : null,
     browserPage,
     confirming: flow !== 'checkout' || confirmingSince === null ? null : slow ? 'slow' : 'waiting',
     // Each page names what did not open; a refusal such as an existing
     // subscription is already answered by the status read it triggers.
     failure:
-      browserPage === 'checkout' && checkout.failure
+      change.failure ??
+      (browserPage === 'checkout' && checkout.failure
         ? { message: 'Could not open the payment page. Try again.', tone: checkout.failure.tone }
         : browserPage === 'portal' && portal.failure
           ? {
@@ -144,7 +154,8 @@ export function useBilling(
                 'Could not open subscription management. Check your connection and default browser, then try again.',
               tone: portal.failure.tone,
             }
-          : null,
+          : null),
+    change: (input) => change.run(input),
     manage: () => portal.run(),
     plans: plans.data ?? [],
     plansFailed: plans.isError,

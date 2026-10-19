@@ -36,6 +36,8 @@ import {
   hostedBillingPlansSchema,
   hostedBillingRedirectSchema,
   hostedBillingStatusSchema,
+  hostedBillingChangeRequestSchema,
+  hostedBillingChangeResponseSchema,
   type AgentBootstrapFailureWire,
   type AgentBootstrapStatusWire,
   type AgentRuntimeDebugStateWire,
@@ -172,6 +174,10 @@ function toBillingStatus(wire: HostedBillingStatusWire): BillingStatus {
     canManage: wire.canManage,
     paidThrough: wire.paidThrough,
     planName: wire.plan?.name ?? null,
+    planKey: wire.plan?.planKey ?? null,
+    scheduledChange: wire.scheduledChange ?? null,
+    changePending: wire.changePending ?? false,
+    changeError: wire.changeError ?? null,
     status: wire.subscriptionStatus ?? wire.status,
   };
 }
@@ -243,6 +249,15 @@ export function createAgentRuntimeAdapter(client: HttpClient): AgentRuntimePort 
           schema: hostedBillingStatusSchema,
         }),
       );
+    },
+    async changeBilling(input, signal) {
+      await request(client, {
+        ...runtime('/api/account/billing/change', signal, {
+          body: hostedBillingChangeRequestSchema.parse(input),
+          method: 'POST',
+        }),
+        schema: hostedBillingChangeResponseSchema,
+      });
     },
     async startCheckout(priceId, signal) {
       const answer = await request(client, {

@@ -14,7 +14,7 @@ import type {
   AppearancePreferences,
   SystemFont,
 } from '@/features/settings/domain/appearance';
-import type { BillingPlan, BillingStatus } from '@/features/settings/domain/billing';
+import type { BillingChange, BillingPlan, BillingStatus } from '@/features/settings/domain/billing';
 import type { LocalComponentStatus } from '@/features/settings/domain/local-component';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 import type { AgentId } from '@/shared/domain/agent-id';
@@ -37,6 +37,7 @@ export interface AgentRuntimePort {
   /** The public plan catalog. */
   getBillingPlans(signal: AbortSignal): Promise<readonly BillingPlan[]>;
   getBillingStatus(signal: AbortSignal): Promise<BillingStatus>;
+  changeBilling(input: BillingChange, signal: AbortSignal): Promise<void>;
   /** A Stripe Checkout page for this account and plan; promotion codes are
    *  entered there. */
   startCheckout(priceId: string, signal: AbortSignal): Promise<string>;

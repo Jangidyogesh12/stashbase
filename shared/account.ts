@@ -38,10 +38,15 @@ export interface HostedBillingStatus {
   plan: HostedBillingPlan | null;
   status: string;
   subscriptionStatus?: string;
+  scheduledChange?: { priceId: string; effectiveAt: string } | null;
+  changePending?: boolean;
+  changeError?: string | null;
   paidThrough: string | null;
   cancelAtPeriodEnd: boolean;
   canManage: boolean;
 }
+
+export type HostedBillingChange = { action: 'downgrade'; priceId: string } | { action: 'keep' | 'cancel' | 'resume' };
 
 /** A Stripe-hosted page (Checkout or Customer Portal) for the browser. */
 export interface HostedBillingRedirect {
