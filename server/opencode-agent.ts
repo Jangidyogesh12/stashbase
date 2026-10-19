@@ -96,7 +96,7 @@ function providerErrorDiagnostic(error: unknown): unknown {
 }
 
 function nativeErrorMessage(error: Extract<Event, { type: 'session.error' }>['properties']['error']): string {
-  if (!error) return 'The Agent turn failed.';
+  if (!error) return 'The agent turn failed.';
   if ('data' in error && error.data && typeof error.data === 'object') {
     const data = error.data as { message?: unknown; responseBody?: unknown };
     if (typeof data.message === 'string' && data.message) {
@@ -261,7 +261,7 @@ export class OpenCodeEventTranslator {
     if (!isError && !interrupted && !this.nativeTurnStarted) return [];
     const events: AgentServerEvent[] = [];
     if (!isError && !interrupted && this.lastFinishReason === 'unknown' && !this.errors.size) {
-      events.push(agentTurnErrorEvent('The Agent model stopped without a complete response. The task may be incomplete; completed file changes have been kept.'));
+      events.push(agentTurnErrorEvent('The agent model stopped without a complete response. The task may be incomplete; completed file changes have been kept.'));
       isError = true;
     }
     isError ||= this.errors.size > 0;
@@ -394,7 +394,7 @@ export class OpenCodePanelSession {
   /** Runs an enabled tool for the main agent, inside its running turn: one
    * call on the tool's model, on the turn's catalog snapshot. */
   async runTool(id: string, task: string | (() => Promise<string>), signal?: AbortSignal): Promise<AgentToolResult> {
-    if (!this.turnInFlight()) throw Object.assign(new Error('Tools run only inside an Agent turn.'), { status: 409 });
+    if (!this.turnInFlight()) throw Object.assign(new Error('Tools run only inside an agent turn.'), { status: 409 });
     return this.runtime.runTool(id, task, signal);
   }
 
@@ -430,7 +430,7 @@ export class OpenCodePanelSession {
       // Without a readable list the chat still runs, on the default profile
       // the service picks for an unversioned request.
       const profiles = await this.runtime.models().catch((error: unknown) => {
-        log.warn(`could not read the Agent model list: ${errorMessage(error)}`);
+        log.warn(`could not read the agent model list: ${errorMessage(error)}`);
         return [];
       });
       const main = defaultHostedAgentProfile(profiles);
@@ -523,7 +523,7 @@ export class OpenCodePanelSession {
     try {
       const parsed = agentClientEventSchema.safeParse(JSON.parse(raw.toString()));
       if (!parsed.success) {
-        send(this.ws, agentTurnErrorEvent('Invalid Agent request. Review the message and its attachments.'));
+        send(this.ws, agentTurnErrorEvent('Invalid agent request. Review the message and its attachments.'));
         return;
       }
       event = parsed.data;

@@ -12,7 +12,7 @@ the [maintenance policy](../MAINTENANCE.md#previous-version-data-policy).
 
 ## IDE for writing
 
-A local project environment for developing ideas with an Agent and writing
+A local project environment for developing ideas with an agent and writing
 documents. [Overview](overview.md) owns product identity and principles.
 
 ## Brainstorming
@@ -28,14 +28,14 @@ types. Format capabilities determine whether its body can be edited.
 
 ## Document-specific diff
 
-Inline review of an Agent turn's saved Markdown changes, individually undone
+Inline review of an agent turn's saved Markdown changes, individually undone
 or kept.
-It is distinct from file/conflict comparisons and Agent action approval.
+It is distinct from file/conflict comparisons and agent action approval.
 See [Project Files](capabilities/project-files.md#document-specific-diff).
 
 ## Turn review
 
-The reader-requested review of what one Agent turn changed in a Markdown file,
+The reader-requested review of what one agent turn changed in a Markdown file,
 shown in the document as changes to undo or keep. It compares the saved document
 with the text from before the turn. See
 [Project Files](capabilities/project-files.md#turn-review).
@@ -49,17 +49,25 @@ and retrieval readiness. Use this instead of an ambiguous global/app store.
 
 **Documents** centers files and editing; **Chat** centers conversation. They share
 a project and retain work across switches. These are application modes, distinct
-from Agent permissions and document reading/editing controls.
+from agent permissions and document reading/editing controls.
+
+## Agent
+
+A runtime that works in a chat: Claude, Codex, Antigravity, or the Default
+Agent. Write **agent** in lowercase in prose and interface copy, such as "your
+agent", "agent credits", and **Ask agent**. Capitalize it only in names
+(**Default Agent**), at the start of a sentence, label, or list item, in
+title-case headings, and in third-party product names such as Claude Agent SDK.
 
 ## Agent Panel
 
-The Agent collaboration capability; **Chat** is its conversation surface.
+The agent collaboration capability; **Chat** is its conversation surface.
 OpenQuill, Claude, Codex, and Antigravity are runtimes, not names for the
 capability.
 
 ## Passage
 
-Selected document text bound to an Agent request with **Ask Agent**. Its words
+Selected document text bound to an agent request with **Ask agent**. Its words
 are sent with the request; it is not a file attachment or a revision.
 
 ## Citation
@@ -69,11 +77,11 @@ that Documents locates on open. A plain file link is not a citation.
 
 ## Persona
 
-Who the Agent is when it talks and writes in a Chat. The reader keeps a
+Who the agent is when it talks and writes in a Chat. The reader keeps a
 library of personas shared by every project: written themselves, or added as a
 copy from **Browse personas**. Each Chat runs under one persona or none, and a
 project's next new Chat starts with the persona last chosen there. How the
-Agent works belongs to the user-owned `AGENTS.md` / `CLAUDE.md` native
+agent works belongs to the user-owned `AGENTS.md` / `CLAUDE.md` native
 instruction files; a persona is distinct from them, from access control, and
 from internal routing.
 
@@ -90,8 +98,8 @@ user's explicit choice clear.
 
 ## OpenQuill
 
-The included Agent runtime, named **Default** in the app. It uses StashBase
-account access and **free Agent credits**, separate from embedding-provider billing.
+The included agent runtime, named **Default** in the app. It uses StashBase
+account access and **free agent credits**, separate from embedding-provider billing.
 OpenQuill remains the external/runtime name; `stashbase` is its implementation
 identifier. [Agent Sessions](capabilities/agent-sessions.md) owns selection behavior.
 
@@ -113,7 +121,7 @@ only to OpenQuill; `allowance` is an internal protocol/type term, not search cop
 ## Wiki
 
 An optional set of source-linked project pages, maintained through requested
-Agent work. It is not the product name or a global search scope.
+agent work. It is not the product name or a global search scope.
 
 ## Wiki Pages
 
@@ -155,11 +163,11 @@ matters. Use the narrow capability instead:
   surface.
 - **Content-editable** — the source body can be changed through a named surface
   and the shared versioned save boundary.
-- **Direct-text readable** — retrieval or an Agent reads useful text from the
+- **Direct-text readable** — retrieval or an agent reads useful text from the
   source itself without durable Preparation.
-- **Prepared-text readable** — retrieval or an Agent reads only a current
+- **Prepared-text readable** — retrieval or an agent reads only a current
   derived representation produced by Preparation.
-- **Agent-readable** — a named built-in or external Agent surface can consume
+- **Agent-readable** — a named built-in or external agent surface can consume
   the source or its current derived representation. Name the surface when
   built-in attachment and external MCP behavior differ.
 - **File-mutable** — the visible source can be renamed, moved, or deleted. This
@@ -172,13 +180,13 @@ See the [format matrix](capabilities/project-files.md#format-capability-matrix).
 
 ## Generic workspace file
 
-A visible file without declared retrieval/Agent support. Bounded read-only
-inspection may be available; visibility does not make it searchable or Agent-readable.
+A visible file without declared retrieval/agent support. Bounded read-only
+inspection may be available; visibility does not make it searchable or agent-readable.
 
 ## Derived data
 
 Rebuildable extraction, preview, index, checkpoint, and status data, hidden from
-the workspace. Visible Agent-written documents are not derived data.
+the workspace. Visible agent-written documents are not derived data.
 
 ## Project
 
@@ -206,13 +214,13 @@ unavailable; see [J11](journeys/README.md#j11-turn-a-conversation-into-a-project
 
 ## Local RAG layer
 
-Preparation and retrieval that supply project evidence to Agents. Local refers
+Preparation and retrieval that supply project evidence to agents. Local refers
 to source/data ownership; configured embedding requests may use a hosted provider.
 
 ## Preparation
 
 Extraction or OCR that makes a source usable for retrieval or
-Agent reading. It is separate from vector-index readiness.
+agent reading. It is separate from vector-index readiness.
 
 ## Product scenario
 

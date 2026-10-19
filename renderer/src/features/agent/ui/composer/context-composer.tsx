@@ -309,7 +309,7 @@ export function AgentContextComposer({
       )}
       {!attachments && uploads.length > 0 && (
         <FailureLine className="m-0 px-3 pt-2" tone="input">
-          This Agent cannot use these uploads. Remove them or choose another Agent.
+          This agent cannot use these uploads. Remove them or choose another agent.
         </FailureLine>
       )}
       {issue && (

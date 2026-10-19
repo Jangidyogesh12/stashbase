@@ -46,13 +46,13 @@ export function setAgentRuntimeDebugState(
   }
   if (patch.nextFailure !== undefined) {
     if (!SETUP_FAILURE_SIMULATIONS.has(patch.nextFailure)) {
-      throw Object.assign(new Error('Invalid Agent setup failure simulation.'), { status: 400 });
+      throw Object.assign(new Error('Invalid agent setup failure simulation.'), { status: 400 });
     }
     nextFailure = patch.nextFailure;
   }
   if (patch.nextTurnFailure !== undefined) {
     if (!TURN_FAILURE_SIMULATIONS.has(patch.nextTurnFailure)) {
-      throw Object.assign(new Error('Invalid Agent turn failure simulation.'), { status: 400 });
+      throw Object.assign(new Error('Invalid agent turn failure simulation.'), { status: 400 });
     }
     nextTurnFailure = patch.nextTurnFailure;
   }
@@ -103,7 +103,7 @@ export function simulatedTurnFailureScript(
     case 'network':
       return { fatal: false, message: 'Simulated failure: fetch failed — getaddrinfo ENOTFOUND (network unreachable).' };
     case 'crash':
-      return { fatal: true, message: 'Simulated failure: the Agent runtime exited unexpectedly (code 1).' };
+      return { fatal: true, message: 'Simulated failure: the agent runtime exited unexpectedly (code 1).' };
   }
 }
 

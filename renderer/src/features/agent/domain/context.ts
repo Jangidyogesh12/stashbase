@@ -264,7 +264,7 @@ function validateItem(item: AgentContextItem, environment: ContextEnvironment): 
       return {
         item,
         key,
-        reason: 'Preparation failed; the Agent gets the source only.',
+        reason: 'Preparation failed; the agent gets the source only.',
         status: 'failed',
       };
     case 'blocked':

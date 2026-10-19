@@ -46,11 +46,11 @@ describe('agent failure messages', () => {
 
   it('names every kind either Agent ladder can report', () => {
     expect(failureMessage('not-found')).toBe('That file is no longer in this folder.');
-    expect(failureMessage('unsupported')).toContain('cannot be given to the Agent');
+    expect(failureMessage('unsupported')).toContain('cannot be given to the agent');
     expect(failureMessage('scope-lost')).toContain('no longer available');
     expect(failureMessage('unauthorized')).toContain('no longer');
     expect(failureMessage('invalid-response')).toContain('unexpected response');
-    expect(failureMessage('unavailable')).toContain('could not reach the Agent service');
+    expect(failureMessage('unavailable')).toContain('could not reach the agent service');
   });
 
   it('reads a refusal by its kind and never repeats its own sentence', () => {

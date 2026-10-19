@@ -102,7 +102,7 @@ export function SidebarAccountRow({
                 ? 'Retry loading your account'
                 : account.signInPending
                   ? undefined
-                  : 'Sign in for free Agent credits'
+                  : 'Sign in for free agent credits'
             }
           />
           {account.canStopWaiting && (

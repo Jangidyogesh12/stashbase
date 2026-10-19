@@ -124,6 +124,6 @@ Packaging is release-only; outputs stay in `release.nosync/` and are never commi
 
 ## Development Controls
 
-In development builds, Cmd/Ctrl+Alt+Shift+D opens Developer tools for Agent setup
+In development builds, Cmd/Ctrl+Alt+Shift+D opens Developer tools for agent setup
 and turn simulations and sidebar update previews. These controls are separate
 from Settings; the production application does not offer the shortcut.

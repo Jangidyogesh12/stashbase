@@ -40,7 +40,7 @@ function AccountRow({ account }: { account: AccountViewModel }) {
             ? [account.account.displayName, account.account.email]
                 .filter((part): part is string => part !== null)
                 .join(' · ') || accountLabel(account.account)
-            : 'Sign in for free Agent credits every week.'
+            : 'Sign in for free agent credits every month.'
       }
       title="Account"
       trail={

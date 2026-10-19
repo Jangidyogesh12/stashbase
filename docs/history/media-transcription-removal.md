@@ -12,7 +12,7 @@ additional edits.
 Remove audio/video transcription and native media conversion to focus on writing.
 Keep ordinary project files and direct browser playback. Unsupported codecs have
 an unavailable preview; users can open their source in an external application.
-Media is excluded from preparation, retrieval, and Agent/MCP content access.
+Media is excluded from preparation, retrieval, and agent/MCP content access.
 PDF, DOCX, image preparation and their shared scheduler remain.
 No migration or deletion of user-authored files or old downloaded models is added.
 
@@ -46,13 +46,13 @@ Validated on 2026-09-15, with changes left uncommitted.
   protocol/Electron tests, service builds, documentation validation, and the
   built Electron smoke suite.
 - New regressions verify that media source bytes remain intact, preparation and
-  Agent/MCP content reads are refused, media is omitted from Agent discovery
+  agent/MCP content reads are refused, media is omitted from agent discovery
   and index admission, and original asset streaming retains Range support.
 - The complete renderer gate passed architecture, size, duplication, formatting,
   lint, Story accessibility, type checking, and both builds. Its test run passed
-  1,460 of 1,461 tests; an Agent convergence test timed out and all three tests
+  1,460 of 1,461 tests; an agent convergence test timed out and all three tests
   in that file passed on a focused rerun. Coverage completion is not claimed.
-- Existing uncommitted Agent work still prevents a green full gate:
+- Existing uncommitted agent work still prevents a green full gate:
   `use-agent-access.ts` violates signal/error-message conventions, and
   `agentAccessFailure` / `AGENT_RUNTIMES` are unused exports. The test inventory
   also reports the existing `server/routes/agent-preferences.test.ts` outside

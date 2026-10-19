@@ -54,12 +54,12 @@ date. Older builds do not supply the same activity or identity evidence.
 | `subscription_observed` | Hosted API confirms subscription rights; unchanged polling is suppressed | bounded `plan`, `paid`, `cancel_at_period_end` |
 | `agent_setup_result` | Agent setup settles or connection fails | `runtime`, `stage`, `outcome`, optional failure stage and diagnostic |
 | `agent_setup_stage` | Discovery, installation, authentication or MCP stage starts or succeeds | `runtime`, `attempt_id`, `stage`, `outcome` |
-| `application_error` | Host, renderer, Agent or native failure | `source`, `operation`, optional `runtime`, detailed `diagnostic`, `occurrences` |
-| `application_warning` | Operation degraded but continued, such as a saved file that could not be indexed, a refused (4xx) request, or an Agent that is not ready | Same as `application_error` |
+| `application_error` | Host, renderer, agent or native failure | `source`, `operation`, optional `runtime`, detailed `diagnostic`, `occurrences` |
+| `application_warning` | Operation degraded but continued, such as a saved file that could not be indexed, a refused (4xx) request, or an agent that is not ready | Same as `application_error` |
 
 `app_active` and each document activity/format category are limited to once per UTC
 minute across windows. They are not heartbeats. Idle background processes,
-restored tabs, automatic source refresh, and streamed Agent output alone do not
+restored tabs, automatic source refresh, and streamed agent output alone do not
 create active days. Read engagement is a surface-interaction proxy: it cannot
 prove comprehension, and silent reading without interaction is not counted.
 Editing events contain no text or keystrokes. Unchanged saves report
@@ -98,7 +98,7 @@ prompts. Missing provider explanations remain missing; request IDs support
 follow-up investigation rather than implying a known root cause.
 
 Allowance-query failures keep the local response status separate from the
-upstream status/request ID or original network cause. Daemon and Agent startup
+upstream status/request ID or original network cause. Daemon and agent startup
 exit diagnostics retain a bounded stderr tail and available exit code/signal.
 OpenCode startup stages are `prepare`, `spawn`, `waiting_ready`, `ready`, and
 `cleanup` (retirement failed). Elapsed time covers preparation through settlement,
@@ -124,7 +124,7 @@ arguments. Host connection-close observations carry the same connection ID as
 renderer errors. Known client/server closures have an explicit reason; unknown
 socket loss remains unknown. Closure after a successful turn is not a failed turn.
 
-An Agent error immediately followed by an exit with the same explanation is
+An agent error immediately followed by an exit with the same explanation is
 one diagnostic with the original cause; both notifications still reach the UI.
 
 An identical diagnostic is reported when first seen. Repeats within its window
@@ -275,7 +275,7 @@ D1, D7 and D30 mean return on exactly that calendar day after cohort entry. W1
 means at least one return on days 7–13; W4 means days 28–34. Divide returning
 identities by eligible identities in that entry cohort, not all current users.
 Use unique installations for installation retention and resolved persons for
-person retention. Break down event-time OS, version, mode and Agent runtime;
+person retention. Break down event-time OS, version, mode and agent runtime;
 do not substitute mutable current profile properties for cohort-entry attributes.
 
 These views describe reporting activity, not all users. Missing events can mean

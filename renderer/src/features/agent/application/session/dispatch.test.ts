@@ -165,7 +165,7 @@ describe('prompt dispatcher', () => {
 
     await test.dispatcher.attach([new File(['a'], 'ok.png')]);
 
-    expect(test.state().contextIssue).toBe('StashBase could not reach the Agent service.');
+    expect(test.state().contextIssue).toBe('StashBase could not reach the agent service.');
   });
 });
 

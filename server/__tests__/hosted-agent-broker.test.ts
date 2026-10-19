@@ -411,9 +411,9 @@ test('empty response buffering is bounded and malformed events are not retried',
 });
 
 for (const scenario of [
-  { code: 'agent_allowance_reserved', message: 'Remaining Agent credits cannot cover this request while some credits are reserved for active requests or fees awaiting confirmation. Check Agent credits in Settings; wait for reservations to clear or try a shorter conversation.', kind: 'allowance-exhausted' },
-  { code: 'agent_allowance_exhausted', message: 'Remaining Agent credits cannot cover this request. Try a shorter conversation or wait for credits to refill.', kind: 'allowance-exhausted' },
-  { code: 'agent_turn_budget_exhausted', message: 'This Agent turn has insufficient spending budget for another model call.', kind: 'quota' },
+  { code: 'agent_allowance_reserved', message: 'Remaining agent credits cannot cover this request while some credits are reserved for active requests or fees awaiting confirmation. Check agent credits in Settings; wait for reservations to clear or try a shorter conversation.', kind: 'allowance-exhausted' },
+  { code: 'agent_allowance_exhausted', message: 'Remaining agent credits cannot cover this request. Try a shorter conversation or wait for credits to refill.', kind: 'allowance-exhausted' },
+  { code: 'agent_turn_budget_exhausted', message: 'This agent turn has insufficient spending budget for another model call.', kind: 'quota' },
 ]) {
   test(`hosted Agent broker preserves ${scenario.code} through the OpenCode translator`, async (t) => {
     const broker = new HostedAgentBroker({

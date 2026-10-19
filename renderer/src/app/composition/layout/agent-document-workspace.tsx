@@ -221,7 +221,7 @@ export function AgentDocumentWorkspace({
           <SplitHandle
             className="left-0 -translate-x-1/2"
             defaultWidth={AGENT_PANE_WIDTH.default}
-            label="Resize Agent pane"
+            label="Resize agent pane"
             max={AGENT_PANE_WIDTH.max}
             min={AGENT_PANE_WIDTH.min}
             onWidthChange={onPaneWidthChange}

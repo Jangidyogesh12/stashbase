@@ -47,7 +47,7 @@ export function AgentWorkStatus({
       )}
       {repair && (
         <Button size="compact" variant="ghost" onClick={onOpenSettings}>
-          Open Agent settings
+          Open agent settings
         </Button>
       )}
       {paused && (

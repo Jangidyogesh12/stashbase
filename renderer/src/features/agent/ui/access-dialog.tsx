@@ -37,7 +37,7 @@ function gateCopy(agent: AgentId): {
   if (agent === DEFAULT_AGENT_ID)
     return {
       action: 'Sign in',
-      description: 'Default agent runs on free Agent credits.',
+      description: 'Default Agent runs on free agent credits.',
       title: 'Sign in to use Default Agent',
       waiting: 'Waiting for your browser. Your message sends as soon as this is ready.',
     };

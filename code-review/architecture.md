@@ -18,9 +18,9 @@ Electron windows → shared Node server → Python daemon → one MFS store
 |---|---|
 | User filesystem | Source files, Wiki Pages, and native instruction files |
 | Electron main | Window/capability identity, server-child lifetime, native save barriers, updates |
-| Node server | Registered projects, authorized file operations, preparation, Settings, MCP operations, Agent adapters |
+| Node server | Registered projects, authorized file operations, preparation, Settings, MCP operations, agent adapters |
 | Python/MFS | Completed text projections, revisions, chunking, embeddings, status, and retrieval through public APIs |
-| Native Agent runtime | Sessions, conversation history, native capabilities and tool execution |
+| Native agent runtime | Sessions, conversation history, native capabilities and tool execution |
 | Renderer | Window-local presentation, live buffers, scoped commands, and caches; no durable data authority |
 
 Closing one window releases its work, not services used by peers. Only Node
@@ -37,7 +37,7 @@ Journey-specific entry points and evidence stay in [Journey Coverage](journey-co
 | Product capability | Engineering ownership and seams |
 |---|---|
 | [Project entry and lifetime](../design-docs/capabilities/project-entry.md) | Renderer coordinates entry; Electron selects windows and hands off; Node validates directory identity and membership. See [project scope](#project-scope-and-paths) and [import publication](#import-publication). |
-| [Project files](../design-docs/capabilities/project-files.md) | Renderer owns live drafts; Node owns source/version transactions shared by HTTP, Agent, and MCP; Electron gates window release. See [source transactions](#source-transactions) and [draft durability](#draft-durability). |
+| [Project files](../design-docs/capabilities/project-files.md) | Renderer owns live drafts; Node owns source/version transactions shared by HTTP, agent, and MCP; Electron gates window release. See [source transactions](#source-transactions) and [draft durability](#draft-durability). |
 | [Agent sessions](../design-docs/capabilities/agent-sessions.md) | Renderer owns draft/turn interaction; Node owns session routing and adapter lifetime; native runtimes own their sessions and execution. See [sessions and permissions](#agent-sessions-and-permissions). |
 | [Project context](../design-docs/capabilities/project-context.md) | Node schedules preparation and binds project scope; Python/MFS owns published index state and retrieval. See [preparation and retrieval](#preparation-and-retrieval). |
 | [Account and settings](../design-docs/capabilities/account-settings.md) | Node owns persistent settings, account state, and external credentials; renderer owns scoped interaction. See [credentials and access](#credentials-and-external-access) and [native lifecycle](#native-lifecycle-and-updates). |
@@ -58,7 +58,7 @@ Journey-specific entry points and evidence stay in [Journey Coverage](journey-co
   and window binding. A newer open, close, or retirement invalidates pending work.
   Directory absence never silently removes membership or favorites.
 - Project creation stays beneath the default home or an authorized location.
-  Entry and Agent startup never seed or rewrite user-owned instruction files.
+  Entry and agent startup never seed or rewrite user-owned instruction files.
   Startup creates only the default home directory; it never populates it with
   sample content or registers projects automatically.
 - Removing membership preserves source files and independently registered nested
@@ -71,7 +71,7 @@ Journey-specific entry points and evidence stay in [Journey Coverage](journey-co
   `server/file-listing.ts` owns browsing visibility, including default-visible
   project configuration directories; `server/indexable.ts` retains dot-directory
   exclusions for preparation and retrieval. Workspace listings apply the browsing
-  preference with either explicit project scope or window scope; Agent/MCP directory
+  preference with either explicit project scope or window scope; agent/MCP directory
   discovery uses the separate Project Operations surface.
 
 The shared entry experience is owned by [Entering a Project](../design-docs/capabilities/project-entry.md).
@@ -83,7 +83,7 @@ Session restoration restores presentation only and never initiates project entry
 
 ## Source Transactions
 
-HTTP, Agent, and MCP adapters share file/version authorities. Source capability
+HTTP, agent, and MCP adapters share file/version authorities. Source capability
 follows the [format matrix](../design-docs/capabilities/project-files.md#format-capability-matrix);
 preview, content editing, and rename/delete are separate permissions.
 
@@ -105,7 +105,7 @@ preview, content editing, and rename/delete are separate permissions.
   unintended control bytes without consuming valid literal backslashes.
 - Turn changes are host state owned by `server/turn-changes.ts`. Native runtime
   writes and shell commands never pass through the host, so `attachAgentRuntime`
-  wraps every Agent socket bound to a folder: a prompt and everything after it
+  wraps every agent socket bound to a folder: a prompt and everything after it
   wait until the folder's Markdown baseline exists, and the runtime's `turn-end`
   triggers a rescan and a `turn-changes` event. This is the one seam shared by every
   runtime; adapters carry no tracking of their own. Tracking is best effort: a
@@ -117,7 +117,7 @@ preview, content editing, and rename/delete are separate permissions.
 - Rename/move/delete validate before cancelling work, await native-handle release,
   mutate, retire current AppData-derived/index identity, then rediscover and notify.
   Retired extraction filenames never authorize sibling-file migration or deletion. Generic
-  Workbench mutations do not broaden Agent content permissions.
+  Workbench mutations do not broaden agent content permissions.
 - Link rewrites plan against versions before rename and apply through the shared
   transaction owner. Rollback restores only bytes it still owns. Current cascade
   covers inline Markdown links/images and HTML anchor hrefs, not reference-style
@@ -286,7 +286,7 @@ stable status without download, retry, or a new durable demand latch.
   they never delete credentials. A provider that refuses a signed-in account
   (`AgentAccountRefusedError`, code `account-refused`) offers a recheck
   instead, because signing in again cannot change its answer. Setup errors retain bounded stdout/stderr and
-  nested network causes, with Agent/action/stage context. Settings and chat
+  nested network causes, with agent/action/stage context. Settings and chat
   update surfaces preserve HTTP diagnostics as well as bootstrap failures.
 - User-installed CLIs keep their native account/history ownership. StashBase discovers provider-owned
   installations and never uninstalls them; AppData stores temporary installer
@@ -358,7 +358,7 @@ stable status without download, retry, or a new durable demand latch.
   first prompt with the chat's mode, model, and effort as launch flags. A change
   to any of them, Stop, or process exit retires it, and the next prompt resumes
   the same conversation with `--conversation`. `agy` accepts no caller system
-  prompt, so the Agent role, persona, and routing policy ride ahead of each
+  prompt, so the agent role, persona, and routing policy ride ahead of each
   process's first message. Like a Claude session, each chat reads the runtime's current models
   when it starts; because one `agy` read takes 10–20 seconds, it opens on the
   remembered list and replaces it when the read lands, and chats opened within
@@ -386,13 +386,13 @@ stable status without download, retry, or a new durable demand latch.
   unwraps only this owned terminal envelope and consumes native text/reasoning
   delta events, reconciling final snapshots without duplicating output. Stale
   deltas cannot cross session, message, or turn boundaries.
-- Project Agent preferences are explicit choices in Node-owned app config, keyed
+- Project agent preferences are explicit choices in Node-owned app config, keyed
   by registered project scope. Readiness and history restore never write them.
-  Thinking effort is stored separately per Agent in that project. Composer choices
+  Thinking effort is stored separately per agent in that project. Composer choices
   update the window cache immediately and persist in order; new/blank chats seed
   from that cache, while history keeps its native effort. Catalog admission clears
   unsupported effort in the session without overwriting the saved choice. Effort
-  writes preserve the preferred Agent and other runtimes' efforts.
+  writes preserve the preferred agent and other runtimes' efforts.
   Missing preference means Default; failed preference reads/writes remain visible.
   Access requested on Send retains a scope/session/draft snapshot and cancellation
   owner. Only confirmed readiness may continue that same submission once; navigation,
@@ -401,12 +401,12 @@ stable status without download, retry, or a new durable demand latch.
 - Unstarted means no session/transcript/turn; blank also means no pending user work.
   Blank chats may follow the window and be reused; user work pins scope. Runtime
   adoption preserves drafts, source bindings, and transient upload bytes. Catalog
-  connections before the first request may be replaced when changing Agent. Mode changes
+  connections before the first request may be replaced when changing agent. Mode changes
   never remount ongoing work merely to change presentation.
 - Started sessions survive window folder switches. Member removal retires only
   bound sessions, reports a structured scope-removed event before closure, preserves
   transcripts, and rejects queued/late work. Expected retirement never reconnects.
-- History restore joins repeated requests for the same project/Agent/native id.
+- History restore joins repeated requests for the same project/agent/native id.
   Mounted titles carry a manual-rename flag; first submissions supply a fallback
   title hint. Rename mutations serialize before publishing confirmed titles.
 - Native history is authoritative. Native cwd determines project ownership; no
@@ -428,8 +428,8 @@ stable status without download, retry, or a new durable demand latch.
   searches, and questions report nothing.
 - A persona is per-Chat guidance resolved at native mount and composed
   with internal routing policy. A native runtime reads StashBase's one-sentence
-  Agent role ahead of both, because each provider's own system prompt casts it
-  as a coding assistant; the bundled Agent states its role in its own
+  agent role ahead of both, because each provider's own system prompt casts it
+  as a coding assistant; the bundled agent states its role in its own
   configuration. That policy is the one text every runtime always
   sees, so it owns which StashBase tool orients and reads prepared text, and that
   existing documents use `edit_file` while new documents use `write_file`; a tool description alone
@@ -441,10 +441,10 @@ stable status without download, retry, or a new durable demand latch.
   native session's persona. The Chat's persona id travels on its connection;
   the shared Agent Contract records it against the `session-id` every runtime
   announces, and replay returns it. The project's choice for new Chats is an
-  Agent preference. A change never mutates a running native prompt: the
+  agent preference. A change never mutates a running native prompt: the
   renderer resumes the Chat's own conversation, as it does for effort, so the
   persona applies from the next turn. Gallery personas are Gallery index data;
-  the composition layer adds them through the Agent's library, since the
+  the composition layer adds them through the agent's library, since the
   features do not import each other. Brainstorming needs no sources/wiki/index.
 - Default receives explicit transient attachment references in the prompt
   protocol. `server/routes/attach.ts` binds uploads to an explicit registered
@@ -483,9 +483,9 @@ stable status without download, retry, or a new durable demand latch.
   wire its producer's snapshot and activation handler in composition. Keep its
   live target validation in the owning feature; delivery needs no new routing
   rules. Do not accept arbitrary URLs, permission decisions or tool/document data.
-- The Agent producer observes all retained sessions through
+- The agent producer observes all retained sessions through
   `agent/application/attention.ts`. Its opaque notification IDs map to pending
-  session/request identities inside the Agent feature. Clicks restore the owner
+  session/request identities inside the agent feature. Clicks restore the owner
   and return only kind/ID; the feature rechecks the pending target before navigation
   and focus. Stop, resolution, navigation, renderer loss and window close revoke
   stale targets. Notification delivery never grants permission.
@@ -499,7 +499,7 @@ stable status without download, retry, or a new durable demand latch.
   result block, expose its transcript page and focus it; startup failures retain
   the composer. Pending notifications may wait for background; event notifications
   are consumed while foreground or disabled, without later replay. The catalog
-  selects this delivery policy; the center implements it independently of Agent
+  selects this delivery policy; the center implements it independently of agent
   state. All variants use the existing renderer platform adapter and native driver.
 - `electron/notifications/native.ts` uses Electron's common title/body,
   show/close and click APIs on macOS, Windows and Linux. Windows sets the AUMID to
@@ -536,7 +536,7 @@ stable status without download, retry, or a new durable demand latch.
   add their section at composition rather than teaching the native presenter
   scheduling rules or introducing arbitrary renderer actions. No scheduler or
   upcoming-task IPC exists yet. All OS branches remain in the native notification
-  boundary. Tray loss must not fail Agent work or alter window-close semantics.
+  boundary. Tray loss must not fail agent work or alter window-close semantics.
   Tray images derive from the application mark through `scripts/icons/status.mjs`
   and ship inside `electron/notifications/icons`; macOS uses Retina templates.
 - Pending approvals require the exact request id; abort/disposal denies them.
@@ -584,7 +584,7 @@ stable status without download, retry, or a new durable demand latch.
   the tool-free classification with a 256-token output cap and a 30-second
   transport deadline, retaining its original turn for accounting. The five-second
   decision deadline never aborts that active request. Broker shutdown cancels
-  remaining drains; late answers cannot approve a later turn's action. Main Agent
+  remaining drains; late answers cannot approve a later turn's action. Main agent
   and Crew requests still abort when their turn ends.
   Approval replies grant once, require a pending request id, and never persist
   an `always` grant across modes. Options stay frozen while a turn runs.
@@ -674,7 +674,7 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
 - OpenQuill receives a random session-local model broker credential, not
   account secrets. Model calls require an active submitted turn, retain its
   id/idempotency across the one auth-refresh retry, and cannot expose account
-  tokens in history. Turn/channel retirement cancels main Agent/Crew body reads
+  tokens in history. Turn/channel retirement cancels main agent/Crew body reads
   and pending upstream work. Already dispatched Auto classifications drain under
   the bounded permission-review lifecycle above; awaited credential acquisition cannot forward a request after
   retirement. The broker buffers a bounded empty SSE prefix and retries an
@@ -700,7 +700,7 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   always runs on the service's default profile. `server/agent-tool-catalog.ts`
   reads the tool catalog (`GET /v2/agent/tools`): the tools, their published
   names and descriptions, and a tool model pool independent of the main
-  Agent's profiles, cached per account with the service's ETag (304 reuses it,
+  agent's profiles, cached per account with the service's ETag (304 reuses it,
   a failed refresh keeps a valid copy, sign-out clears it; without a copy,
   selected Crew blocks startup and a chat without Crew can proceed). `server/default-agent-tools.ts` holds no tool of
   its own: it resolves the chat's choices in app config `agentCrewChats` against a catalog.
@@ -760,7 +760,7 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   the atomic stdio launcher on startup/readiness/Settings. Stdio is scoped to its spawning client.
 - MCP reads are bounded; line windows omit a version so partial content cannot
   authorize a whole-file overwrite. Generic/derived/unsupported entries never
-  bypass source admission. Native coding-Agent tools have separate runtime permissions.
+  bypass source admission. Native coding-agent tools have separate runtime permissions.
 - Readiness alone writes the built-in CLIs' MCP config; OpenQuill injects config
   per process. Claude's entry asks the runtime to always load StashBase's tools,
   because Claude otherwise defers MCP definitions behind its tool search once a
@@ -799,7 +799,7 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   ingestion refusal remain observable-data limitations. One serial drain re-reads
   current preferences/queue after every await and removes only acknowledged UUIDs.
   Bounded retry never waits in the user's writing operation or shutdown.
-- Foreground input and document/Agent engagement establish activity, not timers,
+- Foreground input and document/agent engagement establish activity, not timers,
   background work or streamed output. All windows share category suppression and
   sessions. Save/project/billing work captures initiating identity before await;
   turn correlation persists identity/session, original version and observation times.
@@ -836,7 +836,7 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   persist, never each streamed token; last stage is evidence, not inferred cause.
   Tool failures contain bounded call IDs/categories, not inputs or results, and do
   not themselves settle a turn. Setup stages share attempt
-  and retry IDs. Background diagnostics retain the operation sentence. HTTP, Agent,
+  and retry IDs. Background diagnostics retain the operation sentence. HTTP, agent,
   background and renderer failures converge here without throwing into operations,
   recursively reporting analytics failures, or creating another privacy setting.
   A runtime error immediately followed by an exit with the same explanation
@@ -844,7 +844,7 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   still reach the renderer. Closed sessions cannot publish late discovery failures.
   Allowance-query diagnostics retain the original network cause or upstream
   status/request ID separately from the local HTTP result. Unexpected daemon
-  and Agent startup exits retain bounded, credential-filtered stderr and the
+  and agent startup exits retain bounded, credential-filtered stderr and the
   available exit code/signal, without serializing process configuration.
   OpenCode reports each physical startup attempt, including success/cancellation,
   with purpose (history/chat/prewarm), pinned version, attempt/retry identity,
@@ -858,7 +858,7 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   closure. These observations cannot retroactively fail a completed turn.
   Renderer JSON-body failures retain the original cause, status (including 2xx),
   content type and host-issued response request ID. Requested cancellation stays
-  cancellation; empty HEAD/204/205 responses are not decode failures. The Agent
+  cancellation; empty HEAD/204/205 responses are not decode failures. The agent
   broker observes bounded SSE framing metadata and explicit upstream errors,
   never retains model text/tools, and supplies the current request trace to the
   native adapter's error diagnostic before the turn retires. Unknown completion
@@ -973,7 +973,7 @@ registered host boundaries; renderer shared types are a different layer.
 Sandboxed, context-isolated windows have no Node integration and load the bundled
 application origin (explicit Vite development is separate). Main authorizes live
 main-frame origin and capability for each parsed IPC call and stamps HTTP/socket
-identity itself. Canonical API/Agent paths only; asset requests carry no window
+identity itself. Canonical API/agent paths only; asset requests carry no window
 authority and retain server path checks. CSP/root containment, navigation/popup/
 webview denial, and narrow preload methods cannot be weakened by document content.
 Only sanitized clipboard write is granted to the application origin; paste needs
@@ -1114,11 +1114,11 @@ Only successful catalog loads remain fresh for the window session. Failed loads
 retain any successful catalog (or the bundled fallback) and remain retryable.
 The selected entry is an ID resolved against that catalog, not an independent
 copy of its metadata. Image retries retain the restricted proxy origin. Gallery metadata never installs
-ongoing Agent instructions. Personas ride the
+ongoing agent instructions. Personas ride the
 same index as an optional array; an index without it keeps the bundled persona
 snapshot. The overlay frame is shared, but its entrance fixes one shop: the
 sidebar's Gallery shows projects and the picker's Browse personas shows
-personas, with no switch between them. Adding one copies it into the reader's library through the Agent's
+personas, with no switch between them. Adding one copies it into the reader's library through the agent's
 library port and chooses it for no Chat.
 
 ## Validation

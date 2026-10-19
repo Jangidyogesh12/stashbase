@@ -61,7 +61,7 @@ export function skillCatalogOf(
   report: Extract<AgentSessionAction, { kind: 'skills' }>,
 ): AgentSkillCatalog {
   if (report.state === 'failed') {
-    return { kind: 'failed', message: report.error ?? 'The Agent could not read its skills.' };
+    return { kind: 'failed', message: report.error ?? 'The agent could not read its skills.' };
   }
   return report.skills.length > 0
     ? { kind: 'available', skills: report.skills }

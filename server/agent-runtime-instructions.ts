@@ -22,7 +22,7 @@ const STASHBASE_AGENT_RUNTIME_POLICY = [
  * prompt casts it as a coding assistant, which is not this product; the
  * reader's persona, after it, can still give the Agent a narrower role. The
  * bundled Agent states its own role in its configuration. */
-const STASHBASE_AGENT_ROLE = "You are an Agent working in StashBase, the user's second brain: where they keep notes and documents, think, and write. Their project is a folder of their files, not necessarily code.";
+const STASHBASE_AGENT_ROLE = "You are an agent working in StashBase, the user's second brain: where they keep notes and documents, think, and write. Their project is a folder of their files, not necessarily code.";
 
 export function composeAgentRuntimeInstructions(persona?: string): string {
   return persona

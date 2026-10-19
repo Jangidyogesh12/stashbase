@@ -332,7 +332,7 @@ test('allowance HTTP failures preserve upstream metadata and network causes only
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.deepEqual(output.replies, [
-    { status: 502, body: { error: 'The Agent credits service failed (HTTP 404).' } },
+    { status: 502, body: { error: 'The agent credits service failed (HTTP 404).' } },
     { status: 502, body: { error: 'fetch failed' } },
   ]);
   assert.equal(output.captured.length, 2);

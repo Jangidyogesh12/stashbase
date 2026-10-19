@@ -90,7 +90,7 @@ export function DebugBlock({ runtimes }: { runtimes: AgentRuntimesViewModel }) {
       summary="Agent setup testing"
     >
       <p className="text-caption text-muted-foreground">
-        Simulate Agent setup and turn results in StashBase. System installations and provider
+        Simulate agent setup and turn results in StashBase. System installations and provider
         sign-ins are kept.
       </p>
       <DebugSelectRow

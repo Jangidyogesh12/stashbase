@@ -40,7 +40,7 @@ export function TurnFailure({
     (!modelChanged || refreshed);
   return (
     <section className={cn('border border-destructive/30 bg-destructive-light p-3', shape.panel)}>
-      <h3 className="text-caption font-medium text-foreground">The Agent could not finish</h3>
+      <h3 className="text-caption font-medium text-foreground">The agent could not finish</h3>
       <p className="mt-1 text-caption text-muted-foreground">{block.text}</p>
       <p className="mt-1 text-caption text-muted-foreground">
         {modelChanged

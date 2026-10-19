@@ -8,14 +8,14 @@ no account.
 
 | Capability | Access source |
 |---|---|
-| Default Agent | StashBase account with free or subscribed Agent credits |
+| Default Agent | StashBase account with free or subscribed agent credits |
 | Codex / Claude / Antigravity | The native runtime's installation and authentication |
 | Search by meaning | User-supplied embedding key in Settings, billed independently |
 | External HTTP MCP | Current Settings token; separate opt-in for Docker access |
 
-Selecting an Agent is not login or installation consent. Account sign-in does not
+Selecting an agent is not login or installation consent. Account sign-in does not
 enable search. Credentials remain outside projects, renderer persistence, and
-Agent history; supplied environment variables do not configure BYOK access.
+agent history; supplied environment variables do not configure BYOK access.
 
 ## Settings Organization
 
@@ -51,7 +51,7 @@ Settings owns lasting preferences and connection configuration:
   shared across desktop windows, enabled by default. Separate "Needs confirmation",
   "Task completed" and "Task failed" switches also default on. The master switch
   preserves these choices when turned off. Changing one category preserves other
-  windows' category changes. Notifications cover pending Agent approvals/questions
+  windows' category changes. Notifications cover pending agent approvals/questions
   and submitted task outcomes while the app is in the background; user-requested
   stops stay quiet. Disabled outcome notifications are not replayed later.
   The status explains
@@ -93,7 +93,7 @@ Settings owns lasting preferences and connection configuration:
   verified native copy for subsequent sessions and leaves the npm copy intact.
   Explicit executable overrides remain authoritative; an override outside the
   native installation must be removed before updating through StashBase.
-  Each native Agent checks its own sign-in status before readiness and offers
+  Each native agent checks its own sign-in status before readiness and offers
   its provider's browser sign-in when needed. Antigravity has no separate
   sign-in command: its sign-in opens the browser from a terminal session
   StashBase starts, a pseudo-terminal on macOS and Linux and a console window on
@@ -120,7 +120,7 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
 
 ## Shared State and Recovery
 
-- Settings declare their scope. Project Agent preferences follow the project;
+- Settings declare their scope. Project agent preferences follow the project;
   current account and embedding configuration are shared across windows.
 - A failed read is not an empty configuration. Failed writes preserve unrelated
   settings and report failure; disposable caches cannot overwrite unreadable state.
@@ -185,7 +185,7 @@ reader to current credits rather than claiming all credits are spent.
   in Settings, and waits for affected document saves. Failure
   leaves the current application and downloaded update recoverable. Relaunch waits
   for the previous local service to release its port before opening the replacement.
-  The same choice governs the background checks for newer Agent runtime
+  The same choice governs the background checks for newer agent runtime
   releases ([Agent Sessions](agent-sessions.md)).
   Development notification previews have no authority to invoke the updater.
   Offline, network-change, suspended-network and DNS failures during a check
@@ -202,7 +202,7 @@ reader to current credits rather than claiming all credits are spent.
   output are retained to support debugging. Known credential patterns are filtered;
   documents, chats, arbitrary provider payloads and whole logs are not collected.
   Bounded offline delivery preserves occurrence time and identity. A submitted
-  Agent turn can retain content-free progress and its result across restarts.
+  agent turn can retain content-free progress and its result across restarts.
   If a prior host left no result, recovery reports an interrupted turn with an
   unknown outcome; it does not infer success, failure, or an exact end time.
   Lost connections and recoverable tool errors remain distinct from confirmed
@@ -232,7 +232,7 @@ reader to current credits rather than claiming all credits are spent.
 ## Default Agent Subscriptions
 
 A window that is signed out shows a banner in the notice strip, with or
-without a folder open: "Sign in for free Agent credits every week." with Sign in
+without a folder open: "Sign in for free agent credits every month." with Sign in
 and Not now. It states what signing in gives, neither a commitment to use the
 Default Agent nor the allowance's terms, which Settings → Agents shows. A completed sign-in or Not now answers it for
 the installation until the next sign-out, which brings it back: signed out, the
@@ -274,8 +274,12 @@ Stripe owns prices, promotion codes, and payment management. The hosted API owns
 subscription rights and usage. A discounted subscription receives its full tier
 allowance. Paid credits follow the successfully paid monthly billing period.
 A tier change preserves consumption within that period; an upgrade raises the
-current ceiling. Free credits keep their separate seven-day window. Paid-tier changes use Stripe
-prorations. Cancellation retains access until paid-through, then returns to Free.
+current ceiling. Free credits keep their separate monthly window from first use, and
+there is no first-week grant. The first time an account adds a card, its first month of
+Plus is a free trial with the full Plus allowance; it renews as paid Plus unless canceled,
+does not combine with promotion codes, and is offered once per account. Canceling during
+the trial keeps Plus until it ends without a charge. Trial billing follows Stripe defaults. Pro carries ten
+times the Plus allowance. Paid-tier changes use Stripe prorations. Cancellation retains access until paid-through, then returns to Free.
 A browser success redirect is not evidence of payment; pending confirmation stays
 visible until the API confirms rights. Failed billing does not discard local work.
 

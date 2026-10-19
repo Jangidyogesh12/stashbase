@@ -8,13 +8,13 @@ writing loop. Shared rules live in the linked [capabilities](../README.md#horizo
 
 ### Flow
 
-Enter a project → prepare the selected Agent if needed → discuss an idea → return through Recent.
+Enter a project → prepare the selected agent if needed → discuss an idea → return through Recent.
 
 ### Required Results
 
 First value may be discussion in an empty project. No references, wiki, search key, or
 file output is required. Local browsing and editing remain available without an account.
-Hardware or OS limitations in optional search, extraction, or Agent runtimes must
+Hardware or OS limitations in optional search, extraction, or agent runtimes must
 not prevent application entry on an OS supported by the desktop runtime. Explain
 the unavailable capability where it is used; preserve project access and editing.
 
@@ -245,7 +245,7 @@ source reorganization.
 ### Failure and Recovery
 
 Setup failure keeps the request. Partial writes follow ordinary file recovery;
-completeness, grounding, and link quality require real-Agent evaluation.
+completeness, grounding, and link quality require real-agent evaluation.
 
 **Capabilities:** [Agent Sessions](../capabilities/agent-sessions.md), [Project Files](../capabilities/project-files.md), [Project Context](../capabilities/project-context.md).
 

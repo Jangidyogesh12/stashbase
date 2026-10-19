@@ -35,18 +35,18 @@ describe('Agent document workspace row', () => {
 
     expect(mounts).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('document-slot').getAttribute('aria-hidden')).toBe('true');
-    expect(screen.queryByRole('separator', { name: 'Resize Agent pane' })).toBeNull();
+    expect(screen.queryByRole('separator', { name: 'Resize agent pane' })).toBeNull();
 
     await act(async () => void (await runtime.open(PLAN)));
     expect(mounts).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('document-slot').getAttribute('aria-hidden')).toBe('false');
-    expect(screen.getByRole('separator', { name: 'Resize Agent pane' })).not.toBeNull();
+    expect(screen.getByRole('separator', { name: 'Resize agent pane' })).not.toBeNull();
     expect(screen.getByTestId('agent')).not.toBeNull();
 
     await act(async () => void (await runtime.closeSource(PLAN)));
     expect(mounts).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('document-slot').getAttribute('aria-hidden')).toBe('true');
-    expect(screen.queryByRole('separator', { name: 'Resize Agent pane' })).toBeNull();
+    expect(screen.queryByRole('separator', { name: 'Resize agent pane' })).toBeNull();
     runtime.dispose();
   });
 
@@ -66,7 +66,7 @@ describe('Agent document workspace row', () => {
 
     // No seam to drag while the document has the whole row, and the Agent's
     // transcript is still in the tree for when the panel comes back.
-    expect(screen.queryByRole('separator', { name: 'Resize Agent pane' })).toBeNull();
+    expect(screen.queryByRole('separator', { name: 'Resize agent pane' })).toBeNull();
     expect(screen.getByTestId('agent')).not.toBeNull();
     const shelf = screen.getByTestId('agent-pane').parentElement;
     expect(shelf?.getAttribute('aria-hidden')).toBe('true');
@@ -100,7 +100,7 @@ describe('Agent document workspace row', () => {
     expect(shelf?.getAttribute('aria-hidden')).toBe('false');
     expect(shelf?.hasAttribute('inert')).toBe(false);
     expect(screen.getByTestId('agent-pane').style.width).toBe('100%');
-    expect(screen.queryByRole('separator', { name: 'Resize Agent pane' })).toBeNull();
+    expect(screen.queryByRole('separator', { name: 'Resize agent pane' })).toBeNull();
     runtime.dispose();
   });
 

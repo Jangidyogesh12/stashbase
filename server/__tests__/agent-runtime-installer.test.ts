@@ -485,7 +485,7 @@ test('an injected installation failure is classified and consumed before retry',
   assert.equal(settled.failure?.stage, 'installation');
   assert.equal(settled.failure?.code, 'simulated');
   assert.equal(settled.failure?.manualRecovery, undefined);
-  assert.match(settled.failure?.message ?? '', /Simulated Agent installation failure/);
+  assert.match(settled.failure?.message ?? '', /Simulated agent installation failure/);
 
   assert.equal(coordinator.begin('codex').phase, 'configuring');
   assert.equal((await coordinator.wait('codex')).phase, 'ready');
@@ -1028,7 +1028,7 @@ test('development turn failure injection is one-shot and independent of setup in
     assert.equal(getAgentRuntimeDebugState().nextFailure, 'mcp');
     assert.throws(
       () => setAgentRuntimeDebugState({ nextTurnFailure: 'invalid' as AgentTurnFailureSimulation }),
-      /Invalid Agent turn failure simulation/,
+      /Invalid agent turn failure simulation/,
     );
   } finally {
     setAgentRuntimeDebugState({ nextFailure: 'none', nextTurnFailure: 'none' });

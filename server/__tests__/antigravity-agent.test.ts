@@ -133,7 +133,7 @@ test('a turn runs agy in stream-json mode with the chat\'s choices and records w
   assert.match(first.message.content, /^<stashbase_session_instructions>[\s\S]*edit_file[\s\S]*<\/stashbase_session_instructions>\n\nOutline the essay$/);
   // agy's own system prompt casts it as a pair programmer; StashBase's role
   // leads what it reads first.
-  assert.match(first.message.content, /^<stashbase_session_instructions>\nYou are an Agent working in StashBase/);
+  assert.match(first.message.content, /^<stashbase_session_instructions>\nYou are an agent working in StashBase/);
 
   proc.emitEvent({ event: 'step_update', step_update: { step_index: 1, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'Looking.' } });
   proc.emitEvent({ event: 'step_update', step_update: { step_index: 2, state: 'ACTIVE', step_type: 'tool', tool_info: { name: 'run_command', parameters: { CommandLine: 'ls' } } } });

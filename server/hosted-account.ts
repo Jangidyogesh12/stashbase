@@ -480,7 +480,7 @@ export async function fetchHostedAgentAllowance(
   if (response.status === 401 && !options.forceRefreshToken) {
     return fetchHostedAgentAllowance({ forceRefreshToken: true });
   }
-  if (!response.ok) throw Object.assign(new Error(messageOf(payload, `The Agent credits service failed (HTTP ${response.status}).`)), {
+  if (!response.ok) throw Object.assign(new Error(messageOf(payload, `The agent credits service failed (HTTP ${response.status}).`)), {
     http_status: response.status,
     code: payload?.code,
     request_id: response.headers.get('x-request-id') ?? undefined,

@@ -15,7 +15,7 @@ export function mount(app: express.Express): void {
   app.put('/api/agent-preferences', async (req, res) => {
     try {
       const parsed = projectAgentPreferenceUpdateSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: 'Invalid project Agent choice.' });
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid project agent choice.' });
       const { agent, effort, persona } = parsed.data;
       if (!filesystemPath.isAbsolute(parsed.data.scope)) return res.status(400).json({ error: 'Project must be an absolute path.' });
       readAppConfigStrict();

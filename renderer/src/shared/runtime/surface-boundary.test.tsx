@@ -37,7 +37,7 @@ describe('SurfaceBoundary', () => {
         <p>Folder list</p>
         <SurfaceBoundary
           placement="pane"
-          recovery={{ actions: [{ label: 'Retry' }], message: 'The Agent view could not load.' }}
+          recovery={{ actions: [{ label: 'Retry' }], message: 'The agent view could not load.' }}
           surface="Agent"
         >
           <Surface />
@@ -45,7 +45,7 @@ describe('SurfaceBoundary', () => {
       </>,
     );
 
-    expect(screen.getByText('The Agent view could not load.').isConnected).toBe(true);
+    expect(screen.getByText('The agent view could not load.').isConnected).toBe(true);
     expect(screen.getByRole('button', { name: 'Retry' }).isConnected).toBe(true);
     expect(screen.getByText('Folder list').isConnected).toBe(true);
   });
@@ -54,7 +54,7 @@ describe('SurfaceBoundary', () => {
     render(
       <SurfaceBoundary
         placement="pane"
-        recovery={{ actions: [{ label: 'Retry' }], message: 'The Agent view could not load.' }}
+        recovery={{ actions: [{ label: 'Retry' }], message: 'The agent view could not load.' }}
         surface="Agent"
       >
         <Surface />
@@ -65,7 +65,7 @@ describe('SurfaceBoundary', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(screen.getByText('Surface content').isConnected).toBe(true);
-    expect(screen.queryByText('The Agent view could not load.')).toBeNull();
+    expect(screen.queryByText('The agent view could not load.')).toBeNull();
   });
 
   it('runs the pressed action and clears the failure', () => {
@@ -114,7 +114,7 @@ describe('SurfaceBoundary', () => {
     render(
       <SurfaceBoundary
         placement="pane"
-        recovery={{ actions: [{ label: 'Retry' }], message: 'The Agent view could not load.' }}
+        recovery={{ actions: [{ label: 'Retry' }], message: 'The agent view could not load.' }}
         surface="Agent"
       >
         <Surface />

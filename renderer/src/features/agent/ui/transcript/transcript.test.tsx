@@ -51,7 +51,7 @@ it('keeps a terminal turn failure visible while tool failures are omitted', () =
     ],
     false,
   );
-  expect(screen.getByRole('heading', { name: 'The Agent could not finish' })).not.toBeNull();
+  expect(screen.getByRole('heading', { name: 'The agent could not finish' })).not.toBeNull();
   expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull();
   expect(screen.queryByRole('button', { name: /Ran.*ls.*Failed/u })).toBeNull();
 });

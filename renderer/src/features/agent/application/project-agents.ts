@@ -48,7 +48,7 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
         return true;
       } catch {
         if (!signal.aborted)
-          store.setState({ failure: 'Could not save your Agent settings. Your message was kept.' });
+          store.setState({ failure: 'Could not save your agent settings. Your message was kept.' });
         return false;
       }
     });
@@ -68,7 +68,7 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
       })
       .catch(() => {
         if (!signal.aborted)
-          store.setState({ failure: 'Could not load your Agent settings. Retry before sending.' });
+          store.setState({ failure: 'Could not load your agent settings. Retry before sending.' });
         return false;
       })
       .finally(() => {

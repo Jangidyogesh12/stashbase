@@ -171,7 +171,7 @@ export class AgentBootstrapCoordinator {
           stage = 'installation';
           reportStage(stage, 'started');
           if (this.dependencies.consumeFailure('installation')) {
-            this.fail(id, action, stage, 'simulated', new Error('Simulated Agent installation failure.'));
+            this.fail(id, action, stage, 'simulated', new Error('Simulated agent installation failure.'));
             return;
           }
           this.statuses.set(id, { phase: 'installing', progress: 0, message: `${action === 'update' ? 'Updating' : 'Preparing'} ${agentLabel(id)}…` });
@@ -882,7 +882,7 @@ async function runInstallerScript(
         if (buffered.trim()) onLine(agentSetupDiagnostic(buffered));
         if (signal.aborted) reject(new Error('Agent installation was cancelled.'));
         else if (code === 0) resolve();
-        else reject(Object.assign(new Error(`Official Agent installer exited with code ${code ?? 'unknown'}.\n${output.trim()}`), { exitCode: code, stderr: output }));
+        else reject(Object.assign(new Error(`Official agent installer exited with code ${code ?? 'unknown'}.\n${output.trim()}`), { exitCode: code, stderr: output }));
       }, (error) => {
         signal.removeEventListener('abort', abort);
         reject(error);

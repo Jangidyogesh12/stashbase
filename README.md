@@ -1,39 +1,29 @@
 # StashBase
 
-**Like an IDE, but for writing.**
+**Stash your notes and sources. Write with your agent.**
 
 [![Website](https://img.shields.io/badge/website-stashbase.ai-0a66c2.svg)](https://stashbase.ai)
 [![Release](https://img.shields.io/github/v/release/liliu-z/stashbase?label=release)](https://github.com/liliu-z/stashbase/releases/latest)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-support%20%26%20chat-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/zsRZH4PTq9)
 
-StashBase is an open-source, local-first writing workspace where you can write
-with Claude, Codex, and Antigravity, drawing on your own sources and past work.
+StashBase is an open-source, local-first writing workspace. Open a folder of
+notes and sources, then brainstorm, draft, and revise with Claude, Codex, or
+Antigravity on your own subscription. Your documents stay ordinary files on
+your computer.
 
-- 🔎 **From files to context.** Give your agent fast, accurate search across your
-  sources with text extraction and semantic search.
-- 📝 **Doc diff ≠ Code diff.** Read edits in the flow of your document, without
-  jumping between old and new lines.
-- ✍️ **Make it sound like you.** Use your past writing and edits to guide new
-  drafts and preserve your voice.
+- 🔎 **Your files become context.** PDFs (scanned ones too), Word documents,
+  images, saved web pages, and Markdown become searchable text on your
+  computer. Replies can link to the exact passage.
+- 💬 **Bring the agent you already use.** Claude, Codex, and Antigravity run on
+  your existing accounts, and StashBase charges nothing for them. Pick a persona
+  or write your own to set the voice.
+- 📝 **See what your agent changed.** It edits your files directly. Choose
+  **Review** to see each change inside the prose, then undo or keep it.
 
 ## Product Preview
 
 https://github.com/user-attachments/assets/4ba282a3-85d2-4a08-b7af-562a1e71e716
-
-## Document Diff
-
-After an Agent changes Markdown documents, its conversation shows **Changed in
-this turn**. Choose **Review** beside an edited file to see its changes in the
-prose: deleted words are struck through in red and additions highlighted in green.
-
-Use **Undo** or **Keep** for individual changes, or **Undo all** and **Keep all**
-for the remaining set. Changes are already saved; Undo restores earlier text
-through the document's normal save path. Keeping everything leaves the file
-exactly as the Agent wrote it. New files offer **Open** instead of Review.
-
-Agent file diffs and editor save-conflict comparisons are separate features and still
-work the way they did.
 
 ## Get Started
 
@@ -64,28 +54,29 @@ troubleshooting.
 ### Start Writing
 
 1. **Enter a project.** Open or create a local folder.
-2. **Choose an Agent.** Select Claude, Codex, or Antigravity and complete its
+2. **Choose an agent.** Select Claude, Codex, or Antigravity and complete its
    setup with your provider account. If you can't use any of them, the built-in
    **Default Agent** is available as a fallback. Sign in to StashBase to use
    its free credits.
 3. **Talk it through.** Try: “I want to write a blog post about Humanizer.
    Interview me to understand what I think about it before drafting.”
-4. **Draft and revise.** Ask your Agent to draft the article, then review and
+4. **Draft and revise.** Ask your agent to draft the article, then review and
    refine it.
 
-Choose between **Chat** and **Documents** modes to suit the task at hand.
-You can write and revise this way, and use the [document diff](#document-diff) to
-review fine edits inside the prose.
+Switch between **Chat** for the conversation and **Documents**, a file tree and
+editor that works like an IDE, but for writing. Both modes share the project and
+keep unfinished work when you switch.
 
 See [Using StashBase](docs/using-stashbase.md) for everyday document and search workflows.
 
 ## Explore the Gallery
 
-Explore how people organize files and write with Agents. Copy a ready-made
+Explore how people organize files and write with agents. Copy a ready-made
 project or reuse its prompt to try a workflow with your own material.
 
-For example, [How to Start a Startup](https://stashbase.ai/gallery/how-to-start-a-startup/)
-brings together Stanford CS183B lecture transcripts and a founder playbook.
+For example, in [Resume Builder](https://stashbase.ai/gallery/resume-builder/)
+the agent interviews you first, then writes a resume that shows what you
+actually did and tailors it to each job.
 
 [Explore the Gallery →](https://stashbase.ai/gallery/)
 

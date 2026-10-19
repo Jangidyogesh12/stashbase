@@ -31,7 +31,7 @@ credentials. An `ACTIVE` failure blocks publication; a `CALIBRATION` report is
 retained to establish the provider baseline and is not a passing gate.
 
 Use a disposable folder and non-sensitive test documents. Do not paste tokens,
-credentials, personal documents, or private Agent output into screenshots or
+credentials, personal documents, or private agent output into screenshots or
 issue reports. Check an item only after observing the result; record a concise
 reason when a platform cannot exercise it.
 
@@ -84,11 +84,11 @@ Never use production PostHog as the test event sink.
   sensible control after dismissing an overlay, and confirm View exposes no
   Reload or Force Reload bypass.
 - [ ] **J06** — With tester-owned credentials and an installed supported CLI, send one
-  harmless Agent turn. Confirm streaming/activity, one permission or stop
+  harmless agent turn. Confirm streaming/activity, one permission or stop
   interaction when available, completion, and a clean close. Never use a real
   user workspace or capture credentials in evidence.
 - [ ] **J06** — On each platform, enable desktop notifications in General, then
-  background/minimize the app while an Agent awaits approval or an answer. Confirm
+  background/minimize the app while an agent awaits approval or an answer. Confirm
   one native notification, click it physically, and verify the owning window/chat
   and pending card receive focus without approving anything. Repeat with an
   inactive chat and a second window. Foreground requests stay quiet; resolution,
@@ -126,12 +126,12 @@ Never use production PostHog as the test event sink.
   a result from an inactive chat and an earlier transcript page.
 - [ ] **J05 / J07 / J10** — In a disposable project with one non-sensitive source and
   one Markdown Canvas, confirm searching by meaning returns the source, ask the
-  real Agent to use that evidence and write an accepted result into the Canvas,
+  real agent to use that evidence and write an accepted result into the Canvas,
   approve the write, review and edit the file, then close and reopen it. Confirm
   keyword search can find the new durable content. This is a packaged integration
   check, not the semantic-quality threshold owned by the J05 Eval.
 - **J11 is retired:** chat starts in an open project; no conversation migration.
-- [ ] **J06** — Paste one non-sensitive clipboard image into the Agent composer. Confirm
+- [ ] **J06** — Paste one non-sensitive clipboard image into the agent composer. Confirm
   the attachment preview appears and accompanying text remains.
 - [ ] **J09** — Open **Report a Bug…** from the native Help menu. Review the bounded
   screenshot/log previews, exclude one available artifact, prepare the report,

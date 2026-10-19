@@ -6,7 +6,7 @@ export const INTERRUPTED_MODEL_RESPONSE = {
   // "unavailable"/"exhausted", calling them "Provider is overloaded". This
   // terminal envelope must not carry the gateway's retry-triggering code.
   code: 'agent_response_interrupted',
-  message: 'The Agent model response was interrupted. The task may be incomplete; completed file changes have been kept. Try again later.',
+  message: 'The agent model response was interrupted. The task may be incomplete; completed file changes have been kept. Try again later.',
   type: 'stashbase_hosted_error',
 };
 
@@ -125,7 +125,7 @@ export async function modelStream(upstream: Response, signal: AbortSignal): Prom
       }
       prefix.push(frame.text);
       bytes += Buffer.byteLength(frame.text);
-      if (bytes > MAX_PREFIX_BYTES) throw Object.assign(new Error('The Agent model returned too much data without a reply.'), { status: 422 });
+      if (bytes > MAX_PREFIX_BYTES) throw Object.assign(new Error('The agent model returned too much data without a reply.'), { status: 422 });
     }
   } finally {
     if (!handedOff) await cleanup();

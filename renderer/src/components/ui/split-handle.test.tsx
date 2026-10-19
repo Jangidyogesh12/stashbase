@@ -11,7 +11,7 @@ function renderHandle(onWidthChange = vi.fn()) {
   const view = render(
     <SplitHandle
       defaultWidth={576}
-      label="Resize Agent pane"
+      label="Resize agent pane"
       max={960}
       min={320}
       onWidthChange={onWidthChange}
@@ -21,7 +21,7 @@ function renderHandle(onWidthChange = vi.fn()) {
   );
   return {
     container: view.container,
-    handle: screen.getByRole('separator', { name: 'Resize Agent pane' }),
+    handle: screen.getByRole('separator', { name: 'Resize agent pane' }),
     onWidthChange,
   };
 }

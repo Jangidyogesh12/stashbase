@@ -88,7 +88,7 @@ export function AgentPersonaControl({ disabled, onBrowse, picker }: AgentPersona
           <MenuItem
             checked={chosen === null}
             closeOnClick={false}
-            description="The Agent’s own voice"
+            description="The agent’s own voice"
             icon={CircleDashed}
             label="None"
             onSelect={() => picker.choose(null)}

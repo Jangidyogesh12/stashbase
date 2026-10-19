@@ -2,20 +2,20 @@
 
 ## Scope
 
-Chat mode and the Agent pane in Documents share conversation identity, execution,
+Chat mode and the agent pane in Documents share conversation identity, execution,
 and unfinished requests. Default, Codex, Claude, and Antigravity expose their
 actual capabilities through this common experience.
 
 ## Identity and Continuity
 
-- A conversation belongs to a project, Agent, and native session. Restore it once;
+- A conversation belongs to a project, agent, and native session. Restore it once;
   duplicate titles are valid. Automatic naming never replaces a manual title.
 - A completely blank chat may be reused. Drafts, context, queued requests, and
   started transcripts remain reachable when navigating or switching modes.
-- Changing Agent before the first send preserves the draft and resets model,
-  thinking, and skill choices without a switch notice. The selected Agent's saved
+- Changing agent before the first send preserves the draft and resets model,
+  thinking, and skill choices without a switch notice. The selected agent's saved
   thinking preference applies when supported. Unsupported context still needs an
-  actionable explanation. Changing Agent after starting creates another
+  actionable explanation. Changing agent after starting creates another
   conversation; it does not transfer history.
 - Project removal stops active work, retains transcripts, and disables sending.
   A conversation never migrates to another project.
@@ -38,7 +38,7 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
 
 After a Default turn, the app may prepare a local runtime for the next chat to
 reduce connection delay. This creates no conversation, sends no model request,
-and consumes no Agent credits. Each chat still receives its own runtime and
+and consumes no agent credits. Each chat still receives its own runtime and
 permissions, with current model and tool choices checked before use.
 
 ## Submission and Execution
@@ -57,11 +57,11 @@ permissions, with current model and tool choices checked before use.
   that turn; an interim reply must not show Completed or release queued work.
 - Validate context before sending. Opening a document does not attach it; missing
   or changed context needs replacement, refresh, or explicit removal.
-- The Agent pane beside Documents suggests the document in front of the reader
+- The agent pane beside Documents suggests the document in front of the reader
   as a quiet chip. One click attaches it like a mention; dismissing it hides the
   suggestion until another document comes to the front. Chat mode shows no
   suggestion, since no document is on screen there.
-- A **passage** is selected text bound as context, from **Ask Agent** on a
+- A **passage** is selected text bound as context, from **Ask agent** on a
   Markdown selection. Its words travel with the request, so later edits to the
   file do not change what was asked about; it is refused only when its file
   leaves the project or it exceeds 6,000 characters. Reloaded history shows it
@@ -89,7 +89,7 @@ permissions, with current model and tool choices checked before use.
   files fail visibly; content is never silently truncated or omitted. The full
   model request, including retained history, also has a transport size limit.
 - Model, effort, skills, and permission options follow the selected runtime.
-  Remember explicitly chosen thinking effort per project and Agent for new chats,
+  Remember explicitly chosen thinking effort per project and agent for new chats,
   including after restart. A model that does not support that effort uses its own
   default. Restoring history keeps that conversation's effort and never changes
   the preference; selecting Default explicitly clears the saved effort.
@@ -160,7 +160,7 @@ permissions, with current model and tool choices checked before use.
   Gallery. Editing a persona applies to every Chat that runs it from that
   Chat's next message; a deleted persona leaves its Chats running none. A
   persona is distinct from permissions, requests, and user-owned native
-  instruction files, which own how the Agent works.
+  instruction files, which own how the agent works.
 - When the desktop app is in the background or minimized, a pending approval
   or clarifying question sends a local system notification. Requests arriving
   together are grouped per window, and each pending request is announced once.
@@ -185,7 +185,7 @@ permissions, with current model and tool choices checked before use.
   or re-enabling notifications. Each chat retains its latest outcome notification
   until replaced, opened or retired. Clicking opens that chat and focuses the
   result/error when present; a startup failure opens the retained input instead.
-- Every runtime works as an Agent in StashBase, the reader's second brain, not
+- Every runtime works as an agent in StashBase, the reader's second brain, not
   as a coding assistant: a native runtime is told so before its persona, since
   its provider's own prompt describes a programming tool. A persona can narrow
   that role.
@@ -205,15 +205,15 @@ permissions, with current model and tool choices checked before use.
   Reviews have no tools and share the current turn's usage allowance. Plan reads
   and explores without writes or commands. A mode change applies between turns,
   including when a conversation resumes.
-- A new chat starts each Agent in Auto, or in Edit where Auto is not offered;
-  Ask is only a choice, never the starting point while either exists. The mode belongs to its Agent: switching Agents in an
-  unsent chat restores the mode that Agent was last left in there, so one
-  Agent's choice never carries to another.
+- A new chat starts each agent in Auto, or in Edit where Auto is not offered;
+  Ask is only a choice, never the starting point while either exists. The mode belongs to its agent: switching agents in an
+  unsent chat restores the mode that agent was last left in there, so one
+  agent's choice never carries to another.
 - A reply may cite a passage in a project file with a link carrying a short
   quoted phrase. Opening it shows the file in Documents and locates that
   phrase; when the file no longer holds it, the file stays open and says so.
   A link without a phrase opens its file at the top. Citing is standing
-  guidance to the Agent, not a guarantee that every reply cites.
+  guidance to the agent, not a guarantee that every reply cites.
 - A clarifying question is answered in place on its own pending request. Answers
   return keyed by question text; Skip or Stop leaves it unanswered rather than
   guessing on the reader's behalf.
@@ -230,7 +230,7 @@ automatic retry after the failed process has fully retired. This retries only
 startup, before reading history; it never replays a chat turn or a history edit.
 Exhausted recovery keeps the load error and manual retry available. Missing
 runtime/account prerequisites and failed cleanup do not trigger automatic retry.
-An uninstalled Agent is an installation prerequisite when reading its history,
+An uninstalled agent is an installation prerequisite when reading its history,
 not a server failure or evidence that its native history is empty.
 Repeated identical native retry errors appear once per turn while retries continue;
 a final short-term request limit or accounting-recovery refusal remains a rate-limit

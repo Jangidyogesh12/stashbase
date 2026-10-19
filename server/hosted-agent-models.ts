@@ -51,7 +51,7 @@ const defaultDependencies: HostedAgentModelDependencies = {
  * whole list, so a later API field never hides the models it can run. */
 export function parseHostedAgentProfiles(payload: unknown): HostedAgentProfile[] {
   const models = (payload as { models?: unknown } | null)?.models;
-  if (!Array.isArray(models)) throw new Error('The Agent model list has an unexpected shape.');
+  if (!Array.isArray(models)) throw new Error('The agent model list has an unexpected shape.');
   const profiles: HostedAgentProfile[] = [];
   for (const entry of models) {
     const parsed = hostedAgentProfileSchema.safeParse(entry);
@@ -85,7 +85,7 @@ export async function fetchHostedAgentProfiles(
   if (!response.ok) {
     throw new Error(typeof payload?.message === 'string' && payload.message
       ? payload.message
-      : `The Agent model list is unavailable (HTTP ${response.status}).`);
+      : `The agent model list is unavailable (HTTP ${response.status}).`);
   }
   return parseHostedAgentProfiles(payload);
 }

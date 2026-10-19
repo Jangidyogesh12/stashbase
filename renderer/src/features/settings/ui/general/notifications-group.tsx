@@ -16,12 +16,12 @@ const categories: { kind: NotificationKind; title: string; detail: string }[] = 
   {
     kind: 'agent-confirmation',
     title: 'Needs confirmation',
-    detail: 'When an Agent needs approval or an answer.',
+    detail: 'When an agent needs approval or an answer.',
   },
   {
     kind: 'agent-completed',
     title: 'Task completed',
-    detail: 'When an Agent finishes a task.',
+    detail: 'When an agent finishes a task.',
   },
   {
     kind: 'agent-failed',

@@ -95,7 +95,7 @@ export function AgentPersonaDialog({ onClose, open, persona, picker }: AgentPers
         <DialogHeader>
           <DialogTitle>{persona ? 'Edit persona' : 'New persona'}</DialogTitle>
           <DialogDescription className="text-muted-foreground/70">
-            How the Agent talks and writes. Applies from your next message.
+            How the agent talks and writes. Applies from your next message.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -160,7 +160,7 @@ export function AgentPersonaDialog({ onClose, open, persona, picker }: AgentPers
               disabled={picker.saving}
               id={ids.prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Who is the Agent? How does it talk, and how does it write?"
+              placeholder="Who is the agent? How does it talk, and how does it write?"
               value={prompt}
             />
           </label>

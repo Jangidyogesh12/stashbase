@@ -171,7 +171,7 @@ describe('context validation', () => {
       ['ready', null],
       ['stale', 'This file is no longer in the folder.'],
       ['preparing', 'Searchable text is still being prepared.'],
-      ['failed', 'Preparation failed; the Agent gets the source only.'],
+      ['failed', 'Preparation failed; the agent gets the source only.'],
       ['blocked', 'Preparation is blocked.'],
       ['ready', null],
     ]);

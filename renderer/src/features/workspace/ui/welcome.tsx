@@ -187,7 +187,7 @@ export function ProjectWelcome({
             <h1 className="brand-wordmark text-display">StashBase</h1>
           </div>
           <p className="mt-3 text-body leading-relaxed text-muted-foreground">
-            Stash your notes and resources. Put them to work with your agent.
+            Stash your notes and sources. Write with your agent.
           </p>
         </div>
 

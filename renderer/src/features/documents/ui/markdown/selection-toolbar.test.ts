@@ -85,7 +85,7 @@ async function openEditor(source: string) {
 }
 
 describe('selection toolbar Heading menu', () => {
-  it('leads the toolbar and keeps Ask Agent last', () => {
+  it('leads the toolbar and keeps Ask agent last', () => {
     const groups = buildGroups(selectionToolbar({ askAgent: () => undefined }));
     expect(groups.map((group) => group.key)).toEqual([
       'heading',

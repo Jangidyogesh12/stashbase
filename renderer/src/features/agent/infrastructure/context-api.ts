@@ -22,7 +22,7 @@ function resolveFailure({ response, serverMessage }: TransportFailure): AgentCon
     return new AgentContextError('not-found', 'That file is no longer in this folder.', cause);
   }
   return response.status === 415
-    ? new AgentContextError('unsupported', 'This file type cannot be given to the Agent.', cause)
+    ? new AgentContextError('unsupported', 'This file type cannot be given to the agent.', cause)
     : null;
 }
 

@@ -188,12 +188,12 @@ describe('account banners', () => {
     );
     const user = userEvent.setup();
 
-    expect(await screen.findByText('Sign in for free Agent credits every week.')).not.toBeNull();
+    expect(await screen.findByText('Sign in for free agent credits every month.')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Not now' }));
     await waitFor(() =>
       expect(account.markOfferSeen).toHaveBeenCalledWith('sign-in', expect.anything()),
     );
-    expect(screen.queryByText('Sign in for free Agent credits every week.')).toBeNull();
+    expect(screen.queryByText('Sign in for free agent credits every month.')).toBeNull();
   });
 });
 

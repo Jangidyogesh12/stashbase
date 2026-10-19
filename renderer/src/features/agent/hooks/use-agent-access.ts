@@ -108,7 +108,7 @@ export function useAgentAccess({
       const selected = await runtime.chooseAgent(chosen);
       if (signal.aborted || !selected || runtime.activeSession() !== request.session) {
         if (!signal.aborted) {
-          setFailure('Your Agent choice could not be applied. Your message was kept.');
+          setFailure('Your agent choice could not be applied. Your message was kept.');
           setWorking(false);
         }
         cancel();
@@ -132,7 +132,7 @@ export function useAgentAccess({
       signal.throwIfAborted();
       onRefresh();
       if (!ready)
-        throw new Error('This Agent is not connected yet. Try again or choose another Agent.');
+        throw new Error('This agent is not connected yet. Try again or choose another agent.');
       if (pending.current !== request) return;
       pending.current = null;
       setOpen(false);

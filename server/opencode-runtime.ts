@@ -475,7 +475,7 @@ class OpenCodeRuntime {
       const password = cryptoRandomSecret();
       const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
       const model = hostedAgentRuntime(this.agentSessionId);
-      if (!model) throw new Error('The Agent model broker is not running.');
+      if (!model) throw new Error('The agent model broker is not running.');
       stage = 'spawn';
       const child = ownAgentProcess(spawn(executable, [
         'serve',
@@ -507,7 +507,7 @@ class OpenCodeRuntime {
           if (this.running?.process !== child) return;
           this.running = null;
           const reason = code ?? signal ?? 'unknown';
-          const error = exitDiagnostic(`The included Agent runtime exited unexpectedly (${reason}).`, code, signal);
+          const error = exitDiagnostic(`The included agent runtime exited unexpectedly (${reason}).`, code, signal);
           log.warn(error.message);
           for (const listener of this.exitListeners) listener(error);
         });
@@ -638,7 +638,7 @@ export function createOpenCodeSessionRuntime(context: OpenCodeContext): OpenCode
     // tools rather than on a guessed configuration.
     await Promise.all([
       fetchHostedAgentProfiles().then((read) => { list = read; })
-        .catch((error: unknown) => { log.warn('could not read the Agent model list', error); }),
+        .catch((error: unknown) => { log.warn('could not read the agent model list', error); }),
       latestToolCatalog().then((read) => { toolCatalog = read; })
         .catch((error: unknown) => { log.warn('could not read the tool catalog', error); }),
     ]);
@@ -723,7 +723,7 @@ export function createOpenCodeSessionRuntime(context: OpenCodeContext): OpenCode
       const snapshot = turn;
       const lifetime = AbortSignal.any([turnAbort.signal, ...(signal ? [signal] : [])]);
       lifetime.throwIfAborted();
-      if (!snapshot) throw new Error('Crew members work only inside an Agent turn.');
+      if (!snapshot) throw new Error('Crew members work only inside an agent turn.');
       const brief = typeof task === 'string' ? task : await task();
       lifetime.throwIfAborted();
       return runToolInTurn(snapshot, id, (on) => {

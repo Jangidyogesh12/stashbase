@@ -2,14 +2,14 @@
 
 ## Scope
 
-Documents, search, built-in Agents, and external MCP clients can use project
+Documents, search, built-in agents, and external MCP clients can use project
 material as evidence. Preparation and indexing are optional support for writing;
 an empty project and a conversation without references are valid.
 
 ## Preparation and Evidence
 
 - Keep original sources authoritative. Extracted text and indexes stay hidden;
-  Agent-written documents remain ordinary project files.
+  agent-written documents remain ordinary project files.
 - Apply search and preparation exclusions within the selected project. A project
   remains searchable when its parent path is hidden, including a cloud drive's
   internal mount path; hidden directories inside the project stay excluded.

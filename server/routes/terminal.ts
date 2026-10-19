@@ -61,7 +61,7 @@ export function mount(app: express.Express): void {
   app.post('/api/terminal/clis/:id/bootstrap', async (req, res) => {
     const id = agentId(req.params.id);
     if (!id) {
-      res.status(404).json({ error: 'Unsupported Agent runtime.' });
+      res.status(404).json({ error: 'Unsupported agent runtime.' });
       return;
     }
     try {
@@ -82,7 +82,7 @@ export function mount(app: express.Express): void {
   app.post('/api/terminal/clis/:id/check', async (req, res) => {
     const id = agentId(req.params.id);
     if (!id) {
-      res.status(404).json({ error: 'Unsupported Agent runtime.' });
+      res.status(404).json({ error: 'Unsupported agent runtime.' });
       return;
     }
     try {
@@ -102,7 +102,7 @@ export function mount(app: express.Express): void {
   app.post('/api/terminal/clis/:id/login', async (req, res) => {
     const id = nativeAgentId(req.params.id);
     if (!id) {
-      res.status(404).json({ error: 'Unsupported Agent runtime.' });
+      res.status(404).json({ error: 'Unsupported agent runtime.' });
       return;
     }
     try {
@@ -119,11 +119,11 @@ export function mount(app: express.Express): void {
   app.post('/api/terminal/clis/:id/update', async (req, res) => {
     const id = nativeAgentId(req.params.id);
     if (!id) {
-      res.status(404).json({ error: 'Unsupported Agent runtime.' });
+      res.status(404).json({ error: 'Unsupported agent runtime.' });
       return;
     }
     if (!agentSupportsInAppUpdate(id)) {
-      res.status(400).json({ error: 'This Agent uses an explicit executable override. Remove the override to update its native installation through StashBase.' });
+      res.status(400).json({ error: 'This agent uses an explicit executable override. Remove the override to update its native installation through StashBase.' });
       return;
     }
     try {

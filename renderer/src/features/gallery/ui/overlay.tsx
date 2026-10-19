@@ -24,7 +24,7 @@ export type GallerySection = 'projects' | 'personas';
 
 const HEADERS: Record<GallerySection, { title: string; description: string }> = {
   personas: {
-    description: 'Ready-made voices for the Agent. Add one, then edit it like your own.',
+    description: 'Ready-made voices for the agent. Add one, then edit it like your own.',
     title: 'Personas',
   },
   projects: {

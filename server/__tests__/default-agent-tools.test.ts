@@ -177,7 +177,7 @@ test('a turn\'s calls run on its snapshot, and only an unbound turn moves to a n
   await assert.rejects(runToolInTurn(unbound, 'writer', async () => { throw changed; }, async () => withoutOpus, isChanged),
     /can no longer run on Opus/);
 
-  await assert.rejects(runToolInTurn(null, 'writer', call, async () => a, isChanged), /only inside an Agent turn/);
+  await assert.rejects(runToolInTurn(null, 'writer', call, async () => a, isChanged), /only inside an agent turn/);
   await assert.rejects(runToolInTurn(snapshot(a, []), 'writer', call, async () => a, isChanged), /not in this chat/);
 });
 

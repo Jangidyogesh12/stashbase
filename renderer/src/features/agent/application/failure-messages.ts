@@ -23,12 +23,12 @@ export type AgentContextExtra = 'not-found' | 'unsupported';
 export type AgentContextErrorKind = FeatureFailureKind<AgentContextExtra>;
 
 const MESSAGES: Readonly<Record<AgentContextErrorKind, string>> = {
-  'invalid-response': 'The Agent service returned an unexpected response.',
+  'invalid-response': 'The agent service returned an unexpected response.',
   'not-found': 'That file is no longer in this folder.',
   'scope-lost': 'That folder is no longer available in this window.',
   unauthorized: 'This window can no longer perform that action.',
-  unsupported: 'This file type cannot be given to the Agent.',
-  unavailable: 'StashBase could not reach the Agent service.',
+  unsupported: 'This file type cannot be given to the agent.',
+  unavailable: 'StashBase could not reach the agent service.',
 };
 
 /** A file the reader picked that the Agent cannot take is theirs to change;
@@ -55,7 +55,7 @@ export const RESTORE_FAILED = 'That conversation could not be restored.';
 
 /** What the Agent panel shows in its own region when its chunk never arrives
  *  or its render throws, neither of which is a refusal on the ladder above. */
-export const SURFACE_FAILED = 'The Agent view could not load.';
+export const SURFACE_FAILED = 'The agent view could not load.';
 
 /** The sentence and tone a refusal shows, without repeating what it was thrown
  *  with. */
@@ -112,7 +112,7 @@ export function agentUpdateFailure(error: unknown): string {
     : UPDATE_FAILED;
 }
 
-const UPDATE_FAILED = 'The update did not finish. Check Agent settings and try again.';
+const UPDATE_FAILED = 'The update did not finish. Check agent settings and try again.';
 
 /** The runtime is updated, but this conversation could not come back on it. */
 /** Why a hosted model list could not be refreshed by reconnecting. */

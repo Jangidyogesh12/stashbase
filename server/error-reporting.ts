@@ -191,9 +191,9 @@ export function reportAgentRuntimeError(runtime: NonNullable<ErrorContext['runti
       context: { ...context.context, tool_call_id: event.id, tool_category: state?.tools?.get(event.id) ?? 'other' },
       source: 'agent', operation: 'tool', runtime });
   } else if (event.t === 'skills' && event.state === 'failed') {
-    capture(event.error ?? 'Could not load Agent skills', { ...context, source: 'agent', operation: 'skills', runtime });
+    capture(event.error ?? 'Could not load agent skills', { ...context, source: 'agent', operation: 'skills', runtime });
   } else if (event.t === 'steer-result' && !event.ok) {
-    capture(event.message ?? 'Could not steer Agent', { ...context, source: 'agent', operation: 'steer', runtime });
+    capture(event.message ?? 'Could not steer agent', { ...context, source: 'agent', operation: 'steer', runtime });
   }
   if (state) state.lastError = event.t === 'error' ? event.message : undefined;
   if (event.t === 'tool-result') state?.tools?.delete(event.id);

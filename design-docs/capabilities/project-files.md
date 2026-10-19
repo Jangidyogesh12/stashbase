@@ -2,7 +2,7 @@
 
 ## Scope
 
-Documents, Agent tools, external MCP, and file import operate on ordinary local
+Documents, agent tools, external MCP, and file import operate on ordinary local
 files. They share source identity and content-preservation rules; access and
 editing capabilities remain explicit for each surface.
 
@@ -86,7 +86,7 @@ recoverable work. Rollback must not replace newer user or external changes.
 
 ## Document-specific Diff
 
-An Agent applies requested document changes directly through StashBase's file
+An agent applies requested document changes directly through StashBase's file
 tools: `edit_file` for existing documents and `write_file` for new ones. Editing
 an existing empty file may match empty text only while the source is still empty;
 ordinary version checks protect concurrent changes. There is no pending-proposal
@@ -101,9 +101,9 @@ and Heading 3, with the selection's current kind checked. A choice turns every
 selected block into that kind. Deeper levels and other block types stay in the
 slash menu.
 
-**Ask Agent**, last on the selection toolbar, binds the exact selection, as
+**Ask agent**, last on the selection toolbar, binds the exact selection, as
 Markdown, to the chat beside the document and brings that chat into view. It writes
-nothing and needs no service; the selection is saved first so the Agent reads
+nothing and needs no service; the selection is saved first so the agent reads
 what the reader selected. [Agent Sessions](agent-sessions.md) owns how the
 passage is sent.
 
@@ -114,12 +114,12 @@ Markdown math uses double-dollar delimiters or `math` / `latex` fenced blocks.
 Single-dollar amounts remain ordinary text in Documents and Chat, including
 when a Markdown document is saved.
 
-File diffs, save-conflict comparisons, and Agent tool approvals have their own
+File diffs, save-conflict comparisons, and agent tool approvals have their own
 flows. Other editable formats currently have no inline revision surface.
 
 ### Turn Review
 
-After an Agent turn changes Markdown files, the conversation shows what changed
+After an agent turn changes Markdown files, the conversation shows what changed
 in that turn. The summary shows the total file count and added/removed lines
 across all files. Each completed turn starts collapsed to at most three files,
 with per-file line counts. A bottom **Show N more files** button reveals the
@@ -131,7 +131,7 @@ Undo restores the earlier text through the document's ordinary versioned save;
 keeping every change leaves the file byte-identical. A created file offers Open,
 and a deleted file is only named.
 
-This works the same for every Agent runtime and every way a turn writes,
+This works the same for every agent runtime and every way a turn writes,
 including shell commands, because the host compares the project's Markdown
 before the prompt reaches the runtime with what is on disk when the turn ends.
 Anything that changed in between is shown as the turn's, including an edit the

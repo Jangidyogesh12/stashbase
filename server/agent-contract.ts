@@ -235,7 +235,7 @@ export function runtimeDescriptorFor(
       ...adapter.runtime(),
     };
   }
-  if (adapter.id === 'stashbase') throw new Error('Bundled Agent adapter must describe its runtime.');
+  if (adapter.id === 'stashbase') throw new Error('Bundled agent adapter must describe its runtime.');
   const cli = CLIS[adapter.id];
   const installed = executable !== null;
   const state: AgentRuntimeState = installed ? 'available' : 'unavailable';

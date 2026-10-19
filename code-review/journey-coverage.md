@@ -84,7 +84,7 @@ identity returns the unsupported component status, opens a real project, lists
 and reads its Markdown, saves revised content with a search warning, and reads
 the saved bytes back while health stays available. Provider CLI execution is
 disabled in this pass; it establishes service isolation, not Intel binary or
-Agent compatibility.
+agent compatibility.
 
 **Settings organization (2026-09-16):** General owns preferences, Agents groups
 Default account/credits/connection, and Advanced owns optional connections.
@@ -113,7 +113,7 @@ sign-out and hosted subscription facts. File/project routes capture identity
 before work; `file-save.ts` distinguishes unchanged saves. Renderer foreground
 input is observed by `platform/telemetry.ts` through `app/composition/use-desktop-usage.ts`.
 Document runtime changes and active reading-surface interaction report content-free
-engagement; Agent usage correlates start/terminal results with a random turn ID.
+engagement; agent usage correlates start/terminal results with a random turn ID.
 Settings General discloses account linking and the shared usage/error opt-out.
 
 `server/telemetry.test.ts` covers anonymous-to-account links, restart continuity,
@@ -129,7 +129,7 @@ diagnostics; the isolated host-test fixture suppresses descendants as well.
 Renderer telemetry tests exercise trusted foreground input, quiet background days,
 listener disposal, bounded edit reporting and refusal of host-only facts.
 Document lifecycle tests distinguish editing from reconciliation/no-change callbacks;
-Agent usage tests cover correlation and terminal coalescing. All collection tests
+agent usage tests cover correlation and terminal coalescing. All collection tests
 use isolated configuration and fake/local transport, never production PostHog.
 
 Diagnostic serialization is shared in `shared/protocols/diagnostics.ts`; host/renderer error
@@ -151,7 +151,7 @@ production diagnostic delivery or a packaged N→N+1 update.
 
 **Detailed diagnostics (2026-10-12):** schema 4 preserves bounded original errors,
 unknown codes, cause chains, stack frames and process output with targeted
-credential filtering. HTTP request IDs, Agent turn IDs and setup attempt/retry
+credential filtering. HTTP request IDs, agent turn IDs and setup attempt/retry
 IDs connect outcomes with their failure details. Native updater, startup and
 process failures spool for later host delivery. Collector and spool tests cover
 retry/restart, original occurrence/version, opt-out, credential filtering and
@@ -232,7 +232,7 @@ A later 2026-09-15 source-desktop startup pass used an empty temporary HOME and
 isolated profile, with any application access to Electron safeStorage made fatal.
 It reached the real welcome screen, showed no statistics banner, and exited
 cleanly. This proves the source startup path no longer needs OS key storage;
-it does not establish the next signed installer or third-party Agent login UI.
+it does not establish the next signed installer or third-party agent login UI.
 
 
 **Intent:** [J01](../design-docs/journeys/README.md#j01-complete-onboarding-and-reach-first-value).
@@ -244,7 +244,7 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
 
 - **Contract Test:** startup ownership/readiness, native activation and window
   isolation, empty-home startup/registry/restart, Settings persistence, account entry,
-  Agent preparation, and update state/authorization. Entry points:
+  agent preparation, and update state/authorization. Entry points:
   `pnpm test:renderer`, `pnpm test:server`,
   `pnpm test:updates`, `pnpm test:electron`, and `pnpm test:electron:smoke`. Key persistence survives daemon reconfiguration
   failure; these tests do not prove rollback of saved configuration.
@@ -388,7 +388,7 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 - **Contract Test:** `pnpm test:renderer`, `pnpm test:server`, and `pnpm test:electron` cover asynchronous
   open/commit, cancellation, GitHub staging/publication rollback, project
   retirement, retained nested projects and preparation, and distinct path
-  whitespace/case/Unicode identities. Scoped HTTP/Agent regressions now preserve
+  whitespace/case/Unicode identities. Scoped HTTP/agent regressions now preserve
   a trailing-space project through reads, saves, and index status. Shared entry
   tests cover copy/entry retry separation, explicit folder conflicts, cancellation
   before late results, retained Recent records, receipt recovery, and workspace
@@ -527,9 +527,9 @@ Turn review: `renderer/src/features/documents/application/open-revision.ts`
 (`openTurnChangeReview`), `infrastructure/turn-change-api.ts`, and the reversed
 labels and colours in `ui/markdown/revision-adapter.ts`, `review-bar.tsx` and
 `document.css`; host `server/turn-changes.ts` and `server/routes/turn-changes.ts`.
-Ask Agent on a selection: `renderer/src/features/documents/ui/markdown/selection-markdown.ts`
+Ask agent on a selection: `renderer/src/features/documents/ui/markdown/selection-markdown.ts`
 and `selection-toolbar.ts`, bound in `renderer/src/app/shell.tsx`, which saves the
-documents, shows the chat pane, and hands the passage to the Agent workspace.
+documents, shows the chat pane, and hands the passage to the agent workspace.
 The same `selection-toolbar.ts` owns the leading Text/Heading 1–3 block menu;
 Milkdown's block command remains the document mutation owner.
 A save refused against a version a deleted file no longer has, whose reload confirms
@@ -573,7 +573,7 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   paragraph out of the diff.
   `selection-toolbar.test.ts` runs the Heading menu against a real Milkdown
   editor, covering toolbar order, the checked block kind, paragraph/heading
-  conversion, menu dismissal, and Ask Agent as the last item.
+  conversion, menu dismissal, and Ask agent as the last item.
 - **Project configuration visibility runtime pass (2026-09-30):** the built
   macOS source app used isolated configuration and a supplied folder-picker result.
   All five recognized configuration directories appeared with hidden files off.
@@ -601,10 +601,10 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   Heading 2 converted them to H2, and reopening the menu marked Heading 2 as the
   current choice. A later pass the same day, after Humanize was removed,
   selected prose in the same split: the toolbar read Heading, the formatting
-  marks, then Ask Agent on one 401px line, and its open menu checked Text.
+  marks, then Ask agent on one 401px line, and its open menu checked Text.
   With the document pane forced to 420, 360 and 320px, it stayed on one line
   at 420px and below that kept the formatting groups whole on the first row
-  with Ask Agent on a second, never clipped by the pane. Clipped screenshots in light and dark were reviewed
+  with Ask agent on a second, never clipped by the pane. Clipped screenshots in light and dark were reviewed
   by eye. These passes did not use a packaged, signed application or exercise
   undo and save-conflict recovery.
 - **Driven Runtime Pass:** isolated built-app passes cover preview reuse/keep,
@@ -615,13 +615,13 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   The 2026-09-15 v2.7.0 retry exercised the built service with a real Python/MFS
   daemon: consecutive versioned saves, stale-write rejection with source
   preservation, empty-source removal from keyword results, and rejection of
-  blank Agent identity and cross-project writes. No embedding key was configured;
+  blank agent identity and cross-project writes. No embedding key was configured;
   this pass does not establish real-provider latency or ranking quality.
 - **Documents runtime pass (2026-09-15):** the built desktop app used an isolated
   real project to exercise hidden-tab autosave, undo after tab switching, external
   disk conflict, marker refusal and explicit merge completion, New tab close,
   rename rebinding, immediate Markdown publication, and undo after six other
-  kept Markdown editors. No Agent/provider fixture was needed. The source files
+  kept Markdown editors. No agent/provider fixture was needed. The source files
   and visible editor contents were checked; this was not a packaged release.
 - **Turn-only review (2026-10-08):** the proposal tool, transient store,
   consumptive delivery routes/poll, and Accept/Reject chat controls are retired.
@@ -682,7 +682,7 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   the window open. Recovery is a React remount, not a native reload protocol.
 - **Keyboard sidebar resizing (2026-10-01):** the sidebar's edge rail is a
   focusable separator reporting its width and bounds; arrow keys step it 16 px,
-  the same step as the Agent pane seam, within 272–360 px, and never collapse it.
+  the same step as the agent pane seam, within 272–360 px, and never collapse it.
   The rail now renders inside the sidebar's landmark, measured at the same
   position in the sidebar, floating, and inset variants.
   `sidebar.test.tsx` covers the bounds, clamping, the reported width, the
@@ -879,11 +879,11 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
-**Background confirmation notifications (2026-10-17):** The Agent attention
+**Background confirmation notifications (2026-10-17):** The agent attention
 projection observes inactive sessions as well as the visible chat. Electron owns
 background detection, coalescing, durable opt-out, and notification lifetime via
 the product-independent notification center. The protocol/catalog register event
-kinds; Agent composition maps opaque IDs back to live pending targets. Click
+kinds; agent composition maps opaque IDs back to live pending targets. Click
 navigation rechecks the pending request and focuses its decision card.
 `electron/notifications/*.test.cjs` covers sender isolation, foreground suppression,
 coalescing, stale clicks, cancellation, navigation/crash/close, opt-out and delivery
@@ -1025,7 +1025,7 @@ by a successful turn and delivery/opt-out of startup samples. These fixtures do
 not reproduce the reported Windows cold-start failure or establish that a
 WebSocket 1006 was caused by network loss.
 
-Validation: Agent tests (369), telemetry/native-diagnostic/error tests (43), native
+Validation: agent tests (369), telemetry/native-diagnostic/error tests (43), native
 OpenCode checks (3), Electron/protocol checks, host/renderer types, docs, service
 and renderer builds, and the built Electron smoke passed. An isolated macOS
 Electron run used the built host/renderer with controlled child failures: a silent
@@ -1225,7 +1225,7 @@ live provider's error shape or packaged delivery.
   the approved ceiling. `server/__tests__/hosted-agent-broker.test.ts` covers
   accurate insufficient-credit/turn wording through the OpenCode translator and
   retained recovery kinds. These fixtures do not establish real-provider response
-  quality or complete Agent tasks with very small output budgets.
+  quality or complete agent tasks with very small output budgets.
 
 **Default empty completion (2026-10-11):** the reported local transcript records
 successful reads followed by an assistant message with zero output tokens,
@@ -1328,7 +1328,7 @@ with the fix. A driven bundled OpenCode read exposed an ignored
 `permission.asked` event; the adapter now translates it into the shared approval
 flow. The native smoke reads an external fixture through the real runtime,
 receives the translated approval, grants it once, and verifies the file content
-reaches the fake model gateway. Host/renderer types, Agent and installed native
+reaches the fake model gateway. Host/renderer types, agent and installed native
 protocol tests, service/renderer builds, Electron tests and built desktop smoke
 passed. These checks do not establish
 live-provider compliance with the prompt or a packaged desktop approval flow.
@@ -1351,7 +1351,7 @@ resetting the list cursor during streaming. Query-level combination now preserve
 unchanged history data. The keyboard regression fails before this change because
 ArrowDown selects the first chat again, and passes afterward. Both captured turns
 then completed over the same real WebSocket without a consumer exception. This
-fixture uses local captured messages and fake non-Agent ports; packaged behavior
+fixture uses local captured messages and fake non-agent ports; packaged behavior
 and unrelated network interruptions remain unverified.
 All renderer checks passed across the gate and reruns, including 1,638 tests
 with coverage and 146 Story accessibility cases, plus documentation and built
@@ -1378,13 +1378,13 @@ with controlled events, not the cause or repair of the reported interruption.
 **Claude background completion (2026-10-05):** `server/agent.ts` requests native
 session-state events and waits for `idle` before publishing `turn-end`, retaining
 the latest result for the outcome. A live Claude 2.1.280 SDK probe reproduced a
-successful waiting reply before a background Agent finished, followed by another
+successful waiting reply before a background agent finished, followed by another
 result after its continuation. With state events enabled, `idle` followed that
 continuation; interrupting during the wait stopped the child and emitted `idle`
 without another result. Adapter regressions cover the waiting interval, child
 completion before the parent reply, queue admission, duplicate idle, a failed
 continuation, and cancellation racing acknowledgement. Result-only native CLIs
-retain their existing terminal behavior. Validation passed 226 Agent tests,
+retain their existing terminal behavior. Validation passed 226 agent tests,
 host types, Electron boundary tests and built smoke, and documentation checks.
 The live probe exercised the SDK protocol, not the application UI; the changed
 journey through the built desktop and packaged behavior remain unverified.
@@ -1407,7 +1407,7 @@ settlement or packaged-release pass. A built Electron pass against the deployed
 API on 2026-10-15 opened the current account menu and Settings -> Agents: both
 showed 40% available after automatic recovery, matching the production ledger
 (39.680695% available, no held user credits). Telemetry reported unavailable.
-Renderer gates, host types, 323 Agent tests, 22 hosted-account tests, Electron
+Renderer gates, host types, 323 agent tests, 22 hosted-account tests, Electron
 boundary tests and the real Electron smoke passed on the current main baseline.
 A fresh packaged pass remains part of the release verification.
 
@@ -1511,7 +1511,7 @@ The 2026-09-28 merge onto current main passed the complete renderer gate
 host types, 61 configuration/account tests, Electron tests and built-output smoke,
 and documentation validation. A browser pass through the merged built Settings
 Story confirmed the signed-in subscription entry, credit balance, and existing
-Agent controls. This uses controlled account ports, not live desktop login.
+agent controls. This uses controlled account ports, not live desktop login.
 Real live-mode payment,
 production renewal collection, browser card replacement, and packaged cross-browser account handoff remain release
 checks; local and Stripe test-mode checks do not establish those behaviors.
@@ -1527,11 +1527,11 @@ not a packaged app or live provider. All 12 renderer gates, host types, Electron
 tests and smoke, service builds, and documentation validation passed.
 
 **New-chat thinking effort (2026-09-16):** project preferences persist explicit
-effort separately for each Agent. Workspace/session tests reproduce High reverting
+effort separately for each agent. Workspace/session tests reproduce High reverting
 to Medium, verify the next Codex connection receives High, preserve project/runtime
 isolation and restart choices, and keep history/catalog defaults from changing the
 preference. Host-route tests exercise persistence, invalid input, explicit Default,
-and effort updates without switching the project's preferred Agent.
+and effort updates without switching the project's preferred agent.
 An isolated built-main/host/renderer pass selected Codex High through the composer,
 verified the real preferences route persisted it, created a new chat and inspected
 its `effort=high` socket request, then reloaded the renderer and created another
@@ -1696,7 +1696,7 @@ terminal turn failure and its retry action visible, and retain progress after a
 running tool fails. No retry identity is inferred
 from a shared file path; the native runtime still owns execution and retries.
 The `FailedAttemptThenSuccess` Story covers the reported failed-edit/success layout.
-An isolated built-main/host/renderer pass with controlled Agent socket events
+An isolated built-main/host/renderer pass with controlled agent socket events
 verified failed-only activity disappears, the successful file result and final
 reply remain visible, expanded activity excludes the failure, and a subsequent
 network turn failure retains its retry action. Both collapsed and expanded
@@ -1712,7 +1712,7 @@ now asks, when a turn settles, whether it ran a call that could have written
 unseen (a command, a subagent, or any tool it does not parse; reads, listings,
 searches, and questions are excluded), and `application/session/events.ts`
 reports the folder as possibly changed. `use-folder-refresh.ts` takes that
-report down the existing Agent-write path: re-read the listing, reconcile the
+report down the existing agent-write path: re-read the listing, reconcile the
 folder, re-read listing and status. A file result and its Open still require a
 named write; a shell-written file has none by design and appears in Files
 instead. Tests cover the classification, the settled-turn report against a
@@ -1785,7 +1785,7 @@ an image preview, and a text-file card; history tests keep unknown-extension fil
 inside transient attachment storage as name-only cards while leaving arbitrary
 external paths in the transcript. Runtime interpretation of binary formats remains
 provider-dependent and is not established by local upload acceptance.
-Validation: `pnpm check:web` passed all 12 renderer gates; the Agent server
+Validation: `pnpm check:web` passed all 12 renderer gates; the agent server
 tests (now in `pnpm test:server`) passed 204 tests; the attachment route test, host typecheck, and documentation
 checks passed.
 
@@ -1832,7 +1832,7 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   a live signed-in runtime. A window-authorized read pass (2026-09-14) proves
   source/prepared-path parity and stale/deleted-source refusal with seeded PDF
   output, not a native preparation or model turn.
-  A built-app pass (2026-09-15) with an isolated project and controlled Agent
+  A built-app pass (2026-09-15) with an isolated project and controlled agent
   HTTP/socket events verifies draft reachability, mode switches, paused queues
   after Stop/failure/connection loss, same-session reconnect without resend,
   history restore, title search, folded activity, math, and return to latest.
@@ -1849,7 +1849,7 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   card in light and dark themes. Allow and Reject remove the decision controls,
   show Running and Denied respectively, and return focus to the heading. This
   verifies the rendered card and its controlled reply callback, not native
-  Agent execution.
+  agent execution.
   Approval scroll regression (2026-10-17): an isolated Electron renderer
   harness with the real transcript and bottom-follow hook reproduced Allow
   jumping from scrollTop 1773 to 0 when the decided tool joined an activity
@@ -1897,7 +1897,7 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   termination after its leader exits. Codex session tests verify that a process
   crash does not disable subsequent runtime access. Installer tests retain
   cancellation, authentication, output verification, and temporary-file cleanup.
-  Validation: 195 Agent tests, 145 Settings tests, 97 protocol tests, host types,
+  Validation: 195 agent tests, 145 Settings tests, 97 protocol tests, host types,
   service build, and documentation checks pass. The full renderer gate is not
   green: first-send conventions and unused exports remain; seven failures in
   four chat/document test files all pass when rerun together (22 tests).
@@ -1982,16 +1982,16 @@ decides what is offered and `use-suggested-source.ts` holds the dismissal.
 `session-api.test.ts`, `codex-history.test.ts`, `context-composer.test.tsx`,
 `selection-markdown.test.ts`, and `use-agent-environment.test.tsx` own these rules.
 A driven built-app pass (2026-09-25, Linux, isolated home, folder dialog stubbed
-in the main process) opened a Markdown file beside the Agent pane: the pane
-offered it as a dashed suggestion; a selection showed Ask Agent on the
-toolbar; Ask Agent bound "tide rises twice" as a passage chip and moved the
+in the main process) opened a Markdown file beside the agent pane: the pane
+offered it as a dashed suggestion; a selection showed Ask agent on the
+toolbar; Ask agent bound "tide rises twice" as a passage chip and moved the
 caret into the composer; clicking the suggestion turned it into an inline
-mention and removed it. The formatting toolbar stays drawn after Ask Agent
+mention and removed it. The formatting toolbar stays drawn after Ask agent
 moves focus, until the next selection change. Not proven at runtime: a real
 turn receiving the passage, and a reloaded chat restoring its chip.
 A real Default turn (2026-09-25) received the passage and replied with a
 `#:~:text=` citation, but showed the reader's own prompt, context block
-included, again as Agent text: OpenCode streams the prompt's text part like a
+included, again as agent text: OpenCode streams the prompt's text part like a
 reply's, and `OpenCodeEventTranslator` forwarded every text part. It now drops
 parts of messages OpenCode announced as the user's; `opencode-agent.test.ts`
 owns that rule and the history restore.
@@ -2024,10 +2024,10 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
 - **Driven Runtime Pass:** isolated built-app window-authorized write/edit
   (2026-09-14) persists literal replacements with version checks. It proves the
   file boundary, not a real conversation producing a requested draft/revision.
-  A controlled built desktop pass (2026-09-16), with a fixture Agent transport
+  A controlled built desktop pass (2026-09-16), with a fixture agent transport
   and real document services, clicks both Open and a local Markdown link from
   Chats. Both select Documents and display the file while retaining the same
-  Agent session and unfinished follow-up.
+  agent session and unfinished follow-up.
 - **File tool routing (2026-10-08):** shared runtime instructions require
   `edit_file` for existing documents and `write_file` for new ones; `suggest_edits`
   and its approval exceptions are removed from HTTP/MCP and all built-in runtimes.
@@ -2051,10 +2051,10 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   A built Storybook pass in Electron verified 3 → 9 → 3 files, both themes,
   and a 311px-wide card without horizontal overflow. This exercises the real
   card with controlled turn data, not a live provider or packaged application.
-- **Turn review (2026-10-04):** every turn on a folder-bound Agent socket is
+- **Turn review (2026-10-04):** every turn on a folder-bound agent socket is
   bracketed by a Markdown baseline taken before the prompt reaches the runtime
   and a rescan at `turn-end`; the Chat card offers Review per edited file, which
-  opens a reversed inline review (Undo/Keep). The runtime policy has Agents
+  opens a reversed inline review (Undo/Keep). The runtime policy has agents
   write directly through the StashBase file tools.
   `server/turn-changes.test.ts` covers created/edited/deleted detection for
   untooled writes, hidden-note and size exclusion, retention, prompt hold and
@@ -2096,7 +2096,7 @@ Host/services: `server/project-operations/index.ts`, `mcp/server.ts`, `server/ro
 **Retired interface (2026-10-08):** `suggest_edits` and its HTTP delivery routes
 are removed. External clients use the existing write/edit tools; unsupported old
 calls fail without writing. Post-write Chat review requires a StashBase-owned
-Agent turn and is not promised for standalone external MCP clients.
+agent turn and is not promised for standalone external MCP clients.
 
 **Status:** Partial and release-dependent.
 
@@ -2106,7 +2106,7 @@ Agent turn and is not promised for standalone external MCP clients.
 - **Driven Runtime Pass:** a 2026-09-16 isolated source HTTP client initializes
   MCP, lists tools, reads a registered Markdown file through production Project
   Operations, rejects an outside-project read, and verifies token rotation.
-  This is a controlled protocol client, not a third-party Agent or packaged launcher.
+  This is a controlled protocol client, not a third-party agent or packaged launcher.
 - **AI Eval:** retrieval quality is J05; client generation is outside app ownership.
 - **Release Check:** packaged launcher, copied configuration, URL access, and a
   representative external client.
@@ -2165,7 +2165,7 @@ Host/services: follow J02/J03/J05/J06/J07 owners for the exercised path. StashBa
 
 **Status:** Partial and release-dependent evidence for implemented writing.
 
-- **Contract Test:** J02/J06 establish entry and Agent ownership, J03/J07 writing,
+- **Contract Test:** J02/J06 establish entry and agent ownership, J03/J07 writing,
   and J04/J05/J08 supporting references/client paths. These do not prove usefulness.
 - **Driven Runtime Pass:** no complete enter project → brainstorm → requested
   writing → return pass, especially from an empty project without a wiki/index.
@@ -2211,11 +2211,11 @@ structure); they come from the request or the user's
   data validation covers approvals, confinement, reconciliation, and admission.
 - **Driven Runtime Pass:** real-app gated composer retains a typed Build Wiki
   request through runtime setup and restores Send without sending automatically.
-  No real Agent page-generation turn is part of this pass.
+  No real agent page-generation turn is part of this pass.
 - **AI Eval:** Gap. No representative mixed-format Eval of completeness, source
   links, useful pages, requested scope, and preservation of existing wiki content.
 - **Release Check:** real packaged OpenQuill setup and generated-page review;
-  optional BYOK indexing and an external Agent are separate secondary checks.
+  optional BYOK indexing and an external agent are separate secondary checks.
 - **Gap:** model quality remains unproven; persistent ready/stale wiki state,
   scheduled rewriting, and an Update Wiki Pages mode are not product promises.
 

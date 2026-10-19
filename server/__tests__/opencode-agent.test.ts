@@ -349,7 +349,7 @@ test('native text and reasoning deltas remain visible on stream failure without 
     error: { name: 'UnknownError', data: { message: JSON.stringify({ code: 'agent_response_interrupted', message: 'native envelope' }) } },
   } });
   assert.equal(failure[0]?.t, 'error');
-  assert.ok(failure[0]?.t === 'error' && failure[0].message.startsWith('The Agent model response was interrupted.'));
+  assert.ok(failure[0]?.t === 'error' && failure[0].message.startsWith('The agent model response was interrupted.'));
   translator.beginTurn();
   assert.deepEqual(translator.translate({ id: 'late', type: 'message.part.delta',
     properties: { sessionID: 'session-1', messageID: 'assistant-1', partID: 'text', field: 'text', delta: 'Late old output' } }), []);
@@ -712,7 +712,7 @@ test('an unexpected bundled runtime exit terminates the panel with one diagnosti
   await settle();
 
   assert.ok(exitListener);
-  (exitListener as (error: Error) => void)(new Error('The included Agent runtime exited unexpectedly (SIGKILL).'));
+  (exitListener as (error: Error) => void)(new Error('The included agent runtime exited unexpectedly (SIGKILL).'));
   await settle();
 
   const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string });
@@ -1093,7 +1093,7 @@ test('an enabled tool runs only inside the chat\'s turn, through the turn\'s own
   const harness = modelHarness({ tools: [fixtureWriter()] });
   t.after(() => harness.session.dispose());
   await settle();
-  await assert.rejects(harness.session.runTool('writer', 'Draft it.'), /only inside an Agent turn/);
+  await assert.rejects(harness.session.runTool('writer', 'Draft it.'), /only inside an agent turn/);
   assert.deepEqual(harness.toolCalls, []);
   harness.send({ t: 'prompt', text: 'Write a post.' });
   await settle();

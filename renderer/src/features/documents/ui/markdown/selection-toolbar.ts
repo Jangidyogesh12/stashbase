@@ -187,7 +187,7 @@ export function selectionToolbar({ askAgent }: SelectionActions): ToolbarFeature
       if (!askAgent) return;
       builder.addGroup('selection', 'Selection').addItem('ask-agent', {
         active: () => false,
-        icon: label('Ask Agent'),
+        icon: label('Ask agent'),
         onRun: (ctx) => askAgent(ctx),
       });
     },

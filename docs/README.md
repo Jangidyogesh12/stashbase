@@ -7,7 +7,7 @@ maintainer contracts, or release checklists.
 Current guides:
 
 - [Installation](installation.md) — platform setup, updates, removal, and troubleshooting.
-- [Using StashBase](using-stashbase.md) — folders, Agents, file workflows, and search.
+- [Using StashBase](using-stashbase.md) — folders, agents, file workflows, and search.
 - [MCP Configuration](mcp-configuration.md) — client setup examples,
   Streamable HTTP, Docker access, credentials, and transport boundaries.
 

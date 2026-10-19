@@ -1,5 +1,5 @@
 /**
- * What Ask Agent takes from a selection, proven against the real Milkdown
+ * What Ask agent takes from a selection, proven against the real Milkdown
  * build: exactly what is selected, code included, and nothing for a selection
  * that holds no text.
  */

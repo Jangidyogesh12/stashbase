@@ -3,7 +3,7 @@
 ## Product Context
 
 StashBase is an **IDE for writing** in ordinary local projects. The main flow is:
-enter a project → brainstorm with an Agent → draft and revise → refine.
+enter a project → brainstorm with an agent → draft and revise → refine.
 An empty project is valid; references, search, and wiki building are optional.
 
 - **Documents mode** is a VSCode-like files/editor workspace.
@@ -11,7 +11,7 @@ An empty project is valid; references, search, and wiki building are optional.
 - Both share the project and preserve unfinished work. A folder is a project
   scope and search namespace; the product has no global Library.
 
-Local file handling, preparation, indexing, retrieval, and Agent-assisted writing
+Local file handling, preparation, indexing, retrieval, and agent-assisted writing
 are implemented, including inline prose revision. Existing file diffs and
 save-conflict comparisons are separate. Defects and missing evidence are not
 additional planned features.
@@ -59,7 +59,7 @@ Respect the requested scope, including whether frontend UI is excluded.
   entry through success, failure, cancellation, and recovery. Use Journey
   Coverage to find code and evidence, then identify the shared capabilities it uses.
 - **Horizontal — compare the callers of a capability.** Start with its design
-  and engineering owner. Trace real UI, Agent, MCP, and background callers as
+  and engineering owner. Trace real UI, agent, MCP, and background callers as
   applicable; compare identity, state, permissions, errors, and recovery. Look
   for duplicate rules and bypasses, while preserving intentional differences.
 - **Use both when a change affects shared state or multiple entries.** Check

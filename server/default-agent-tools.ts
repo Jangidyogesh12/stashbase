@@ -229,7 +229,7 @@ export async function runToolInTurn(
   signal?: AbortSignal,
 ): Promise<AgentToolResult> {
   signal?.throwIfAborted();
-  if (!turn) throw Object.assign(new Error('Tools run only inside an Agent turn.'), { status: 409 });
+  if (!turn) throw Object.assign(new Error('Tools run only inside an agent turn.'), { status: 409 });
   let entry = turn.tools.find((candidate) => candidate.tool.id === id);
   if (!entry) throw Object.assign(new Error('That crew member is not in this chat.'), { status: 409 });
   let text: string;

@@ -249,7 +249,7 @@ async function nativeDerivedReadRedirect(
       : 'extracted Markdown';
   return {
     behavior: 'deny',
-    message: `StashBase has ${textKind} ready for this ${sourceFormat.toUpperCase()}. Use mcp__stashbase__read_file with {"path":"${abs}"} to read that Agent-readable text. Use native Read only if you specifically need the original source file.`,
+    message: `StashBase has ${textKind} ready for this ${sourceFormat.toUpperCase()}. Use mcp__stashbase__read_file with {"path":"${abs}"} to read that agent-readable text. Use native Read only if you specifically need the original source file.`,
   };
 }
 

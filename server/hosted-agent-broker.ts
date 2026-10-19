@@ -218,7 +218,7 @@ export class HostedAgentBroker {
         const address = server.address();
         if (!address || typeof address === 'string') {
           server.close();
-          reject(new Error('Could not bind the hosted Agent broker.'));
+          reject(new Error('Could not bind the hosted agent broker.'));
           return;
         }
         this.server = server;
@@ -259,9 +259,9 @@ export class HostedAgentBroker {
   ): void {
     const apiKey = this.channelBySession.get(agentSessionId);
     const channel = apiKey ? this.channels.get(apiKey) : undefined;
-    if (!channel) throw new Error('The hosted Agent broker channel is unavailable.');
+    if (!channel) throw new Error('The hosted agent broker channel is unavailable.');
     if (!UUID_PATTERN.test(turnId)) {
-      throw new Error('The hosted Agent turn id must be a valid UUID.');
+      throw new Error('The hosted agent turn id must be a valid UUID.');
     }
     channel.turnAbort.abort();
     channel.turnAbort = new AbortController();
@@ -286,7 +286,7 @@ export class HostedAgentBroker {
   ): Promise<string> {
     const apiKey = this.channelBySession.get(agentSessionId);
     const channel = apiKey ? this.channels.get(apiKey) : undefined;
-    if (!channel?.turnId) throw new Error('The Agent tool call is not bound to an active turn.');
+    if (!channel?.turnId) throw new Error('The agent tool call is not bound to an active turn.');
     const turnId = channel.turnId;
     const admissionSignal = signal ? AbortSignal.any([signal, channel.turnAbort.signal]) : channel.turnAbort.signal;
     const lifetime = new AbortController();
@@ -326,9 +326,9 @@ export class HostedAgentBroker {
         const payload = await upstream.json().catch(() => null) as GatewayError | null;
         const code = payload?.error?.code ?? payload?.code;
         throw new Error((code && MODEL_REFUSALS[code])
-          ?? payload?.error?.message ?? payload?.message ?? `The Agent gateway failed (HTTP ${upstream.status}).`);
+          ?? payload?.error?.message ?? payload?.message ?? `The agent gateway failed (HTTP ${upstream.status}).`);
       }
-      return completionText(await upstream.text(), (chunk) => new Error(chunk.message ?? 'The Agent model failed.'), () => new Error('The Agent model returned an empty response.'));
+      return completionText(await upstream.text(), (chunk) => new Error(chunk.message ?? 'The agent model failed.'), () => new Error('The agent model returned an empty response.'));
     } finally {
       this.permissionReviews.delete(lifetime);
     }
@@ -349,7 +349,7 @@ export class HostedAgentBroker {
   ): Promise<string> {
     const apiKey = this.channelBySession.get(agentSessionId);
     const channel = apiKey ? this.channels.get(apiKey) : undefined;
-    if (!channel?.turnId) throw new Error('The Agent tool call is not bound to an active turn.');
+    if (!channel?.turnId) throw new Error('The agent tool call is not bound to an active turn.');
     const turnId = channel.turnId;
     const callSignal = signal ? AbortSignal.any([signal, channel.turnAbort.signal]) : channel.turnAbort.signal;
     const body = JSON.stringify({ model: selection.model, messages, stream: true });
@@ -479,7 +479,7 @@ export class HostedAgentBroker {
       return;
     }
     if (!channel.turnId) {
-      writeJson(response, 409, { error: { message: 'The Agent model call is not bound to an active turn.', code: 'agent_turn_required' } });
+      writeJson(response, 409, { error: { message: 'The agent model call is not bound to an active turn.', code: 'agent_turn_required' } });
       return;
     }
     const turnId = channel.turnId;
@@ -545,7 +545,7 @@ export class HostedAgentBroker {
       if (!upstream.ok) {
         const payload = await upstream.json().catch(() => null) as GatewayError | null;
         const nested = payload?.error;
-        const upstreamMessage = nested?.message ?? payload?.message ?? `The Agent gateway failed (HTTP ${upstream.status}).`;
+        const upstreamMessage = nested?.message ?? payload?.message ?? `The agent gateway failed (HTTP ${upstream.status}).`;
         const upstreamCode = nested?.code ?? payload?.code;
         diagnostic?.fail({ message: upstreamMessage, code: upstreamCode, status: upstream.status });
         const modelRefusal = upstreamCode ? MODEL_REFUSALS[upstreamCode] : undefined;
@@ -554,11 +554,11 @@ export class HostedAgentBroker {
           return;
         }
         const allowanceMessage = upstreamCode === 'agent_allowance_reserved'
-          ? 'Remaining Agent credits cannot cover this request while some credits are reserved for active requests or fees awaiting confirmation. Check Agent credits in Settings; wait for reservations to clear or try a shorter conversation.'
+          ? 'Remaining agent credits cannot cover this request while some credits are reserved for active requests or fees awaiting confirmation. Check agent credits in Settings; wait for reservations to clear or try a shorter conversation.'
           : upstreamCode === 'agent_turn_budget_exhausted'
-          ? 'This Agent turn has insufficient spending budget for another model call.'
+          ? 'This agent turn has insufficient spending budget for another model call.'
           : upstreamCode === 'agent_allowance_exhausted' || !upstreamCode
-            ? 'Remaining Agent credits cannot cover this request. Try a shorter conversation or wait for credits to refill.'
+            ? 'Remaining agent credits cannot cover this request. Try a shorter conversation or wait for credits to refill.'
             : upstreamMessage;
         const retryAfter = upstream.status === 429 || upstream.status === 503
           ? upstream.headers.get('retry-after') : null;
@@ -578,7 +578,7 @@ export class HostedAgentBroker {
         // 422 prevents the native runtime from adding another retry loop
         // after our bounded recovery. Do not resend the whole user turn.
         writeJson(response, 422, { error: interrupted ? INTERRUPTED_MODEL_RESPONSE : {
-          message: 'The Agent model returned an empty response twice. The task may be incomplete; completed file changes have been kept.',
+          message: 'The agent model returned an empty response twice. The task may be incomplete; completed file changes have been kept.',
           type: 'stashbase_hosted_error', code: 'agent_empty_response',
         } });
         return;

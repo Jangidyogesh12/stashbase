@@ -13,13 +13,13 @@ source mutations, saving, and release guarantees.
 2. Keep a preview or start editing to retain its tab. New draft creates an ordinary
    Markdown file; New tab creates only a starting point. Import copies files into
    the current project and refreshes the list without taking document focus.
-3. Read/edit and move between documents, outline, search, and Agent assistance.
+3. Read/edit and move between documents, outline, search, and agent assistance.
    Commands act on the visible surface. Opening a document never attaches it to Chat.
-   From an Agent turn's changes in Chat, review what that turn changed in a
+   From an agent turn's changes in Chat, review what that turn changed in a
    document, undoing or keeping each change or the remaining set.
    Select prose and choose a Heading menu entry to turn the selected blocks into
    text or a heading.
-   Select any Markdown and choose Ask Agent to bind that passage to the chat
+   Select any Markdown and choose Ask agent to bind that passage to the chat
    beside the document; the chat pane opens if it was hidden. The pane also
    suggests the document in front, which attaches only on a click.
 4. Return to live work with edits, undo, selection, and reading position intact.
@@ -58,5 +58,5 @@ recovery belongs to [Project Files](../capabilities/project-files.md#failure-and
 [J03](README.md#j03-read-and-edit-source-documents),
 [J05](README.md#j05-search-and-open-source-evidence),
 [J07](README.md#j07-converge-chat-into-a-document).
-[Chat](chat.md) supplies optional Agent assistance; [J03 evidence](../../code-review/journey-coverage.md#j03-documents)
+[Chat](chat.md) supplies optional agent assistance; [J03 evidence](../../code-review/journey-coverage.md#j03-documents)
 records implementation and validation limits.

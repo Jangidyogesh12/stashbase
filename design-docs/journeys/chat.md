@@ -1,6 +1,6 @@
 # Working in Chat
 
-Explore ideas, draft, and revise with an Agent. A conversation needs no source
+Explore ideas, draft, and revise with an agent. A conversation needs no source
 files, wiki, or intended deliverable. This journey owns the interaction;
 [Agent Sessions](../capabilities/agent-sessions.md) owns shared behavior across
 Chat, Documents assistance, and runtimes.
@@ -10,8 +10,8 @@ Chat, Documents assistance, and runtimes.
 1. Start a chat in the project or return through history. The sidebar keeps drafts
    reachable and makes conversation identity and working state clear. Search names
    its scope; conversation navigation follows actual visits.
-2. Compose an idea, optionally attach context and choose supported Agent options.
-   The action clearly sends, queues, or stops work. A persona sets how the Agent
+2. Compose an idea, optionally attach context and choose supported agent options.
+   The action clearly sends, queues, or stops work. A persona sets how the agent
    talks and writes in this Chat from the next message on and remains distinct
    from the current request. The reader can switch personas between messages,
    write a new one, or browse ready-made personas to add one. Default also offers
@@ -21,10 +21,10 @@ Chat, Documents assistance, and runtimes.
    grouped per turn and collapsed. The group holding a running turn names the
    step in hand so long work visibly advances; a settled group states what it
    did. Approvals, turn failures, and file results remain individually
-   actionable. An Agent's clarifying questions appear as a card with its
+   actionable. An agent's clarifying questions appear as a card with its
    options and a line for the reader's own answer; answering continues the
-   turn, and skipping tells the Agent no answer was given. Ordinary tool-call failures
-   do not appear in activity summaries or expanded details; the Agent explains
+   turn, and skipping tells the agent no answer was given. Ordinary tool-call failures
+   do not appear in activity summaries or expanded details; the agent explains
    task outcomes and native history retains the failed attempts. Selected Crew
    calls have their own cards, including failed calls and their explanations.
    Only successful file operations contribute to changed-file results. A
@@ -40,21 +40,21 @@ Chat, Documents assistance, and runtimes.
 5. Return through history or change modes without losing the conversation or unsent
    work. Rename is deliberate; deleting a chat does not delete project files.
    New Chat reuses the last explicitly selected thinking effort for that project's
-   Agent when supported, instead of resetting to the runtime default.
+   agent when supported, instead of resetting to the runtime default.
 
 ## First Send
 
 With no explicit project choice, the draft uses Default even while signed out.
-If the selected Agent is unavailable, Send presents its access prompt before
+If the selected agent is unavailable, Send presents its access prompt before
 starting login, installation, or a session:
 
-- Default offers Sign in for free Agent credits.
-- A native Agent offers Connect Codex, Connect Claude, or Connect Antigravity.
-- Not now keeps the request. Another Agent can be selected from the draft.
+- Default offers Sign in for free agent credits.
+- A native agent offers Connect Codex, Connect Claude, or Connect Antigravity.
+- Not now keeps the request. Another agent can be selected from the draft.
 
-The prompt is about the selected Agent. On explicit confirmation, keep the request
+The prompt is about the selected agent. On explicit confirmation, keep the request
 while access is prepared. Readiness may continue only this same submission once.
-Changing the request, project, conversation, or Agent, or cancelling the prompt,
+Changing the request, project, conversation, or agent, or cancelling the prompt,
 retires that continuation. Standalone Settings setup never sends a draft.
 If preparation fails, the same prompt shows the failed step and the service's
 specific explanation, including any supplied error code or file location. Keep

@@ -4,7 +4,7 @@
 
 Open, Create, Recent, GitHub Import, and Gallery Copy converge on one local
 project identity and window decision. Entry is complete when the workspace is
-usable; Agent setup and indexing are independent.
+usable; agent setup and indexing are independent.
 
 ## Shared Rules
 

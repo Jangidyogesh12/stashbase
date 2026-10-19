@@ -1,6 +1,6 @@
 # Overview
 
-StashBase is an **IDE for writing**: develop ideas with an Agent and turn them
+StashBase is an **IDE for writing**: develop ideas with an agent and turn them
 into documents in ordinary local projects.
 
 Enter a project → brainstorm → write → refine.
@@ -22,7 +22,7 @@ Both share the project and preserve unfinished work when switching.
 
 ## Product Principles
 
-- **Ordinary files are authoritative.** Documents and Agent-written wiki pages
+- **Ordinary files are authoritative.** Documents and agent-written wiki pages
   remain user-owned; extracted text, checkpoints, and indexes stay hidden.
 - **One project scope.** Each folder has an independent search namespace.
   Missing results or failures never broaden access.

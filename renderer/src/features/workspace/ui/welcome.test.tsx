@@ -94,7 +94,7 @@ describe('project welcome', () => {
     const user = userEvent.setup();
     expect(await screen.findByRole('heading', { level: 1, name: 'StashBase' })).not.toBeNull();
     expect(
-      screen.getByText('Stash your notes and resources. Put them to work with your agent.'),
+      screen.getByText('Stash your notes and sources. Write with your agent.'),
     ).not.toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Recent' })).not.toBeNull();
     expect(screen.getByText('Projects you open will appear here.')).not.toBeNull();

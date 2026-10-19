@@ -144,7 +144,7 @@ function accountRequiredPort(): AgentRuntimePort {
     preparation: {
       kind: 'failed',
       failure: {
-        note: 'Sign in to StashBase to use the included weekly Agent allowance.',
+        note: 'Sign in to StashBase to use the included monthly agent allowance.',
         refusal: 'account-required',
         stage: 'authenticate',
       },
