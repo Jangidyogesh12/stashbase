@@ -2,11 +2,11 @@
  * The signed-in StashBase account used by the hosted Agent runtime.
  *
  * An account is optional throughout the product — the project works
- * anonymously — so every consumer has to be able to render "no account"
+ * anonymously — so every consumer has to be able to render 'no account'
  * without treating it as an error.
  */
 
-/** Public Agent allowance intentionally exposes only the user-facing weekly
+/** Public Agent allowance intentionally exposes only the user-facing monthly
  * percentage and token detail. Picodollar accounting stays server-side. */
 export interface HostedAgentAllowance {
   profile: string;
@@ -28,6 +28,7 @@ export interface HostedBillingPlan {
   amount: number;
   currency: string;
   interval: 'month' | 'year';
+  monthlyGrantPicodollars?: number | null;
   available: boolean;
 }
 
@@ -36,6 +37,7 @@ export interface HostedBillingPlan {
 export interface HostedBillingStatus {
   plan: HostedBillingPlan | null;
   status: string;
+  subscriptionStatus?: string;
   paidThrough: string | null;
   cancelAtPeriodEnd: boolean;
   canManage: boolean;

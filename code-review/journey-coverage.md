@@ -1411,6 +1411,37 @@ Renderer gates, host types, 323 agent tests, 22 hosted-account tests, Electron
 boundary tests and the real Electron smoke passed on the current main baseline.
 A fresh packaged pass remains part of the release verification.
 
+**Monthly billing policy (2026-10-19):** Free is $1/month; Plus is $5/month
+with $5 in credits; Pro is $20/month with $20 in credits. A first-ever Plus
+subscription receives a native Stripe trial with full $5 credits, card collection
+and automatic renewal. The API owns eligibility and preserves it across Checkout
+recovery. Desktop and website display monthly terms and catalog credit amounts.
+API ledger tests cover month-end clamping, no seven-day refill, shared usage,
+non-stacking paid ceilings, and late settlement; billing tests cover returning
+subscribers and idempotent offer recovery. Renderer gates passed after updating the monthly text assertions (1,695 tests),
+along with host types and documentation checks. The local website pricing page
+was visually inspected with a controlled monthly catalog; the built desktop
+Story could not be inspected through the available preview tool. Live card
+collection, first charge after trial, and deployed price/reminder configuration
+still require Stripe validation. Native-trial tests cover confirmed access,
+non-stacking credits, cancellation, expiry, failed first collection, paid renewal,
+and ineligible returning subscribers. Desktop and website confirmation accept
+`trialing` access and retain Portal cancellation. The HTTP compatibility field
+keeps released clients' Checkout confirmation working; adapter tests retain
+trial wording in updated clients and support older API responses. The operator configures the
+seven-day reminder and `https://stashbase.ai/pricing/` cancellation link manually;
+this change does not establish live email delivery. After the native-trial change,
+all 12 renderer gates, API typecheck/build and 341 API tests passed (one skipped),
+as did 20 website account tests and documentation validation.
+The subsequent repair pass passed 345 API tests (one skipped), all 12 renderer
+gates, host types and the complete website build. Real Stripe test-clock checks
+verified trial grants, the first $5 payment, cancellation, declined first
+collection returning to $1 Free, and the old $10 Plus price migrating and renewing
+at $5 without an immediate invoice or billing-date reset. The built Ready and
+RenewalCanceled Stories were visually checked, closing the earlier preview gap
+for those states. Live card collection, public webhook delivery, production
+migration and actual reminder delivery remain deployment checks.
+
 **Default Agent billing:** Settings -> Agents shows the subscription, reached also
 from the sidebar account menu, through
 `settings/hooks/use-billing.ts` and `settings/ui/agents/subscription-rows.tsx`.

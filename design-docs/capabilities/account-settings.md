@@ -272,14 +272,20 @@ path for a browser-signed-in account.
 
 Stripe owns prices, promotion codes, and payment management. The hosted API owns
 subscription rights and usage. A discounted subscription receives its full tier
-allowance. Paid credits follow the successfully paid monthly billing period.
+allowance. The first-ever Plus subscription receives its first month free with a
+card and automatic renewal through a native Stripe trial, then renews at $5/month. Stripe sends a reminder seven days before the trial ends, with a cancellation link; the operator enables and verifies this Dashboard setting. It includes the full Plus
+allowance and cannot combine with other promotions. Previous subscriptions or
+trials make an account ineligible; abandoned Checkout does not. Canceling renewal
+preserves access until the current month ends. Subscription credits follow the confirmed trial period and then each successfully paid monthly billing period.
 A tier change preserves consumption within that period; an upgrade raises the
-current ceiling. Free credits keep their separate monthly window from first use, and
-there is no first-week grant. The first time an account adds a card, its first month of
-Plus is a free trial with the full Plus allowance; it renews as paid Plus unless canceled,
-does not combine with promotion codes, and is offered once per account. Canceling during
-the trial keeps Plus until it ends without a charge. Trial billing follows Stripe defaults. Pro carries ten
-times the Plus allowance. Paid-tier changes use Stripe prorations. Cancellation retains access until paid-through, then returns to Free.
+current ceiling. Free credits use a separate calendar-month window anchored by first
+hosted use, with month-end clamping and no rollover; there is no first-week grant.
+Paid allowances replace the free ceiling: Plus costs $5/month, and Pro costs $20/month
+with ten times the Plus allowance. Customer-facing copy states no credit amounts in
+dollars. Canceling during the trial keeps Plus until it ends without a charge; upgrading
+to Pro during it ends the trial and charges Pro's full monthly price, as Stripe's
+Customer Portal does by default. Paid-tier changes use Stripe prorations. Cancellation
+retains access until paid-through, then returns to Free.
 A browser success redirect is not evidence of payment; pending confirmation stays
 visible until the API confirms rights. Failed billing does not discard local work.
 

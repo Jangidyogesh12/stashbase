@@ -2,14 +2,16 @@
  * Default Agent subscriptions as the Agents panel reasons about them.
  *
  * Stripe owns prices, promotion codes, and payment; the hosted API owns the
- * rights a payment buys. A browser return is never evidence of payment, so a
- * paid plan is in effect only while the API reports it paid through a future
+ * rights from a confirmed payment or native trial. A browser return is never evidence of payment, so a
+ * plan is in effect only while the API reports confirmed access through a future
  * date.
  */
 
 export interface BillingPlan {
   readonly priceId: string;
   readonly name: string;
+  readonly planKey?: string;
+  readonly monthlyGrantPicodollars?: number | null;
   /** Minor currency units, as Stripe reports them. */
   readonly amount: number;
   readonly currency: string;
@@ -31,7 +33,7 @@ export function billingPaid(status: BillingStatus, now = Date.now()): boolean {
   return (
     status.paidThrough !== null &&
     Date.parse(status.paidThrough) > now &&
-    (status.status === 'active' || status.status === 'past_due')
+    (status.status === 'active' || status.status === 'past_due' || status.status === 'trialing')
   );
 }
 

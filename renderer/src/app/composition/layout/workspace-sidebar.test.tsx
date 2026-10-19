@@ -162,7 +162,7 @@ describe('account row', () => {
     // Plans and billing lands on the subscription, beside the credits.
     await user.click(within(menu).getByRole('menuitem', { name: 'Plans and billing' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Settings' }));
-    expect(await dialog.findByText('Free · Paid plans add monthly credits.')).not.toBeNull();
+    expect(await dialog.findByText('Free · $1 in credits each month.')).not.toBeNull();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
 

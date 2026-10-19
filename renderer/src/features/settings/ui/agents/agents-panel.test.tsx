@@ -117,7 +117,7 @@ describe('AgentRuntimesPanel', () => {
     const rendered = renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
     const user = userEvent.setup();
 
-    expect(await screen.findByText('Free · Paid plans add monthly credits.')).not.toBeNull();
+    expect(await screen.findByText('Free · $1 in credits each month.')).not.toBeNull();
     const subscribe = await screen.findAllByRole('button', { name: 'Subscribe' });
     expect(subscribe).toHaveLength(2);
     await user.click(subscribe[1] as HTMLElement);
@@ -139,7 +139,7 @@ describe('AgentRuntimesPanel', () => {
     };
     window.dispatchEvent(new Event('focus'));
 
-    expect(await screen.findByText(/^Pro · Paid through/)).not.toBeNull();
+    expect(await screen.findByText(/^Pro · Credits until/)).not.toBeNull();
     await waitFor(() =>
       expect(vi.mocked(port.getAllowance).mock.calls.length).toBeGreaterThan(allowanceReads),
     );
@@ -170,6 +170,41 @@ describe('AgentRuntimesPanel', () => {
     expect(await screen.findByRole('button', { name: 'Manage billing' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Manage or cancel' })).toBeNull();
   });
+
+  it.each([false, true])(
+    'shows confirmed trial access and cancellation state: %s',
+    async (cancelAtPeriodEnd) => {
+      const port = agentRuntimePort({
+        getBillingStatus: vi.fn(async () => ({
+          cancelAtPeriodEnd,
+          canManage: true,
+          paidThrough: '2099-11-05T00:00:00.000Z',
+          planName: 'Plus',
+          status: 'trialing',
+        })),
+      });
+      const rendered = renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
+      const user = userEvent.setup();
+      expect(
+        await screen.findByText(
+          cancelAtPeriodEnd
+            ? /^Plus · Renewal canceled. Access until/
+            : /^Plus · Free trial until.*Then \$5 a month/,
+        ),
+      ).not.toBeNull();
+      expect(screen.queryByText(/credits are not active/)).toBeNull();
+      await user.click(
+        screen.getByRole('button', {
+          name: cancelAtPeriodEnd ? 'Manage billing' : 'Manage or cancel',
+        }),
+      );
+      await waitFor(() =>
+        expect(rendered.onOpenExternal).toHaveBeenLastCalledWith(
+          'https://billing.stripe.com/p/session/test',
+        ),
+      );
+    },
+  );
 
   it('keeps cancellation reachable during confirmation and retries a refused browser launch', async () => {
     const port = agentRuntimePort({
