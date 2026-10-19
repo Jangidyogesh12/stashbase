@@ -108,3 +108,26 @@ export function missedRuns(task: ScheduledTaskTiming, now: Date): MissedRuns | n
     last: occurrenceOn(now, at, -1),
   };
 }
+
+/** A run history entry as the server stores it (ISO instants) or as the list
+ *  reads it (epoch milliseconds). */
+interface HistoryRun {
+  readonly occurrence: number | string | null;
+  readonly startedAt: number | string;
+  readonly status: string;
+}
+
+/** Where a run sits in a newest-first history: when it started, or for a
+ *  missed entry the last day it covers. */
+function historyTime(run: HistoryRun): number {
+  const at = run.status === 'missed' && run.occurrence !== null ? run.occurrence : run.startedAt;
+  return typeof at === 'number' ? at : Date.parse(at);
+}
+
+/** A newest-first history with a missed entry in its place in time, so a run
+ *  started after the missed days, such as a Run now, stays above it. */
+export function withMissedRun<T extends HistoryRun>(runs: readonly T[], missed: T | null): T[] {
+  if (!missed) return [...runs];
+  const index = runs.findIndex((run) => historyTime(run) < historyTime(missed));
+  return index < 0 ? [...runs, missed] : [...runs.slice(0, index), missed, ...runs.slice(index)];
+}

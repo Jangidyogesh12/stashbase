@@ -3,7 +3,7 @@
  * form, and the preload bridge for Run now and for the runs main hands this
  * window. The only module in the feature that sees either wire shape.
  */
-import { missedRuns, nextRun } from '@/contracts/scheduled-task-timing';
+import { missedRuns, nextRun, withMissedRun } from '@/contracts/scheduled-task-timing';
 import {
   ScheduledTasksError,
   type ScheduledRunNowResult,
@@ -114,20 +114,6 @@ function pendingMissed(wire: ScheduledTaskWire, now: Date): ScheduledTaskRun | n
   };
 }
 
-/** When a run happened, for ordering; missed days by the last one missed. */
-function runAt(run: ScheduledTaskRun): number {
-  return run.status === 'missed' && run.occurrence !== null ? run.occurrence : run.startedAt;
-}
-
-/** The recorded runs, newest first, with the pending missed entry in its
- *  place in time: a Run now started after the missed days stays the latest,
- *  so the task's own row keeps showing how today's run is going. */
-function withPendingMissed(runs: ScheduledTaskRun[], missed: ScheduledTaskRun | null) {
-  if (!missed) return runs;
-  const at = runs.findIndex((run) => runAt(run) < runAt(missed));
-  return at < 0 ? [...runs, missed] : [...runs.slice(0, at), missed, ...runs.slice(at)];
-}
-
 /** The next run is read when the list is, by the rule main's clock follows. */
 function toTask(wire: ScheduledTaskWire, now: Date): ScheduledTask {
   return {
@@ -139,7 +125,7 @@ function toTask(wire: ScheduledTaskWire, now: Date): ScheduledTask {
     nextRunAt: nextRun(wire, now)?.getTime() ?? null,
     problem: wire.problem,
     prompt: wire.prompt,
-    runs: withPendingMissed(wire.runs.map(toRun), pendingMissed(wire, now)),
+    runs: withMissedRun(wire.runs.map(toRun), pendingMissed(wire, now)),
     time: wire.time,
   };
 }

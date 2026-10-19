@@ -516,8 +516,9 @@ across three owners; none keeps another's state.
 
 - `shared/scheduled-task-timing.ts` is the one due rule: main decides what to claim
   with it, the list's adapter reads each task's next run and its missed days from it,
-  and the server records the missed days with it when a claim follows them, so the
-  list's pending entry and the recorded one never disagree.
+  and the server records the missed days with it when a claim follows them. Both
+  place the entry in the history with the same helper, so the list's pending entry
+  and the recorded one never disagree in content or in place.
 - Claims are at most once. The server refuses an occurrence at or before the one last
   claimed and a second run of a task still running in this process; a run left running
   by an earlier process reads as failed. A lost answer never causes a second dispatch.

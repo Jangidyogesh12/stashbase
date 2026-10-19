@@ -39,7 +39,7 @@ import {
   type ScheduledTaskRunWire,
   type ScheduledTaskWire,
 } from '../shared/protocols/http/scheduled-tasks.ts';
-import { missedRuns } from '../shared/scheduled-task-timing.ts';
+import { missedRuns, withMissedRun } from '../shared/scheduled-task-timing.ts';
 
 const log = logger('scheduled-tasks');
 
@@ -519,7 +519,7 @@ export function createScheduledTaskStore(io: ScheduledTaskStoreIo) {
           title: null,
           trigger: request.trigger,
         };
-        state.runs = [run, ...(missed ? [missed] : []), ...storedRuns(state)].slice(0, RUN_HISTORY_LIMIT);
+        state.runs = [run, ...withMissedRun(storedRuns(state), missed)].slice(0, RUN_HISTORY_LIMIT);
         return { ok: true, runId } as const;
       });
     },
