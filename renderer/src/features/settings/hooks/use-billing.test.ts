@@ -12,38 +12,41 @@ afterEach(() => {
 });
 
 describe('billing browser handoff', () => {
-  it('restarts confirmation when returning after a long checkout', async () => {
-    let status = FREE_BILLING;
-    const port = agentRuntimePort({ getBillingStatus: vi.fn(async () => status) });
-    const view = renderHook(() => useBilling(port, vi.fn(), true), {
-      wrapper: queryWrapper(createTestQueryClient()),
-    });
-    await waitFor(() => expect(view.result.current.status).not.toBeNull());
-    vi.useFakeTimers();
-    await act(async () => {
-      view.result.current.subscribe('price_plus');
-      await vi.advanceTimersByTimeAsync(1);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(125_000);
-    });
-    expect(view.result.current.confirming).toBe('slow');
-    await act(async () => {
-      window.dispatchEvent(new Event('focus'));
-    });
-    expect(view.result.current.confirming).toBe('waiting');
-    status = {
-      ...FREE_BILLING,
-      status: 'active',
-      canManage: true,
-      planName: 'Plus',
-      paidThrough: '2099-01-01T00:00:00Z',
-    };
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_010);
-    });
-    expect(view.result.current.confirming).toBeNull();
-  });
+  it.each(['active', 'trialing'])(
+    'confirms %s rights when returning after a long checkout',
+    async (subscriptionStatus) => {
+      let status = FREE_BILLING;
+      const port = agentRuntimePort({ getBillingStatus: vi.fn(async () => status) });
+      const view = renderHook(() => useBilling(port, vi.fn(), true), {
+        wrapper: queryWrapper(createTestQueryClient()),
+      });
+      await waitFor(() => expect(view.result.current.status).not.toBeNull());
+      vi.useFakeTimers();
+      await act(async () => {
+        view.result.current.subscribe('price_plus');
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(125_000);
+      });
+      expect(view.result.current.confirming).toBe('slow');
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+      });
+      expect(view.result.current.confirming).toBe('waiting');
+      status = {
+        ...FREE_BILLING,
+        status: subscriptionStatus,
+        canManage: true,
+        planName: 'Plus',
+        paidThrough: '2099-01-01T00:00:00Z',
+      };
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_010);
+      });
+      expect(view.result.current.confirming).toBeNull();
+    },
+  );
 
   it('reports browser refusal instead of silently completing a Portal action', async () => {
     const port = agentRuntimePort({

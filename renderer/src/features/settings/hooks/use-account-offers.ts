@@ -30,7 +30,7 @@ export function useAccountOffers(): readonly WorkspaceNotice[] {
       dismissLabel: 'Not now',
       // What signing in gives, not a commitment to the Default Agent nor the
       // allowance's terms, which Settings → Agents shows.
-      message: 'Sign in for free Agent credits every week.',
+      message: 'Sign in for free Agent credits every month.',
       // The offer itself is drawn as a banner; the waiting line is a row.
       offer: true,
       onDismiss: () => account.markOfferSeen('sign-in'),

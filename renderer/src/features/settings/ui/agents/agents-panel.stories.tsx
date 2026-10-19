@@ -67,7 +67,9 @@ function fakePort(): AgentRuntimePort {
     }),
     getBillingPlans: async () => [
       {
-        amount: 1000,
+        amount: 500,
+        planKey: 'plus',
+        monthlyGrantPicodollars: 5e12,
         available: true,
         currency: 'usd',
         interval: 'month',
@@ -76,6 +78,8 @@ function fakePort(): AgentRuntimePort {
       },
       {
         amount: 2000,
+        planKey: 'pro',
+        monthlyGrantPicodollars: 20e12,
         available: true,
         currency: 'usd',
         interval: 'month',
@@ -144,7 +148,7 @@ function accountRequiredPort(): AgentRuntimePort {
     preparation: {
       kind: 'failed',
       failure: {
-        note: 'Sign in to StashBase to use the included weekly Agent allowance.',
+        note: 'Sign in to StashBase to use the included monthly Agent allowance.',
         refusal: 'account-required',
         stage: 'authenticate',
       },

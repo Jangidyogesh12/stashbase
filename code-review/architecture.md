@@ -739,7 +739,14 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   refusals keep the service code and never fall back to another model.
   Versions, limits, and upstream identity stay in the host; the listing keeps
   the hosted catalog in memory only. Hosted quota/accounting and Stripe
-  billing stay external; the desktop exposes bounded usage, plans, and
+  billing stay external; the API owns monthly credit grants and first-subscription
+  offer eligibility. Confirmed native trial access and paid invoice coverage share
+  the monthly ledger; the existing `paidThrough` field is the confirmed access
+  end for either. The API keeps trials recognizable as `active` in the legacy
+  `status` field and supplies their actual state in `subscriptionStatus`; the
+  renderer prefers the latter and falls back for older servers. Ledger decisions
+  remain server-owned. The desktop displays the published monthly amount and terms
+  without deciding eligibility; it exposes bounded usage, plans, and
   subscription status. The host requests Checkout and Portal pages with the
   account session and hands the renderer only a verified Stripe-hosted URL;
   desktop account tokens never appear in links or Stripe configuration.

@@ -22,6 +22,27 @@ const catalogBody = {
 };
 
 describe('agent runtime API', () => {
+  it('preserves trial terms from the compatible API and supports older API responses', async () => {
+    for (const subscriptionStatus of ['trialing', undefined]) {
+      const adapter = createAgentRuntimeAdapter({
+        request: async () => ({
+          status: 200,
+          body: {
+            plan: null,
+            status: 'active',
+            subscriptionStatus,
+            paidThrough: '2099-01-01T00:00:00Z',
+            cancelAtPeriodEnd: false,
+            canManage: true,
+          },
+        }),
+      });
+      await expect(adapter.getBillingStatus(new AbortController().signal)).resolves.toMatchObject({
+        status: subscriptionStatus ?? 'active',
+        paidThrough: '2099-01-01T00:00:00Z',
+      });
+    }
+  });
   it('preserves the service diagnostic through the Settings failure presenter', async () => {
     const detail = 'EACCES: unable to write /Users/example/.local/bin/codex';
     const adapter = createAgentRuntimeAdapter({

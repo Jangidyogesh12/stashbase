@@ -152,7 +152,7 @@ function toAllowance(wire: HostedAgentAllowanceWire): AgentAllowance {
   };
 }
 
-/** The catalog's plan key and Stripe product metadata have no reader. */
+/** Keep published monthly credits alongside the purchase price. */
 function toBillingPlan(wire: HostedBillingPlanWire): BillingPlan {
   return {
     amount: wire.amount,
@@ -161,6 +161,8 @@ function toBillingPlan(wire: HostedBillingPlanWire): BillingPlan {
     interval: wire.interval,
     name: wire.name,
     priceId: wire.priceId,
+    planKey: wire.planKey,
+    monthlyGrantPicodollars: wire.monthlyGrantPicodollars ?? null,
   };
 }
 
@@ -170,7 +172,7 @@ function toBillingStatus(wire: HostedBillingStatusWire): BillingStatus {
     canManage: wire.canManage,
     paidThrough: wire.paidThrough,
     planName: wire.plan?.name ?? null,
-    status: wire.status,
+    status: wire.subscriptionStatus ?? wire.status,
   };
 }
 

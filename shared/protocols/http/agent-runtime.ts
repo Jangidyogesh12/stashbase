@@ -177,6 +177,7 @@ const hostedBillingPlanSchema = z
     amount: z.number().int().nonnegative(),
     currency: z.string().min(3).max(3),
     interval: z.enum(['month', 'year']),
+    monthlyGrantPicodollars: z.number().nonnegative().nullable().optional(),
     available: z.boolean(),
   })
   .passthrough();
@@ -190,6 +191,7 @@ export const hostedBillingStatusSchema = z
   .object({
     plan: hostedBillingPlanSchema.nullable(),
     status: z.string().min(1).max(64),
+    subscriptionStatus: z.string().min(1).max(64).optional(),
     paidThrough: z.string().nullable(),
     cancelAtPeriodEnd: z.boolean(),
     canManage: z.boolean(),

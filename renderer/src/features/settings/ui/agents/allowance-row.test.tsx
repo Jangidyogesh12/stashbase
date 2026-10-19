@@ -11,7 +11,7 @@ describe('AllowanceRow', () => {
   it('says the window has not started when the server reports no end date', () => {
     render(<AllowanceRow allowance={IDLE_ALLOWANCE} />);
 
-    expect(screen.getByText('100% available · Refills 7 days after first use')).not.toBeNull();
+    expect(screen.getByText('100% available · Refills one month after first use')).not.toBeNull();
   });
 
   it('clamps a nonsensical percentage into the bar it can actually draw', () => {

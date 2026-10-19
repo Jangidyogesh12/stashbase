@@ -17,7 +17,7 @@ export function AllowanceRow({ allowance }: { allowance: AgentAllowance }) {
   return (
     <SettingsRow
       as="li"
-      detail={`${percent}% available${reserved ? ` · ${reserved}` : ''} · Refills ${reset ?? '7 days after first use'}`}
+      detail={`${percent}% available${reserved ? ` · ${reserved}` : ''} · Refills ${reset ?? 'one month after first use'}`}
       title="Credits"
     >
       <ProgressBar value={percent} />

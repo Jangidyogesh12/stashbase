@@ -20,7 +20,9 @@ function subscriptionDetail(status: BillingStatus): string {
     const plan = status.planName ?? 'Paid plan';
     return status.cancelAtPeriodEnd
       ? `${plan} · Renewal canceled. Access until ${paidDate(status.paidThrough)}`
-      : `${plan} · Paid through ${paidDate(status.paidThrough)}`;
+      : status.status === 'trialing'
+        ? `${plan} · Free trial until ${paidDate(status.paidThrough)}. Then $5 a month.`
+        : `${plan} · Credits until ${paidDate(status.paidThrough)}`;
   }
   return 'Paid credits are not active. Check your payment.';
 }
@@ -108,12 +110,7 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
 
   return (
     <>
-      <SettingsRow
-        as="li"
-        detail="Free · Paid plans add monthly credits."
-        title="Plan"
-        trail={manage}
-      >
+      <SettingsRow as="li" detail="Free · $1 in credits each month." title="Plan" trail={manage}>
         {failure}
         {browserHelp}
       </SettingsRow>
@@ -127,7 +124,7 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
       {billing.plans.map((plan) => (
         <SettingsRow
           as="li"
-          detail={billingPrice(plan)}
+          detail={`${billingPrice(plan)}${plan.monthlyGrantPicodollars == null ? '' : ` · $${plan.monthlyGrantPicodollars / 1e12} in monthly credits`}`}
           key={plan.priceId}
           title={plan.name}
           titleTone={plan.available ? 'default' : 'muted'}
@@ -145,7 +142,14 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
                   : 'Coming soon'}
             </Button>
           }
-        />
+        >
+          {plan.planKey === 'plus' && (
+            <p className="text-caption text-muted-foreground">
+              First subscription: first month free with a card and automatic renewal. Then{' '}
+              {billingPrice(plan)}. Cancel anytime.
+            </p>
+          )}
+        </SettingsRow>
       ))}
     </>
   );

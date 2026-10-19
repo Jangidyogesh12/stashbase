@@ -232,7 +232,7 @@ reader to current credits rather than claiming all credits are spent.
 ## Default Agent Subscriptions
 
 A window that is signed out shows a banner in the notice strip, with or
-without a folder open: "Sign in for free Agent credits every week." with Sign in
+without a folder open: "Sign in for free Agent credits every month." with Sign in
 and Not now. It states what signing in gives, neither a commitment to use the
 Default Agent nor the allowance's terms, which Settings → Agents shows. A completed sign-in or Not now answers it for
 the installation until the next sign-out, which brings it back: signed out, the
@@ -272,9 +272,13 @@ path for a browser-signed-in account.
 
 Stripe owns prices, promotion codes, and payment management. The hosted API owns
 subscription rights and usage. A discounted subscription receives its full tier
-allowance. Paid credits follow the successfully paid monthly billing period.
+allowance. The first-ever Plus subscription receives its first month free with a
+card and automatic renewal through a native Stripe trial, then renews at $5/month. Stripe sends a reminder seven days before the trial ends, with a cancellation link; the operator enables and verifies this Dashboard setting. It includes the full $5
+allowance and cannot combine with other promotions. Previous subscriptions or
+trials make an account ineligible; abandoned Checkout does not. Canceling renewal
+preserves access until the current month ends. Subscription credits follow the confirmed trial period and then each successfully paid monthly billing period.
 A tier change preserves consumption within that period; an upgrade raises the
-current ceiling. Free credits keep their separate seven-day window. Paid-tier changes use Stripe
+current ceiling. Free credits provide $1 in a separate calendar-month window anchored by first hosted use, with month-end clamping and no rollover. Paid allowances replace the free ceiling: Plus costs $5/month with $5 in credits; Pro costs $20/month with $20 in credits. Paid-tier changes use Stripe
 prorations. Cancellation retains access until paid-through, then returns to Free.
 A browser success redirect is not evidence of payment; pending confirmation stays
 visible until the API confirms rights. Failed billing does not discard local work.
