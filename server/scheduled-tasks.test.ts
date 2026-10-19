@@ -11,6 +11,19 @@ import {
   withTask,
   withoutTask,
 } from './scheduled-tasks.ts';
+import { dueOccurrence, missedRuns, nextRun } from '../shared/scheduled-task-timing.ts';
+
+// Local wall-clock instants, so the rules read the same in every time zone.
+const local = (day: number, hours: number, minutes = 0) => new Date(2026, 9, day, hours, minutes);
+const timing = (overrides: Partial<Parameters<typeof missedRuns>[0]> = {}) => ({
+  enabled: true,
+  enabledAt: local(10, 12).toISOString(),
+  lastDispatchedAt: null,
+  lastOccurrence: null,
+  problem: null,
+  time: '08:00',
+  ...overrides,
+});
 
 test('a task file is read leniently: each bad task says why it cannot run, the rest still run', () => {
   const parsed = parseScheduleFile(JSON.stringify({
@@ -93,23 +106,25 @@ function memoryStore(start = '2026-10-16T09:00:00.000Z') {
 }
 
 test('one occurrence is claimed at most once, and never one from before the switch was turned on', () => {
-  const { store, advance } = memoryStore();
+  // Local times: the task's 08:00 is local, so a UTC fixture would make the
+  // 16th a missed day in zones west of UTC.
+  const { store, advance } = memoryStore(local(16, 9).toISOString());
   const root = '/projects/brief';
-  const claim = (occurrence: string) => store.claim(root, 'brief', { occurrence, trigger: 'schedule' });
+  const claim = (occurrence: Date) => store.claim(root, 'brief', { occurrence: occurrence.toISOString(), time: '08:00', trigger: 'schedule' });
 
-  assert.deepEqual(claim('2026-10-16T08:00:00.000Z'), { ok: false, refusal: 'disabled' });
+  assert.deepEqual(claim(local(16, 8)), { ok: false, refusal: 'disabled' });
   store.setEnabled(root, 'brief', true);
-  assert.equal(store.states(root)('brief').enabledAt, '2026-10-16T09:00:00.000Z');
-  assert.deepEqual(claim('2026-10-16T08:00:00.000Z'), { ok: false, refusal: 'not-due' });
+  assert.equal(store.states(root)('brief').enabledAt, local(16, 9).toISOString());
+  assert.deepEqual(claim(local(16, 8)), { ok: false, refusal: 'not-due' });
 
-  const first = claim('2026-10-17T08:00:00.000Z');
+  const first = claim(local(17, 8));
   assert.deepEqual(first, { ok: true, runId: 'run-1' });
-  assert.deepEqual(claim('2026-10-17T08:00:00.000Z'), { ok: false, refusal: 'running' });
+  assert.deepEqual(claim(local(17, 8)), { ok: false, refusal: 'running' });
   assert.equal(store.finish(root, 'brief', 'run-1', { agent: 'claude', reason: null, sessionId: 'native-1', status: 'sent', title: 'Brief · Oct 17' }), true);
-  assert.deepEqual(claim('2026-10-17T08:00:00.000Z'), { ok: false, refusal: 'already-claimed' });
+  assert.deepEqual(claim(local(17, 8)), { ok: false, refusal: 'already-claimed' });
 
   const state = store.states(root)('brief');
-  assert.equal(state.lastOccurrence, '2026-10-17T08:00:00.000Z');
+  assert.equal(state.lastOccurrence, local(17, 8).toISOString());
   assert.equal(state.runs[0]?.status, 'sent');
   assert.equal(state.runs[0]?.sessionId, 'native-1');
 
@@ -118,12 +133,123 @@ test('one occurrence is claimed at most once, and never one from before the swit
   advance(60_000);
   assert.deepEqual(store.claim(root, 'brief', { trigger: 'manual' }), { ok: true, runId: 'run-2' });
   assert.equal(store.finish(root, 'brief', 'run-1', { agent: null, reason: 'late', sessionId: null, status: 'failed', title: null }), false);
-  assert.equal(store.states(root)('brief').lastOccurrence, '2026-10-17T08:00:00.000Z');
+  assert.equal(store.states(root)('brief').lastOccurrence, local(17, 8).toISOString());
   // Switching off and on again starts the schedule from the new moment.
   store.setEnabled(root, 'brief', false);
   advance(60_000);
   store.setEnabled(root, 'brief', true);
-  assert.equal(store.states(root)('brief').enabledAt, '2026-10-16T09:02:00.000Z');
+  assert.equal(store.states(root)('brief').enabledAt, local(16, 9, 2).toISOString());
+});
+
+test('a missed run is listed as missed and never run late', () => {
+  // Ran on the 14th, closed all of the 15th, opened at 07:00 on the 16th:
+  // nothing runs now, the 15th is missed, and the 16th runs at its time.
+  const task = timing({ lastDispatchedAt: local(14, 8).toISOString(), lastOccurrence: local(14, 8).toISOString() });
+  assert.equal(dueOccurrence(task, local(16, 7)), null);
+  assert.equal(nextRun(task, local(16, 7))?.getTime(), local(16, 8).getTime());
+  assert.deepEqual(missedRuns(task, local(16, 7)), { count: 1, first: local(15, 8), last: local(15, 8) });
+  // Today's run starts within five minutes of its time, such as on launch or
+  // waking from sleep, and is not missed while it still can.
+  assert.equal(dueOccurrence(task, local(16, 8, 5))?.getTime(), local(16, 8).getTime());
+  assert.equal(missedRuns(task, local(16, 8, 5))?.count, 1);
+  // Past that it does not run late: it is missed, and the next run is tomorrow's.
+  assert.equal(dueOccurrence(task, local(16, 8, 6)), null);
+  assert.equal(nextRun(task, local(16, 8, 6))?.getTime(), local(17, 8).getTime());
+  assert.deepEqual(missedRuns(task, local(16, 8, 6)), { count: 2, first: local(15, 8), last: local(16, 8) });
+
+  // Never run: every day from the first time after the switch went on.
+  assert.deepEqual(missedRuns(timing(), local(16, 7)), { count: 5, first: local(11, 8), last: local(15, 8) });
+  assert.equal(missedRuns(timing({ enabledAt: local(10, 7).toISOString() }), local(16, 7))?.count, 6);
+  // Switched on after today's time: today is not missed.
+  assert.equal(missedRuns(timing({ enabledAt: local(16, 9).toISOString() }), local(16, 23)), null);
+  // A day that had a run is never missed, even after the time changed.
+  assert.equal(missedRuns(timing({ lastOccurrence: local(15, 9).toISOString(), time: '17:00' }), local(16, 10)), null);
+  assert.equal(missedRuns(timing({ lastOccurrence: local(16, 8).toISOString() }), local(16, 9)), null);
+  // Days are counted on the calendar, so a 25-hour clock-change day is one.
+  assert.equal(missedRuns(timing({ lastOccurrence: local(24, 8).toISOString() }), local(27, 7))?.count, 2);
+  assert.equal(missedRuns(timing({ enabled: false }), local(16, 7)), null);
+  assert.equal(missedRuns(timing({ problem: 'Set a time like 08:00.' }), local(16, 7)), null);
+});
+
+test('a scheduled run keeps the days it missed in history as one entry', () => {
+  const { store } = memoryStore(local(10, 12).toISOString());
+  const root = '/projects/brief';
+  const sent = { agent: 'claude' as const, reason: null, sessionId: 'native', status: 'sent' as const, title: 'Brief' };
+  const claim = (day: number) => store.claim(root, 'brief', { occurrence: local(day, 8).toISOString(), time: '08:00', trigger: 'schedule' });
+  store.setEnabled(root, 'brief', true);
+
+  assert.deepEqual(claim(11), { ok: true, runId: 'run-1' });
+  store.finish(root, 'brief', 'run-1', sent);
+  // Closed from the 12th through the 14th.
+  assert.deepEqual(claim(15), { ok: true, runId: 'run-3' });
+  let runs = store.states(root)('brief').runs;
+  assert.deepEqual(runs.map((run) => [run.status, run.missedCount]), [['running', null], ['missed', 3], ['sent', null]]);
+  assert.equal(runs[1]?.startedAt, local(12, 8).toISOString());
+  assert.equal(runs[1]?.occurrence, local(14, 8).toISOString());
+
+  // The next day's run follows with nothing missed between them.
+  store.finish(root, 'brief', 'run-3', sent);
+  assert.deepEqual(claim(16), { ok: true, runId: 'run-4' });
+  runs = store.states(root)('brief').runs;
+  assert.deepEqual(runs.map((run) => run.status), ['running', 'sent', 'missed', 'sent']);
+});
+
+test('a missed entry is recorded in its place in time, below a Run now made after it', () => {
+  const { store, advance } = memoryStore(local(10, 12).toISOString());
+  const root = '/projects/brief';
+  const sent = { agent: 'claude' as const, reason: null, sessionId: 'native', status: 'sent' as const, title: 'Brief' };
+  store.setEnabled(root, 'brief', true);
+  advance(local(11, 8).getTime() - local(10, 12).getTime());
+  assert.equal(store.claim(root, 'brief', { occurrence: local(11, 8).toISOString(), time: '08:00', trigger: 'schedule' }).ok, true);
+  store.finish(root, 'brief', 'run-1', sent);
+  // Closed on the 12th; Run now at 06:50 on the 13th, then that day's 08:00.
+  advance(local(13, 6, 50).getTime() - local(11, 8).getTime());
+  assert.deepEqual(store.claim(root, 'brief', { trigger: 'manual' }), { ok: true, runId: 'run-2' });
+  store.finish(root, 'brief', 'run-2', sent);
+  advance(local(13, 8).getTime() - local(13, 6, 50).getTime());
+  assert.equal(store.claim(root, 'brief', { occurrence: local(13, 8).toISOString(), time: '08:00', trigger: 'schedule' }).ok, true);
+
+  const runs = store.states(root)('brief').runs;
+  assert.deepEqual(runs.map((run) => [run.status, run.trigger]), [
+    ['running', 'schedule'],
+    ['sent', 'manual'],
+    ['missed', 'schedule'],
+    ['sent', 'schedule'],
+  ]);
+});
+
+test('a spring-forward day records the missed days the list showed, at the task\'s own time', () => {
+  // 02:30 does not exist in New York on 2026-03-08; Date moves it to 03:30.
+  // The zone is set here, so the clock change happens on every host.
+  const zone = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const at = (month: number, day: number, hours: number, minutes = 0) => new Date(2026, month - 1, day, hours, minutes);
+    // Switched on at 03:00 on the 6th, after that day's 02:30; closed until 03:32 on the 8th.
+    const { store } = memoryStore(at(3, 6, 3).toISOString());
+    const root = '/projects/brief';
+    store.setEnabled(root, 'brief', true);
+    const task = timing({ enabledAt: at(3, 6, 3).toISOString(), time: '02:30' });
+    const now = at(3, 8, 3, 32);
+    const due = dueOccurrence(task, now);
+    assert.ok(due);
+    assert.equal(due.getHours(), 3);
+
+    // What the list shows before today's run starts.
+    const pending = missedRuns(task, now);
+    assert.deepEqual(pending, { count: 1, first: at(3, 7, 2, 30), last: at(3, 7, 2, 30) });
+
+    // What the server records when it claims today's moved run.
+    assert.equal(store.claim(root, 'brief', { occurrence: due.toISOString(), time: task.time, trigger: 'schedule' }).ok, true);
+    const recorded = store.states(root)('brief').runs.find((run) => run.status === 'missed');
+    assert.deepEqual(
+      [recorded?.missedCount, recorded?.startedAt, recorded?.occurrence],
+      [pending.count, pending.first.toISOString(), pending.last.toISOString()],
+    );
+  } finally {
+    if (zone === undefined) delete process.env.TZ;
+    else process.env.TZ = zone;
+  }
 });
 
 test('a sent run takes its first turn\'s outcome once, and history keeps the newest runs', () => {
@@ -142,12 +268,20 @@ test('a sent run takes its first turn\'s outcome once, and history keeps the new
   assert.equal(runs[0]?.title, 'Brief 31');
 
   const newest = runs[0]?.runId ?? '';
-  assert.equal(store.settle(root, 'brief', newest, { reason: 'Rate limited.', status: 'failed' }), true);
+  assert.equal(runs[0]?.summary, null);
+  assert.equal(store.settle(root, 'brief', newest, { reason: 'Rate limited.', status: 'failed', summary: null }), true);
   // Only a sent run takes an outcome: a second report changes nothing.
-  assert.equal(store.settle(root, 'brief', newest, { reason: null, status: 'completed' }), false);
-  assert.equal(store.settle(root, 'brief', runs[1]?.runId ?? '', { reason: null, status: 'completed' }), true);
+  assert.equal(store.settle(root, 'brief', newest, { reason: null, status: 'completed', summary: 'Late.' }), false);
+  assert.equal(store.settle(root, 'brief', runs[1]?.runId ?? '', {
+    reason: null,
+    status: 'completed',
+    summary: `I couldn't save the brief. ${'x'.repeat(400)}`,
+  }), true);
   const after = store.states(root)('brief').runs;
-  assert.deepEqual([after[0]?.status, after[0]?.reason, after[1]?.status], ['failed', 'Rate limited.', 'completed']);
+  assert.deepEqual([after[0]?.status, after[0]?.reason, after[0]?.summary, after[1]?.status], ['failed', 'Rate limited.', null, 'completed']);
+  // The reply's start is kept within the list's bound.
+  assert.match(after[1]?.summary ?? '', /^I couldn't save the brief\. x+$/);
+  assert.equal(after[1]?.summary?.length, 300);
 });
 
 test('a run left running by an earlier process reads as failed and does not block the next one', () => {
@@ -183,7 +317,10 @@ test('the routes read, save, switch, claim and finish one registered project, an
       const config = await import('./server/app-config.ts');
       const { mount } = await import('./server/routes/scheduled-tasks.ts');
       const { removeRecentAsync } = await import('./server/folder.ts');
+      const { filesystemPath } = await import('./server/filesystem-path.ts');
       const project = path.join(os.homedir(), 'project');
+      // The routes answer with the server's own spelling (C:/... on Windows).
+      const root = filesystemPath.absolute(project);
       fs.mkdirSync(project, { recursive: true });
       config.writeAppConfigStrict({ recentFolders: [{ path: project, openedAt: new Date().toISOString() }] });
       const app = express(); app.use(express.json()); mount(app);
@@ -194,7 +331,7 @@ test('the routes read, save, switch, claim and finish one registered project, an
       const read = async () => (await fetch(base + '?folder=' + encodeURIComponent(project))).json();
 
       let schedule = await read();
-      assert.deepEqual(schedule, { folderPath: project, problem: null, tasks: [], version: null });
+      assert.deepEqual(schedule, { folderPath: root, problem: null, tasks: [], version: null });
       assert.equal((await fetch(base + '?folder=/unregistered')).status, 404);
 
       const draft = { agent: 'claude', files: ['brief.md'], name: 'Daily brief', prompt: '', time: '08:00' };
@@ -230,7 +367,7 @@ test('the routes read, save, switch, claim and finish one registered project, an
       response = await send('/enabled', 'PUT', { enabled: true, folderPath: project, taskId: 'daily-brief' });
       assert.equal((await response.json()).tasks[0].enabled, true);
       const listed = await (await fetch(base + '/projects')).json();
-      assert.deepEqual(listed.projects.map(entry => entry.folderPath), [project]);
+      assert.deepEqual(listed.projects.map(entry => entry.folderPath), [root]);
 
       const claim = { folderPath: project, occurrence: new Date(Date.now() - 86_400_000).toISOString(), taskId: 'daily-brief', trigger: 'schedule' };
       assert.equal((await send('/runs', 'POST', claim)).status, 409);
@@ -242,9 +379,12 @@ test('the routes read, save, switch, claim and finish one registered project, an
       response = await send('/runs', 'PUT', { agent: 'claude', folderPath: project, reason: null, runId: claimed.runId, sessionId: 'native-1', status: 'sent', taskId: 'daily-brief', title: 'Brief · Oct 16' });
       assert.deepEqual(await response.json(), { recorded: true });
       assert.equal((await read()).tasks[0].runs[0].sessionId, 'native-1');
-      response = await send('/runs/settled', 'PUT', { folderPath: project, reason: null, runId: claimed.runId, status: 'completed', taskId: 'daily-brief' });
+      response = await send('/runs/settled', 'PUT', { folderPath: project, reason: null, runId: claimed.runId, status: 'completed', summary: 'Saved briefs/oct-16.md.', taskId: 'daily-brief' });
       assert.deepEqual(await response.json(), { recorded: true });
       assert.equal((await read()).tasks[0].runs[0].status, 'completed');
+      assert.equal((await read()).tasks[0].runs[0].summary, 'Saved briefs/oct-16.md.');
+      // The excerpt has a bound the list relies on.
+      assert.equal((await send('/runs/settled', 'PUT', { folderPath: project, reason: null, runId: claimed.runId, status: 'completed', summary: 'x'.repeat(301), taskId: 'daily-brief' })).status, 400);
       assert.equal((await send('/runs', 'POST', { ...claim, taskId: 'missing' })).status, 409);
 
       // Deleting a task forgets its switch, so a new task that takes its id

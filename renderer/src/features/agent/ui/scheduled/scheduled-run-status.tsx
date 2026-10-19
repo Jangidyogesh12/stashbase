@@ -1,7 +1,9 @@
-/** One run's line: what became of it, when, why it was late or failed, and a
- *  way into the chat it started. Ink and grey throughout; red marks only a
- *  run that did not run or did not finish, the one thing to act on. */
+/** One run's line: what became of it, when, why it failed or was missed, the
+ *  start of the Agent's last reply, and a way into the chat it started. Ink
+ *  and grey throughout; red marks only a run that did not run or did not
+ *  finish, the one thing to act on. */
 import {
+  CalendarX2,
   CircleAlert,
   CircleCheck,
   CircleDashed,
@@ -11,9 +13,8 @@ import {
 } from 'lucide-react';
 
 import {
-  lateNote,
   runStatus,
-  runTimeLabel,
+  runWhenLabel,
   type RunTone,
 } from '@/features/agent/domain/scheduled-task-status';
 import type { ScheduledTaskRun } from '@/features/agent/domain/scheduled-tasks';
@@ -24,6 +25,7 @@ import { cn } from '@/lib/utils';
 const TONE_ICONS: Readonly<Record<RunTone, LucideIcon>> = {
   done: CircleCheck,
   failed: CircleX,
+  missed: CalendarX2,
   progress: LoaderCircle,
   quiet: CircleDashed,
   waiting: CircleAlert,
@@ -44,7 +46,6 @@ export function ScheduledRunStatus({
 }) {
   const status = runStatus(run, live);
   const Icon = TONE_ICONS[status.tone];
-  const late = lateNote(run);
   const failed = status.tone === 'failed';
   return (
     <div className="flex min-w-0 items-start gap-2 text-caption">
@@ -64,7 +65,7 @@ export function ScheduledRunStatus({
             {status.label}
           </span>
           {name && <span className="text-foreground">{name}</span>}
-          <span>{runTimeLabel(run.startedAt)}</span>
+          <span>{runWhenLabel(run)}</span>
           {run.trigger === 'manual' && <span>via Run now</span>}
           {run.sessionId && (
             <button
@@ -79,8 +80,13 @@ export function ScheduledRunStatus({
             </button>
           )}
         </p>
-        {late && <p className="m-0 text-muted-foreground">{late}</p>}
         {run.reason && <p className="m-0 text-muted-foreground">{run.reason}</p>}
+        {status.note && <p className="m-0 text-muted-foreground">{status.note}</p>}
+        {run.summary && run.summary !== run.reason && (
+          <blockquote className="m-0 mt-0.5 border-l-2 border-border pl-2 text-muted-foreground">
+            {run.summary}
+          </blockquote>
+        )}
       </div>
     </div>
   );
