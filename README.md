@@ -7,19 +7,20 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-support%20%26%20chat-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/zsRZH4PTq9)
 
-StashBase is an open-source, local-first writing workspace. Open a folder of
-notes and sources, then brainstorm, draft, and revise with Claude, Codex, or
-Antigravity on your own subscription. Your documents stay ordinary files on
-your computer.
+StashBase is an open-source, local knowledge base for writing with AI agents.
+Keep notes, PDFs, Word documents, and scans in a folder on your computer.
+Claude, Codex, or Antigravity works inside that folder, side by side with you
+on your docs, and keeps your knowledge base up to date as it grows.
 
-- 🔎 **Your files become context.** PDFs (scanned ones too), Word documents,
-  images, saved web pages, and Markdown become searchable text on your
-  computer. Replies can link to the exact passage.
+- 📝 **Work on the same docs.** Your docs stay open beside the chat. When your
+  agent edits one, **Review** shows each change inside the prose, so you can
+  undo or keep it.
+- 🗂️ **Your notes, kept up to date.** Ask your agent to file new material,
+  update your notes, and link them back to their sources. It reads PDFs, Word
+  documents, and scans too, with the text extracted on your computer.
 - 💬 **Bring the agent you already use.** Claude, Codex, and Antigravity run on
   your existing accounts, and StashBase charges nothing for them. Pick a persona
   or write your own to set the voice.
-- 📝 **See what your agent changed.** It edits your files directly. Choose
-  **Review** to see each change inside the prose, then undo or keep it.
 
 ## Product Preview
 
@@ -31,7 +32,7 @@ https://github.com/user-attachments/assets/4ba282a3-85d2-4a08-b7af-562a1e71e716
 platforms. Linux x86_64 Debian 12+ / Ubuntu 22.04+ is community-supported.
 On Intel Macs, local search and PDF/image text extraction require macOS 15+;
 older supported systems can still open projects and edit files. Agent runtime
-requirements may vary. Intel installers are available starting with v2.9.5.
+requirements may vary.
 
 On macOS, install with Homebrew:
 
@@ -56,10 +57,10 @@ troubleshooting.
 1. **Enter a project.** Open or create a local folder.
 2. **Choose an agent.** Select Claude, Codex, or Antigravity and complete its
    setup with your provider account. If you can't use any of them, the built-in
-   **Default Agent** is available as a fallback. Sign in to StashBase to use
-   its free credits.
-3. **Talk it through.** Try: “I want to write a blog post about Humanizer.
-   Interview me to understand what I think about it before drafting.”
+   **Default Agent** is available as a fallback. Sign in to StashBase for its
+   free monthly credits; [Plus and Pro](https://stashbase.ai/pricing/) add more.
+3. **Talk it through.** Try: “I want to write a LinkedIn post about what I
+   shipped this week. Interview me before drafting.”
 4. **Draft and revise.** Ask your agent to draft the article, then review and
    refine it.
 
@@ -84,12 +85,13 @@ actually did and tailors it to each job.
 
 Your documents stay in local project folders. Removing a project from StashBase
 doesn't delete its files. Browsing, editing, previews, and keyword search work
-without an account. PDF text extraction and OCR run locally, with required
+without an account. PDF and Word text extraction and OCR run locally, with required
 components downloaded on first use.
 
 Agent conversations send your prompts and relevant context to model services.
 Claude, Codex, and Antigravity use your provider accounts; the Default Agent connects
-through StashBase's hosted model gateway.
+through StashBase's hosted model gateway, which sends requests through OpenRouter
+to Claude Haiku 5.5 by default.
 
 **Search by meaning** requires your own OpenAI or OpenRouter key in
 **Settings → Advanced → Search by meaning**. It sends source text and search
@@ -141,9 +143,9 @@ implementation, review, and evidence. The
 Small focused PRs are preferred. Open an issue before larger changes so scope
 and direction can be discussed first.
 
-- [Contributing guide](CONTRIBUTING.md) — development and validation.
-- [Product design](design-docs/README.md) — intent, workflows, and contribution areas.
-- [Engineering contracts](code-review/README.md) — ownership, invariants, and review.
+- [Contributing guide](CONTRIBUTING.md): development and validation.
+- [Product design](design-docs/README.md): intent, workflows, and contribution areas.
+- [Engineering contracts](code-review/README.md): ownership, invariants, and review.
 
 ## Feedback
 
@@ -153,7 +155,7 @@ and direction can be discussed first.
 ## About
 
 StashBase is an independent open-source project built by
-[Li Liu](https://www.linkedin.com/in/cmuliliu/) and
-[Bing Wu](https://www.linkedin.com/in/bingwu-cmu/).
+[Bing Wu](https://www.linkedin.com/in/bingwu-cmu/) and
+[Li Liu](https://www.linkedin.com/in/cmuliliu/).
 
 Licensed under [Apache 2.0](LICENSE).
