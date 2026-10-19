@@ -228,13 +228,14 @@ export function createScheduledTaskScheduler<W>({
   }
 
   const scheduler = {
-    /** Starts the clock: a first check shortly after launch, which is when a
-     *  run missed while the app was closed catches up, then one a minute. */
+    /** Starts the clock: a first check shortly after launch, so a run whose
+     *  time just passed still starts on time, then one a minute. */
     start() {
       schedule(startDelayMs);
     },
     /** Checks for due tasks now, sharing a check already in flight. Waking
-     *  from sleep calls this, so a missed run catches up without waiting. */
+     *  from sleep calls this, so a run whose time just passed starts without
+     *  waiting for the next minute. */
     check(): Promise<void> {
       if (disposed) return Promise.resolve();
       checking ??= checkDue().finally(() => { checking = null; });

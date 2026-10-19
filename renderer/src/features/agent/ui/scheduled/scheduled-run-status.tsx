@@ -1,4 +1,4 @@
-/** One run's line: what became of it, when, why it was late or failed, the
+/** One run's line: what became of it, when, why it failed or was missed, the
  *  start of the Agent's last reply, and a way into the chat it started. Ink
  *  and grey throughout; red marks only a run that did not run or did not
  *  finish, the one thing to act on. */
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 
 import {
-  lateNote,
   runStatus,
   runWhenLabel,
   type RunTone,
@@ -47,7 +46,6 @@ export function ScheduledRunStatus({
 }) {
   const status = runStatus(run, live);
   const Icon = TONE_ICONS[status.tone];
-  const late = lateNote(run);
   const failed = status.tone === 'failed';
   return (
     <div className="flex min-w-0 items-start gap-2 text-caption">
@@ -82,7 +80,6 @@ export function ScheduledRunStatus({
             </button>
           )}
         </p>
-        {late && <p className="m-0 text-muted-foreground">{late}</p>}
         {run.reason && <p className="m-0 text-muted-foreground">{run.reason}</p>}
         {status.note && <p className="m-0 text-muted-foreground">{status.note}</p>}
         {run.summary && run.summary !== run.reason && (

@@ -53,7 +53,7 @@ function adapter(body: unknown = schedule) {
 afterEach(() => vi.useRealTimers());
 
 describe('scheduled tasks adapter', () => {
-  it('lists days missed since the last run before today’s run records them', async () => {
+  it('lists days missed since the last run before the next run records them', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(local(16, 7));
     const [task] = (await adapter().api.read('/project/Brief', signal())).tasks;
@@ -67,6 +67,17 @@ describe('scheduled tasks adapter', () => {
       occurrence: local(15, 8).getTime(),
       sessionId: null,
       startedAt: local(15, 8).getTime(),
+    });
+
+    // Asleep through today's 08:00: it is missed too, not run late.
+    vi.setSystemTime(local(16, 9));
+    const [later] = (await adapter().api.read('/project/Brief', signal())).tasks;
+    expect(later?.nextRunAt).toBe(local(17, 8).getTime());
+    expect(later?.runs[0]).toMatchObject({
+      missedCount: 2,
+      occurrence: local(16, 8).getTime(),
+      startedAt: local(15, 8).getTime(),
+      status: 'missed',
     });
   });
 

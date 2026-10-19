@@ -159,8 +159,8 @@ export function ScheduledTasksView({
               <div className="flex items-start gap-4">
                 <p className="m-0 min-w-0 flex-1 text-caption text-muted-foreground">
                   Each task starts a new chat in this project at its time, every day. Tasks run only
-                  while StashBase is open; a run missed while it was closed starts when you come
-                  back that day, and is listed as missed after that.
+                  while StashBase is open; a run missed while it was closed or asleep is listed as
+                  missed and does not run later.
                 </p>
                 <Button
                   disabled={!schedule || schedule.problem !== null}

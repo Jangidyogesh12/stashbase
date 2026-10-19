@@ -80,7 +80,7 @@ const busy: ProjectSchedule = {
           title: 'Daily brief · Oct 16',
         }),
         run({
-          occurrence: Date.now() - 30 * HOUR,
+          occurrence: Date.now() - 26 * HOUR,
           runId: 'run-1',
           sessionId: 'native-6',
           startedAt: Date.now() - 26 * HOUR,
@@ -208,10 +208,10 @@ describe('ScheduledTasksView', () => {
     );
   });
 
-  it('lists every run, says why a late one was late, and reads a held chat live', async () => {
+  it('lists every run with the start of its reply, and reads a held chat live', async () => {
     const { runtime } = setup();
     const history = await screen.findByRole('list', { name: 'Run history' });
-    await within(history).findByText(/StashBase was closed or asleep then\./u);
+    await within(history).findByText('Saved briefs/oct-15.md with three open threads.');
     const lines = within(history).getAllByRole('listitem');
     expect(lines.map((line) => line.textContent)).toEqual([
       expect.stringContaining('Daily brief'),
@@ -221,7 +221,6 @@ describe('ScheduledTasksView', () => {
     expect(
       within(history).getByText('Saved briefs/oct-15.md with three open threads.').tagName,
     ).toBe('BLOCKQUOTE');
-    expect(within(history).getByText(/StashBase was closed or asleep then\./u)).not.toBeNull();
 
     // The window holds the sent run's chat, which is waiting for approval.
     runtime.store.setState((state) => {

@@ -39,16 +39,17 @@ test('a daily task is due once its time has passed, once per day', () => {
   assert.equal(dueOccurrence(ranToday, at(17, 8))?.getTime(), at(17, 8).getTime());
 });
 
-test('a run missed today catches up once; an earlier day\'s does not run late', () => {
+test('a missed run never runs late; one a few minutes past its time still starts', () => {
   // Closed all of the 15th: launching at 07:00 on the 16th runs nothing,
   // and the 08:00 run that day happens at its time.
   const missed = task({ lastDispatchedAt: iso(at(14, 8)), lastOccurrence: iso(at(14, 8)) });
   assert.equal(dueOccurrence(missed, at(16, 7)), null);
   assert.equal(dueOccurrence(missed, at(16, 8))?.getTime(), at(16, 8).getTime());
-  // Asleep through 08:00 on the 16th: waking at 13:00 runs it once.
-  assert.equal(dueOccurrence(missed, at(16, 13))?.getTime(), at(16, 8).getTime());
-  const caughtUp = { ...missed, lastDispatchedAt: iso(at(16, 13)), lastOccurrence: iso(at(16, 8)) };
-  assert.equal(dueOccurrence(caughtUp, at(16, 23)), null);
+  // Waking or launching within five minutes of 08:00 still runs it.
+  assert.equal(dueOccurrence(missed, at(16, 8, 5))?.getTime(), at(16, 8).getTime());
+  // Asleep through 08:00: waking at 08:06 or at 13:00 runs nothing that day.
+  assert.equal(dueOccurrence(missed, at(16, 8, 6)), null);
+  assert.equal(dueOccurrence(missed, at(16, 13)), null);
 
   // Switched on at 15:00: 08:00 that day is not a missed run.
   assert.equal(dueOccurrence(task({ enabledAt: iso(at(16, 15)) }), at(16, 16)), null);
@@ -60,7 +61,7 @@ test('a run is titled with its task and its day', () => {
   assert.equal(runTitle(' Daily brief ', at(16, 8)), 'Daily brief · Oct 16');
 });
 
-function harness({ claim, dispatch, projects = [{ folderPath: '/p', tasks: [task()] }], now = at(16, 9) } = {}) {
+function harness({ claim, dispatch, projects = [{ folderPath: '/p', tasks: [task()] }], now = at(16, 8, 1) } = {}) {
   const calls = [];
   const scheduler = createScheduledTaskScheduler({
     server: {

@@ -95,7 +95,8 @@ function toRun(run: ScheduledTaskRunWire): ScheduledTaskRun {
 }
 
 /** Days missed since the last run, by the rule the server records them
- *  with when today's run starts; until then the list shows them from here. */
+ *  with when the next scheduled run starts; until then the list shows them
+ *  from here. */
 function pendingMissed(wire: ScheduledTaskWire, now: Date): ScheduledTaskRun | null {
   const missed = missedRuns(wire, now);
   if (!missed) return null;

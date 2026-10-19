@@ -2044,16 +2044,18 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
 - **Contract Test:** `server/scheduled-tasks.test.ts` covers lenient parsing,
   single-task edits that keep unknown fields, version conflicts, unreadable files left
   untouched, at-most-once claims, enabled-time cutoff, bounded run history, forward-only
-  run reports with their bounded reply excerpt, missed days recorded as one entry
-  (including across a clock change), stale running runs, and removal.
-  Electron suites cover the due rule with same-day catch-up, one run per day, Run now, the run
+  run reports with their bounded reply excerpt, missed days recorded as one entry in
+  its place in time (including across a clock change and below a later Run now), the
+  five-minute on-time window with no late runs, stale running runs, and removal.
+  Electron suites cover the due rule with its on-time window, one run per day, Run now, the run
   coordinator's late-subscriber pull and deadlines, preload de-duplication, and the
   no-focus window rule. Renderer suites drive a run through the real session runtime
   over a fake port (sent in the background with its title and file, its first-turn
   outcome and reply excerpt reported, refused for a missing file or an unready Agent),
   the surface that stands in the chat's place, and the list page: next run, latest-run
-  states including a held chat's live approval wait and missed days, the run history
-  with late runs and reply excerpts, the empty list, the in-page form with its Agent
+  states including a held chat's live approval wait and missed days, today's run
+  listed as missed once its window passed, the run history with reply excerpts, the
+  empty list, the in-page form with its Agent
   choices, and the clock on run chats in the chat list.
 - **Driven Runtime Pass:** 2026-10-16, built app under an isolated HOME and port: a
   due task was claimed about 20 seconds after launch, its project window opened hidden
@@ -2069,8 +2071,9 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
   Default Agent: a task due at 17:47 was claimed at 17:47:44, sent its chat without
   taking the visible chat, and settled as finished with its title. With the task's
   record set to a last run on Oct 13, launching at 20:19 recorded "Missed 2 runs"
-  (Oct 14 – Oct 15) before claiming that day's run, which wrote its brief file and
-  showed "Finished" with the late note and the reply excerpt. A Claude task with no
+  (Oct 14 – Oct 15) when that day's run was claimed, which wrote its brief file and
+  showed "Finished" with the reply excerpt. That build still started a run due
+  earlier the same day; the current rule lists it as missed instead. A Claude task with no
   sign-in failed as "Did not run" with the sign-in reason. The Chats list marked both
   run chats with the clock and not the reader's own chat. A Codex task ran on time
   and settled with its excerpt. With only Welcome open and Notepad focused, a due
@@ -2080,12 +2083,22 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
   partial chat. A copied project listed every task off with no history. An approval
   wait could not be produced: in Ask mode the runtimes reported their write tool and
   shell as unavailable, and the runs finished with that reply as their excerpt.
+- **Driven Runtime Pass (no late runs):** 2026-10-19, built app on macOS under an
+  isolated HOME and port. A task due two minutes before launch, last run three days
+  earlier, was claimed 23 seconds after launch in a hidden project window, failed with
+  the readiness reason (no agent set up in that HOME), and recorded "Missed 2 runs"
+  (Oct 17 – Oct 18) below it. A task due 30 minutes before launch was never claimed
+  within 95 seconds; the list showed it as missed that day, with the closed-or-asleep
+  note and its next run tomorrow, and the run history listed all three newest first.
 - **AI Eval:** Not applicable; a run's quality is the workflow's and the Agent's.
 - **Release Check:** packaged macOS, Windows, and Linux runs with a signed-in Agent,
-  including sleep/wake catch-up and the hidden-window reveal on each platform.
-- **Gap:** a run's later approval wait, the persisted title on each runtime, a signed-in
-  Claude run, macOS, Linux, and packaged builds are unproven in the app. The reply excerpt shows what a finished turn said, not whether
-  its work succeeded.
+  including a run slept through listed as missed, and the hidden-window reveal on
+  each platform.
+- **Gap:** a run's later approval wait, the persisted title on each runtime, a
+  signed-in Claude run, live runs on macOS and Linux, and packaged builds are
+  unproven in the app. Waking
+  from sleep inside the on-time window is covered by tests only. The reply excerpt
+  shows what a finished turn said, not whether its work succeeded.
 
 ## Maintenance Rule
 

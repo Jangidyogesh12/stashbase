@@ -1,13 +1,13 @@
 /**
  * When a daily scheduled task runs, in local time. Electron main decides what
- * is due with these; the task list says when the next run will be with the
- * same rule, so the two can never disagree.
+ * is due with these; the task list says when the next run will be, and which
+ * runs were missed, with the same rule, so the two can never disagree.
  *
- * A task is due once a day at its time. A run missed earlier today while the
- * app was closed or the computer slept starts when it is back; one missed on
- * an earlier day is not run late, because that day's result would be stale,
- * and is listed as missed instead. Never more than one run per task per
- * local day, and never for a time before the task was switched on.
+ * A task is due once a day at its time. A run that cannot start within a few
+ * minutes of its time, because the app was closed or the computer slept, is
+ * not run late: its result would be stale. It is listed as missed, and the
+ * task runs at its next time. Never more than one run per task per local day,
+ * and never for a time before the task was switched on.
  */
 export interface ScheduledTaskTiming {
   readonly enabled: boolean;
@@ -18,6 +18,11 @@ export interface ScheduledTaskTiming {
   /** `HH:MM`, local. */
   readonly time: string;
 }
+
+/** How long after its time a run still starts. It covers main's first check
+ *  after launch, its one-minute checks, and waking from sleep just after the
+ *  time; a run that cannot start within it is missed. */
+export const ON_TIME_WINDOW_MS = 5 * 60_000;
 
 function clock(time: string): { hours: number; minutes: number } | null {
   const match = time.match(/^(\d{2}):(\d{2})$/u);
@@ -48,13 +53,14 @@ function dayNumber(day: Date): number {
 }
 
 /** The occurrence a task should run for now, or null when nothing is due.
- *  Only today's can be due. */
+ *  Only today's can be due, and only within its on-time window. */
 export function dueOccurrence(task: ScheduledTaskTiming, now: Date): Date | null {
   if (!task.enabled || task.problem) return null;
   const at = clock(task.time);
   if (!at) return null;
   const occurrence = occurrenceOn(now, at);
-  if (occurrence.getTime() > now.getTime()) return null;
+  const late = now.getTime() - occurrence.getTime();
+  if (late < 0 || late > ON_TIME_WINDOW_MS) return null;
   if (task.enabledAt && occurrence.getTime() < Date.parse(task.enabledAt)) return null;
   if (task.lastOccurrence && occurrence.getTime() <= Date.parse(task.lastOccurrence)) return null;
   if (task.lastDispatchedAt && sameLocalDay(new Date(task.lastDispatchedAt), now)) return null;
@@ -81,11 +87,11 @@ export interface MissedRuns {
 }
 
 /**
- * The daily runs that came and went before today without starting, because
+ * The daily runs whose on-time window passed without a run starting, because
  * StashBase was closed or asleep: one a day from the day after the last run
- * that started (or from the switch turning on) through yesterday. A day that
- * had a run is never missed, even if the time changed since. Today's own run
- * is never missed; it is still due. Null when there are none.
+ * that started (or from the switch turning on) through today once its window
+ * has passed, or through yesterday before then. A day that had a run is never
+ * missed, even if the time changed since. Null when there are none.
  */
 export function missedRuns(task: ScheduledTaskTiming, now: Date): MissedRuns | null {
   if (!task.enabled || task.problem) return null;
@@ -99,13 +105,14 @@ export function missedRuns(task: ScheduledTaskTiming, now: Date): MissedRuns | n
     starts.push(dayNumber(enabledAt) + (sameDay ? 0 : 1));
   }
   if (starts.length === 0) return null;
-  const today = dayNumber(now);
+  const todayPassed = now.getTime() - occurrenceOn(now, at).getTime() > ON_TIME_WINDOW_MS;
+  const lastDay = dayNumber(now) - (todayPassed ? 0 : 1);
   const firstDay = Math.max(...starts);
-  if (firstDay >= today) return null;
+  if (firstDay > lastDay) return null;
   return {
-    count: today - firstDay,
-    first: occurrenceOn(now, at, firstDay - today),
-    last: occurrenceOn(now, at, -1),
+    count: lastDay - firstDay + 1,
+    first: occurrenceOn(now, at, firstDay - dayNumber(now)),
+    last: occurrenceOn(now, at, lastDay - dayNumber(now)),
   };
 }
 

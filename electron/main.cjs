@@ -1233,7 +1233,8 @@ if (!hasSingleInstanceLock) {
     });
     powerMonitor.on('unlock-screen', () => { void scheduledTaskScheduler?.check(); });
     // Scheduled tasks run only while StashBase is open. The first check, a
-    // moment after launch, catches up a run missed while it was closed.
+    // moment after launch, starts a run whose time passed in the last few
+    // minutes; one missed while the app was closed is listed as missed.
     scheduledTaskScheduler?.start();
     if (initialProtocolLaunch === 'oauth-return') focusOAuthReturn();
     if (initialProtocolLaunch === 'billing-return') focusBillingReturn();

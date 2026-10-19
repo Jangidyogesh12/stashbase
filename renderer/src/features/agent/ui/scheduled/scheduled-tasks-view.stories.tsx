@@ -66,7 +66,7 @@ const BUSY: ProjectSchedule = {
           reason: null,
           runId: 'run-2',
           sessionId: 'native-2',
-          startedAt: at(4, 10, 12),
+          startedAt: at(4, 8, 1),
           status: 'completed',
           summary: null,
           title: 'Daily brief',

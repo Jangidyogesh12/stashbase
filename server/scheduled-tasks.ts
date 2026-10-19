@@ -447,7 +447,7 @@ export function createScheduledTaskStore(io: ScheduledTaskStoreIo) {
     setEnabled(root: string, taskId: string, enabled: boolean): TaskState {
       return mutate(root, taskId, (state) => {
         // Turning a task on starts its schedule from now: an earlier time
-        // today is not a missed run to catch up on.
+        // today is not a missed run.
         if (enabled && state.enabled !== true) state.enabledAt = io.now().toISOString();
         state.enabled = enabled;
         return stateView(state);

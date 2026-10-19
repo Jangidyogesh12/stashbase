@@ -297,11 +297,11 @@ A run is a new chat sent the way the reader sends one: same Agent, model, permis
 mode, approvals, and questions, titled with the task's name and the day. It never takes
 focus or the chat the reader is writing in; a project with no window gets one opened out
 of sight. A task runs at most once a day; a run missed while StashBase was closed or
-asleep starts once if it was due earlier that day, and is listed as missed otherwise.
+asleep is listed as missed and never runs late.
 Copying a template or syncing the folder to another computer never switches a task on.
 The list never leaves the reader guessing: each task says when it runs next, and every
 recent run says when it ran, what became of it, what the Agent last said, and why it
-was late, failed, or missed.
+failed or was missed.
 
 ### Failure and Recovery
 

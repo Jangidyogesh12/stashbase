@@ -1,8 +1,8 @@
 /**
  * How the task list says what a scheduled task did and will do. A reader
  * should never have to guess whether a task ran: every run is listed with
- * what became of it, a late run says why it was late, and a task that is on
- * says when it runs next.
+ * what became of it, a missed run says why, and a task that is on says when
+ * it runs next.
  */
 import type { ScheduledTask, ScheduledTaskRun } from './scheduled-tasks';
 
@@ -14,9 +14,6 @@ export interface RunStatusView {
   readonly note?: string | undefined;
   readonly tone: RunTone;
 }
-
-/** A run that started this long after its time was caught up, not on time. */
-const LATE_AFTER_MS = 5 * 60_000;
 
 /**
  * What became of one run. `live` is the work status of the run's chat when
@@ -72,12 +69,6 @@ export function runWhenLabel(run: ScheduledTaskRun, locale: Intl.LocalesArgument
   const day = (at: number) =>
     new Date(at).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
   return `${day(run.startedAt)} – ${runTimeLabel(run.occurrence, locale)}`;
-}
-
-/** Why a scheduled run started late, or null when it ran on time. */
-export function lateNote(run: ScheduledTaskRun, locale: Intl.LocalesArgument = []): string | null {
-  if (run.occurrence === null || run.startedAt - run.occurrence < LATE_AFTER_MS) return null;
-  return `Due at ${runTimeLabel(run.occurrence, locale)}; StashBase was closed or asleep then.`;
 }
 
 /** When an on task runs next, as the list says it. */

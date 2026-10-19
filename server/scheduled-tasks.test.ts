@@ -141,20 +141,27 @@ test('one occurrence is claimed at most once, and never one from before the swit
   assert.equal(store.states(root)('brief').enabledAt, local(16, 9, 2).toISOString());
 });
 
-test('a run missed on an earlier day is listed as missed and never run late', () => {
+test('a missed run is listed as missed and never run late', () => {
   // Ran on the 14th, closed all of the 15th, opened at 07:00 on the 16th:
   // nothing runs now, the 15th is missed, and the 16th runs at its time.
   const task = timing({ lastDispatchedAt: local(14, 8).toISOString(), lastOccurrence: local(14, 8).toISOString() });
   assert.equal(dueOccurrence(task, local(16, 7)), null);
   assert.equal(nextRun(task, local(16, 7))?.getTime(), local(16, 8).getTime());
   assert.deepEqual(missedRuns(task, local(16, 7)), { count: 1, first: local(15, 8), last: local(15, 8) });
-  // Today's run is due at its time, even late in the day, and is never missed itself.
-  assert.equal(dueOccurrence(task, local(16, 23))?.getTime(), local(16, 8).getTime());
-  assert.equal(missedRuns(task, local(16, 23))?.count, 1);
+  // Today's run starts within five minutes of its time, such as on launch or
+  // waking from sleep, and is not missed while it still can.
+  assert.equal(dueOccurrence(task, local(16, 8, 5))?.getTime(), local(16, 8).getTime());
+  assert.equal(missedRuns(task, local(16, 8, 5))?.count, 1);
+  // Past that it does not run late: it is missed, and the next run is tomorrow's.
+  assert.equal(dueOccurrence(task, local(16, 8, 6)), null);
+  assert.equal(nextRun(task, local(16, 8, 6))?.getTime(), local(17, 8).getTime());
+  assert.deepEqual(missedRuns(task, local(16, 8, 6)), { count: 2, first: local(15, 8), last: local(16, 8) });
 
   // Never run: every day from the first time after the switch went on.
   assert.deepEqual(missedRuns(timing(), local(16, 7)), { count: 5, first: local(11, 8), last: local(15, 8) });
   assert.equal(missedRuns(timing({ enabledAt: local(10, 7).toISOString() }), local(16, 7))?.count, 6);
+  // Switched on after today's time: today is not missed.
+  assert.equal(missedRuns(timing({ enabledAt: local(16, 9).toISOString() }), local(16, 23)), null);
   // A day that had a run is never missed, even after the time changed.
   assert.equal(missedRuns(timing({ lastOccurrence: local(15, 9).toISOString(), time: '17:00' }), local(16, 10)), null);
   assert.equal(missedRuns(timing({ lastOccurrence: local(16, 8).toISOString() }), local(16, 9)), null);
@@ -218,12 +225,12 @@ test('a spring-forward day records the missed days the list showed, at the task\
   process.env.TZ = 'America/New_York';
   try {
     const at = (month: number, day: number, hours: number, minutes = 0) => new Date(2026, month - 1, day, hours, minutes);
-    // Switched on at 03:00 on the 6th, after that day's 02:30; closed until 04:00 on the 8th.
+    // Switched on at 03:00 on the 6th, after that day's 02:30; closed until 03:32 on the 8th.
     const { store } = memoryStore(at(3, 6, 3).toISOString());
     const root = '/projects/brief';
     store.setEnabled(root, 'brief', true);
     const task = timing({ enabledAt: at(3, 6, 3).toISOString(), time: '02:30' });
-    const now = at(3, 8, 4);
+    const now = at(3, 8, 3, 32);
     const due = dueOccurrence(task, now);
     assert.ok(due);
     assert.equal(due.getHours(), 3);
