@@ -8,9 +8,8 @@
 [![Discord](https://img.shields.io/badge/Discord-support%20%26%20chat-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/zsRZH4PTq9)
 
 StashBase is an open-source, local knowledge base for writing with AI agents.
-Keep notes, PDFs, Word documents, and scans in a folder on your computer.
-Claude, Codex, or Antigravity works inside that folder, side by side with you
-on your docs, and keeps your knowledge base up to date as it grows.
+Your notes, PDFs, and docs stay in a folder on your computer, and Claude, Codex,
+or Antigravity works inside it with you.
 
 - 📝 **Work on the same docs with your agent.** Your docs stay open beside the
   chat. When your agent edits one, **Review** shows each change inside the prose, so you can
