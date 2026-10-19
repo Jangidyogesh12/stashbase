@@ -110,7 +110,7 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
 
   return (
     <>
-      <SettingsRow as="li" detail="Free · $1 in credits each month." title="Plan" trail={manage}>
+      <SettingsRow as="li" detail="Free · Credits refresh each month." title="Plan" trail={manage}>
         {failure}
         {browserHelp}
       </SettingsRow>
@@ -124,7 +124,7 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
       {billing.plans.map((plan) => (
         <SettingsRow
           as="li"
-          detail={`${billingPrice(plan)}${plan.monthlyGrantPicodollars == null ? '' : ` · $${plan.monthlyGrantPicodollars / 1e12} in monthly credits`}`}
+          detail={`${billingPrice(plan)}${plan.planKey === 'pro' ? ' · 10× the Plus allowance' : ''}`}
           key={plan.priceId}
           title={plan.name}
           titleTone={plan.available ? 'default' : 'muted'}

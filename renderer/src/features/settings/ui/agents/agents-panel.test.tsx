@@ -117,7 +117,7 @@ describe('AgentRuntimesPanel', () => {
     const rendered = renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
     const user = userEvent.setup();
 
-    expect(await screen.findByText('Free · $1 in credits each month.')).not.toBeNull();
+    expect(await screen.findByText('Free · Credits refresh each month.')).not.toBeNull();
     const subscribe = await screen.findAllByRole('button', { name: 'Subscribe' });
     expect(subscribe).toHaveLength(2);
     await user.click(subscribe[1] as HTMLElement);
