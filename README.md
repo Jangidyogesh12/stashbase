@@ -12,8 +12,8 @@ Keep notes, PDFs, Word documents, and scans in a folder on your computer.
 Claude, Codex, or Antigravity works inside that folder, side by side with you
 on your docs, and keeps your knowledge base up to date as it grows.
 
-- 📝 **Work on the same docs.** Your docs stay open beside the chat. When your
-  agent edits one, **Review** shows each change inside the prose, so you can
+- 📝 **Work on the same docs with your agent.** Your docs stay open beside the
+  chat. When your agent edits one, **Review** shows each change inside the prose, so you can
   undo or keep it.
 - 🗂️ **Your notes, kept up to date.** Ask your agent to file new material,
   update your notes, and link them back to their sources. It reads PDFs, Word
