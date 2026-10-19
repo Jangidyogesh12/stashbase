@@ -12,9 +12,9 @@ Your notes, PDFs, and docs stay in a folder on your computer, and Claude, Codex,
 or Antigravity works inside it with you.
 
 - 📝 **Work on the same docs with your agent.** Your docs stay open beside the
-  chat. When your agent edits one, **Review** shows each change inside the prose, so you can
-  undo or keep it.
-- 🗂️ **Your notes, kept up to date.** Ask your agent to file new material,
+  chat. When your agent edits one, `Review` shows each change inside the prose,
+  so you can undo or keep it.
+- 🗂️ **Your knowledge base, kept up to date.** Ask your agent to file new material,
   update your notes, and link them back to their sources. It reads PDFs, Word
   documents, and scans too, with the text extracted on your computer.
 - 💬 **Bring the agent you already use.** Claude, Codex, and Antigravity run on
@@ -63,7 +63,7 @@ troubleshooting.
 4. **Draft and revise.** Ask your agent to draft the article, then review and
    refine it.
 
-Switch between **Chat** for the conversation and **Documents**, a file tree and
+Switch between `Chat` for the conversation and `Documents`, a file tree and
 editor that works like an IDE, but for writing. Both modes share the project and
 keep unfinished work when you switch.
 
@@ -93,20 +93,20 @@ through StashBase's hosted model gateway, which sends requests through OpenRoute
 to Claude Haiku 5.5 by default.
 
 **Search by meaning** requires your own OpenAI or OpenRouter key in
-**Settings → Advanced → Search by meaning**. It sends source text and search
+`Settings → Advanced → Search by meaning`. It sends source text and search
 queries to your chosen embedding provider. Default Agent credits don't cover
 this service.
 
 Official builds share basic usage statistics by default, excluding document
-and conversation content. You can turn this off in **Settings → General →
-Privacy**. See [Usage statistics](docs/usage-statistics.md) for details.
+and conversation content. You can turn this off in
+`Settings → General → Privacy`. See [Usage statistics](docs/usage-statistics.md) for details.
 
 ## Connect External Agents
 
 Agents in the built-in Chat connect to StashBase's tools automatically.
 
 To use an external MCP client, keep StashBase running and copy the connection
-configuration from **Settings → Advanced → External apps (MCP)** into that
+configuration from `Settings → Advanced → External apps (MCP)` into that
 client. It can read, search, and edit supported files in the project you select.
 
 See [MCP Configuration](docs/mcp-configuration.md) for client examples,
