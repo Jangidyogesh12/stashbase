@@ -11,7 +11,7 @@ StashBase is an open-source, local knowledge base for writing with AI agents.
 Your notes, PDFs, and docs stay in a folder on your computer, and Claude, Codex,
 or Antigravity works inside it with you.
 
-- 📝 **Work on the same docs with your agent.** Your docs stay open beside the
+- 📝 **Side by side with your agent.** Your docs stay open beside the
   chat. When your agent edits one, `Review` shows each change inside the prose,
   so you can undo or keep it.
 - 🗂️ **Your knowledge base, kept up to date.** Ask your agent to file new material,
