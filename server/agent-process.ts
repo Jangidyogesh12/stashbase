@@ -1,12 +1,36 @@
-import { diagnosticText } from '../shared/protocols/diagnostics.ts';
+import { randomUUID } from 'node:crypto';
+import { diagnosticText, errorDiagnostic } from '../shared/protocols/diagnostics.ts';
 import type { ChildProcess } from 'node:child_process';
-import { terminateExtractorTree } from './extractor-process.ts';
+import type { AgentStopReason, TelemetryEvent } from '../shared/protocols/http/telemetry.ts';
+import { terminateExtractorTree, type ProcessTermination } from './extractor-process.ts';
+import { markDiagnosticReported } from './error-diagnostics.ts';
+import { telemetry } from './telemetry.ts';
 import { logger } from './log.ts';
 
+export type { AgentStopReason } from '../shared/protocols/http/telemetry.ts';
+type StopEvent = Extract<TelemetryEvent, { event: 'agent_runtime_stop_result' }>;
+export interface AgentProcessContext {
+  runtime: StopEvent['runtime'];
+  purpose: StopEvent['purpose'];
+  processStartId?: string;
+  runtimeVersion?: string;
+}
+interface OwnedProcess {
+  closed: boolean;
+  exited: boolean;
+  finished: boolean;
+  completion: Promise<void>;
+  finish(): void;
+  retirement?: Promise<void>;
+  poll?: ReturnType<typeof setInterval>;
+  context?: AgentProcessContext;
+  processStartId: string;
+  capture: ReturnType<typeof telemetry.scoped>;
+}
 const log = logger('agent-process');
-const closed = new WeakSet<ChildProcess>();
+const owners = new WeakMap<ChildProcess, OwnedProcess>();
 const processes = new Set<ChildProcess>();
-const retirements = new Map<ChildProcess, Promise<void>>();
+const CLOSE_DEADLINE_MS = 4000;
 
 function groupExists(child: ChildProcess): boolean {
   if (!child.pid || process.platform === 'win32') return false;
@@ -14,62 +38,106 @@ function groupExists(child: ChildProcess): boolean {
   catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 }
 
+function inspect(child: ChildProcess, owner: OwnedProcess): void {
+  if (!owner.closed || groupExists(child) || owner.finished) return;
+  owner.finished = true;
+  clearInterval(owner.poll);
+  processes.delete(child);
+  owner.finish();
+}
+
 /** App-server launches use their own POSIX group; Windows termination uses taskkill /T. */
-export function ownAgentProcess<T extends ChildProcess>(child: T): T {
+export function ownAgentProcess<T extends ChildProcess>(child: T, context?: AgentProcessContext): T {
+  if (owners.has(child)) return child;
+  let finish!: () => void;
+  const owner: OwnedProcess = {
+    closed: false, exited: child.exitCode != null || child.signalCode != null, finished: false,
+    completion: new Promise<void>(resolve => { finish = resolve; }), finish: () => finish(),
+    context, processStartId: context?.processStartId ?? randomUUID(), capture: telemetry.scoped(),
+  };
+  owners.set(child, owner);
   processes.add(child);
+  const onExit = () => { owner.exited = true; };
+  child.once('exit', onExit);
   child.once('close', () => {
-    closed.add(child);
-    if (groupExists(child)) void retireAgentProcess(child);
-    else processes.delete(child);
+    owner.closed = true;
+    child.off('exit', onExit);
+    inspect(child, owner);
+    if (!owner.finished) void retireAgentProcess(child, 'process_exit');
   });
-  child.once('error', () => { if (!child.pid) processes.delete(child); });
+  child.once('error', () => {
+    if (!child.pid) { owner.closed = true; inspect(child, owner); }
+  });
   return child;
 }
 
-/** Retain ownership until pipes close, including descendants, and escalate a stalled exit. */
-export function retireAgentProcess(child: ChildProcess): Promise<void> {
-  const pending = retirements.get(child);
-  if (pending) return pending;
-  if (closed.has(child) && !groupExists(child)) return Promise.resolve();
-  // Spawn failures and injected test transports have no native process to wait for.
-  if (!child.pid) {
-    try { child.kill('SIGTERM'); } catch { /* spawn already failed */ }
-    processes.delete(child);
-    return Promise.resolve();
-  }
-  const retirement = new Promise<void>((resolve, reject) => {
-    let pipesClosed = closed.has(child);
-    const cleanup = () => {
-      clearTimeout(deadline);
-      clearInterval(poll);
-      child.off('close', onClose);
-    };
-    const inspect = () => {
-      if (pipesClosed && !groupExists(child)) { cleanup(); resolve(); }
-    };
-    const onClose = () => { pipesClosed = true; inspect(); };
-    const deadline = setTimeout(() => {
-      cleanup();
-      reject(new Error(`Agent process ${child.pid} did not finish closing after termination.`));
-    }, 4000);
-    const poll = setInterval(inspect, 25);
-    child.once('close', onClose);
-    terminateExtractorTree(child);
-  }).finally(() => {
-    retirements.delete(child);
-    if (closed.has(child) && !groupExists(child)) processes.delete(child);
-  });
-  retirements.set(child, retirement);
-  // Callers that retire synchronously still report failed cleanup; awaited callers also reject.
-  void retirement.catch((error) => log.warn(String(error)));
-  return retirement;
+/** Unlike the deadline result, this barrier resolves only on verified final closure. */
+export function agentProcessClosed(child: ChildProcess): Promise<void> {
+  ownAgentProcess(child);
+  return owners.get(child)!.completion;
 }
 
-/** Shutdown includes idle history readers and retirements already removed from session maps. */
+/** One termination attempt and one timeout fact, even when several owners await it. */
+export function retireAgentProcess(child: ChildProcess, reason: AgentStopReason = 'session_closed'): Promise<void> {
+  ownAgentProcess(child);
+  const owner = owners.get(child)!;
+  if (owner.finished) return Promise.resolve();
+  if (owner.retirement) return owner.retirement;
+  // Spawn failures and injected test transports have no native process to await.
+  if (!child.pid) {
+    try { child.kill('SIGTERM'); } catch { /* spawn already failed */ }
+    owner.closed = true;
+    inspect(child, owner);
+    return Promise.resolve();
+  }
+  const started = performance.now();
+  const attemptId = randomUUID();
+  let termination: ProcessTermination | undefined;
+  let timeoutError: Error | undefined;
+  const report = (outcome: StopEvent['outcome']) => {
+    if (!owner.context) return;
+    owner.capture({ event: 'agent_runtime_stop_result', runtime: owner.context.runtime,
+      purpose: owner.context.purpose, reason, attempt_id: attemptId, outcome,
+      elapsed_ms: Math.round(performance.now() - started), deadline_ms: CLOSE_DEADLINE_MS,
+      exit_observed: owner.exited, pipes_closed: owner.closed,
+      ...(child.exitCode != null ? { exit_code: child.exitCode } : {}),
+      ...(child.signalCode != null ? { signal: child.signalCode } : {}),
+      ...(process.platform !== 'win32' ? { process_tree_alive: groupExists(child) } : {}),
+      ...(termination ? { termination: { ...termination } } : {}),
+      ...(outcome === 'timeout' ? { diagnostic: errorDiagnostic(timeoutError) } : {}),
+      context: { process_start_id: owner.processStartId,
+        ...(owner.context.runtimeVersion ? { runtime_version: owner.context.runtimeVersion } : {}) },
+    });
+  };
+  owner.retirement = new Promise<void>((resolve, reject) => {
+    const deadline = setTimeout(() => {
+      timeoutError = Object.assign(new Error('Agent process did not finish closing after termination.'), {
+        code: 'AGENT_PROCESS_CLOSE_TIMEOUT',
+      });
+      if (owner.context) markDiagnosticReported(timeoutError);
+      report('timeout');
+      log.info('Agent process retirement timed out', { pid: child.pid, attempt_id: attemptId });
+      reject(timeoutError);
+      // Keep observing late closure without keeping an otherwise-closed host alive.
+    }, CLOSE_DEADLINE_MS);
+    void owner.completion.then(() => {
+      clearTimeout(deadline);
+      report(timeoutError ? 'closed_after_timeout' : 'success');
+      resolve(); // A timed-out caller stays rejected; late closure is a separate fact.
+    });
+    owner.poll = setInterval(() => inspect(child, owner), 25);
+    owner.poll.unref();
+    termination = terminateExtractorTree(child);
+    inspect(child, owner);
+  });
+  // Detached callers are safe; awaited callers still receive the original failure.
+  void owner.retirement.catch(() => {});
+  return owner.retirement;
+}
+
+/** Includes idle history readers and processes whose original close timed out. */
 export async function closeAgentProcesses(): Promise<void> {
-  const results = await Promise.allSettled([
-    ...[...processes].map(retireAgentProcess), ...retirements.values(),
-  ]);
+  const results = await Promise.allSettled([...processes].map(child => retireAgentProcess(child, 'app_shutdown')));
   const failed = results.find((result) => result.status === 'rejected');
   if (failed?.status === 'rejected') throw failed.reason;
 }

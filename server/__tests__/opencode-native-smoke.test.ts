@@ -1,7 +1,7 @@
 import './isolated-home.ts';
 import { attachmentPdf } from './attachment-fixtures.ts';
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { ChildProcess, execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -687,11 +687,13 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   completed = true;
 });
 
-test('prewarmed native chats retain exclusive attribution and refresh changed models and tools', { timeout: 30_000 }, async (t) => {
+test('prewarmed native chats retain attribution, refresh configuration and release late-closing runtimes', { timeout: 45_000 }, async (t) => {
   const starts: Extract<TelemetryEvent, { event: 'agent_runtime_start_result' }>[] = [];
+  const stops: Extract<TelemetryEvent, { event: 'agent_runtime_stop_result' }>[] = [];
   t.mock.method(telemetry, 'scoped', () => (input: TelemetryEvent) => {
     const event = telemetryEventSchema.parse(input);
     if (event.event === 'agent_runtime_start_result') starts.push(event);
+    if (event.event === 'agent_runtime_stop_result') stops.push(event);
   });
   const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-warm-native-')));
   setHostedAccountSession({
@@ -785,4 +787,33 @@ test('prewarmed native chats retain exclusive attribution and refresh changed mo
     assert.ok(event.first_output_ms !== undefined && event.first_output_ms <= event.elapsed_ms);
   }
   assert.equal(new Set(starts.map(event => event.attempt_id)).size, starts.length);
+  await second.close();
+  await third.close();
+  // Hold one real runtime's final notification, without preventing its OS exit.
+  // A later shutdown must stop other owners and eventually forget this failure.
+  const emit = EventEmitter.prototype.emit;
+  let releaseClose: (() => void) | undefined;
+  let released = false;
+  const held = t.mock.method(ChildProcess.prototype, 'emit', function (this: ChildProcess, event: string | symbol, ...args: unknown[]) {
+    if (event === 'close' && !releaseClose && this.spawnargs.includes('serve')) {
+      releaseClose = () => { if (!released) { released = true; emit.call(this, event, ...args); } };
+      return true;
+    }
+    return emit.call(this, event, ...args);
+  });
+  try {
+    const closing = fourth.close();
+    await assert.rejects(closing, { code: 'AGENT_PROCESS_CLOSE_TIMEOUT' });
+    await assert.rejects(stopOpenCodeRuntime(), { code: 'AGENT_PROCESS_CLOSE_TIMEOUT' });
+    assert.ok(releaseClose);
+    releaseClose();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    await stopOpenCodeRuntime();
+    await assert.rejects(closing, { code: 'AGENT_PROCESS_CLOSE_TIMEOUT' });
+    const failure = stops.find(event => event.outcome === 'timeout');
+    assert.ok(failure);
+    assert.ok(starts.some(event => event.attempt_id === failure.context?.process_start_id));
+    assert.deepEqual(stops.filter(event => event.attempt_id === failure.attempt_id).map(event => event.outcome),
+      ['timeout', 'closed_after_timeout']);
+  } finally { held.mock.restore(); releaseClose?.(); }
 });

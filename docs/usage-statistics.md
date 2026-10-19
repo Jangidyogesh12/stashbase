@@ -43,6 +43,7 @@ date. Older builds do not supply the same activity or identity evidence.
 | `agent_turn_stage` | Host observes a significant execution boundary | `runtime`, `turn_id`, `stage`, per-turn `sequence`, bounded correlation context |
 | `agent_turn_finished` | Submission completes, fails, is blocked, cancelled or interrupted | `runtime`, `turn_id`, `outcome`, `source`, optional `reason`, last stage, sequence and observation times; duration only for an observed end |
 | `agent_runtime_start_result` | One Default/OpenCode startup attempt settles, including history and prewarm | `purpose`, `outcome`, `stage`, `attempt_id`, optional `retry_of`, exact `elapsed_ms`/`first_output_ms`, runtime version and optional diagnostic |
+| `agent_runtime_stop_result` | Managed OpenCode/Codex/Antigravity retirement succeeds, times out, or closes after timeout | `purpose`, initiating `reason`, stop `attempt_id`, original process-start ID, elapsed/deadline, exit/pipe observations and bounded termination evidence |
 | `agent_connection_closed` | Host observes socket closure, including idle and intentional closes | `runtime`, shared `context.connection_id`, close code/initiator/reason and available process evidence |
 | `document_write_result` | Versioned editor save settles | `outcome`; success includes `changed` |
 | `account_login_started` | A browser sign-in flow starts | None |
@@ -344,3 +345,20 @@ local sink and never send test events to production PostHog.
 Protocol references: [Capture API](https://posthog.com/docs/api/capture),
 [identity linking](https://posthog.com/docs/product-analytics/identify),
 [anonymous and identified events](https://posthog.com/docs/data/anonymous-vs-identified-events).
+
+### Agent cleanup outcomes
+
+Count `agent_runtime_stop_result` with `outcome=timeout` as cleanup failures.
+A later `closed_after_timeout` with the same `attempt_id` confirms final closure;
+it is neither another failure nor a successful original operation. The same
+caught timeout is not counted again as a generic application warning/error.
+Successful closes provide the denominator for timeout rates. Process purpose
+separates history, chat, prewarm and model readers; the first initiating reason
+identifies expiration, replacement, scope/window closure or shutdown.
+
+Windows termination evidence distinguishes taskkill still pending, spawn failure,
+nonzero exit and direct-kill fallback, with bounded credential-filtered errors.
+An observed leader exit without pipe closure differs from a leader that has not
+exited. Windows does not report process-group presence as if it were observed.
+Neither fact alone establishes the cause of a slow close. Returning activity,
+editing, and the next successful Agent turn remain separate measures of recovery.

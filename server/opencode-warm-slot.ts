@@ -1,10 +1,15 @@
+import { logger } from './log.ts';
+import type { AgentStopReason } from './agent-process.ts';
+
+const log = logger('opencode-runtime');
+
 /** One unused OpenCode server, prepared for the next chat. Claiming it
  * transfers exclusive ownership; it is never shared by active chats. */
 export interface WarmOpenCode {
   key: string;
   windowId: string;
   directory: string;
-  close(): Promise<void>;
+  close(reason?: AgentStopReason): Promise<void>;
 }
 
 export class OpenCodeWarmSlot<T extends WarmOpenCode> {
@@ -22,7 +27,7 @@ export class OpenCodeWarmSlot<T extends WarmOpenCode> {
   }
 
   put(entry: T): void {
-    void this.clear();
+    this.clearInBackground('spare_replaced');
     this.entry = entry;
     this.refresh(entry.key);
   }
@@ -32,21 +37,27 @@ export class OpenCodeWarmSlot<T extends WarmOpenCode> {
   refresh(key: string): boolean {
     if (this.entry?.key !== key) return false;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => { void this.clear(); }, this.idleMs);
+    this.timer = setTimeout(() => { this.clearInBackground('spare_expired'); }, this.idleMs);
     this.timer.unref?.();
     return true;
   }
 
   /** A failed warm-up must not retire a newer spare or a claimed server. */
   discard(entry: T): void {
-    if (this.entry === entry) void this.clear();
+    if (this.entry === entry) this.clearInBackground('spare_discarded');
   }
 
-  async clear(matches: (entry: T) => boolean = () => true): Promise<void> {
+  private clearInBackground(reason: AgentStopReason): void {
+    // Observe this async wrapper too: the process owner's rejection handler
+    // does not handle the new promise returned by clear().
+    void this.clear(() => true, reason).catch((error: unknown) => log.warn('Could not retire the spare agent runtime.', error));
+  }
+
+  async clear(matches: (entry: T) => boolean = () => true, reason: AgentStopReason = 'session_closed'): Promise<void> {
     const entry = this.entry;
     if (!entry || !matches(entry)) return;
     this.entry = undefined;
     clearTimeout(this.timer);
-    await entry.close();
+    await entry.close(reason);
   }
 }

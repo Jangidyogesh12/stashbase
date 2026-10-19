@@ -138,7 +138,7 @@ export function rememberedCatalogFor(runtime: {
  * process runs in the home directory, so what it reports is the user's own
  * default rather than a folder's project override. */
 export async function readCodexModelCatalog(
-  spawn: (cwd: string) => ChildProcessWithoutNullStreams = (cwd) => spawnCodexAppServerProcess(cwd),
+  spawn: (cwd: string) => ChildProcessWithoutNullStreams = (cwd) => spawnCodexAppServerProcess(cwd, {}, { purpose: 'models' }),
   timeoutMs = 8_000,
 ): Promise<CatalogReading> {
   const proc = spawn(os.homedir());

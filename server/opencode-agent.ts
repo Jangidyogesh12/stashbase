@@ -420,7 +420,8 @@ export class OpenCodePanelSession {
       }).catch(() => {});
     }
     sessions.delete(this);
-    void this.runtime.close();
+    void this.runtime.close(termination?.kind === 'scope-removed' ? 'scope_removed' : 'session_closed')
+      .catch((error: unknown) => log.warn('Could not close the agent session runtime.', error));
     if (this.ws.readyState === this.ws.OPEN) this.ws.close();
   }
 
@@ -689,12 +690,14 @@ export function attachOpenCodeWebSocket(ws: WebSocket, options: AgentConnectionO
 
 export function killActiveOpenCode(windowId?: string): void {
   sessions.killWindow(windowId);
-  void discardWarmOpenCodeForWindow(windowId);
+  void discardWarmOpenCodeForWindow(windowId)
+    .catch((error: unknown) => log.warn('Could not retire the window\'s spare agent runtime.', error));
 }
 
 export function killOpenCodeSessionsForFolder(folder: string): void {
   sessions.killFolder(folder);
-  void discardWarmOpenCodeForFolder(folder);
+  void discardWarmOpenCodeForFolder(folder)
+    .catch((error: unknown) => log.warn('Could not retire the project\'s spare agent runtime.', error));
 }
 
 export function openCodeSessionHasContent(

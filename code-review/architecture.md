@@ -351,6 +351,13 @@ stable status without download, retry, or a new durable demand latch.
   Preparation failures, cancellation, chat dispatch and history mutations never
   receive this retry. Startup listeners are removed on every outcome;
   shutdown also awaits readers and already-retiring processes.
+  Detached session and spare cleanup must observe their own rejection, including
+  promises created by async wrappers; a handler on the underlying process promise
+  is not sufficient. Cleanup failures remain diagnostic and reject awaited
+  retirement without escaping into an unhandled host exception. The process owner
+  retains a timed-out child until final pipe/group closure; OpenCode releases its
+  runtime only after that closure and startup settlement, preserving the original
+  failed promise. Shutdown attempts every runtime and broker despite a failed peer.
   Process death settles pending RPCs/turns, and generation guards reject late
   messages. An ambiguous timed-out start retires its generation before retry.
   Claude replacement waits for native iterator/query cleanup after verifying scope.
@@ -857,6 +864,12 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   status/request ID separately from the local HTTP result. Unexpected daemon
   and agent startup exits retain bounded, credential-filtered stderr and the
   available exit code/signal, without serializing process configuration.
+  Managed agent retirement reports one typed result per attempt, linked to its
+  process-start identity, purpose and first initiating reason. Timeout retains
+  exit/pipe state and Windows taskkill/fallback evidence; a later confirmed close
+  is a separate recovery result, never a rewritten success. The original timeout
+  Error is already reported by this owner and outer collectors do not recount it.
+  Windows pipe closure does not prove escaped descendants are gone.
   OpenCode reports each physical startup attempt, including success/cancellation,
   with purpose (history/chat/prewarm), pinned version, attempt/retry identity,
   stage, elapsed time and first output time. Ready means the expected loopback

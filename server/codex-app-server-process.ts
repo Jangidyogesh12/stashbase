@@ -7,7 +7,7 @@ import {
   commandDir,
   resolveAgentCli,
 } from './agent-cli.ts';
-import { ownAgentProcess } from './agent-process.ts';
+import { ownAgentProcess, type AgentProcessContext } from './agent-process.ts';
 import { logger } from './log.ts';
 
 const log = logger('codex-app-server');
@@ -22,6 +22,7 @@ function resolveCodexBinary(): string | null {
 export function spawnCodexAppServerProcess(
   cwd: string,
   extraEnv: NodeJS.ProcessEnv = {},
+  context: Omit<AgentProcessContext, 'runtime'> = { purpose: 'chat' },
 ): ChildProcessWithoutNullStreams {
   const command = resolveCodexBinary();
   if (!command) {
@@ -38,7 +39,7 @@ export function spawnCodexAppServerProcess(
     env: agentCliEnv(extraEnv, [commandDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: agentCliNeedsShell(command),
-  }));
+  }), { runtime: 'codex', ...context });
 }
 
 export function appVersion(): string {

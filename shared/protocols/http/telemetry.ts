@@ -1,6 +1,21 @@
 import { z } from 'zod';
 
 const runtime = z.enum(['stashbase', 'claude', 'codex', 'antigravity']);
+export const agentStopReasonSchema = z.enum(['session_closed', 'window_closed', 'scope_removed', 'app_shutdown',
+  'spare_expired', 'spare_replaced', 'spare_discarded', 'startup_failed', 'configuration_changed', 'process_exit', 'interrupted']);
+export type AgentStopReason = z.infer<typeof agentStopReasonSchema>;
+export const processTerminationSchema = z.object({
+  method: z.enum(['signals', 'taskkill']),
+  escalated: z.boolean().optional(),
+  taskkill_state: z.enum(['pending', 'finished', 'spawn_failed']).optional(),
+  taskkill_exit_code: z.number().int().optional(),
+  taskkill_signal: z.string().max(80).optional(),
+  taskkill_error: diagnostic.optional(),
+  taskkill_stderr: z.string().max(8000).optional(),
+  fallback_attempted: z.boolean().optional(),
+  fallback_sent: z.boolean().optional(),
+  fallback_error: diagnostic.optional(),
+}).strict();
 export const agentTurnStageSchema = z.enum(['preparing', 'host_accepted', 'runtime_dispatched', 'model_request_started', 'response_started', 'waiting_permission', 'tool_running']);
 export const agentTurnReasonSchema = z.enum(['completed', 'runtime_error', 'user_cancelled', 'context_invalid', 'connection_lost', 'session_closed', 'scope_removed', 'app_shutdown', 'host_shutdown', 'app_update', 'host_restarted']);
 export type AgentTurnStage = z.infer<typeof agentTurnStageSchema>;
@@ -105,6 +120,14 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
     attempt_id: z.string().uuid(), retry_of: z.string().uuid().optional(),
     elapsed_ms: z.number().nonnegative(), first_output_ms: z.number().nonnegative().optional(),
     diagnostic: diagnostic.optional(), ...correlation,
+  }).strict(),
+  z.object({ event: z.literal('agent_runtime_stop_result'), runtime,
+    purpose: z.enum(['history', 'chat', 'prewarm', 'models']), reason: agentStopReasonSchema,
+    attempt_id: z.string().uuid(), outcome: z.enum(['success', 'timeout', 'closed_after_timeout']),
+    elapsed_ms: z.number().nonnegative(), deadline_ms: z.number().positive(),
+    exit_observed: z.boolean(), pipes_closed: z.boolean(), process_tree_alive: z.boolean().optional(),
+    exit_code: z.number().int().optional(), signal: z.string().max(80).optional(),
+    termination: processTerminationSchema.optional(), diagnostic: diagnostic.optional(), ...correlation,
   }).strict(),
   z.object({ event: z.literal('agent_setup_stage'), runtime, attempt_id: z.string().uuid(), stage: z.enum(['discovery', 'installation', 'authentication', 'mcp']), outcome: z.enum(['started', 'success']), ...correlation }).strict(),
   z.object({ event: z.literal('application_error'), ...diagnosticFields }).strict(),

@@ -914,6 +914,40 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Cleanup timeout recovery (2026-10-20):** `agent-process.ts` owns one bounded
+retirement attempt and a separate final-closure barrier. A deadline rejects its
+original callers with `AGENT_PROCESS_CLOSE_TIMEOUT` while retaining the child;
+late pipe/group closure releases that ownership. `opencode-runtime.ts` releases
+closed runtime owners after that barrier and startup settlement, and shutdown
+attempts every owner and the broker even if one fails. Session/window/project
+and spare expiry/replacement/discard observe their detached promises, fixing the
+unhandled-rejection paths also present in v2.16.11.
+
+Each managed OpenCode, Codex and Antigravity termination attempt emits
+`agent_runtime_stop_result` with purpose, initiating reason, a stop attempt ID,
+original process-start ID, elapsed time, exit/pipe observations and termination
+snapshot. A timeout and its later `closed_after_timeout` share that attempt;
+the latter does not rewrite the failed operation. Windows snapshots retain
+bounded filtered taskkill stderr, exit/spawn failure and fallback result;
+process-tree presence is reported only where it is observable. The lifecycle
+owner marks its reported Error so outer warning/error collectors do not count
+it again. Unrelated errors still report normally.
+
+`agent-runtime-recovery.test.ts` holds a real child's close notification past
+the deadline and verifies one timeout, retained failure and eventual release.
+The native OpenCode smoke repeats late closure through the actual runtime owner:
+shutdown initially rejects, other owners still close, and shutdown after final
+closure no longer retains the timed-out runtime. Windows command outcome tests
+cover success, spawn/exit failure and one fallback with credential filtering;
+telemetry tests cover typed delivery, deduplication and opt-out. The complete
+local release gates passed after correcting a formatter issue and isolating the
+file-mutation test's configuration. A strict-unhandled-rejection pass against the
+built host delayed real child close notifications beyond the four-second deadline
+at six detached cleanup entries. The host kept serving HTTP, emitted six paired
+timeout/late-close records, released runtime ownership, and retired a new child
+normally. These controlled failures do not establish why the reported Windows process exceeded its deadline;
+the incident's original stack and a packaged Windows reproduction remain gaps.
+
 **Background confirmation notifications (2026-10-17):** The agent attention
 projection observes inactive sessions as well as the visible chat. Electron owns
 background detection, coalescing, durable opt-out, and notification lifetime via

@@ -10,6 +10,41 @@ import { mount } from './routes/telemetry.ts';
 
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+test('process shutdown evidence survives delivery without recounting its caught timeout', async () => {
+  const { markDiagnosticReported } = await import('./error-diagnostics.ts');
+  const { errorDiagnostic } = await import('./error-diagnostics.ts');
+  const f = fixture();
+  const error = Object.assign(new Error('Agent process did not finish closing after termination.'), { code: 'AGENT_PROCESS_CLOSE_TIMEOUT' });
+  const event = {
+    event: 'agent_runtime_stop_result' as const, runtime: 'stashbase' as const, purpose: 'prewarm' as const,
+    reason: 'spare_expired' as const, attempt_id: '11111111-1111-4111-8111-111111111111',
+    outcome: 'timeout' as const, elapsed_ms: 4001, deadline_ms: 4000,
+    exit_observed: true, pipes_closed: false,
+    context: { process_start_id: '22222222-2222-4222-8222-222222222222' },
+    termination: { method: 'taskkill' as const, taskkill_state: 'finished' as const, taskkill_exit_code: 1,
+      taskkill_stderr: 'denied token=private-secret', fallback_attempted: true, fallback_sent: false,
+      fallback_error: { message: 'failed password=other-secret', code: 'EPERM' } },
+    diagnostic: errorDiagnostic(error),
+  };
+  f.service.capture(event);
+  markDiagnosticReported(error);
+  f.service.captureWarning(error, { source: 'server', operation: 'background.opencode-runtime' });
+  f.service.captureError(error, { source: 'server', operation: 'background.server' });
+  f.service.capture({ ...event, outcome: 'closed_after_timeout', elapsed_ms: 4500, pipes_closed: true, diagnostic: undefined });
+  await tick();
+  assert.deepEqual(f.sent.map(({ body }) => [body.event, body.properties.outcome]), [
+    ['agent_runtime_stop_result', 'timeout'], ['agent_runtime_stop_result', 'closed_after_timeout'],
+  ]);
+  assert.equal(f.sent[0].body.properties.termination.taskkill_exit_code, 1);
+  assert.equal(f.sent[0].body.properties.context.process_start_id, event.context.process_start_id);
+  assert.doesNotMatch(JSON.stringify(f.sent), /private-secret|other-secret/);
+  f.service.update({ enabled: false });
+  f.service.capture(event);
+  await tick();
+  assert.equal(f.sent.length, 2);
+  f.service.close();
+});
+
 test('test launches suppress every event without changing saved preferences, including through Electron', () => {
   const cases = [
     { packaged: '1', disabled: '1', available: false },

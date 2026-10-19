@@ -63,6 +63,36 @@ test('retirement waits for native exit', async () => {
   assert.equal(retired, true);
 });
 
+for (const trigger of ['expiry', 'replacement', 'discard'] as const) {
+  test(`failed spare retirement during ${trigger} stays contained and leaves the next spare usable`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const slot = new OpenCodeWarmSlot(100);
+    let fail!: (error: Error) => void;
+    const closing = new Promise<void>((_resolve, reject) => { fail = reject; });
+    const entry = { ...spare('stalled'), close: () => closing };
+    const next = spare('next');
+    slot.put(entry);
+    if (trigger === 'expiry') t.mock.timers.tick(100);
+    else if (trigger === 'replacement') slot.put(next);
+    else slot.discard(entry);
+    if (trigger !== 'replacement') slot.put(next);
+    fail(new Error('Agent process 123 did not finish closing after termination.'));
+    // The test runner fails on an unhandled rejection at the detached boundary.
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(slot.take('stalled'), undefined);
+    assert.equal(slot.take('next'), next);
+    assert.equal(next.closes(), 0);
+  });
+}
+
+test('awaited spare retirement still rejects when native cleanup fails', async () => {
+  const slot = new OpenCodeWarmSlot();
+  const error = new Error('Agent process 123 did not finish closing after termination.');
+  slot.put({ ...spare('stalled'), close: async () => { throw error; } });
+  await assert.rejects(slot.clear(), error);
+  assert.equal(slot.take('stalled'), undefined);
+});
+
 test('another matching turn extends idle expiry without replacing the spare', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const slot = new OpenCodeWarmSlot(100);

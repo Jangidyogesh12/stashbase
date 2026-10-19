@@ -22,7 +22,7 @@ export async function retryOpenCodeHistoryStartup<T>(
 
 /** Rejection is a retirement barrier, not just a signal sent to the process. */
 export async function retireFailedOpenCode(child: OpenCodeChild, cause: unknown): Promise<never> {
-  try { await retireAgentProcess(child); }
+  try { await retireAgentProcess(child, 'startup_failed'); }
   catch (cleanup) {
     throw Object.assign(new AggregateError([cause, cleanup], 'OpenCode failed to stop after startup failure.'), {
       code: 'OPENCODE_CLEANUP_FAILED',

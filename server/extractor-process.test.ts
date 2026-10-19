@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import type { ChildProcess } from 'node:child_process';
 import {
   spawnOptionsForExtractor,
   spawnOptionsForPdfOcr,
@@ -36,6 +39,35 @@ test('PDF/OCR subprocess configuration stays hidden on Windows', () => {
   assert.equal(spawnOptionsForPdfOcr('linux').detached, true);
   assert.equal(spawnOptionsForExtractor().detached, true);
 });
+
+for (const outcome of ['success', 'exit_failure', 'spawn_failure', 'fallback_failure'] as const) {
+  test(`Windows tree termination retains ${outcome} evidence and attempts fallback once`, () => {
+    let kills = 0;
+    const child = { pid: 123, exitCode: null, signalCode: null, kill: () => {
+      kills++;
+      if (outcome === 'fallback_failure') throw Object.assign(new Error('access denied'), { code: 'EPERM' });
+      return true;
+    } } as unknown as ChildProcess;
+    const killer = Object.assign(new EventEmitter(), { stderr: new PassThrough() });
+    const result = terminateExtractorTree(child, { platform: 'win32', spawn: (() => killer) as unknown as typeof spawn });
+    assert.equal(result.taskkill_state, 'pending');
+    killer.stderr.write('cannot terminate token=private-token');
+    if (outcome === 'spawn_failure') {
+      killer.emit('error', Object.assign(new Error('taskkill missing'), { code: 'ENOENT' }));
+      killer.emit('close', -2, null);
+      assert.equal(result.taskkill_state, 'spawn_failed');
+      assert.equal(result.taskkill_error?.code, 'ENOENT');
+    } else {
+      killer.emit('close', outcome === 'success' ? 0 : 1, null);
+      assert.equal(result.taskkill_state, 'finished');
+      assert.equal(result.taskkill_exit_code, outcome === 'success' ? 0 : 1);
+    }
+    assert.equal(kills, outcome === 'success' ? 0 : 1);
+    assert.equal(result.fallback_attempted, outcome !== 'success');
+    if (outcome === 'fallback_failure') assert.equal(result.fallback_error?.code, 'EPERM');
+    assert.doesNotMatch(JSON.stringify(result), /private-token/);
+  });
+}
 
 async function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;

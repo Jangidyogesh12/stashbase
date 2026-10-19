@@ -119,7 +119,7 @@ class CodexHistoryAppServer {
   private closed = false;
 
   constructor(readonly cwd: string, private onClose: () => void) {
-    this.proc = spawnCodexAppServerProcess(cwd);
+    this.proc = spawnCodexAppServerProcess(cwd, {}, { purpose: 'history' });
     this.appServer = connectCodexAppServer(this.proc, {
       requestTimeoutMs: CODEX_RPC_REQUEST_TIMEOUT_MS,
       onRequest: ({ id, method }) => {

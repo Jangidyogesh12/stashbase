@@ -230,6 +230,10 @@ automatic retry after the failed process has fully retired. This retries only
 startup, before reading history; it never replays a chat turn or a history edit.
 Exhausted recovery keeps the load error and manual retry available. Missing
 runtime/account prerequisites and failed cleanup do not trigger automatic retry.
+An agent cleanup failure must not exit the application or discard other work.
+Failure remains diagnosable; a cleanup timeout does not establish that the native
+process stopped successfully. A later confirmed exit releases the retired
+runtime without replaying a request or changing the original timeout into success.
 An uninstalled agent is an installation prerequisite when reading its history,
 not a server failure or evidence that its native history is empty.
 Repeated identical native retry errors appear once per turn while retries continue;

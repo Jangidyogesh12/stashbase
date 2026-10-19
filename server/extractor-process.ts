@@ -1,6 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import { extractorSpawn } from './python-host.ts';
+import { errorDiagnostic, diagnosticText } from '../shared/protocols/diagnostics.ts';
+import type { z } from 'zod';
+import type { processTerminationSchema } from '../shared/protocols/http/telemetry.ts';
 
 const KILL_GRACE_MS = 1500;
 const EXTRACTOR_NICE_PRIORITY = 15;
@@ -134,42 +137,68 @@ export function waitForExtractorTree(proc: ChildProcess): Promise<number | null>
   });
 }
 
-export function terminateExtractorTree(proc: ChildProcess): void {
-  if (process.platform === 'win32') {
-    terminateWindowsTree(proc);
-    return;
+export type ProcessTermination = z.infer<typeof processTerminationSchema>;
+
+/** The snapshot is updated as termination progresses; it contains no command or environment. */
+export function terminateExtractorTree(proc: ChildProcess, options: {
+  platform?: NodeJS.Platform; spawn?: typeof spawn;
+} = {}): ProcessTermination {
+  if ((options.platform ?? process.platform) === 'win32') {
+    return terminateWindowsTree(proc, options.spawn ?? spawn);
   }
+  const result: ProcessTermination = { method: 'signals', escalated: false };
   sendSignal(proc, 'SIGTERM');
   setTimeout(() => {
     // The group can outlive its leader while descendants still own pipes.
     if (extractorGroupExists(proc) || (proc.exitCode == null && proc.signalCode == null)) {
+      result.escalated = true;
       sendSignal(proc, 'SIGKILL');
     }
   }, KILL_GRACE_MS).unref();
+  return result;
 }
 
 /** Node cannot address Windows process groups with a negative PID. `taskkill`
  * is the OS-provided tree primitive; `/T /F` makes cancellation a real tree
  * kill before the scheduler observes the extractor's close event. */
-function terminateWindowsTree(proc: ChildProcess): void {
-  if (!proc.pid) return;
+function terminateWindowsTree(proc: ChildProcess, spawnProcess: typeof spawn): ProcessTermination {
+  const result: ProcessTermination = { method: 'taskkill', fallback_attempted: false };
+  if (!proc.pid) return result;
   const fallback = () => {
-    if (proc.exitCode == null && proc.signalCode == null) {
-      try { proc.kill(); } catch { /* already gone */ }
+    if (!result.fallback_attempted && proc.exitCode == null && proc.signalCode == null) {
+      result.fallback_attempted = true;
+      try { result.fallback_sent = proc.kill(); }
+      catch (error) { result.fallback_error = errorDiagnostic(error); }
     }
   };
   try {
-    const killer = spawn('taskkill.exe', ['/PID', String(proc.pid), '/T', '/F'], {
-      stdio: 'ignore',
+    result.taskkill_state = 'pending';
+    const killer = spawnProcess('taskkill.exe', ['/PID', String(proc.pid), '/T', '/F'], {
+      stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true,
     });
-    killer.once('error', fallback);
-    killer.once('close', (code) => {
+    let stderr = '';
+    killer.stderr?.on('data', (chunk: Buffer | string) => {
+      stderr = (stderr + String(chunk)).slice(-8_000);
+      result.taskkill_stderr = diagnosticText(stderr);
+    });
+    killer.once('error', (error) => {
+      result.taskkill_state = 'spawn_failed';
+      result.taskkill_error = errorDiagnostic(error);
+      fallback();
+    });
+    killer.once('close', (code, signal) => {
+      if (result.taskkill_state !== 'spawn_failed') result.taskkill_state = 'finished';
+      if (code !== null) result.taskkill_exit_code = code;
+      if (signal !== null) result.taskkill_signal = signal;
       if (code !== 0) fallback();
     });
-  } catch {
+  } catch (error) {
+    result.taskkill_state = 'spawn_failed';
+    result.taskkill_error = errorDiagnostic(error);
     fallback();
   }
+  return result;
 }
 
 function extractorGroupExists(proc: ChildProcess): boolean {

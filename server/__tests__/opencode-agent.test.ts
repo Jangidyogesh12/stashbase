@@ -574,16 +574,18 @@ test('a trailing native idle event cannot finish the next submitted Default turn
   assert.deepEqual(translator.translate({ type: 'session.idle', properties: { sessionID: 'session-1' } }), [{ t: 'turn-end', isError: false }]);
 });
 
-test('the Default Agent publishes scope retirement once before closing its transport', () => {
+test('the Default Agent publishes scope retirement once and contains a later native cleanup failure', async () => {
   const ws = new FakeWebSocket();
   let closed = 0;
+  let fail!: (error: Error) => void;
+  const closing = new Promise<void>((_resolve, reject) => { fail = reject; });
   const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
     windowId: 'retire-window', folder: '/workspace',
   }, {
     models: async () => [],
     client: async () => new Promise<never>(() => {}),
     beginTurn: () => {}, endTurn: () => {}, tools: () => [], complete: async () => '', runTool: async () => ({ text: '', tool: '', model: '' }), onExit: () => () => {},
-    close: async () => { closed += 1; },
+    close: () => { closed += 1; return closing; },
   });
   const termination = { kind: 'scope-removed' as const, folder: '/workspace' };
   session.dispose(termination);
@@ -593,6 +595,12 @@ test('the Default Agent publishes scope retirement once before closing its trans
   ]);
   assert.equal(ws.readyState, 3);
   assert.equal(closed, 1);
+  fail(new Error('Agent process 123 did not finish closing after termination.'));
+  // A catch on the lower process retirement does not handle the runtime's promise.
+  await settle();
+  assert.equal(ws.listenerCount('message'), 0);
+  assert.equal(ws.listenerCount('close'), 0);
+  assert.equal(ws.sent.length, 1, 'cleanup failure must not reopen a retired transport');
 });
 
 test('bundled OpenCode inherits launch plumbing but no ambient credentials or injection flags', () => {

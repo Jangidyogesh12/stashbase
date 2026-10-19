@@ -1,4 +1,4 @@
-import { agentProcessExitDiagnostic, ownAgentProcess, retireAgentProcess } from './agent-process.ts';
+import { agentProcessClosed, agentProcessExitDiagnostic, ownAgentProcess, retireAgentProcess, type AgentStopReason } from './agent-process.ts';
 /**
  * App-scoped owner of the pinned OpenCode headless server.
  *
@@ -420,22 +420,25 @@ class OpenCodeRuntime {
     return () => this.exitListeners.delete(listener);
   }
 
-  close(): Promise<void> {
-    return this.closing ??= this.retire();
+  close(reason: AgentStopReason = 'session_closed'): Promise<void> {
+    return this.closing ??= this.retire(reason);
   }
 
-  private async retire(): Promise<void> {
+  private async retire(reason: AgentStopReason): Promise<void> {
     this.generation += 1;
     const running = this.running;
     const process = running?.process ?? this.startingProcess;
     this.running = null;
     this.startingProcess = null;
     releaseHostedAgentChannel(this.agentSessionId);
-    if (process) await retireAgentProcess(process);
-    // Also wait for preparation that had not spawned yet, and for a startup
-    // failure already retiring its child. The generation fence prevents retry.
-    await this.starting?.catch(() => {});
-    runtimes.delete(this);
+    // Keep the original deadline result, but release this owner after actual
+    // closure even if that happens later. Preparation cannot resurrect it.
+    const starting = this.starting;
+    const retirement = process ? retireAgentProcess(process, reason) : Promise.resolve();
+    void Promise.all([process ? agentProcessClosed(process) : Promise.resolve(), starting?.catch(() => {})])
+      .then(() => { runtimes.delete(this); });
+    await retirement;
+    await starting?.catch(() => {});
   }
 
   private async start(directory: string, retryHistoryStartup: boolean): Promise<RunningOpenCode> {
@@ -489,7 +492,7 @@ class OpenCodeRuntime {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
         detached: process.platform !== 'win32',
-      }));
+      }), { runtime: 'stashbase', purpose: this.purpose, processStartId: attemptId, runtimeVersion: BUNDLED_OPENCODE_VERSION });
       const exitDiagnostic = agentProcessExitDiagnostic(child);
       this.startingProcess = child;
 
@@ -568,7 +571,7 @@ export interface OpenCodeSessionRuntime {
   endTurn(): void;
   diagnostic?(): unknown;
   onExit(listener: (error: Error) => void): () => void;
-  close(): Promise<void>;
+  close(reason?: AgentStopReason): Promise<void>;
 }
 
 export type { AgentToolResult } from './default-agent-tools.ts';
@@ -590,7 +593,7 @@ interface PreparedOpenCode {
   tools: readonly EnabledAgentTool[];
   runtime: OpenCodeRuntime;
   ready: Promise<void>;
-  close(): Promise<void>;
+  close(reason?: AgentStopReason): Promise<void>;
 }
 
 const warmSlot = new OpenCodeWarmSlot<PreparedOpenCode>();
@@ -659,7 +662,7 @@ export function createOpenCodeSessionRuntime(context: OpenCodeContext): OpenCode
     if (prepared && (!isDeepStrictEqual(list, prepared.profiles)
       || !isDeepStrictEqual(tools, prepared.tools))) {
       stopExitListener();
-      await sessionRuntime.close();
+      await sessionRuntime.close('configuration_changed');
       if (closed) throw new Error('OpenCode startup was cancelled.');
       sessionRuntime = makeRuntime();
     } else if (prepared) {
@@ -680,7 +683,7 @@ export function createOpenCodeSessionRuntime(context: OpenCodeContext): OpenCode
     const next: PreparedOpenCode = {
       key, windowId: context.windowId, directory: context.directory,
       attributionId: nextId, profiles, tools, runtime: nextRuntime,
-      ready: Promise.resolve(), close: () => nextRuntime.close(),
+      ready: Promise.resolve(), close: (reason) => nextRuntime.close(reason),
     };
     warmSlot.put(next);
     nextRuntime.onExit(() => warmSlot.discard(next));
@@ -745,19 +748,24 @@ export function createOpenCodeSessionRuntime(context: OpenCodeContext): OpenCode
     },
     diagnostic: () => hostedAgentDiagnostic(attributionId),
     onExit: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    close: () => { closed = true; turnAbort.abort(); stopExitListener(); return sessionRuntime.close(); },
+    close: (reason) => { closed = true; turnAbort.abort(); stopExitListener(); return sessionRuntime.close(reason); },
   };
 }
 
 export const discardWarmOpenCodeForWindow = (windowId?: string): Promise<void> =>
-  warmSlot.clear((entry) => !windowId || entry.windowId === windowId);
+  warmSlot.clear((entry) => !windowId || entry.windowId === windowId, 'window_closed');
 export const discardWarmOpenCodeForFolder = (directory: string): Promise<void> =>
-  warmSlot.clear((entry) => filesystemPath.equal(entry.directory, directory));
+  warmSlot.clear((entry) => filesystemPath.equal(entry.directory, directory), 'scope_removed');
 
 export const openCodeClient = (directory: string, retryStartup = false): Promise<OpencodeClient> => historyRuntime.client(directory, retryStartup);
 export const openCodeRuntimeAvailability = () => historyRuntime.availability();
 export async function stopOpenCodeRuntime(): Promise<void> {
-  await warmSlot.clear();
-  await Promise.all([...runtimes].map((runtime) => runtime.close()));
+  // Every owner gets a cleanup attempt even if another runtime timed out.
+  const results = await Promise.allSettled([
+    warmSlot.clear(() => true, 'app_shutdown'),
+    ...[...runtimes].map((runtime) => runtime.close('app_shutdown')),
+  ]);
   await stopHostedAgentBroker();
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed?.status === 'rejected') throw failed.reason;
 }

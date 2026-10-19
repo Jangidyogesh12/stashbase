@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { AppConfigFile } from './app-config.ts';
 import { readAppConfigStrict, writeAppConfigStrict } from './app-config.ts';
 import { boundedDiagnosticContext, telemetryEventSchema, type TelemetryEvent, type ErrorContext } from '../shared/protocols/http/telemetry.ts';
-import { diagnosticOperation, errorDiagnostic } from './error-diagnostics.ts';
+import { diagnosticAlreadyReported, diagnosticOperation, errorDiagnostic } from './error-diagnostics.ts';
 import { diagnosticText } from '../shared/protocols/diagnostics.ts';
 import { diagnosticScope, type DiagnosticScope } from './diagnostic-context.ts';
 import { accountUsageId, usageState, usageIdentity, usagePayload, QUEUE_LIMIT,
@@ -74,6 +74,12 @@ export function createTelemetry(options: {
     earlyTurns.clear();
   };
   const sanitizeContext = (context: Record<string, unknown>) => Object.fromEntries(Object.entries(context).map(([key, value]) => [key, typeof value === 'string' ? diagnosticText(value, 500) : Array.isArray(value) ? value.map(item => typeof item === 'string' ? diagnosticText(item, 100) : item) : value]));
+  const sanitizeTermination = (value: NonNullable<Extract<TelemetryEvent, { event: 'agent_runtime_stop_result' }>['termination']>) => ({
+    ...value,
+    ...(value.taskkill_error ? { taskkill_error: errorDiagnostic(value.taskkill_error) } : {}),
+    ...(value.fallback_error ? { fallback_error: errorDiagnostic(value.fallback_error) } : {}),
+    ...(value.taskkill_stderr ? { taskkill_stderr: diagnosticText(value.taskkill_stderr) } : {}),
+  });
   const send = async (queued: QueuedUsage, controller: AbortController) => {
     const timeout = setTimeout(() => controller.abort(), 2000);
     timeout.unref();
@@ -84,6 +90,7 @@ export function createTelemetry(options: {
         payload.properties.diagnostic = errorDiagnostic(payload.properties.diagnostic);
       }
       if ('context' in payload.properties && payload.properties.context) payload.properties.context = sanitizeContext(payload.properties.context);
+      if ('termination' in payload.properties && payload.properties.termination) payload.properties.termination = sanitizeTermination(payload.properties.termination);
       if ('operation' in payload.properties) payload.properties.operation = diagnosticOperation(payload.properties.operation);
       const response = await sendFetch(`${options.host.replace(/\/$/, '')}/i/v0/e/`, {
         method: 'POST', redirect: 'error', signal: controller.signal,
@@ -212,6 +219,7 @@ export function createTelemetry(options: {
       const event = parsed.data;
       if ('diagnostic' in event && event.diagnostic) event.diagnostic = errorDiagnostic(event.diagnostic);
       if ('context' in event && event.context) event.context = sanitizeContext(event.context);
+      if (event.event === 'agent_runtime_stop_result' && event.termination) event.termination = sanitizeTermination(event.termination);
       if (event.event === 'application_error' || event.event === 'application_warning') {
         event.operation = diagnosticOperation(event.operation);
         if (!rollup && (!native || event.event === 'application_warning')) {
@@ -382,11 +390,13 @@ export function createTelemetry(options: {
       } catch { /* Authentication never depends on analytics. */ }
     },
     captureError(error: unknown, context: ErrorContext) {
+      if (diagnosticAlreadyReported(error)) return;
       try { capture({ event: 'application_error', ...context, diagnostic: errorDiagnostic(error) }); }
       catch { /* Never replace the original failure. */ }
     },
     /** A degraded but continuing operation, reported apart from failures. */
     captureWarning(error: unknown, context: ErrorContext) {
+      if (diagnosticAlreadyReported(error)) return;
       try { capture({ event: 'application_warning', ...context, diagnostic: errorDiagnostic(error) }); }
       catch { /* Never replace the original condition. */ }
     },

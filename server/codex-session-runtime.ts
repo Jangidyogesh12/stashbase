@@ -211,14 +211,15 @@ export class CodexSession implements AttributedAgentSession {
 
   private spawnAppServer(cwd: string): CodexAppServerConnection {
     this.modelsWithoutMetadata.clear();
+    const processStartId = randomUUID();
     const proc = this.spawnProcess(cwd, {
       STASHBASE_WINDOW_ID: this.windowId,
       // Session identity for host-side MCP tools (create_project): request
       // attribution only, never a path-resolution channel.
       STASHBASE_AGENT_SESSION_ID: this.attributionId,
-    });
+    }, { purpose: 'chat', processStartId });
     this.proc = proc;
-    updateAgentDiagnosticContext(this.ws, { process_start_id: randomUUID(), process_generation: ++this.processGeneration,
+    updateAgentDiagnosticContext(this.ws, { process_start_id: processStartId, process_generation: ++this.processGeneration,
       pending_rpc_methods: [], close_reason: undefined, close_initiator: undefined });
     const appServer = connectCodexAppServer(proc, {
       requestTimeoutMs: this.requestTimeoutMs,

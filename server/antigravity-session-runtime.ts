@@ -1,5 +1,5 @@
 import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
-import { retireAgentProcess, ownAgentProcess } from './agent-process.ts';
+import { retireAgentProcess, ownAgentProcess, type AgentStopReason } from './agent-process.ts';
 /**
  * Live Antigravity WebSocket session runtime.
  *
@@ -121,7 +121,7 @@ function spawnAntigravityProcess(cwd: string, args: string[], env: NodeJS.Proces
     env: agentCliEnv(env, [commandDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: agentCliNeedsShell(command),
-  }));
+  }), { runtime: 'antigravity', purpose: 'chat' });
 }
 
 export class AntigravitySession implements AttributedAgentSession {
@@ -463,7 +463,7 @@ export class AntigravitySession implements AttributedAgentSession {
       if (!this.interruptRequested) this.sendTurnError(result.error || 'Antigravity stopped the turn before it finished.');
       const requested = this.interruptRequested;
       this.settleTurn(!requested);
-      if (requested) this.retireProcess();
+      if (requested) this.retireProcess('interrupted');
       return;
     }
     if (result.status === 'SUCCESS') {
@@ -497,7 +497,7 @@ export class AntigravitySession implements AttributedAgentSession {
     if (unterminated.trim()) this.onLine(unterminated);
     this.proc = null;
     this.launchedWith = null;
-    void retireAgentProcess(proc).catch(() => {});
+    void retireAgentProcess(proc, 'process_exit').catch(() => {});
     this.denyPendingApprovals('The Antigravity process ended.');
     if (!this.busy || this.closed) return;
     if (this.interruptRequested) {
@@ -522,19 +522,19 @@ export class AntigravitySession implements AttributedAgentSession {
     try { proc.kill('SIGINT'); } catch { /* already gone */ }
     this.interruptTimer = setTimeout(() => {
       this.interruptTimer = null;
-      if (this.busy && this.interruptRequested && this.proc === proc) this.retireProcess();
+      if (this.busy && this.interruptRequested && this.proc === proc) this.retireProcess('interrupted');
     }, INTERRUPT_GRACE_MS);
     this.interruptTimer.unref?.();
   }
 
   /** Retire the live process; a turn it was running settles as stopped. */
-  private retireProcess(): void {
+  private retireProcess(reason: AgentStopReason = 'configuration_changed'): void {
     const proc = this.proc;
     this.proc = null;
     this.launchedWith = null;
     if (!proc) return;
     try { proc.stdin.end(); } catch { /* already closed */ }
-    this.retirement = retireAgentProcess(proc).catch(() => {});
+    this.retirement = retireAgentProcess(proc, reason).catch(() => {});
     if (this.busy && this.interruptRequested) this.settleTurn(false);
   }
 
@@ -713,7 +713,7 @@ export class AntigravitySession implements AttributedAgentSession {
     this.denyPendingApprovals('This StashBase chat has ended.');
     const proc = this.proc;
     this.proc = null;
-    if (proc) void retireAgentProcess(proc).catch(() => {});
+    if (proc) void retireAgentProcess(proc, termination?.kind === 'scope-removed' ? 'scope_removed' : 'session_closed').catch(() => {});
     try { this.ws.close(); } catch { /* already closed */ }
   }
 }
