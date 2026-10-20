@@ -6,7 +6,7 @@
  * so a task a template or the Agent wrote appears without reopening anything.
  * Writing or editing a task happens in the same page.
  */
-import { CalendarClock, Play, Plus } from 'lucide-react';
+import { CalendarClock, Plus } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { useStore } from 'zustand';
 
@@ -313,10 +313,9 @@ function TaskRow({
         disabled={
           task.problem !== null || latest?.status === 'running' || pending.has(`run:${task.id}`)
         }
-        leadingIcon={Play}
         onClick={onRunNow}
         size="compact"
-        variant="secondary"
+        variant="tertiary"
       >
         Run now
       </Button>
