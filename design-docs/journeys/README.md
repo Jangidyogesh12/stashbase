@@ -286,21 +286,21 @@ downloading again.
 
 ### Flow
 
-Open the project's Scheduled tasks list → write a task (name, daily time, Agent, and
+Open the project's Scheduled tasks list → write a task (name, daily time, agent, and
 what to do, optionally mentioning a workflow file) or keep one a template ships → switch
 it on → at its time a new chat starts in the project → see in the list that it ran and
 how it went → read the result in that chat.
 
 ### Required Results
 
-A run is a new chat sent the way the reader sends one: same Agent, model, permission
+A run is a new chat sent the way the reader sends one: same agent, model, permission
 mode, approvals, and questions, titled with the task's name and the day. It never takes
 focus or the chat the reader is writing in; a project with no window gets one opened out
 of sight. A task runs at most once a day; a run missed while StashBase was closed or
 asleep is listed as missed and never runs late.
 Copying a template or syncing the folder to another computer never switches a task on.
 The list never leaves the reader guessing: each task says when it runs next, and every
-recent run says when it ran, what became of it, what the Agent last said, and why it
+recent run says when it ran, what became of it, what the agent last said, and why it
 failed or was missed.
 
 ### Failure and Recovery

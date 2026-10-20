@@ -96,11 +96,11 @@ function startOutcome(state: AgentSessionState): ScheduledRunOutcome | null {
   const { connection } = state;
   if (connection.kind === 'failed') return failed(connection.message);
   if (connection.kind === 'closed')
-    return failed(connection.message ?? 'The Agent stopped before the request was sent.');
+    return failed(connection.message ?? 'The agent stopped before the request was sent.');
   if (connection.kind === 'retired' || connection.kind === 'disposed') {
     return failed('The chat closed before the request was sent.');
   }
-  if (state.delivery === 'failed') return failed('The Agent could not take the request.');
+  if (state.delivery === 'failed') return failed('The agent could not take the request.');
   const submitted = state.transcript.some((block) => block.kind === 'user');
   return submitted && state.nativeSessionId
     ? { agent: state.agent, sessionId: state.nativeSessionId, status: 'sent' }
@@ -134,7 +134,7 @@ export async function startScheduledRun(
     signal,
   );
   if (!preferences || preferences.failure) {
-    return failed('Your Agent settings could not be read, so the chat was not started.');
+    return failed('Your agent settings could not be read, so the chat was not started.');
   }
   const agentId = request.agent ?? runtime.preferredAgent(scope);
 
@@ -142,7 +142,7 @@ export async function startScheduledRun(
   try {
     agents = (await catalog.listAgents(signal)).agents;
   } catch {
-    return failed('StashBase could not check whether the Agent is ready.');
+    return failed('StashBase could not check whether the agent is ready.');
   }
   const agent = agents.find((candidate) => candidate.id === agentId);
   if (!agent?.ready) return failed(notReady(agent, agentId));
@@ -192,7 +192,7 @@ export async function startScheduledRun(
       (state) => startOutcome(state) ?? undefined,
       START_DEADLINE_MS,
       signal,
-    )) ?? failed('The Agent did not start the chat in time.');
+    )) ?? failed('The agent did not start the chat in time.');
   if (outcome.status === 'failed') {
     discardUnsent(runtime, session);
     return outcome;
@@ -223,7 +223,7 @@ function turnOutcome(state: AgentSessionState): ScheduledTurnOutcome | null {
   const lost =
     connection.kind === 'failed' || connection.kind === 'closed' ? connection.message : null;
   const reason =
-    (error?.kind === 'error' ? error.text : null) ?? lost ?? 'The Agent did not finish.';
+    (error?.kind === 'error' ? error.text : null) ?? lost ?? 'The agent did not finish.';
   return { reason, status: 'failed', summary };
 }
 

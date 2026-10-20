@@ -26,7 +26,7 @@ helper; these documents state product contracts, not implementation inventories.
 | [Agent Sessions](capabilities/agent-sessions.md) | Conversation identity, readiness, submissions, execution, continuity and recovery |
 | [Project Context](capabilities/project-context.md) | Preparation, indexing readiness, retrieval, and source evidence |
 | [Account and Settings](capabilities/account-settings.md) | Access prerequisites, configuration scope, credentials, and shared settings decisions |
-| [Scheduled Tasks](capabilities/scheduled-tasks.md) | Recurring Agent requests: their file, switches, runs, and what the reader sees of them |
+| [Scheduled Tasks](capabilities/scheduled-tasks.md) | Recurring agent requests: their file, switches, runs, and what the reader sees of them |
 
 ## Reading and Maintenance
 

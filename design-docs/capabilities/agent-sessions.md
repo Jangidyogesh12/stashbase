@@ -222,7 +222,7 @@ permissions, with current model and tool choices checked before use.
 
 A [scheduled task](scheduled-tasks.md) starts its chat through this same session and
 send path, so every rule above applies to it unchanged. Its chat starts without taking
-the window, keeps the task's Agent and a title of its own, and never opens Send's
+the window, keeps the task's agent and a title of its own, and never opens Send's
 access prompt. [Scheduled Tasks](scheduled-tasks.md) owns the rest.
 
 ## Failure and Recovery

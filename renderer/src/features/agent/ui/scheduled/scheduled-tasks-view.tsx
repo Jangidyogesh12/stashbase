@@ -182,7 +182,7 @@ export function ScheduledTasksView({
               )}
               {schedule?.problem && (
                 <FailureLine className="m-0" tone="input">
-                  {schedule.problem} Ask the Agent to fix .schedules.json, or edit it with hidden
+                  {schedule.problem} Ask your agent to fix .schedules.json, or edit it with hidden
                   files shown.
                 </FailureLine>
               )}

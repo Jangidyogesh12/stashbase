@@ -77,7 +77,7 @@ Manual packaged checks must set `STASHBASE_TELEMETRY_DISABLED=1` before launchin
 see [testing packaged builds](docs/usage-statistics.md#testing-packaged-builds).
 
 `test:server`, `test:agent` and `test:mcp` preload `server/__tests__/isolated-home.ts`,
-which points the home directory, app data and Agent settings at a temporary
+which points the home directory, app data and agent settings at a temporary
 folder, so host tests never change your own `~/.stashbase` config or projects.
 Keep that `--import` when running host test files directly, as above.
 

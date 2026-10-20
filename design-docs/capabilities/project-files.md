@@ -59,7 +59,7 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
   made through a file tool, a shell command, or a subagent. File refreshes do
   not steal focus or imply a universal accept/reject gate.
 - A project's scheduled tasks live in its root `.schedules.json`, user-owned content
-  that Agents write with the ordinary file tools. It joins Files only with hidden files
+  that agents write with the ordinary file tools. It joins Files only with hidden files
   shown and is never retrieval-eligible. [Scheduled Tasks](scheduled-tasks.md#the-file-is-the-source-the-list-is-its-view)
   owns how the task list reads and edits it.
 - Returning focus to StashBase refreshes the open project's Files tree and

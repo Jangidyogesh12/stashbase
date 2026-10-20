@@ -2,7 +2,7 @@
 
 ## Scope
 
-A scheduled task is recurring work a project asks of its Agent: at a set local time
+A scheduled task is recurring work a project asks of its agent: at a set local time
 every day, a new chat starts in the project with a request the reader wrote once. A
 daily brief that follows a workflow file in the project is the typical case. This
 document owns why scheduled tasks work the way they do and the rules that follow from
@@ -25,7 +25,7 @@ task mentions, not in app code. A daily brief, a weekly review, or a reading dig
 a file a template ships or the reader writes; none needs a release of StashBase.
 
 - A task's request is text, project files mentioned with `@`, or both, written in the
-  same field as a Chat message. A task that only mentions files asks the Agent to
+  same field as a Chat message. A task that only mentions files asks the agent to
   follow them, so a reader never has to decide whether a file is a workflow, a skill,
   or a checklist.
 - A task stores file paths, never their contents. Each run reads the files as they
@@ -35,11 +35,11 @@ a file a template ships or the reader writes; none needs a release of StashBase.
 
 A run is the reader opening a new chat in the project, writing the request, and
 pressing Send. It uses the same session, send path, and context checks as any chat,
-so the Agent, model, permission mode, approvals, and clarifying questions behave
+so the agent, model, permission mode, approvals, and clarifying questions behave
 exactly as they do when the reader is at the keyboard. There is no separate automation
 engine and no second permission model to learn or to secure.
 
-- The chat runs on the task's Agent, or on the project's Agent when the task names
+- The chat runs on the task's agent, or on the project's agent when the task names
   none, and keeps it for its whole life.
 - Its title is the task's name and the day, such as "Daily brief · Oct 16", kept as a
   name of its own, so each day's result is easy to find in the chat list.
@@ -52,7 +52,7 @@ A task's definition is part of the project: it lives in the project root's
 `.schedules.json`, it is copied with a template, and it syncs with the folder. Whether
 a task is switched on, and the record of its runs, belong to the computer that runs it.
 
-- Copying a template never switches its tasks on, so nothing spends Agent credits
+- Copying a template never switches its tasks on, so nothing spends agent credits
   until the reader decides it should.
 - A folder synced to two computers is not run twice: each computer has its own switch.
 - A task the reader creates starts switched off, even when an earlier task once used
@@ -63,7 +63,7 @@ a task is switched on, and the record of its runs, belong to the computer that r
 The reader reads and changes tasks through the task list, never through the JSON. The
 list and the file stay one thing:
 
-- The list follows the file while it is open, so a task a template or the Agent wrote
+- The list follows the file while it is open, so a task a template or the agent wrote
   appears without reopening anything.
 - An edit in the list rewrites only its own task, against the version it read. It
   keeps every field it does not know, at the top level and in the task, so templates
@@ -88,7 +88,7 @@ never has to open a chat or a log to find out.
 - Each task says what became of its latest run: starting its chat, working, waiting
   for the reader's approval, finished, did not finish, did not run, or missed, with
   the reason. While this window holds the run's chat, its state is live.
-- A finished run quotes the start of the Agent's last reply. A turn can end normally
+- A finished run quotes the start of the agent's last reply. A turn can end normally
   and still say it could not do the work, so "finished" alone would claim more than
   the app knows.
 - A run history lists every recent run with its time, its outcome, its reason when it
@@ -131,7 +131,7 @@ permissions and windows as their own work.
 A run cannot open a sign-in prompt, an installer, or a dialog. When it cannot start,
 it fails and says why, and the reason waits in the list:
 
-- An Agent that needs sign-in or setup.
+- An agent that needs sign-in or setup.
 - A send the ordinary checks refuse, such as a mentioned file no longer in the project.
 - A chat that does not start in time, or a window that closed first.
 
@@ -155,7 +155,7 @@ left starting when StashBase closed reads as failed rather than as one to repeat
 | `time` | Local 24-hour `HH:MM`, every day. |
 | `prompt` | The request, which may mention files with `@`. |
 | `files` | Project-relative paths the request follows. |
-| `agent` | `default`, `claude`, `codex`, or `antigravity`; absent means the project's Agent. |
+| `agent` | `default`, `claude`, `codex`, or `antigravity`; absent means the project's agent. |
 
 Other fields are kept as they are. [Using StashBase](../../docs/using-stashbase.md#schedule-tasks)
 shows the format to readers.
@@ -165,7 +165,7 @@ shows the format to readers.
 - Tasks run every day; there are no weekday or interval schedules yet.
 - A run's outcome after its window closed is not followed; the chat holds it.
 - Agents learn the file format from the user guide or an existing file; StashBase's
-  own Agent instructions do not describe it, which keeps every session's prompt
+  own agent instructions do not describe it, which keeps every session's prompt
   unchanged. Whether a short description is worth that cost is open.
 
 ## Related Journeys

@@ -646,7 +646,7 @@ across three owners; none keeps another's state.
 |---|---|
 | Node `server/scheduled-tasks.ts` | Reads the project task file (.schedules.json) leniently, writes one task per list edit through the shared text transaction, and keeps each task's switch, last claimed occurrence, and last run in app config keyed by project scope. Project removal forgets them. |
 | Electron main `electron/scheduled-tasks/` | The clock: checks after launch, every minute, and on resume or unlock; decides what is due in local time; claims through the server; finds or opens the project's window; asks it to start the run; records the outcome. |
-| Renderer Agent feature | Starts the run's chat through the session's ordinary send path, answers whether its request was accepted, and reports how its first turn ended. Shows the task list in the chat's place. |
+| Renderer agent feature | Starts the run's chat through the session's ordinary send path, answers whether its request was accepted, and reports how its first turn ended. Shows the task list in the chat's place. |
 
 - `shared/scheduled-task-timing.ts` is the one due rule: main decides what to claim
   with it, the list's adapter reads each task's next run and its missed days from it,
@@ -660,7 +660,7 @@ across three owners; none keeps another's state.
 - Each task keeps a bounded run history. A run moves forward only: main's report
   applies only to a run still starting, and the window's first-turn report only to a
   sent run, so a late or repeated report never rewrites an outcome. The first-turn
-  report carries a bounded excerpt of the Agent's last reply, kept with the outcome.
+  report carries a bounded excerpt of the agent's last reply, kept with the outcome.
 - Main reaches state only through the server's task routes, as it does for update
   preferences; it reads neither config nor task files. Every request names its project
   and only registered projects answer.
@@ -674,7 +674,7 @@ across three owners; none keeps another's state.
   subscribes after the first push; the preload starts each request once. Main's
   three-minute deadline outlasts the renderer's own start deadline.
 - `startBackgroundChat` mounts the run: never activated, never a reused blank chat,
-  Agent pinned against a late preference load, title marked as renamed. The run checks
+  agent pinned against a late preference load, title marked as renamed. The run checks
   catalog readiness instead of opening the access dialog, settles access mode and
   remembered models as the chat pane does for an active chat, binds named files as
   source context with no bound version, and sends. An unsent chat is discarded on
@@ -685,7 +685,7 @@ across three owners; none keeps another's state.
   mounted, hidden, so its scroll, draft, and focus survive. A run's live state comes
   from the chat tab whose native id it names.
 - The task file stays out of Files unless hidden files are shown, and out of
-  indexing; Agent and MCP writes follow the ordinary editable-file rules.
+  indexing; agent and MCP writes follow the ordinary editable-file rules.
 
 ## Credentials and External Access
 

@@ -565,7 +565,7 @@ export function createScheduledTaskStore(io: ScheduledTaskStoreIo) {
       return updateRun(root, taskId, runId, (run) => run.status !== 'sent' ? null : {
         ...run,
         finishedAt: io.now().toISOString(),
-        reason: result.status === 'failed' ? (result.reason ?? 'The Agent did not finish.') : null,
+        reason: result.status === 'failed' ? (result.reason ?? 'The agent did not finish.') : null,
         status: result.status,
         summary: result.summary?.slice(0, SCHEDULED_TASK_LIMITS.summary) || null,
       });

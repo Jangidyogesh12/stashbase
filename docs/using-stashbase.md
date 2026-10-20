@@ -92,14 +92,14 @@ brief.
 
 Choose **Scheduled tasks** under **New chat** in the Chats sidebar, or its calendar
 button in the chat pane's header beside a document. The project's task list takes the
-chat's place; open any chat to go back. Each task has a name, a time, the Agent that
+chat's place; open any chat to go back. Each task has a name, a time, the agent that
 runs it, and what to do: a sentence, a project file mentioned with `@` (such as a
-workflow), or both. A task that only mentions a file asks the Agent to follow it. The
+workflow), or both. A task that only mentions a file asks the agent to follow it. The
 file is read as it is when the task runs.
 
 The list shows each task's next run, or that it is off, and what became of its latest
 run: starting, working, waiting for your approval, finished, did not finish, did not run,
-or missed, with the reason. A finished run quotes the start of the Agent's last reply,
+or missed, with the reason. A finished run quotes the start of the agent's last reply,
 so you can see whether it did the work without opening the chat. **Run history** below
 lists every recent run with its time, outcome, and chat, and the days a task missed
 because StashBase was closed or asleep. A run's chat shows a clock in the chat list.
@@ -111,14 +111,14 @@ because StashBase was closed or asleep. A run's chat shows a clock in the chat l
   or syncing the folder to another computer, never switches a task on.
 - **Run now** starts a run right away without moving the task's next run.
 - A run's chat is titled with the task and the day, such as "Daily brief · Oct 16", and
-  appears at the top of the chat list. If the Agent asks for approval or asks a
+  appears at the top of the chat list. If the agent asks for approval or asks a
   question, the chat waits for you there. StashBase does not take focus or send
   notifications.
 - When the project has no open window, StashBase opens one out of sight and shows it
   the next time you come back to the app.
 
 Tasks are saved in `.schedules.json` at the project root, hidden in Files unless hidden
-files are shown. A template can ship one, and an Agent can write it with its file tools:
+files are shown. A template can ship one, and an agent can write it with its file tools:
 
 ```json
 {
@@ -136,7 +136,7 @@ files are shown. A template can ship one, and an Agent can write it with its fil
 ```
 
 `time` is local 24-hour time and `files` lists project-relative paths. `agent` is
-`default`, `claude`, `codex`, or `antigravity`; leave it out to use the project's Agent. Fields the
+`default`, `claude`, `codex`, or `antigravity`; leave it out to use the project's agent. Fields the
 list does not know are kept when you edit a task there.
 
 ## Turn On Search by Meaning

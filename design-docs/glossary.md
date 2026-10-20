@@ -67,7 +67,7 @@ capability.
 
 ## Scheduled task
 
-A request a project makes of its Agent every day at a set time: a new chat, sent as if
+A request a project makes of its agent every day at a set time: a new chat, sent as if
 the reader had sent it, while StashBase is open. It lives in the project's
 `.schedules.json`; whether it is switched on belongs to each computer. See
 [Scheduled Tasks](capabilities/scheduled-tasks.md).
