@@ -2514,6 +2514,7 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `server/gi
   (Oct 17 – Oct 18) below it. A task due 30 minutes before launch was never claimed
   within 95 seconds; the list showed it as missed that day, with the closed-or-asleep
   note and its next run tomorrow, and the run history listed all three newest first.
+  Repeated on 2026-10-20 on main after the merge, with the same results.
 - **AI Eval:** Not applicable; a run's quality is the workflow's and the agent's.
 - **Release Check:** packaged macOS, Windows, and Linux runs with a signed-in agent,
   including a run slept through listed as missed, and the hidden-window reveal on

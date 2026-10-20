@@ -102,15 +102,16 @@ never has to open a chat or a log to find out.
 
 ### Quiet by design
 
-A scheduled run must never interrupt. The reader may be typing in another app when it
+A scheduled run must never take focus. The reader may be typing in another app when it
 starts.
 
 - A run never takes focus and never takes over the chat the reader is writing in.
 - When the project has no window, one opens out of sight and appears, still without
   focus, the next time the reader comes back to StashBase.
-- There are no system notifications and no unread markers. A daily task runs at a
-  known time; the day's chat at the top of the list, and the task list itself, are
-  where results are found.
+- Its chat notifies like any other chat, under the reader's notification settings:
+  only while StashBase is in the background, for a finished or failed turn or a
+  pending approval or question. There are no unread markers; the day's chat at the
+  top of the list and the task list itself are where results are found.
 
 ### Runs happen only while StashBase is open
 

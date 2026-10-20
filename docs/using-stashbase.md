@@ -112,8 +112,9 @@ because StashBase was closed or asleep. A run's chat shows a clock in the chat l
 - **Run now** starts a run right away without moving the task's next run.
 - A run's chat is titled with the task and the day, such as "Daily brief · Oct 16", and
   appears at the top of the chat list. If the agent asks for approval or asks a
-  question, the chat waits for you there. StashBase does not take focus or send
-  notifications.
+  question, the chat waits for you there. StashBase does not take focus. Like any
+  chat, it can notify you while StashBase is in the background, as your notification
+  settings allow.
 - When the project has no open window, StashBase opens one out of sight and shows it
   the next time you come back to the app.
 
