@@ -29,6 +29,7 @@ import { registeredFolderRootsAsync, runWithFolderRoot } from './folder.ts';
 import { errorMessage, logger } from './log.ts';
 import { fileChanged, readTextSnapshotAsync, type TextSnapshot } from './text-file-transaction.ts';
 import type { AgentId } from '../shared/agent-protocol.ts';
+import { agentIdSchema } from '../shared/protocols/http/agent-runtime.ts';
 import {
   SCHEDULE_FILE_NAME,
   SCHEDULED_TASK_LIMITS,
@@ -46,12 +47,14 @@ const log = logger('scheduled-tasks');
 /** The file names Agents by what a reader calls them; `default` is the
  *  built-in runtime. Its implementation id is accepted as well. */
 const FILE_AGENTS: Readonly<Record<string, AgentId>> = {
+  antigravity: 'antigravity',
   claude: 'claude',
   codex: 'codex',
   default: 'stashbase',
   stashbase: 'stashbase',
 };
 const FILE_AGENT_NAMES: Readonly<Record<AgentId, string>> = {
+  antigravity: 'antigravity',
   claude: 'claude',
   codex: 'codex',
   stashbase: 'default',
@@ -150,7 +153,7 @@ function parseTask(raw: unknown, index: number, taken: Set<string>): ParsedSched
           : !time
             ? 'Set a time like 08:00.'
             : agentProblem
-              ? 'Choose Default, Claude or Codex to run this task.'
+              ? 'Choose Default, Claude, Codex or Antigravity to run this task.'
               : !files || files.some((file) => file === null) || files.length > SCHEDULED_TASK_LIMITS.files
                 ? 'List each file by its path inside this project.'
                 : record.prompt !== undefined && typeof record.prompt !== 'string'
@@ -309,7 +312,8 @@ function positiveInteger(value: unknown): number | null {
 }
 
 function storedAgent(value: unknown): AgentId | null {
-  return value === 'stashbase' || value === 'claude' || value === 'codex' ? value : null;
+  const parsed = agentIdSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function samePath(stored: unknown, root: string): boolean {

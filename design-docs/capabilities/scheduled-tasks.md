@@ -155,7 +155,7 @@ left starting when StashBase closed reads as failed rather than as one to repeat
 | `time` | Local 24-hour `HH:MM`, every day. |
 | `prompt` | The request, which may mention files with `@`. |
 | `files` | Project-relative paths the request follows. |
-| `agent` | `default`, `claude`, or `codex`; absent means the project's Agent. |
+| `agent` | `default`, `claude`, `codex`, or `antigravity`; absent means the project's Agent. |
 
 Other fields are kept as they are. [Using StashBase](../../docs/using-stashbase.md#schedule-tasks)
 shows the format to readers.

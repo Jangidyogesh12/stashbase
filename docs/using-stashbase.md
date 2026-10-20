@@ -136,7 +136,7 @@ files are shown. A template can ship one, and an Agent can write it with its fil
 ```
 
 `time` is local 24-hour time and `files` lists project-relative paths. `agent` is
-`default`, `claude`, or `codex`; leave it out to use the project's Agent. Fields the
+`default`, `claude`, `codex`, or `antigravity`; leave it out to use the project's Agent. Fields the
 list does not know are kept when you edit a task there.
 
 ## Turn On Search by Meaning

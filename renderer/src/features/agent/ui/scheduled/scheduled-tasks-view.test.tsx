@@ -314,6 +314,7 @@ describe('ScheduledTasksView', () => {
       'Follow this project (now Default)',
       'Always Codex',
       'Always Claude',
+      'Always Antigravity',
       'Always Default',
     ]);
   });

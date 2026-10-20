@@ -52,9 +52,11 @@ test('a task file is read leniently: each bad task says why it cannot run, the r
     ['copy', 'Another task in this project uses the same id.'],
     ['no-request', 'Say what to do, or add a file to follow.'],
     ['outside', 'List each file by its path inside this project.'],
-    ['robot', 'Choose Default, Claude or Codex to run this task.'],
+    ['robot', 'Choose Default, Claude, Codex or Antigravity to run this task.'],
     ['task-7', 'This entry is not a task.'],
   ]);
+  const antigravity = parseScheduleFile(JSON.stringify({ tasks: [{ name: 'Gemini', time: '09:00', prompt: 'x', agent: 'Antigravity' }] }));
+  assert.equal(antigravity.tasks[0]?.agent, 'antigravity');
   assert.match(parseScheduleFile('{ tasks: [').problem ?? '', /not valid JSON/);
   assert.match(parseScheduleFile('{"tasks": {}}').problem ?? '', /under "tasks"/);
   assert.deepEqual(parseScheduleFile(null), parseScheduleFile('  '));
