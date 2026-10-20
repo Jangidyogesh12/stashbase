@@ -1,5 +1,5 @@
 /** Conversation surface. Reads session state and invokes runtime actions. */
-import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -14,7 +14,6 @@ import {
   undescribedAgent,
   type Agent,
 } from '@/features/agent/domain/agent-catalog';
-import { changedSource } from '@/features/agent/domain/file-change';
 import {
   agentSkills,
   agentTurnIsActive,
@@ -28,6 +27,7 @@ import { useAgentModelRefresh } from '@/features/agent/hooks/use-agent-model-ref
 import { useAgentPersona } from '@/features/agent/hooks/use-agent-persona';
 import { useAgentRuntimeUpdate } from '@/features/agent/hooks/use-agent-runtime-update';
 import { useAttentionFocus } from '@/features/agent/hooks/use-attention-focus';
+import { useChangedSource } from '@/features/agent/hooks/use-changed-source';
 import { useRenameConversation } from '@/features/agent/hooks/use-conversation-history';
 import { useRotatingPrompt } from '@/features/agent/hooks/use-rotating-prompt';
 import { cn } from '@/lib/utils';
@@ -150,18 +150,7 @@ function ChatWorkspace({
   const composerFocused = useAgentComposerFocused();
   const rotatingPrompt = useRotatingPrompt(EMPTY_CHAT_PROMPTS, composerFocused || !empty);
   const promptPlaceholder = empty && armedSkill === undefined ? rotatingPrompt : null;
-  const scope = state.scope;
-  const sourceFor = useMemo(
-    () => (path: string) => {
-      const source = changedSource(scope, path);
-      return source &&
-        scopeEnvironment?.folderPath === source.folderPath &&
-        scopeEnvironment.listing.files.some((file) => file.path === source.path)
-        ? source
-        : null;
-    },
-    [scope, scopeEnvironment],
-  );
+  const sourceFor = useChangedSource(runtime, state.scope);
   const composerRef = useRef<HTMLDivElement>(null);
   const composerShown = state.connection.kind !== 'retired' && state.connection.kind !== 'disposed';
   const editPrompt = useCallback(
