@@ -5,6 +5,7 @@ import type {
   AgentCatalogPort,
   AgentPersonaPort,
   AgentToolsPort,
+  ScheduledTasksPort,
 } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
@@ -23,6 +24,8 @@ export interface AgentWorkspaceProps {
   header?: boolean | undefined;
   /** The reader's persona library. */
   persona: AgentPersonaPort;
+  /** The project's scheduled tasks, shown in the chat's place on request. */
+  scheduledTasks?: ScheduledTasksPort | undefined;
   /** Default's optional model tools. */
   tools: AgentToolsPort;
   /** Opens the Gallery on its personas. The Gallery is a sibling feature, so
@@ -52,6 +55,8 @@ export interface AgentChatsProps {
   catalog: AgentCatalogPort;
   onOpenAgentSettings(): void;
   runtime: AgentWorkspaceRuntime;
+  /** The project's scheduled tasks; absent, the panel offers none. */
+  scheduledTasks?: ScheduledTasksPort | undefined;
   scope: AgentScope;
   workspaceName: string;
 }
@@ -70,10 +75,13 @@ const agentBoundary = (retry: () => void, children: ReactNode) => (
   </SurfaceBoundary>
 );
 
-export const AgentWorkspace = lazySurface<AgentWorkspaceProps>(() => import('./workspace'), {
-  boundary: agentBoundary,
-  fallback: <div className="h-full bg-surface-2" />,
-});
+export const AgentWorkspace = lazySurface<AgentWorkspaceProps>(
+  () => import('./workspace-surface'),
+  {
+    boundary: agentBoundary,
+    fallback: <div className="h-full bg-surface-2" />,
+  },
+);
 
 export const AgentChats = lazySurface<AgentChatsProps>(() => import('./chats/chats'), {
   boundary: agentBoundary,

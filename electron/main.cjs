@@ -56,6 +56,7 @@ const {
   isOAuthReturnUrl,
   isBillingReturnUrl,
   isStashBaseProtocolUrl,
+  openFolderInBackground,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -153,10 +154,16 @@ let externalNavigationCapability = null;
 let updatesCapability = null;
 let textServicesCapability = null;
 let notificationsCapability = null;
+let scheduledTasksCapability = null;
 let replacementWindowLifecycle = null;
 let replacementAppearance = null;
 let replacementEditableContextMenu = null;
 let replacementUpdates = null;
+let replacementScheduledTasks = null;
+let scheduledTaskScheduler = null;
+// Windows a scheduled run opened without showing them. Each is revealed,
+// still without taking focus, the next time the reader comes back to StashBase.
+const backgroundWindows = new Set();
 let workspaceSessionRestoreWindow = null;
 // Windows a launch reopened a project in also restore that project's tabs.
 const reopenedProjectWindows = new WeakSet();
@@ -288,6 +295,20 @@ function installReplacementBoundary() {
     createNotification: nativeNotifications.create,
   });
   app.once('will-quit', () => notificationService.dispose());
+  const scheduledTasks = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'scheduled-tasks',
+    'ipc.cjs',
+  ));
+  const { createScheduleServer, createScheduledTaskScheduler } = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'scheduled-tasks',
+    'scheduler.cjs',
+  ));
   projectFolderDialogCapability = boundary.PROJECT_FOLDER_DIALOG_CAPABILITY;
   projectLifecycleCapability = lifecycle.PROJECT_LIFECYCLE_CAPABILITY;
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
@@ -295,6 +316,7 @@ function installReplacementBoundary() {
   externalNavigationCapability = externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY;
   updatesCapability = updates.UPDATES_CAPABILITY;
   textServicesCapability = textServices.TEXT_SERVICES_CAPABILITY;
+  scheduledTasksCapability = scheduledTasks.SCHEDULED_TASKS_CAPABILITY;
   bugReportReview.registerBugReportReviewIpc({
     ipcMain,
     bugReports,
@@ -422,7 +444,70 @@ function installReplacementBoundary() {
     windows: () => mainWindows,
     setAutoCheck: writeAutoUpdatePreference,
   });
+  replacementScheduledTasks = scheduledTasks.registerScheduledTasksIpc({
+    BrowserWindow,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+    showsFolder: async (win, folder) => (await windowRegistry.windowsByFolder(folder)).includes(win),
+    runNow: (win, folder, taskId) => scheduledTaskScheduler.runNow(folder, taskId, win),
+  });
+  scheduledTaskScheduler = createScheduledTaskScheduler({
+    server: createScheduleServer(SERVER_URL),
+    dispatch: dispatchScheduledRun,
+    // An update install closes every window; nothing new starts meanwhile.
+    paused: () => desktopUpdateWindows.isActive(),
+    onDiagnostic: (error, action) => nativeDiagnostics.record(error, 'scheduled-task', { action, process: 'electron-main' }),
+  });
   replacementBoundaryInstalled = true;
+}
+
+// A scheduled run behaves as if the reader opened a new chat in the project
+// and sent the request: in the project's own window, which is opened in the
+// background when there is none. The window starts the chat through its
+// ordinary send path and answers whether that worked.
+async function dispatchScheduledRun({ folderPath, runId, task, title, window }) {
+  let target = window;
+  if (!target) {
+    const opened = await openFolderInBackground({
+      createWindow: () => createWindow({ background: true }),
+      enterFolder: (win, folder) => projectEntry.enterFolder(win, folder),
+      folder: folderPath,
+      registry: windowRegistry,
+    });
+    target = opened.win;
+  }
+  if (!isLiveMainWindow(target)) {
+    return { reason: 'The project window closed before the chat started.', status: 'failed' };
+  }
+  return replacementScheduledTasks.request(target, {
+    agent: task.agent,
+    files: task.files,
+    folderPath,
+    prompt: task.prompt,
+    runId,
+    taskId: task.id,
+    title,
+  });
+}
+
+// Coming back to StashBase shows what scheduled runs opened meanwhile, behind
+// whatever the reader is looking at, without moving focus.
+function revealBackgroundWindows() {
+  const focused = BrowserWindow.getFocusedWindow();
+  let revealed = false;
+  for (const win of [...backgroundWindows]) {
+    backgroundWindows.delete(win);
+    if (!isLiveMainWindow(win) || win.isVisible()) continue;
+    win.showInactive();
+    revealed = true;
+  }
+  // Showing a window can order it above the one just focused; keep the
+  // reader's own window in front.
+  if (revealed && focused && !focused.isDestroyed()) focused.moveTop();
 }
 let lastMainWindow = null;
 
@@ -861,7 +946,7 @@ async function openBugReportReview(win) {
   }
 }
 
-async function createWindow({ reopensProject = false } = {}) {
+async function createWindow({ background = false, reopensProject = false } = {}) {
   if (desktopUpdateWindows.isActive()) return;
   try {
     await ensureServer();
@@ -893,18 +978,33 @@ async function createWindow({ reopensProject = false } = {}) {
     // place the folder identity is spelled out.
     title: 'StashBase',
     backgroundColor: windowBackgroundColor(),
+    // A window a scheduled run opens stays out of sight, so nothing appears
+    // over whatever the reader is doing. It renders unthrottled meanwhile:
+    // its workspace has to mount and its chat has to start while hidden.
+    show: !background,
     ...applicationWindowChromeOptions(),
-    webPreferences: applicationWindowWebPreferences({
-      preloadPath: path.join(PROJECT_ROOT, 'dist', 'electron', 'renderer', 'preload.cjs'),
-      additionalArguments: [
-        `--stashbase-server-origin=${SERVER_URL}`,
-        ...(replacementAppearance?.windowArguments() ?? []),
-      ],
-    }),
+    webPreferences: {
+      ...applicationWindowWebPreferences({
+        preloadPath: path.join(PROJECT_ROOT, 'dist', 'electron', 'renderer', 'preload.cjs'),
+        additionalArguments: [
+          `--stashbase-server-origin=${SERVER_URL}`,
+          ...(replacementAppearance?.windowArguments() ?? []),
+        ],
+      }),
+      ...(background ? { backgroundThrottling: false } : {}),
+    },
   });
   const webContentsId = win.webContents.id;
-  if (!workspaceSessionRestoreWindow) workspaceSessionRestoreWindow = win;
+  // The reader's saved workspace belongs to a window they opened.
+  if (!workspaceSessionRestoreWindow && !background) workspaceSessionRestoreWindow = win;
   if (reopensProject) reopenedProjectWindows.add(win);
+  if (background) {
+    backgroundWindows.add(win);
+    win.once('show', () => {
+      backgroundWindows.delete(win);
+      if (!win.webContents.isDestroyed()) win.webContents.setBackgroundThrottling(true);
+    });
+  }
   win.webContents.on('render-process-gone', (_event, details) => {
     if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Renderer exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: 'renderer', reason: details.reason });
   });
@@ -918,7 +1018,8 @@ async function createWindow({ reopensProject = false } = {}) {
     externalNavigationCapability &&
     updatesCapability &&
     textServicesCapability &&
-    notificationsCapability
+    notificationsCapability &&
+    scheduledTasksCapability
   ) {
     replacementWindowCapabilities.set(
       win,
@@ -931,10 +1032,11 @@ async function createWindow({ reopensProject = false } = {}) {
         updatesCapability,
         textServicesCapability,
         notificationsCapability,
+        scheduledTasksCapability,
       ]),
     );
   }
-  lastMainWindow = win;
+  if (!background) lastMainWindow = win;
   replacementWindowLifecycle?.attach(win);
   win.webContents.on('context-menu', (_event, params) => {
     const template = replacementEditableContextMenu?.(
@@ -952,6 +1054,7 @@ async function createWindow({ reopensProject = false } = {}) {
     rememberOpenProjects(win);
     bugReports.discardUnreviewedDraftsForSource(webContentsId);
     mainWindows.delete(win);
+    backgroundWindows.delete(win);
     windowRegistry.remove(windowId);
     releaseWindowContext(windowId);
     if (lastMainWindow === win) {
@@ -959,6 +1062,11 @@ async function createWindow({ reopensProject = false } = {}) {
     }
     if (mainWindows.size === 0 && bugReportReviewWindows.size === 0) {
       if (shouldQuitAfterLastWindow(process.platform, quitRequested)) app.quit();
+    } else if (!quitRequested && process.platform !== 'darwin'
+      && [...mainWindows].every((candidate) => backgroundWindows.has(candidate))) {
+      // Where closing the last window quits, a hidden one must not keep the
+      // app running out of sight. It is shown instead, so its chat is kept.
+      revealBackgroundWindows();
     }
   });
 
@@ -1140,8 +1248,21 @@ if (!hasSingleInstanceLock) {
     installApplicationMenu();
     await openInitialWindows();
     await desktopUpdates.start();
-    app.on('browser-window-focus', () => { void desktopUpdates.checkOnActivity(); });
-    powerMonitor.on('resume', () => { void desktopUpdates.checkOnActivity(); });
+    app.on('browser-window-focus', () => {
+      void desktopUpdates.checkOnActivity();
+      revealBackgroundWindows();
+    });
+    app.on('did-become-active', revealBackgroundWindows);
+    app.on('activate', revealBackgroundWindows);
+    powerMonitor.on('resume', () => {
+      void desktopUpdates.checkOnActivity();
+      void scheduledTaskScheduler?.check();
+    });
+    powerMonitor.on('unlock-screen', () => { void scheduledTaskScheduler?.check(); });
+    // Scheduled tasks run only while StashBase is open. The first check, a
+    // moment after launch, starts a run whose time passed in the last few
+    // minutes; one missed while the app was closed is listed as missed.
+    scheduledTaskScheduler?.start();
     if (initialProtocolLaunch === 'oauth-return') focusOAuthReturn();
     if (initialProtocolLaunch === 'billing-return') focusBillingReturn();
   });
@@ -1209,4 +1330,5 @@ app.on('will-quit', (event) => {
 
 app.on('quit', () => {
   desktopUpdates.dispose();
+  scheduledTaskScheduler?.dispose();
 });

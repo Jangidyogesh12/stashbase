@@ -637,6 +637,56 @@ stable status without download, retry, or a new durable demand latch.
   catalog memory never supplies a fabricated new model. The composer retains
   drafts and blocks Send and provider changes during the update.
 
+## Scheduled Tasks
+
+[Scheduled tasks](../design-docs/capabilities/scheduled-tasks.md) split
+across three owners; none keeps another's state.
+
+| Owner | Authority |
+|---|---|
+| Node `server/scheduled-tasks.ts` | Reads the project task file (.schedules.json) leniently, writes one task per list edit through the shared text transaction, and keeps each task's switch, last claimed occurrence, and last run in app config keyed by project scope. Project removal forgets them. |
+| Electron main `electron/scheduled-tasks/` | The clock: checks after launch, every minute, and on resume or unlock; decides what is due in local time; claims through the server; finds or opens the project's window; asks it to start the run; records the outcome. |
+| Renderer Agent feature | Starts the run's chat through the session's ordinary send path, answers whether its request was accepted, and reports how its first turn ended. Shows the task list in the chat's place. |
+
+- `shared/scheduled-task-timing.ts` is the one due rule: main decides what to claim
+  with it, the list's adapter reads each task's next run and its missed days from it,
+  and the server records the missed days with it when a claim follows them. Both
+  place the entry in the history with the same helper, so the list's pending entry
+  and the recorded one never disagree in content or in place. A run that cannot start
+  within the rule's on-time window is missed, never run late.
+- Claims are at most once. The server refuses an occurrence at or before the one last
+  claimed and a second run of a task still running in this process; a run left running
+  by an earlier process reads as failed. A lost answer never causes a second dispatch.
+- Each task keeps a bounded run history. A run moves forward only: main's report
+  applies only to a run still starting, and the window's first-turn report only to a
+  sent run, so a late or repeated report never rewrites an outcome. The first-turn
+  report carries a bounded excerpt of the Agent's last reply, kept with the outcome.
+- Main reaches state only through the server's task routes, as it does for update
+  preferences; it reads neither config nor task files. Every request names its project
+  and only registered projects answer.
+- A run's window is chosen by folder identity in the shared entry lane. Without one,
+  main opens a window with `show: false` and background throttling off, enters the
+  folder through the acknowledged project entry handoff, and reveals it with
+  `showInactive` on the next app activation or window focus, keeping the focused window
+  in front. It never claims session restoration. Where closing the last window quits,
+  closing every visible window reveals hidden ones instead of leaving the app unseen.
+- Runs stay claimable per window until answered, because a window opened for a run
+  subscribes after the first push; the preload starts each request once. Main's
+  three-minute deadline outlasts the renderer's own start deadline.
+- `startBackgroundChat` mounts the run: never activated, never a reused blank chat,
+  Agent pinned against a late preference load, title marked as renamed. The run checks
+  catalog readiness instead of opening the access dialog, settles access mode and
+  remembered models as the chat pane does for an active chat, binds named files as
+  source context with no bound version, and sends. An unsent chat is discarded on
+  failure. Once the first turn settles the window reports its outcome against the run
+  id main passed with the request, then saves the title through the history rename.
+- The list stands in the chat's place through the workspace's `surface`; activating
+  any chat restores the chat, while a background run leaves it. The chat stays
+  mounted, hidden, so its scroll, draft, and focus survive. A run's live state comes
+  from the chat tab whose native id it names.
+- The task file stays out of Files unless hidden files are shown, and out of
+  indexing; Agent and MCP writes follow the ordinary editable-file rules.
+
 ## Credentials and External Access
 
 Node is the sole atomic app-config writer. Strict writes fail on malformed or
@@ -1161,6 +1211,7 @@ before committing. Release-specific evidence stays in the [Release Runbook](rele
 | Settings/account/MCP | `server/app-config.ts`, `server/hosted-account.ts`, `server/mcp-http-settings.ts`, `server/project-operations/index.ts` | `pnpm test:server` |
 | Renderer ownership and mechanics | `renderer/src/app/dependencies.ts`, `renderer/renderer-architecture.json`, `scripts/renderer/check-web.mjs` | Focused `pnpm test:renderer <path>`; Story checks `pnpm test:renderer:a11y`; complete `pnpm check:web`; wire changes add `pnpm test:protocols` |
 | Bug report / Gallery | `electron/bug-report-service.cjs`, `electron/bug-report-handoff.cjs`, `server/routes/gallery.ts` | `pnpm test:electron`, `pnpm test:electron:smoke`, `pnpm test:server`, focused renderer tests |
+| Scheduled tasks | `server/scheduled-tasks.ts`, `electron/scheduled-tasks/scheduler.ts`, `electron/scheduled-tasks/ipc.ts`, `renderer/src/features/agent/application/scheduled-run.ts` | `pnpm test:server`, `pnpm test:electron`, focused `pnpm test:renderer src/features/agent` |
 
 Source tests, controlled native smokes, model quality, and packaged delivery
 prove different things. Story accessibility checks execute each story's

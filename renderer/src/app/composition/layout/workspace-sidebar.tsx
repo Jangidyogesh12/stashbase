@@ -210,6 +210,7 @@ export function WorkspaceSidebar({
                   catalog={dependencies.agent.catalog}
                   onOpenAgentSettings={() => settings.openSettings('agents')}
                   runtime={agent.runtime}
+                  scheduledTasks={dependencies.agent.scheduledTasks}
                   scope={agent.scope}
                   workspaceName={activeFolder.name}
                 />

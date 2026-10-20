@@ -544,7 +544,8 @@ export async function assertProjectFolderAvailableAsync(absPath: string): Promis
   }
 }
 
-/** Forget membership and its app-owned Agent preferences without deleting source files. */
+/** Forget membership and its app-owned Agent preferences and scheduled-task
+ *  switches without deleting source files. */
 export async function removeRecentAsync(absPath: string): Promise<void> {
   const target = filesystemPath.absolute(absPath);
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -554,12 +555,15 @@ export async function removeRecentAsync(absPath: string): Promise<void> {
     const matches = await Promise.all(list.map((value) => storedFolderPathEqualsAsync(value.path, target)));
     const preferenceMatches = await Promise.all((snapshot.agentPreferences ?? []).map(entry =>
       storedFolderPathEqualsAsync(entry.scope, target)));
+    const scheduleMatches = await Promise.all((snapshot.scheduledTasks ?? []).map(entry =>
+      storedFolderPathEqualsAsync(entry?.scope, target)));
     const current = readConfigStrict();
     if (JSON.stringify(current) !== revision) continue;
     const filtered = list.filter((_, index) => !matches[index]);
-    if (filtered.length === list.length && !preferenceMatches.some(Boolean)) return;
+    if (filtered.length === list.length && !preferenceMatches.some(Boolean) && !scheduleMatches.some(Boolean)) return;
     current.recentFolders = filtered;
     if (preferenceMatches.some(Boolean)) current.agentPreferences = current.agentPreferences!.filter((_, index) => !preferenceMatches[index]);
+    if (scheduleMatches.some(Boolean)) current.scheduledTasks = current.scheduledTasks!.filter((_, index) => !scheduleMatches[index]);
     writeConfigStrict(current);
     return;
   }

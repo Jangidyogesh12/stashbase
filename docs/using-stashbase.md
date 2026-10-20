@@ -84,6 +84,61 @@ are excluded from Search and automatic Chat context. Preview, editing,
 retrieval text, and agent file access vary by format; see the canonical
 [Format Capability Matrix](../design-docs/capabilities/project-files.md#format-capability-matrix).
 
+## Schedule Tasks
+
+A scheduled task starts a new chat in its project at a set time every day, as if you
+had written the request and pressed Send. Use it for recurring work such as a daily
+brief.
+
+Choose **Scheduled tasks** under **New chat** in the Chats sidebar, or its calendar
+button in the chat pane's header beside a document. The project's task list takes the
+chat's place; open any chat to go back. Each task has a name, a time, the Agent that
+runs it, and what to do: a sentence, a project file mentioned with `@` (such as a
+workflow), or both. A task that only mentions a file asks the Agent to follow it. The
+file is read as it is when the task runs.
+
+The list shows each task's next run, or that it is off, and what became of its latest
+run: starting, working, waiting for your approval, finished, did not finish, did not run,
+or missed, with the reason. A finished run quotes the start of the Agent's last reply,
+so you can see whether it did the work without opening the chat. **Run history** below
+lists every recent run with its time, outcome, and chat, and the days a task missed
+because StashBase was closed or asleep. A run's chat shows a clock in the chat list.
+
+- Tasks run only while StashBase is open. A run that cannot start within five minutes
+  of its time, because StashBase was closed or the computer slept, never runs late. It
+  is listed as missed, and the task runs at its next time.
+- The switch beside a task belongs to this computer. Copying a project or a template,
+  or syncing the folder to another computer, never switches a task on.
+- **Run now** starts a run right away without moving the task's next run.
+- A run's chat is titled with the task and the day, such as "Daily brief · Oct 16", and
+  appears at the top of the chat list. If the Agent asks for approval or asks a
+  question, the chat waits for you there. StashBase does not take focus or send
+  notifications.
+- When the project has no open window, StashBase opens one out of sight and shows it
+  the next time you come back to the app.
+
+Tasks are saved in `.schedules.json` at the project root, hidden in Files unless hidden
+files are shown. A template can ship one, and an Agent can write it with its file tools:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "daily-brief",
+      "name": "Daily brief",
+      "time": "08:00",
+      "prompt": "",
+      "files": ["workflows/daily-brief.md"],
+      "agent": "claude"
+    }
+  ]
+}
+```
+
+`time` is local 24-hour time and `files` lists project-relative paths. `agent` is
+`default`, `claude`, or `codex`; leave it out to use the project's Agent. Fields the
+list does not know are kept when you edit a task there.
+
 ## Turn On Search by Meaning
 
 Keyword search needs no account or API key and is on from the start. Search

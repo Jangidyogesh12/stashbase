@@ -305,6 +305,35 @@ function openOrFocusFolder({ registry, folder, senderWindow, createWindow, enter
   return operation;
 }
 
+// A scheduled run needs its project's window without bringing anything
+// forward: the reader may be typing in another app. It shares the entry
+// lane, so it can never open a second window for a project the reader is
+// opening at the same moment, and it never takes over a Welcome window the
+// reader may be looking at.
+function openFolderInBackground({ registry, folder, createWindow, enterFolder, signal }) {
+  const previous = entryLanes.get(registry) ?? Promise.resolve();
+  const operation = previous.catch(() => {}).then(async () => {
+    signal?.throwIfAborted();
+    const existing = await registry.findByFolder(folder);
+    signal?.throwIfAborted();
+    if (existing && !existing.isDestroyed?.()) return { ok: true, action: 'existing', win: existing };
+    const target = await createWindow();
+    if (!target) throw new Error('A project window could not be created.');
+    try { await enterFolder(target, folder); }
+    catch (error) {
+      if (!registry.folderForWindow(target)) target.close?.();
+      throw error;
+    }
+    registry.setFolder(registry.idForWindow(target), folder);
+    return { ok: true, action: 'opened', win: target };
+  });
+  entryLanes.set(registry, operation);
+  void operation.finally(() => {
+    if (entryLanes.get(registry) === operation) entryLanes.delete(registry);
+  }).catch(() => {});
+  return operation;
+}
+
 async function releaseWindowContextWithRetry(
   request,
   {
@@ -359,6 +388,7 @@ module.exports = {
   isOAuthReturnUrl,
   isBillingReturnUrl,
   isStashBaseProtocolUrl,
+  openFolderInBackground,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,

@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 import { createExternalNavigationPreload } from '../external-navigation/preload.ts';
 import { createProjectPreload } from '../project/preload.ts';
+import { createScheduledTasksPreload } from '../scheduled-tasks/preload.ts';
 import { createTextServicesPreload } from '../text-services/preload.ts';
 import { createUpdatesPreload } from '../updates/preload.ts';
 import { createWorkspaceSessionPreload } from '../workspace/preload.ts';
@@ -20,6 +21,7 @@ contextBridge.exposeInMainWorld(
     notifications: createNotificationsPreload(ipcRenderer),
     runtime: createRuntimeConfig(process.argv),
     project: createProjectPreload(ipcRenderer),
+    scheduledTasks: createScheduledTasksPreload(ipcRenderer),
     textServices: createTextServicesPreload(ipcRenderer),
     workspaceSession: createWorkspaceSessionPreload(ipcRenderer),
     windowLifecycle: createWindowLifecyclePreload(ipcRenderer),

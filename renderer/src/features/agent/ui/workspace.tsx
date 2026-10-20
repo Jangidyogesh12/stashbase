@@ -44,6 +44,7 @@ import { AgentThinkingControl } from './composer/thinking';
 import { AgentConnectionNotice, connectionNotice } from './connection-notice';
 import { NewChatButton } from './new-chat-button';
 import { AgentPersonaControl } from './persona/agent-persona-control';
+import { ScheduledTasksButton } from './scheduled/scheduled-tasks-button';
 import { AgentTranscript } from './transcript/transcript';
 import { AgentUpgradeOfferCard } from './upgrade-offer';
 import { AgentWorkStatus } from './work-status';
@@ -62,6 +63,7 @@ function ChatWorkspace({
   catalogPort,
   header = true,
   persona: personaApi,
+  scheduledTasks,
   tools: toolsApi,
   onBrowsePersonas,
   onOpenAgentSettings,
@@ -185,6 +187,7 @@ function ChatWorkspace({
         session={active}
         trailing={
           <>
+            {scheduledTasks && <ScheduledTasksButton runtime={runtime} />}
             <ChatHistoryPopover runtime={runtime} scope={state.scope} />
             <NewChatButton catalog={catalogPort} runtime={runtime} scope={state.scope} />
           </>

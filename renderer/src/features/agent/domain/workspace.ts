@@ -17,9 +17,14 @@ export interface AgentTabState {
   title: string;
 }
 
+/** What the Agent area shows: the active chat, or the project's scheduled
+ *  tasks in its place. Opening any chat brings the chat back. */
+type AgentWorkspaceSurface = 'chat' | 'scheduled-tasks';
+
 export interface AgentWorkspaceState {
   attentionTarget?: AttentionTarget | null;
   activeId: string;
+  surface: AgentWorkspaceSurface;
   visits: string[];
   visitIndex: number;
   /** The window folder's live listing and preparation state, or null while
@@ -32,6 +37,7 @@ export interface AgentWorkspaceState {
 export function createAgentWorkspaceState(activeId: string): AgentWorkspaceState {
   return {
     activeId,
+    surface: 'chat',
     visits: [activeId],
     visitIndex: 0,
     disposed: false,
@@ -61,14 +67,15 @@ export function upsertAgentTab(
 }
 
 export function activateAgentTab(state: AgentWorkspaceState, id: string): AgentWorkspaceState {
-  return state.activeId === id
-    ? state
-    : {
-        ...state,
-        activeId: id,
-        visits: [...state.visits.slice(0, state.visitIndex + 1), id].slice(-100),
-        visitIndex: Math.min(state.visitIndex + 1, 99),
-      };
+  if (state.activeId === id)
+    return state.surface === 'chat' ? state : { ...state, surface: 'chat' };
+  return {
+    ...state,
+    activeId: id,
+    surface: 'chat',
+    visits: [...state.visits.slice(0, state.visitIndex + 1), id].slice(-100),
+    visitIndex: Math.min(state.visitIndex + 1, 99),
+  };
 }
 
 export function removeAgentTab(

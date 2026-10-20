@@ -218,6 +218,13 @@ permissions, with current model and tool choices checked before use.
   return keyed by question text; Skip or Stop leaves it unanswered rather than
   guessing on the reader's behalf.
 
+## Scheduled Runs
+
+A [scheduled task](scheduled-tasks.md) starts its chat through this same session and
+send path, so every rule above applies to it unchanged. Its chat starts without taking
+the window, keeps the task's Agent and a title of its own, and never opens Send's
+access prompt. [Scheduled Tasks](scheduled-tasks.md) owns the rest.
+
 ## Failure and Recovery
 
 Keep usable history, partial output, and unsent work. Distinguish setup/account
@@ -288,7 +295,8 @@ history metadata alone cannot restore them after loss or cleanup.
 [J07](../journeys/README.md#j07-converge-chat-into-a-document),
 [J10](../journeys/README.md#j10-turn-a-local-project-into-durable-agent-assisted-work),
 [J11](../journeys/README.md#j11-turn-a-conversation-into-a-project),
-[J12](../journeys/README.md#j12-build-wiki-pages-from-a-local-folder).
+[J12](../journeys/README.md#j12-build-wiki-pages-from-a-local-folder),
+[J14](../journeys/README.md#j14-run-a-scheduled-task-in-a-project).
 
 [Agent boundary](../../code-review/architecture.md#agent-sessions-and-permissions)
 owns runtime integration and permissions; [Project Files](project-files.md) owns

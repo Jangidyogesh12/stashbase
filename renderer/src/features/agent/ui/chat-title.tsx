@@ -3,6 +3,7 @@
  *  Chat has the whole card and the pane draws no name row of its own, on the
  *  column that row would have named it in. It names and does not rename: the
  *  Chats panel beside it owns renaming. */
+import { CalendarClock } from 'lucide-react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -15,6 +16,23 @@ import { AGENT_ICONS } from '@/shared/brand/agent-icons';
 
 export function ChatTitle({ runtime }: { runtime: AgentWorkspaceRuntime }) {
   const active = useStore(runtime.store, (state) => runtime.session(state.activeId));
+  const tasks = useStore(runtime.store, (state) => state.surface === 'scheduled-tasks');
+  if (tasks) {
+    return (
+      <span
+        aria-level={2}
+        className="flex min-w-0 items-center gap-1.5 text-caption"
+        role="heading"
+      >
+        <CalendarClock
+          aria-hidden
+          className="size-3.5 shrink-0 text-muted-foreground"
+          strokeWidth={1.75}
+        />
+        <span className="min-w-0 truncate font-medium text-foreground">Scheduled tasks</span>
+      </span>
+    );
+  }
   return active ? <SessionTitle active={active} /> : null;
 }
 

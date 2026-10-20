@@ -5,7 +5,7 @@
  * column under the band reads; the header's history popover is the quick
  * way in, this is the manager.
  */
-import { MessageCirclePlus, RefreshCw, Search, X } from 'lucide-react';
+import { CalendarClock, MessageCirclePlus, RefreshCw, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 
@@ -25,14 +25,22 @@ import {
   type AgentHistoryEntry,
 } from '@/features/agent/domain/conversation-history';
 import { useConversationHistory } from '@/features/agent/hooks/use-conversation-history';
+import { useScheduledRunSessions } from '@/features/agent/hooks/use-scheduled-tasks';
 import type { AgentChatsProps } from '@/features/agent/ui/workspace-lazy';
 import { FailureLine } from '@/shared/ui/failure-notice';
 
 import { ConversationTree } from './conversation-tree';
 import { DeleteConversationDialog } from './delete-conversation-dialog';
 
-export default function AgentChats({ runtime, scope, workspaceName }: AgentChatsProps) {
+export default function AgentChats({
+  runtime,
+  scheduledTasks,
+  scope,
+  workspaceName,
+}: AgentChatsProps) {
+  const tasksShown = useStore(runtime.store, (state) => state.surface === 'scheduled-tasks');
   const history = useConversationHistory(runtime, scope);
+  const scheduledRuns = useScheduledRunSessions(scheduledTasks, scope.path, history.history);
   const activeId = useStore(runtime.store, (state) => state.activeId);
   const tabs = useStore(runtime.store, (state) => state.tabs);
   const [query, setQuery] = useState('');
@@ -41,8 +49,15 @@ export default function AgentChats({ runtime, scope, workspaceName }: AgentChats
   const filterField = useRef<HTMLDivElement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AgentHistoryEntry | null>(null);
   const conversationGroups = useMemo(
-    () => buildConversationGroups({ activeId, history: history.history, scope, tabs }),
-    [activeId, history.history, scope, tabs],
+    // While the tasks stand in the chat's place, no chat row reads as open.
+    () =>
+      buildConversationGroups({
+        activeId: tasksShown ? '' : activeId,
+        history: history.history,
+        scope,
+        tabs,
+      }),
+    [activeId, history.history, scope, tabs, tasksShown],
   );
   const filteredGroups = conversationGroups
     .map((group) => ({
@@ -100,7 +115,7 @@ export default function AgentChats({ runtime, scope, workspaceName }: AgentChats
        *  px-2 and the row's own inset put its glyph on the shared 16px column
        *  with the footer rows' and the folder header's. */}
       <div className="shrink-0 px-2 pt-2 pb-1">
-        <SidebarMenu aria-label="New chat">
+        <SidebarMenu aria-label="Chat actions">
           <SidebarMenuItem>
             <SidebarMenuButton
               aria-label="Start new chat"
@@ -110,6 +125,18 @@ export default function AgentChats({ runtime, scope, workspaceName }: AgentChats
               New chat
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {/* The chats this project starts on its own, at their times. */}
+          {scheduledTasks && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                icon={CalendarClock}
+                isActive={tasksShown}
+                onClick={() => runtime.showScheduledTasks(true)}
+              >
+                Scheduled tasks
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </div>
 
@@ -231,6 +258,7 @@ export default function AgentChats({ runtime, scope, workspaceName }: AgentChats
               }}
               onRename={rename}
               onRestore={(entry) => void runtime.restore(entry)}
+              scheduled={scheduledRuns}
             />
             {history.mutationFailure && deleteTarget === null && (
               <FailureLine className="px-2 py-1" tone="input">
@@ -262,7 +290,6 @@ export default function AgentChats({ runtime, scope, workspaceName }: AgentChats
           className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-6 bg-gradient-to-t from-surface-1 to-transparent"
         />
       </div>
-
       <DeleteConversationDialog
         entry={deleteTarget}
         failure={history.mutationFailure}

@@ -73,6 +73,7 @@ import { runShutdownCleanup } from './shutdown-cleanup.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
 import { mount as mountAntigravityHookRoutes } from './routes/antigravity-hook.ts';
 import { mount as mountAgentPreferencesRoutes } from './routes/agent-preferences.ts';
+import { mount as mountScheduledTaskRoutes } from './routes/scheduled-tasks.ts';
 import { mount as mountAgentToolRoutes } from './routes/agent-tools.ts';
 import { mount as mountAgentPersonaRoutes } from './routes/agent-persona.ts';
 import { isAgentPersonaId } from '../shared/agent-persona.ts';
@@ -324,6 +325,7 @@ mountAgentSessionsRoutes(app); // shared contract history surface for the built-
 mountAntigravityHookRoutes(app); // approval for each tool call a StashBase Antigravity chat makes
 mountAgentPersonaRoutes(app);
 mountAgentPreferencesRoutes(app); // global + explicit member-folder Chat guidance
+mountScheduledTaskRoutes(app); // project task files, their switches and last runs
 
 // Renderer error sink. The root `ErrorBoundary` POSTs render-time
 // exceptions here so they appear in the same server log developers

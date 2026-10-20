@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { detectFormat } from './format.ts';
+import { SCHEDULE_FILE_NAME } from '../shared/protocols/http/scheduled-tasks.ts';
 import { analyzeHtml } from './html.ts';
 
 /** Directories that are usually generated, dependency caches, VCS state,
@@ -111,6 +112,9 @@ function isGeneratedPdfBatchCacheDir(seg: string): boolean {
 const EXCLUDED_BASENAMES = new Set<string>([
   'file-metadata.md',
   'folder-metadata.md',
+  // Scheduled-task configuration, not writing material. Reconcile already
+  // skips dot-files; this keeps a save from indexing it either.
+  SCHEDULE_FILE_NAME,
 ]);
 
 export function shouldIndexFilePath(relPath: string): boolean {

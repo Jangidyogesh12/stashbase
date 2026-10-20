@@ -1,19 +1,10 @@
 /** One window owns conversation identity, history operations, and project visits. */
-import { createStore, type StoreApi } from 'zustand/vanilla';
+import { createStore } from 'zustand/vanilla';
 
-import type {
-  AgentContextPort,
-  AgentPreferencesPort,
-  AgentReconnectScheduler,
-  AgentSessionPort,
-} from '@/features/agent/application/ports';
 import {
   createAgentSessionRuntime,
-  type AgentFilesChanged,
   type AgentSessionRuntime,
 } from '@/features/agent/application/session-runtime';
-import type { AgentUsageEvent } from '@/features/agent/application/session/usage';
-import type { AgentScopeEnvironment } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import {
   agentScopesEqual,
@@ -34,50 +25,15 @@ import {
 import { createScopeGuard } from '@/shared/runtime/scope-guard';
 
 import { createProjectAgents } from './project-agents';
+import type {
+  AgentWorkspaceRuntime,
+  AgentWorkspaceRuntimeOptions,
+} from './workspace-runtime-contract';
 import { syncAgentTab } from './workspace-tabs';
 
+export type { AgentWorkspaceRuntime, AgentWorkspaceRuntimeOptions };
+
 type AgentWorkspaceScope = { readonly folderPath: string | null };
-
-export interface AgentWorkspaceRuntime {
-  readonly store: StoreApi<AgentWorkspaceState>;
-  readonly preferences: ReturnType<typeof createProjectAgents>['store'];
-  loadPreferences(): Promise<void>;
-  chooseAgent(agent: AgentId): Promise<boolean>;
-  choosePersona(persona: string | null): boolean;
-  activate(id: string): void;
-  visit(direction: -1 | 1): void;
-  activeSession(): AgentSessionRuntime;
-  close(id: string): void;
-  dispose(): void;
-  listHistory(agent: AgentId, scope: AgentScope, signal: AbortSignal): Promise<AgentHistoryEntry[]>;
-  newChat(agent?: AgentId, scope?: AgentScope): AgentSessionRuntime;
-  removeHistory(entry: AgentHistoryEntry, signal: AbortSignal): Promise<void>;
-  renameHistory(
-    entry: AgentHistoryEntry,
-    title: string,
-    signal: AbortSignal,
-  ): Promise<AgentHistoryEntry>;
-  restore(entry: AgentHistoryEntry): Promise<boolean>;
-  retireFolder(folderPath: string): void;
-  session(id: string): AgentSessionRuntime | null;
-  start(availableAgents?: readonly AgentId[]): void;
-  startActive(): void;
-  setScopeEnvironment(environment: AgentScopeEnvironment | null): void;
-  setWindowFolder(folderPath: string | null): void;
-}
-
-export interface AgentWorkspaceRuntimeOptions {
-  recordUsage?: ((event: AgentUsageEvent) => void) | undefined;
-  autostart?: boolean | undefined;
-  context?: AgentContextPort | undefined;
-  createId(): string;
-  folderPath: string | null;
-  initialAgent?: AgentId | undefined;
-  preferences?: AgentPreferencesPort | undefined;
-  onFilesChanged?: ((change: AgentFilesChanged) => void) | undefined;
-  port: AgentSessionPort;
-  scheduler?: AgentReconnectScheduler | undefined;
-}
 
 interface MountedAgentSession {
   followsWindow: boolean;
@@ -109,6 +65,7 @@ export function createAgentWorkspaceRuntime({
   const projectAgents = createProjectAgents(preferencesPort, controller.signal);
   const preferred = (scope: AgentScope) => projectAgents.get(scope);
   const restorations = new Map<string, Promise<boolean>>();
+  const pinnedAgents = new Set<string>(); // a late preferences read never moves these
   let folderPath = initialFolderPath;
   let disposed = false;
   let started = autostart;
@@ -191,7 +148,7 @@ export function createAgentWorkspaceRuntime({
     async loadPreferences() {
       if (!preferencesPort || !(await projectAgents.load()) || disposed) return;
       for (const { runtime: session } of sessions.values()) {
-        projectAgents.apply(session);
+        if (!pinnedAgents.has(session.id)) projectAgents.apply(session);
       }
     },
     async chooseAgent(agent) {
@@ -220,7 +177,8 @@ export function createAgentWorkspaceRuntime({
       const state = store.getState();
       const index = agentVisitTarget(state, direction);
       const id = index === null ? undefined : state.visits[index];
-      if (id && index !== null) store.setState({ activeId: id, visitIndex: index });
+      if (id && index !== null)
+        store.setState({ activeId: id, surface: 'chat', visitIndex: index });
     },
     activeSession() {
       const mounted = sessions.get(store.getState().activeId);
@@ -230,6 +188,7 @@ export function createAgentWorkspaceRuntime({
     close(id) {
       if (disposed || !sessions.has(id)) return;
       if (sessions.size === 1) {
+        pinnedAgents.delete(id);
         mountSession(
           id,
           preferred(scopeForWindowFolder(folderPath)),
@@ -243,6 +202,7 @@ export function createAgentWorkspaceRuntime({
       mounted?.unsubscribe();
       mounted?.runtime.dispose();
       sessions.delete(id);
+      pinnedAgents.delete(id);
       const visibleScope = scopeForWindowFolder(folderPath);
       const nextWorkspace = removeAgentTab(store.getState(), id, visibleScope);
       store.setState(nextWorkspace, true);
@@ -283,6 +243,19 @@ export function createAgentWorkspaceRuntime({
       projectAgents.seed(mounted.runtime);
       store.setState((state) => activateAgentTab(state, id), true);
       return mounted.runtime;
+    },
+    startBackgroundChat({ agent, scope, title }) {
+      const id = createId();
+      if (disposed || !id.trim() || sessions.has(id)) throw new Error('Cannot start a chat.');
+      const { runtime: session } = mountSession(id, agent, scope, false, title);
+      pinnedAgents.add(id);
+      session.rename(title); // as the reader renaming it: automatic naming never replaces it
+      return session;
+    },
+    preferredAgent: preferred,
+    showScheduledTasks(open) {
+      if (disposed || store.getState().surface === (open ? 'scheduled-tasks' : 'chat')) return;
+      store.setState({ surface: open ? 'scheduled-tasks' : 'chat' });
     },
     async removeHistory(entry, signal) {
       const captured = guard.capture();

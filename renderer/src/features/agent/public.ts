@@ -31,3 +31,10 @@ export { attentionId } from './domain/attention';
 
 export { observeAgentOutcomes } from './application/outcome-notifications';
 export { subscribeDesktopSessions, focusDesktopSession } from './application/desktop-sessions';
+
+export {
+  createScheduledRunsAdapter,
+  createScheduledTasksAdapter,
+} from './infrastructure/scheduled-tasks-api';
+export { useScheduledRunReceiver } from './hooks/use-scheduled-run-receiver';
+export type { ScheduledRunsPort, ScheduledTasksPort } from './application/ports';

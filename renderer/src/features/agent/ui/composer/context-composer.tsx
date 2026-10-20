@@ -37,11 +37,10 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 import { FailureLine } from '@/shared/ui/failure-notice';
 import { dragCarriesSource, readSourceDrag } from '@/shared/utils/source-drag';
 
-import { useMentionRows } from './context-rows';
+import { MentionRowsListbox, useMentionRows } from './context-rows';
 import { DraftSourceTiles, isVisualSource } from './context-tiles';
 import { useComposerFocusRequest } from './focus';
 import { MentionEditor, type MentionEditorHandle, type MentionEditorProps } from './mention-editor';
-import { MentionListbox } from './mention-listbox';
 import { SuggestedSourceChip } from './suggested-source-chip';
 import { useSuggestedSource } from './use-suggested-source';
 
@@ -296,17 +295,7 @@ export function AgentContextComposer({
       onDropCapture={onDropCapture}
       onPasteCapture={onPasteCapture}
     >
-      {panel.open && (
-        <MentionListbox
-          activeIndex={panel.activeRow}
-          id={listboxId}
-          label={panel.label}
-          notice={panel.notice}
-          onHover={panel.onHover}
-          onPick={panel.onPick}
-          rows={panel.rows}
-        />
-      )}
+      <MentionRowsListbox id={listboxId} panel={panel} />
       {!attachments && uploads.length > 0 && (
         <FailureLine className="m-0 px-3 pt-2" tone="input">
           This agent cannot use these uploads. Remove them or choose another agent.

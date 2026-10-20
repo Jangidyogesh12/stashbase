@@ -140,6 +140,10 @@ export interface AppConfigFile {
    * outside a tool's own list. */
   defaultAgentTools?: Partial<Record<string, DefaultAgentToolChoice>>;
   agentCrewChats?: Record<string, Partial<Record<string, DefaultAgentToolChoice>>>;
+  /** Per project, whether each scheduled task is switched on and how its last
+   *  run went. The tasks themselves live in the project's `.schedules.json`;
+   *  `scheduled-tasks.ts` owns this record's shape. */
+  scheduledTasks?: Array<{ scope: string; tasks?: Record<string, unknown> }>;
 }
 
 export function readAppConfigStrict(file = CONFIG_FILE): AppConfigFile {

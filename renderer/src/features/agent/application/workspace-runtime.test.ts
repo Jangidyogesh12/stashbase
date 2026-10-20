@@ -28,6 +28,34 @@ describe('AgentWorkspaceRuntime', () => {
     expect(runtime.newChat('claude').id).toBe('chat-2');
   });
 
+  it('shows scheduled tasks in the chat place until a chat is opened again', () => {
+    let nextId = 0;
+    const runtime = createAgentWorkspaceRuntime({
+      createId: () => `chat-${++nextId}`,
+      folderPath: '/project/Research',
+      port: idleAgentSessionPort(),
+    });
+    const surface = () => runtime.store.getState().surface;
+    expect(surface()).toBe('chat');
+
+    runtime.showScheduledTasks(true);
+    // A scheduled run's chat opens behind the list rather than over it.
+    runtime.startBackgroundChat({
+      agent: 'claude',
+      scope: { kind: 'folder', path: '/project/Research' },
+      title: 'Daily brief · Oct 16',
+    });
+    expect(surface()).toBe('scheduled-tasks');
+    expect(runtime.store.getState().activeId).toBe('chat-1');
+
+    // Opening the chat already in front brings it back too.
+    runtime.activate('chat-1');
+    expect(surface()).toBe('chat');
+    runtime.showScheduledTasks(true);
+    runtime.newChat();
+    expect(surface()).toBe('chat');
+  });
+
   it('focuses a chat in the selected folder without rebinding started work', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
