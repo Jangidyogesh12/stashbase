@@ -1,9 +1,7 @@
 /**
- * The Files tree owns row visibility, gestures, and focus after mutations. A row
- * draws itself (`file-tree-rows`), a group animates itself
- * (`file-tree-group`), the keyboard contract is a pure function
- * (`file-tree-keyboard`), the roving tab stop lives in a hook
- * (`file-tree-focus`), and so does where a drop lands (`file-tree-drop`).
+ * The Files tree owns row visibility, gestures, and focus after mutations.
+ * Adjacent file-tree modules own row rendering, group animation, keyboard
+ * navigation, focus, drop targeting, and clipboard actions.
  */
 import { AnimatePresence, useReducedMotionConfig } from 'framer-motion';
 import {
@@ -38,6 +36,7 @@ import { FailureLine, FailureNotice } from '@/shared/ui/failure-notice';
 
 import { DeleteEntryDialog } from './delete-entry-dialog';
 import type { FileImportAction } from './file-import';
+import { ClipboardFailure, useTreeClipboard } from './file-tree-clipboard';
 import { useTreeDraft } from './file-tree-draft';
 import { dropRegion, useTreeDrop } from './file-tree-drop';
 import { tabStopPath, useTreeRowFocus } from './file-tree-focus';
@@ -108,6 +107,7 @@ export function FileTree({
   const files = useFiles(runtime, api);
   const tree = useTree(runtime, files.data ?? EMPTY_LISTING);
   const reveal = useReveal(runtime, api);
+  const clipboard = useTreeClipboard(runtime.scope.folder.path);
   const operations = useFileOperations(runtime, api, {
     onOpenSource,
     mutateSources,
@@ -311,6 +311,7 @@ export function FileTree({
     <FileTreeMenu
       actions={{
         importFiles,
+        onCopyPath: clipboard.copy,
         onCreate: operations.beginCreate,
         onDelete: operations.requestDelete,
         onRename: (entry) => {
@@ -383,6 +384,7 @@ export function FileTree({
           {reveal.error}
         </FailureLine>
       )}
+      {clipboard.refused && <ClipboardFailure />}
 
       <DeleteEntryDialog
         entry={operations.deleting}

@@ -1,8 +1,10 @@
 /** The Workbench tree's context menu: what a right click offers on a row and
  *  on the tree's own space. Every entry can be shown in the system file
- *  manager, and that is the one action a restricted entry keeps. */
+ *  manager and have its path copied, and those are the only actions a
+ *  restricted entry keeps. */
 import { ContextMenu } from '@base-ui/react/context-menu';
 import {
+  Copy,
   Eye,
   EyeOff,
   ExternalLink,
@@ -27,13 +29,16 @@ export type FileTreeMenuTarget =
   | {
       entry: WorkspaceEntry;
       kind: 'entry';
-      /** Reveal is the only action a restricted entry offers. */
+      /** Reveal and copying the path are all a restricted entry offers. */
       restricted: boolean;
       reprocessable: boolean;
     };
 
 export interface FileTreeMenuActions {
   importFiles?: { disabled: boolean; run(): void } | undefined;
+  /** Puts the entry's path on the clipboard, from the disk root or from the
+   *  project folder. */
+  onCopyPath(entry: WorkspaceEntry, form: 'absolute' | 'relative'): void;
   onCreate(entryKind: WorkspaceEntry['kind'], parentPath: string): void;
   onDelete(entry: WorkspaceEntry): void;
   onRename(entry: WorkspaceEntry): void;
@@ -87,20 +92,24 @@ function actionsFor(
     return rows;
   }
   const { entry } = target;
-  // Every entry can be shown where it lives on disk; a restricted one offers
-  // nothing else.
-  const reveal: MenuAction = {
-    icon: ExternalLink,
-    label: revealLabel,
-    run: () => actions.onReveal(entry),
-  };
-  if (target.restricted) return [reveal];
+  // Every entry can be shown where it lives on disk and have that place
+  // copied; a restricted one offers nothing else.
+  const location: MenuAction[] = [
+    { icon: ExternalLink, label: revealLabel, run: () => actions.onReveal(entry) },
+    { icon: Copy, label: 'Copy path', run: () => actions.onCopyPath(entry, 'absolute') },
+    {
+      icon: Copy,
+      label: 'Copy relative path',
+      run: () => actions.onCopyPath(entry, 'relative'),
+    },
+  ];
+  if (target.restricted) return location;
   const own: MenuRow[] = [
     { icon: PencilLine, label: 'Rename', run: () => actions.onRename(entry) },
     { destructive: true, icon: Trash2, label: 'Delete', run: () => actions.onDelete(entry) },
   ];
   if (entry.kind === 'folder') {
-    return [...create(entry.path), 'separator', reveal, 'separator', ...own];
+    return [...create(entry.path), 'separator', ...location, 'separator', ...own];
   }
   const reprocess: MenuAction = {
     icon: RefreshCw,
@@ -108,7 +117,12 @@ function actionsFor(
     run: () => actions.onReprocess(entry),
     title: 'Rebuild the searchable version of this file',
   };
-  return [...(target.reprocessable ? [reprocess] : []), reveal, 'separator', ...own];
+  return [
+    ...(target.reprocessable ? [reprocess, 'separator' as const] : []),
+    ...location,
+    'separator',
+    ...own,
+  ];
 }
 
 /**

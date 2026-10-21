@@ -212,7 +212,30 @@ describe('file tree menu', () => {
     );
   });
 
-  it('offers restricted entries only the reveal action', async () => {
+  it('copies an entry path from the disk root or from the project folder', async () => {
+    renderTree(treeApi());
+    // user-event installs its own clipboard stub over navigator, so the copy
+    // is read back through it.
+    const user = userEvent.setup();
+
+    fireEvent.contextMenu(await screen.findByRole('treeitem', { name: 'docs' }), {
+      clientX: 12,
+      clientY: 12,
+    });
+    await user.click(await screen.findByRole('menuitem', { name: 'Copy path' }));
+    await waitFor(async () =>
+      expect(await navigator.clipboard.readText()).toBe(`${RESEARCH_FOLDER.path}/docs`),
+    );
+
+    const archive = screen.getByRole('treeitem', {
+      name: 'archive.zip, excluded from Search and automatic Chat context',
+    });
+    fireEvent.contextMenu(archive, { clientX: 12, clientY: 12 });
+    await user.click(await screen.findByRole('menuitem', { name: 'Copy relative path' }));
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe('archive.zip'));
+  });
+
+  it('offers restricted entries only reveal and copying the path', async () => {
     renderTree(treeApi());
     const user = userEvent.setup();
 
@@ -220,9 +243,11 @@ describe('file tree menu', () => {
       name: 'vendor, restricted, Show in file manager',
     });
     fireEvent.contextMenu(vendor, { clientX: 12, clientY: 12 });
-    expect(await screen.findByRole('menuitem', { name: 'Show in file manager' })).not.toBeNull();
-    expect(screen.queryByRole('menuitem', { name: 'Rename' })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull();
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([
+      'Show in file manager',
+      'Copy path',
+      'Copy relative path',
+    ]);
     await user.keyboard('{Escape}');
     fireEvent.doubleClick(vendor);
     expect(screen.queryByRole('textbox')).toBeNull();

@@ -114,6 +114,21 @@ export function renamedTreePath(entryPath: string, name: string): string {
   return joinTreePath(parentPathOf(entryPath), name);
 }
 
+/** An entry's path as the system writes it, for the clipboard: from the disk
+ *  root, or from the project folder. A Windows project folder (a drive letter
+ *  or a UNC share) separates with backslashes throughout. */
+export function systemEntryPath(
+  folderPath: string,
+  entryPath: string,
+  form: 'absolute' | 'relative',
+): string {
+  const separator = /^(?:[A-Za-z]:[\\/]|\\\\)/u.test(folderPath) ? '\\' : '/';
+  const relative = entryPath.replaceAll('/', separator);
+  if (form === 'relative') return relative;
+  const root = folderPath.endsWith(separator) ? folderPath : `${folderPath}${separator}`;
+  return `${root}${relative}`;
+}
+
 /** True for the entry itself and everything below it. */
 export function treePathWithin(entryPath: string, prefix: string): boolean {
   return entryPath === prefix || entryPath.startsWith(`${prefix}/`);

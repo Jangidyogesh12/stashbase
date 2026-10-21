@@ -48,8 +48,10 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
   folder. A name already taken in the destination refuses the move.
   Agent/MCP moves and writes require their own authorized capability.
   Any entry's context menu shows it in the system file manager: Finder on
-  macOS, File Explorer on Windows, its containing folder elsewhere. Protected
-  entries are reveal-only; derived data remains hidden.
+  macOS, File Explorer on Windows, its containing folder elsewhere. It also
+  copies the entry's path, from the disk root or from the project folder, in
+  the platform's own separators. Protected entries offer only these location
+  actions; derived data remains hidden.
 - Renaming or deleting a source never migrates or deletes neighboring files
   merely because their names match retired extraction formats. Current derived
   data is owned separately in AppData.

@@ -594,7 +594,11 @@ branches. Links into it and a link out of it were rewritten, and the open tab
 followed. The drop region was reviewed by eye in the light theme. A drag that
 first enters a row is answered at `dragenter`, which Chromium uses for that step.
 Every row's context menu also offers the platform's reveal (`fileManagerLabel`,
-`POST /api/reveal/*`); `file-tree-menu.test.tsx` covers a file and a folder.
+`POST /api/reveal/*`) and copies its absolute or project-relative path
+(`systemEntryPath`); `file-tree-menu.test.tsx` covers both on a file and a folder,
+and `tree.test.ts` covers Windows separators.
+An isolated built Electron pass used native input events on both copy menu items
+and verified their values in the macOS clipboard; the menu was inspected by eye.
 A second isolated pass on 2026-10-20 reused the final built renderer and host,
 repeated file/folder-target and root moves plus OS-file payload import in the dark
 theme, and inspected the drop highlight and resulting layout.

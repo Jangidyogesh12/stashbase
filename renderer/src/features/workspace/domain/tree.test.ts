@@ -10,6 +10,7 @@ import {
   nextTreePath,
   parentTreePath,
   renamedTreePath,
+  systemEntryPath,
   treeCreationParent,
   treePathWithin,
   untitledDraftName,
@@ -94,6 +95,20 @@ describe('workspace tree model', () => {
     expect(treePathWithin('notes/plan.md', 'notes')).toBe(true);
     expect(treePathWithin('notes', 'notes')).toBe(true);
     expect(treePathWithin('notes-old/plan.md', 'notes')).toBe(false);
+  });
+
+  it('writes copied entry paths with the project folder’s own separator', () => {
+    expect(systemEntryPath('/Users/me/Notes', 'drafts/plan.md', 'absolute')).toBe(
+      '/Users/me/Notes/drafts/plan.md',
+    );
+    expect(systemEntryPath('/Users/me/Notes', 'drafts/plan.md', 'relative')).toBe('drafts/plan.md');
+    expect(systemEntryPath('C:\\Users\\me\\Notes', 'drafts/plan.md', 'absolute')).toBe(
+      'C:\\Users\\me\\Notes\\drafts\\plan.md',
+    );
+    expect(systemEntryPath('C:\\', 'plan.md', 'absolute')).toBe('C:\\plan.md');
+    expect(systemEntryPath('\\\\server\\share\\Notes', 'drafts/plan.md', 'relative')).toBe(
+      'drafts\\plan.md',
+    );
   });
 
   it('explains names that cannot become entries before any request', () => {
