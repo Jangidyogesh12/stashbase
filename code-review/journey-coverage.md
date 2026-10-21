@@ -354,10 +354,25 @@ its Plus subscription, an expired JWT renewed the database session, and sign-out
 revoked the JWT. The website passed its own Google-button/callback, reload,
 session-renewal, subscription and logout flow against that same local API;
 website logout left the independent desktop session active. No production state
-was changed. **Gaps:** real Google consent still requires a separate local OAuth
-callback configuration; released installers and OS protocol registration have
-not been validated by this local pass. These are rollout prerequisites, not
-claims of a completed production cutover.
+was changed by that local pass.
+
+**Production desktop authentication verification (2026-10-21):** An isolated
+profile of the released macOS 2.16.14 app completed a fresh real Google login
+through Supabase after new Supabase sign-ups were disabled. Its refreshed
+session retained the original imported user ID and active Pro subscription.
+The updated source Electron app with its built renderer completed real Google
+login through the production Better Auth API and loopback callback, retained
+the same user ID, subscription period and cancellation state, and renewed its
+API JWT through its opaque desktop session. Only the isolated profiles' local
+expiry timestamps were expired to exercise renewal; production subscription,
+credits and session expiry were not edited. Test telemetry was disabled.
+The new desktop kept its signed-in account and Pro state after a full restart;
+the rendered Sign out action returned the app to its signed-out state.
+Existing users can continue signing in on old releases while the API accepts
+Supabase sessions. New users need the updated client. The 2.16.15 upgrade notice
+asks users to sign in again with their original Google account; this rollout
+does not force an update. Packaged 2.16.15 installation, OS protocol return and
+cross-platform manual checks remain separate release evidence.
 
 ## J02: Folder
 

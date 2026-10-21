@@ -31,6 +31,13 @@ If you can't use any of them, the built-in **Default Agent** provides a fallback
 with free credits. Sign in to StashBase from the bottom of the sidebar or
 **Settings → Agents**; no separate agent installation or model API key is required.
 
+After upgrading to 2.16.15, sign in to StashBase again with the **same Google
+account** you used before. This release switches account authentication to
+Better Auth. Your existing subscription and credits stay linked to that account;
+your local projects and files are unchanged. Older releases remain compatible
+during the transition, and upgrading is optional. New users should install the
+latest release before signing in.
+
 Start with an idea or question in the project's Chat. When ready, ask the
 agent to create an outline or draft, or write directly in a new document.
 References and search are available when useful; neither a wiki nor a
