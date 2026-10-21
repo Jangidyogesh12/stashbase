@@ -731,9 +731,13 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   an in-memory Chromium session in system-proxy mode; Node retains PKCE, session
   persistence and flow retirement. The process-private relay binds IPv4 loopback
   on an ephemeral port, requires a per-launch capability, rejects browser Origins,
-  and admits only four fixed Better Auth operations on `api.stashbase.ai`: POST
-  `/api/auth/electron/token`, GET `/api/auth/get-session`, GET `/api/auth/token`,
-  and POST `/api/auth/sign-out`. It forbids redirects,
+  and admits only the fixed Better Auth operations listed in
+  `shared/hosted-auth-network.ts` on `api.stashbase.ai`: desktop exchange,
+  session/token reads, logout, email-code login, and explicit account linking.
+  Email attempts carry host-owned flow IDs. Cancel, a new login, or sign-out
+  retires older continuations; late issued sessions are revoked before they can
+  replace the current account. Browser-link permissions contain no session token
+  and require fresh session-bound mailbox proof. It forbids redirects,
   cookies and arbitrary hosts, bounds concurrency/body sizes/time, and aborts on
   disconnect or shutdown. The host consumes and removes the capability from its
   environment before spawning tools. A missing/failed desktop relay never falls

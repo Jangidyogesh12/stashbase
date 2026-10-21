@@ -25,7 +25,7 @@ const LAZY = { timeout: 10_000 };
 const LAZY_TEST_MS = 20_000;
 
 describe('account row', () => {
-  it('sits at the foot of the sidebar and starts the browser sign-in in one click', async () => {
+  it('sits at the foot of the sidebar and offers email and Google sign-in', async () => {
     const account = accountPort();
     const openExternal = vi.fn(async () => true);
     const base = appDependencies();
@@ -44,12 +44,18 @@ describe('account row', () => {
     // Settings → Agents, not in the sidebar's label.
     const signIn = await screen.findByRole('button', { name: 'Sign in' });
     await userEvent.setup().click(signIn);
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Continue with Google' }));
 
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
     expect(openExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
     expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Stop waiting' }));
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Sign in' }));
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledTimes(2));
   });
 
@@ -73,6 +79,7 @@ describe('account row', () => {
       const user = userEvent.setup();
       await user.click(await screen.findByRole('button', { name: 'Retry account' }));
       await user.click(await screen.findByRole('button', { name: 'Sign in' }));
+      await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
       await screen.findByRole('button', { name: 'Waiting for browser…' });
       await user.click(screen.getByRole('button', { name: 'Settings' }));
       await user.click(await screen.findByRole('button', { name: 'Agents' }, LAZY));
@@ -155,7 +162,7 @@ describe('account row', () => {
     expect(within(menu).getByText('ada@example.com')).not.toBeNull();
     expect(within(menu).getByText('Agent credits')).not.toBeNull();
     expect(await within(menu).findByText('100%')).not.toBeNull();
-    expect(within(menu).getAllByRole('menuitem')).toHaveLength(3);
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(4);
     expect(within(menu).getByRole('menuitem', { name: 'Settings' })).not.toBeNull();
     expect(within(menu).getByRole('menuitem', { name: 'Sign out' })).not.toBeNull();
 

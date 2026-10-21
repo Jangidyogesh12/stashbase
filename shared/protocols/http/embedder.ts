@@ -79,3 +79,13 @@ export type HostedAccountStateWire = z.infer<typeof hostedAccountStateSchema>;
 export type EmbedderKeySaveResponseWire = z.infer<typeof embedderKeySaveResponseSchema>;
 export type HostedOAuthStartResponseWire = z.infer<typeof hostedOAuthStartResponseSchema>;
 export type HostedOAuthStatusWire = z.infer<typeof hostedOAuthStatusSchema>;
+
+export const emailSendSchema = z.object({ email: z.string().trim().email().max(320) }).strict();
+export const emailCancelSchema = z.object({ flowId: z.string().min(1).max(128) }).strict();
+export const emailVerifySchema = emailCancelSchema.extend({ otp: z.string().regex(/^\d{6}$/) });
+export const emailSentSchema = emailCancelSchema;
+export const accountMethodsSchema = z.object({ email: z.string().email(), google: z.boolean() });
+export const accountLinkActionSchema = z.object({ action: z.enum(['send','link','unlink','status']), otp: z.string().max(16).optional(), ticket: z.string().max(128).optional() }).strict();
+export const accountLinkStartSchema = z.object({ ticket: z.string().min(1).max(128), url: z.string().url() });
+export const accountLinkStatusSchema = z.object({ state: z.enum(['pending','complete','error']) });
+export const accountCommandSchema = z.object({ success: z.boolean().optional(), sent: z.boolean().optional() });

@@ -342,6 +342,23 @@ browser; the full diagnostic and return button fit the card. These controlled
 fixtures do not establish live Google/Supabase login, authenticated corporate
 proxies, OS settings on Windows/Linux, or the reporting user's network.
 
+**Email login and explicit linking (local, unreleased):**
+The shared account dialog provides in-app email OTP login and sign-in method
+management. The host owns email flow retirement and durable sessions; its focused
+checks exercise cancellation after verification and safe renderer state. API
+integration tests use real disposable PostgreSQL and captured delivery, exercising
+single-use codes, expiry/attempt limits, failed delivery, retained identity/customer
+association, Google protocol linking, conflicting identities, disconnect and revoked
+link sessions. Google responses in these tests are fixtures, not real consent.
+A driven built-renderer/host/Electron relay pass completed in-app email login
+against that local API and retained the original UUID and Plus subscription.
+The website dialog completed email login and explicit Google fixture linking;
+website logout left the desktop session active. Both dialogs were visually
+inspected. Production email delivery, live provider linking and packaged upgrade
+behavior for this change require release verification. Regression checks also
+cover browser-launch failure recovery, explicit connect/disconnect intent, and
+retired website polling responses.
+
 **Better Auth client integration (2026-10-21, local only):**
 `server/hosted-account.ts` now uses the API's PKCE desktop transfer, opaque host
 session, cookie-free native relay, and short-lived API JWTs. Its focused tests

@@ -54,14 +54,24 @@ function AccountRow({ account }: { account: AccountViewModel }) {
             Retry account
           </Button>
         ) : signedIn ? (
-          <Button
-            disabled={account.busy}
-            onClick={() => account.signOut()}
-            size="compact"
-            variant="ghost"
-          >
-            Sign out
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              disabled={account.busy}
+              onClick={account.manageSignIn}
+              size="compact"
+              variant="tertiary"
+            >
+              Sign-in methods
+            </Button>
+            <Button
+              disabled={account.busy}
+              onClick={() => account.signOut()}
+              size="compact"
+              variant="ghost"
+            >
+              Sign out
+            </Button>
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             <Button

@@ -132,7 +132,17 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   new attempts and sign-out retire prior local continuations across windows.
 - Network/provider failure preserves credentials. Clear a session only on explicit
   sign-out or confirmed invalidation; repair does not implicitly send or replay work.
-- Account sign-in uses Google through the StashBase API's Better Auth service.
+- Account sign-in offers Google or a six-digit email code through Better Auth.
+  Email entry and verification stay inside the desktop application. New emails
+  create an account; using the original verified email preserves its identity,
+  credits and subscription. Codes expire after five minutes; resend shows a
+  cooldown and failed delivery never appears as a successful send.
+- Sign-in methods in the account menu and Settings show the primary email and
+  Google connection. Connecting or disconnecting Google requires a fresh code
+  sent to that email. Connecting then opens Google consent in the browser.
+  A Google identity already owned by another account cannot be connected; there
+  is no automatic merge. Disconnecting leaves email sign-in available.
+- Account sessions use the StashBase API's Better Auth service.
   Desktop sessions remain host-owned and separate from browser sessions; signing
   out of the website does not sign the desktop out. Short-lived API tokens renew
   through the active server session. A switch from Supabase requires one fresh

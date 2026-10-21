@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { AccountPort, AgentRuntimePort } from '@/features/settings/application/ports';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { BillingStatus } from '@/features/settings/domain/billing';
-import { AccountProvider } from '@/features/settings/hooks/account-context';
+import { AccountProvider } from '@/features/settings/ui/account/account-provider';
 
 import { AgentRuntimesPanel } from './agents-panel';
 
@@ -120,6 +120,14 @@ const SIGNED_OUT = {
 } as const;
 
 const signedIn: AccountPort = {
+  sendEmail: async () => ({ flowId: 'email-flow' }),
+  verifyEmail: async () => ({ ...SIGNED_OUT, signedIn: true, email: 'ada@example.com' }),
+  cancelEmail: async () => {},
+  methods: async () => ({ email: 'ada@example.com', google: true }),
+  sendLinkCode: async () => {},
+  linkGoogle: async () => ({ ticket: 'ticket', url: 'https://accounts.example/link' }),
+  unlinkGoogle: async () => {},
+  linkStatus: async () => ({ state: 'pending' }),
   avatar: async () => null,
   load: async () => ({
     avatarUrl: null,

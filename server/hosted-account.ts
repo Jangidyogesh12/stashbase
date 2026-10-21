@@ -64,6 +64,7 @@ interface PendingOAuthFlow {
 
 const OAUTH_FLOW_TTL_MS = 10 * 60 * 1000;
 const pendingOAuthFlows = new Map<string, PendingOAuthFlow>();
+let emailFlow: { id: string; email: string; expires: number } | null = null;
 let tokenRefresh: { sessionKey: string; promise: Promise<string> } | null = null;
 let profileHydration: { sessionKey: string; attemptedAt: number; promise: Promise<void> } | null = null;
 const PROFILE_HYDRATION_RETRY_MS = 5 * 60 * 1000;
@@ -79,7 +80,8 @@ class HostedAuthError extends Error {
 }
 
 function messageOf(value: ErrorPayload | null, fallback: string): string {
-  return value?.message ?? value?.error_description ?? value?.msg ?? value?.error ?? fallback;
+  const messages: Record<string, string> = { otp_rate_limited: 'Wait a minute before requesting another code. You can request up to five codes per hour.', otp_invalid: 'The code is incorrect or expired. Request a new code.', otp_delivery_failed: 'The email could not be sent. Please try again later.', google_already_linked: 'Google is already connected.', auth_service_unavailable: 'The sign-in service is unavailable. Please try again later.' };
+  return ((value?.code && messages[value.code]) || value?.message) ?? value?.error_description ?? value?.msg ?? value?.error ?? fallback;
 }
 
 async function jsonBody<T>(response: Response): Promise<T | null> {
@@ -148,6 +150,7 @@ function assertLoopbackCallbackOrigin(callbackOrigin: string): URL {
 }
 
 function retireOAuthFlows(message: string): void {
+  emailFlow = null;
   for (const [id, flow] of pendingOAuthFlows) {
     if (flow.state !== 'complete' && flow.state !== 'error') failHostedOAuth(id, message);
   }
@@ -216,6 +219,55 @@ export async function exchangeHostedOAuthCode(flowId: string, authCode: string):
     failHostedOAuth(flowId, error);
     throw error;
   }
+}
+
+/** Email proofs stay in the host; only profile state crosses to the renderer. */
+export async function sendHostedEmail(email: string): Promise<{ flowId: string }> {
+  if (getHostedAccountSession()) throw new Error('Sign out before signing in to another account.');
+  retireOAuthFlows('A newer sign-in request was started.');
+  const flow = { id: crypto.randomBytes(32).toString('hex'), email: email.trim().toLowerCase(), expires: Date.now() + 300_000 };
+  emailFlow = flow;
+  try {
+    await authRequest('/email/send', undefined, { email: flow.email });
+    if (emailFlow !== flow) throw new Error('This sign-in request was cancelled.');
+    return { flowId: flow.id };
+  } catch (error) { if (emailFlow === flow) emailFlow = null; throw error; }
+}
+
+export function cancelHostedEmail(flowId: string): void {
+  if (emailFlow?.id === flowId) emailFlow = null;
+}
+
+export async function verifyHostedEmail(flowId: string, otp: string): Promise<HostedAccountState> {
+  const flow = emailFlow;
+  if (!flow || flow.id !== flowId || flow.expires <= Date.now()) throw new Error('This code expired. Request a new code.');
+  const response = await authRequest<{ token: string }>('/desktop/email/verify', undefined, { email: flow.email, otp });
+  if (!response?.token) throw new Error('The authentication service returned no session.');
+  try {
+    const session = await sessionFrom(response.token);
+    if (emailFlow !== flow || getHostedAccountSession()) throw new Error('This sign-in request was cancelled.');
+    setHostedAccountSession(session);
+    emailFlow = null;
+    telemetry.identityChanged();
+    markAccountOfferSeen('sign-in');
+    return hostedAccountState();
+  } catch (error) {
+    await authRequest('/sign-out', response.token, {}).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function hostedSignInMethods(): Promise<{ email: string; google: boolean }> {
+  return accountOperation('/account/methods', {});
+}
+
+export async function accountOperation<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const session = getHostedAccountSession();
+  if (!session?.sessionToken) throw new Error('Sign in again to manage your account.');
+  const result = await authRequest<T>(path, session.sessionToken, body);
+  if (getHostedAccountSession()?.sessionToken !== session.sessionToken) throw new Error('Your account changed. Try again.');
+  if (!result) throw new Error('The authentication service returned no response.');
+  return result;
 }
 
 export function finishHostedOAuth(flowId: string): void {

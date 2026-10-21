@@ -8,7 +8,7 @@
  * adapter imports a protocol module. Account identity is independent from
  * search by meaning.
  */
-import type { AccountPort } from '@/features/settings/application/ports';
+import { AccountAccessError, type AccountPort } from '@/features/settings/application/ports';
 import type {
   AccountOffer,
   HostedAccount,
@@ -19,6 +19,14 @@ import { settingsRequest } from '@/features/settings/infrastructure/settings-req
 import { request } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
+  embedderFailureSchema,
+  emailSendSchema,
+  emailVerifySchema,
+  emailSentSchema,
+  accountMethodsSchema,
+  accountLinkStartSchema,
+  accountLinkStatusSchema,
+  accountCommandSchema,
   hostedAccountOfferSchema,
   hostedAccountStateSchema,
   hostedOAuthStartRequestSchema,
@@ -28,6 +36,13 @@ import {
   type HostedOAuthStartResponseWire,
   type HostedOAuthStatusWire,
 } from '@/protocols/http/embedder';
+
+function accessRequest(path: string, signal: AbortSignal) {
+  return {
+    ...settingsRequest({ path, signal, failureSchema: embedderFailureSchema }),
+    error: AccountAccessError,
+  };
+}
 
 function toAccount(wire: HostedAccountStateWire): HostedAccount {
   return {
@@ -67,6 +82,73 @@ export function createAccountAdapter(
 ): AccountPort {
   const avatarTarget = new URL('/api/account/avatar', serverOrigin);
   return {
+    async sendEmail(email, signal) {
+      return request(client, {
+        ...accessRequest('/api/account/email/send', signal),
+        method: 'POST',
+        body: emailSendSchema.parse({ email }),
+        schema: emailSentSchema,
+      });
+    },
+    async verifyEmail(flowId, otp, signal) {
+      return toAccount(
+        await request(client, {
+          ...accessRequest('/api/account/email/verify', signal),
+          method: 'POST',
+          body: emailVerifySchema.parse({ flowId, otp }),
+          schema: hostedAccountStateSchema,
+        }),
+      );
+    },
+    async cancelEmail(flowId) {
+      await request(client, {
+        ...settingsRequest({
+          path: '/api/account/email/cancel',
+          signal: AbortSignal.timeout(5000),
+        }),
+        method: 'POST',
+        body: { flowId },
+        schema: accountCommandSchema,
+      });
+    },
+    async methods(signal) {
+      return request(client, {
+        ...accessRequest('/api/account/methods', signal),
+        schema: accountMethodsSchema,
+      });
+    },
+    async sendLinkCode(signal) {
+      await request(client, {
+        ...accessRequest('/api/account/link', signal),
+        method: 'POST',
+        body: { action: 'send' },
+        schema: accountCommandSchema,
+      });
+    },
+    async linkGoogle(otp, signal) {
+      return request(client, {
+        ...accessRequest('/api/account/link', signal),
+        method: 'POST',
+        body: { action: 'link', otp },
+        schema: accountLinkStartSchema,
+      });
+    },
+    async unlinkGoogle(otp, signal) {
+      await request(client, {
+        ...accessRequest('/api/account/link', signal),
+        method: 'POST',
+        body: { action: 'unlink', otp },
+        schema: accountCommandSchema,
+      });
+    },
+    async linkStatus(ticket, signal) {
+      return request(client, {
+        ...accessRequest('/api/account/link', signal),
+        method: 'POST',
+        body: { action: 'status', ticket },
+        schema: accountLinkStatusSchema,
+      });
+    },
     async avatar(signal) {
       try {
         const response = await fetchRequest(avatarTarget, { signal });

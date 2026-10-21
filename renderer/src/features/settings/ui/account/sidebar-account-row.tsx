@@ -198,6 +198,12 @@ export function SidebarAccountRow({
           <MenuItem
             className={SIDEBAR_ROW}
             icon={SettingsIcon}
+            label="Sign-in methods"
+            onSelect={account.manageSignIn}
+          />
+          <MenuItem
+            className={SIDEBAR_ROW}
+            icon={SettingsIcon}
             label="Settings"
             onSelect={onOpenSettings}
           />

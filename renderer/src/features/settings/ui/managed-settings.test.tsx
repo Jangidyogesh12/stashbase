@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vite-plus/test';
 
-import { AccountProvider } from '@/features/settings/hooks/account-context';
+import { AccountProvider } from '@/features/settings/ui/account/account-provider';
 import {
   accountPort,
   agentRuntimePort,

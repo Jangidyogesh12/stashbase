@@ -48,6 +48,14 @@ export function accountPort(
   overrides: Partial<AccountPort> = {},
 ): AccountPort {
   return {
+    sendEmail: vi.fn(async () => ({ flowId: 'email-flow' })),
+    verifyEmail: vi.fn(async () => SIGNED_IN_ACCOUNT),
+    cancelEmail: vi.fn(async () => {}),
+    methods: vi.fn(async () => ({ email: 'ada@example.com', google: true })),
+    sendLinkCode: vi.fn(async () => {}),
+    linkGoogle: vi.fn(async () => ({ ticket: 'ticket', url: 'https://accounts.example/link' })),
+    unlinkGoogle: vi.fn(async () => {}),
+    linkStatus: vi.fn(async () => ({ state: 'pending' as const })),
     avatar: vi.fn(async () => null),
     load: vi.fn(async () => account),
     markOfferSeen: vi.fn(async (offer) => ({

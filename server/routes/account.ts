@@ -1,8 +1,10 @@
 import { hostedBillingChangeRequestSchema } from '../../shared/protocols/http/agent-runtime.ts';
 import express from 'express';
+import { emailSendSchema, emailVerifySchema, emailCancelSchema, accountLinkActionSchema } from '../../shared/protocols/http/embedder.ts';
 import { getHostedAccountSession, markAccountOfferSeen, resetAccountOffers } from '../app-config.ts';
 import {
   beginHostedOAuth,
+  sendHostedEmail, verifyHostedEmail, cancelHostedEmail, hostedSignInMethods, accountOperation,
   createFailedHostedOAuthFlow,
   createHostedBillingPortal,
   changeHostedBilling,
@@ -156,6 +158,35 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     } catch (error: unknown) {
       res.status(502).json({ error: errorMessage(error) });
     }
+  });
+
+  app.post('/api/account/email/send', async (req, res) => {
+    const input = emailSendSchema.safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: 'Enter a valid email address.' });
+    try { res.json(await sendHostedEmail(input.data.email)); }
+    catch (error) { res.status(400).json({ error: errorMessage(error) }); }
+  });
+  app.post('/api/account/email/verify', async (req, res) => {
+    const input = emailVerifySchema.safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: 'Enter the six-digit code.' });
+    try { res.json(await verifyHostedEmail(input.data.flowId, input.data.otp)); }
+    catch (error) { res.status(400).json({ error: errorMessage(error) }); }
+  });
+  app.post('/api/account/email/cancel', (req, res) => {
+    const input = emailCancelSchema.safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: 'Invalid sign-in request.' });
+    cancelHostedEmail(input.data.flowId); res.json({ success: true });
+  });
+  app.get('/api/account/methods', async (_req, res) => {
+    try { res.json(await hostedSignInMethods()); }
+    catch (error) { res.status(400).json({ error: errorMessage(error) }); }
+  });
+  app.post('/api/account/link', async (req, res) => {
+    const input = accountLinkActionSchema.safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: 'Invalid account request.' });
+    const paths = { send: '/account/otp/send', link: '/account/google/link', unlink: '/account/google/unlink', status: '/account/link/status' };
+    try { res.json(await accountOperation(paths[input.data.action], input.data)); }
+    catch (error) { res.status(400).json({ error: errorMessage(error) }); }
   });
 
   app.post('/api/account/oauth/start', (req, res) => {

@@ -50,6 +50,11 @@ export interface AccountViewModel {
   stopWaiting(): void;
   /** Starts the flow and hands the URL to the browser. */
   signIn(): void;
+  readonly accessOpen: boolean;
+  closeAccess(): void;
+  manageSignIn(): void;
+  signInWithGoogle(): void;
+  emailSignedIn(next: HostedAccount): void;
   /** Waits for this explicit sign-in; aborting the caller never revokes browser authorization. */
   signInAndWait(signal: AbortSignal): Promise<boolean>;
   signOut(): void;
@@ -67,6 +72,7 @@ export function useAccount(
   const account = useQuery(accountQuery(port));
   const [signInFlow, setSignInFlow] = useState<string | null>(null);
   const [signInError, setSignInError] = useState<FailureView | null>(null);
+  const [accessOpen, setAccessOpen] = useState(false);
   const command = useRef<'sign-in' | 'sign-out' | null>(null);
   const waiters = useRef(new Set<(success: boolean) => void>());
   const finishWaiters = useCallback((success: boolean) => {
@@ -180,10 +186,16 @@ export function useAccount(
     { onDone: writeAccount },
   );
 
-  const signIn = () => {
+  const signInWithGoogle = () => {
+    setAccessOpen(false);
     if (command.current || !account.data) return;
     command.current = 'sign-in';
     startSignIn.run();
+  };
+
+  const signIn = () => {
+    if (command.current || !account.data) return;
+    setAccessOpen(true);
   };
 
   // One pending flag spans the whole browser round trip: the start call and
@@ -205,6 +217,20 @@ export function useAccount(
       void account.refetch({ cancelRefetch: false });
     },
     signIn,
+    accessOpen,
+    closeAccess: () => {
+      setAccessOpen(false);
+      void queryClient.invalidateQueries({ queryKey: settingsQueryKeys.account });
+      finishWaiters(false);
+    },
+    manageSignIn: () => setAccessOpen(true),
+    signInWithGoogle,
+    emailSignedIn: (next) => {
+      setAccessOpen(false);
+      writeAccount(next);
+      invalidateDependents();
+      finishWaiters(true);
+    },
     signInAndWait: (signal) => {
       if (signal.aborted || !account.data || command.current === 'sign-out')
         return Promise.resolve(false);

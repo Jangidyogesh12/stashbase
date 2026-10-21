@@ -10,7 +10,7 @@ import {
 } from '@/features/settings/application/ports';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { BillingStatus } from '@/features/settings/domain/billing';
-import { AccountProvider } from '@/features/settings/hooks/account-context';
+import { AccountProvider } from '@/features/settings/ui/account/account-provider';
 import {
   accountPort,
   agentRuntime,
@@ -83,12 +83,14 @@ describe('AgentRuntimesPanel', () => {
     const buttons = screen.getAllByRole('button', { name: 'Sign in' });
     expect(buttons).toHaveLength(1);
     await user.click(buttons[0] as HTMLElement);
+    await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
     expect(rendered.onOpenExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
     expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Stop waiting' }));
     expect(screen.queryByRole('button', { name: 'Waiting for browser…' })).toBeNull();
     await user.click(screen.getAllByRole('button', { name: 'Sign in' })[0] as HTMLElement);
+    await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledTimes(2));
   });
 

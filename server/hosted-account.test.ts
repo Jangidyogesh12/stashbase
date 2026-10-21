@@ -683,3 +683,41 @@ test('sign-out during the post-exchange session read cannot restore the account'
   `);
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('email login keeps credentials in the host and a cancelled verification cannot restore a session', () => {
+  const result = runIsolated(`
+    const assert = (await import('node:assert/strict')).default;
+    const account = await import('./server/hosted-account.ts');
+    const config = await import('./server/app-config.ts');
+    let release, defer = false;
+    const revoked = [];
+    globalThis.fetch = async (url, init) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith('/email/send')) return Response.json({success:true});
+      if (path.endsWith('/desktop/email/verify')) {
+        if (defer) await new Promise(resolve => { release = resolve; });
+        return Response.json({token:'email-session'});
+      }
+      if (path.endsWith('/sign-out')) { revoked.push(init.headers.Authorization ?? init.headers.authorization); return Response.json({success:true}); }
+      return authReply(url,{sessionToken:'email-session'});
+    };
+    const first = await account.sendHostedEmail('person@example.com');
+    const signedIn = await account.verifyHostedEmail(first.flowId,'123456');
+    assert.equal(signedIn.signedIn,true);
+    assert.equal(config.getHostedAccountSession().sessionToken,'email-session');
+    assert.equal(JSON.stringify(signedIn).includes('email-session'),false);
+    await account.signOutHostedAccount();
+    const second = await account.sendHostedEmail('person@example.com');
+    defer = true;
+    const pending = account.verifyHostedEmail(second.flowId,'123456');
+    await new Promise(resolve => setTimeout(resolve,10));
+    account.cancelHostedEmail(second.flowId);
+    release();
+    await assert.rejects(pending,/cancelled/);
+    assert.equal(config.getHostedAccountSession(),undefined);
+    assert.equal(revoked.length,2);
+    process.stdout.write('verified');
+  `);
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(result.stdout,'verified');
+});

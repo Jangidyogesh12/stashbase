@@ -3,7 +3,7 @@ import type {
   AgentRuntimeFailureKind,
   SettingsFailureKind,
 } from '@/features/settings/application/ports';
-import { AgentRuntimeError } from '@/features/settings/application/ports';
+import { AgentRuntimeError, AccountAccessError } from '@/features/settings/application/ports';
 /**
  * How a Settings failure reaches the reader.
  *
@@ -45,7 +45,8 @@ export function failureMessage(kind: SettingsAreaFailureKind): string {
 export function settingsFailure(error: unknown): FailureView {
   return readFailure<'invalid-request' | 'rejected'>(error, MESSAGES, {
     inputKinds: INPUT_KINDS,
-    serverSentenceFor: error instanceof AgentRuntimeError ? [error.kind] : [],
+    serverSentenceFor:
+      error instanceof AgentRuntimeError || error instanceof AccountAccessError ? [error.kind] : [],
   });
 }
 

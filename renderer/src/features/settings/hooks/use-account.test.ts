@@ -39,11 +39,11 @@ describe('useAccount', () => {
     const { hook, port } = mount(accountPort(SIGNED_OUT_ACCOUNT));
     await waitFor(() => expect(hook.result.current.account).not.toBeNull());
     act(() => {
-      hook.result.current.signIn();
-      hook.result.current.signIn();
+      hook.result.current.signInWithGoogle();
+      hook.result.current.signInWithGoogle();
     });
     await waitFor(() => expect(hook.result.current.canStopWaiting).toBe(true));
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.signInWithGoogle());
     expect(port.startSignIn).toHaveBeenCalledTimes(1);
   });
   it('lets a pending send wait for sign-in and cancel without cancelling other observers', async () => {
@@ -56,6 +56,8 @@ describe('useAccount', () => {
       first = hook.result.current.signInAndWait(cancelled.signal);
       second = hook.result.current.signInAndWait(new AbortController().signal);
     });
+    expect(hook.result.current.accessOpen).toBe(true);
+    act(() => hook.result.current.signInWithGoogle());
     await waitFor(() => expect(hook.result.current.canStopWaiting).toBe(true));
     act(() => cancelled.abort());
     expect(await first).toBe(false);
@@ -68,6 +70,7 @@ describe('useAccount', () => {
     act(() => {
       completed = hook.result.current.signInAndWait(new AbortController().signal);
     });
+    act(() => hook.result.current.signInWithGoogle());
     await expect(completed).resolves.toBe(true);
   });
 
@@ -78,7 +81,7 @@ describe('useAccount', () => {
     const { hook, openExternal } = mount(port);
     await waitFor(() => expect(hook.result.current.account).toEqual(SIGNED_OUT_ACCOUNT));
 
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.signInWithGoogle());
 
     await waitFor(() =>
       expect(openExternal).toHaveBeenCalledWith('https://accounts.example/sign-in'),
@@ -97,7 +100,7 @@ describe('useAccount', () => {
     await waitFor(() => expect(hook.result.current.account).not.toBeNull());
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
 
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.signInWithGoogle());
 
     await waitFor(() => expect(hook.result.current.signInPending).toBe(false));
     const invalidated = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
@@ -117,7 +120,7 @@ describe('useAccount', () => {
     const { hook } = mount(port);
     await waitFor(() => expect(hook.result.current.account).not.toBeNull());
 
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.signInWithGoogle());
 
     await waitFor(() =>
       expect(hook.result.current.failure).toEqual({ message: 'Denied', tone: 'input' }),
@@ -145,11 +148,11 @@ describe('useAccount', () => {
     });
     const { hook } = mount(port);
     await waitFor(() => expect(hook.result.current.account).not.toBeNull());
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.signInWithGoogle());
     await waitFor(() => expect(port.signInStatus).toHaveBeenCalledOnce());
     await waitFor(() => expect(hook.result.current.signInPending).toBe(false));
     expect(hook.result.current.failure).not.toBeNull();
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.signInWithGoogle());
     await waitFor(() => expect(port.startSignIn).toHaveBeenCalledTimes(2));
   });
 
@@ -173,14 +176,14 @@ describe('useAccount', () => {
     });
     const { hook } = mount(port);
     await waitFor(() => expect(hook.result.current.account).not.toBeNull());
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.signInWithGoogle());
     await waitFor(() => expect(port.signInStatus).toHaveBeenCalledOnce());
     act(() => hook.result.current.stopWaiting());
     expect(hook.result.current.busy).toBe(false);
     expect(hook.result.current.canStopWaiting).toBe(false);
     expect(pollSignal?.aborted).toBe(true);
 
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.signInWithGoogle());
     await waitFor(() =>
       expect(port.signInStatus).toHaveBeenCalledWith('flow-2', expect.any(AbortSignal)),
     );

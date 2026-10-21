@@ -64,7 +64,7 @@ export function createHostedAuthRequest(bridge: { port?: string; token?: string;
       });
     } catch (error) {
       const detail = authNetworkError(options.signal.aborted ? options.signal.reason : error);
-      const stage = path === '/electron/token' ? 'exchange the sign-in code' : path === '/token' ? 'refresh the sign-in session' : path === '/get-session' ? 'read the signed-in profile' : 'sign out';
+      const stage = path === '/electron/token' ? 'exchange the sign-in code' : path === '/token' ? 'refresh the sign-in session' : path === '/get-session' ? 'read the signed-in profile' : path === '/sign-out' ? 'sign out' : path === '/email/send' ? 'send an email code' : path === '/desktop/email/verify' ? 'verify the email code' : 'manage sign-in methods';
       throw Object.assign(new Error(`Could not ${stage} with ${new URL(AUTH_BASE_URL).hostname}. ${detail.message}`, { cause: detail }), { code: detail.code });
     }
   };

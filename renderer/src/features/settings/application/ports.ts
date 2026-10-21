@@ -82,6 +82,17 @@ export interface AccountPort {
   signInStatus(flowId: string, signal: AbortSignal): Promise<HostedSignInStatus>;
   signOut(signal: AbortSignal): Promise<HostedAccount>;
   startSignIn(signal: AbortSignal): Promise<HostedSignIn>;
+  sendEmail(email: string, signal: AbortSignal): Promise<{ flowId: string }>;
+  verifyEmail(flowId: string, otp: string, signal: AbortSignal): Promise<HostedAccount>;
+  cancelEmail(flowId: string): Promise<void>;
+  methods(signal: AbortSignal): Promise<{ email: string; google: boolean }>;
+  sendLinkCode(signal: AbortSignal): Promise<void>;
+  linkGoogle(otp: string, signal: AbortSignal): Promise<{ ticket: string; url: string }>;
+  unlinkGoogle(otp: string, signal: AbortSignal): Promise<void>;
+  linkStatus(
+    ticket: string,
+    signal: AbortSignal,
+  ): Promise<{ state: 'pending' | 'complete' | 'error' }>;
 }
 
 /** The MCP page reads access details and changes how they are reached; it
@@ -98,6 +109,7 @@ export type SettingsFailureKind = FeatureFailureKind<'invalid-request'>;
 
 export type SettingsError = FeatureError<'invalid-request'>;
 export const SettingsError = featureErrorClass<'invalid-request'>('SettingsError');
+export const AccountAccessError = featureErrorClass<'invalid-request'>('AccountAccessError');
 
 export interface LocalComponentPort {
   load(signal: AbortSignal): Promise<LocalComponentStatus>;

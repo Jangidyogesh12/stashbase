@@ -11,25 +11,11 @@
  */
 'use client';
 
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 
-import type { AccountPort } from '@/features/settings/application/ports';
-import { useAccount, type AccountViewModel } from '@/features/settings/hooks/use-account';
+import { type AccountViewModel } from '@/features/settings/hooks/use-account';
 
-const AccountContext = createContext<AccountViewModel | null>(null);
-
-export function AccountProvider({
-  children,
-  openExternal,
-  port,
-}: {
-  children: ReactNode;
-  openExternal: (href: string) => Promise<boolean> | void;
-  port: AccountPort;
-}) {
-  const account = useAccount(port, openExternal);
-  return <AccountContext value={account}>{children}</AccountContext>;
-}
+export const AccountContext = createContext<AccountViewModel | null>(null);
 
 /** The window's account. Throws rather than falling back, because a surface
  *  that offers sign-in outside the provider would start a flow nothing else
