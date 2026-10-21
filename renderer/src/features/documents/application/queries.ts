@@ -60,8 +60,13 @@ export function createDocumentQueryScope(
   return {
     cancel: () => queryClient.cancelQueries({ queryKey: scopeKey }),
     remove: () => queryClient.removeQueries({ queryKey: scopeKey }),
-    replaceSource: (source: DocumentTextSource) =>
-      queryClient.setQueryData(documentQueryKeys.source(scope), source),
+    replaceSource: (source: DocumentTextSource) => {
+      const queryKey = documentQueryKeys.source(scope);
+      // A read started before this accepted write must not publish older text
+      // after the editor becomes clean. Cancellation retires it synchronously.
+      void queryClient.cancelQueries({ exact: true, queryKey });
+      queryClient.setQueryData(queryKey, source);
+    },
   };
 }
 

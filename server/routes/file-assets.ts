@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from '../html.ts';
-import { resolveAssetAsync, resolveExistingAsync } from '../active-file-operations.ts';
+import { fileStatVersionAsync, resolveAssetAsync, resolveExistingAsync } from '../active-file-operations.ts';
 import { detectViewerFormat } from '../format.ts';
 import { derivedHtmlPathForDocx } from '../docx.ts';
 import { currentPreparedTextPathAsync } from '../conversion-dispatch.ts';
@@ -64,9 +64,17 @@ export function mountFileAssetRoutes(app: express.Express): void {
           return;
         }
         res.type(MIME[ext] ?? 'application/octet-stream');
+        // Relative subresources keep the same URL across HTML reloads. Use
+        // the source's precise identity instead of sendFile's size/mtime
+        // validator, which can reuse stale bytes after an external write.
+        const version = await fileStatVersionAsync(scope.rel);
+        if (!version) return res.status(404).end();
+        res.setHeader('ETag', JSON.stringify(version));
+        res.setHeader('Cache-Control', 'no-cache');
         // sendFile owns stream errors, Range requests and client disconnects.
         await new Promise<void>((resolve, reject) => {
-          res.sendFile(abs, { dotfiles: 'allow' }, (error) => error ? reject(error) : resolve());
+          res.sendFile(abs, { dotfiles: 'allow', etag: false, lastModified: false, cacheControl: false },
+            (error) => error ? reject(error) : resolve());
         });
       });
     } catch (err: unknown) {

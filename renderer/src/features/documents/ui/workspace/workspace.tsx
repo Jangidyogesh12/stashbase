@@ -39,6 +39,8 @@ const ignoreNavigation = () => undefined;
 const rejectExternalNavigation = async () => false;
 
 export interface DocumentWorkspaceProps {
+  /** False while Chat mode or the New tab page covers the retained documents. */
+  active?: boolean;
   recordUsage?: ((event: DocumentUsageEvent) => void) | undefined;
   assetApi: DocumentAssetPort;
   docxPreviewApi: DocxPreviewPort;
@@ -64,6 +66,7 @@ export interface DocumentWorkspaceProps {
 }
 
 export function DocumentWorkspace({
+  active = true,
   assetApi,
   docxPreviewApi,
   genericPreviewApi,
@@ -135,7 +138,7 @@ export function DocumentWorkspace({
         <DocumentReadingSurface
           runtime={document}
           history={runtime.history}
-          active={!hidden}
+          active={active && !hidden}
           onRead={() =>
             recordUsage?.({
               event: 'document_engaged',
@@ -145,7 +148,7 @@ export function DocumentWorkspace({
           }
         >
           <DocumentSource
-            active={!hidden}
+            active={active && !hidden}
             assetApi={assetApi}
             docxPreviewApi={docxPreviewApi}
             genericPreviewApi={genericPreviewApi}

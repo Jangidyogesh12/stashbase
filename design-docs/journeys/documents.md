@@ -28,6 +28,10 @@ source mutations, saving, and release guarantees.
 Browsing does not wait for a successful save. Closing or leaving dirty work follows
 [Saving and Release](../capabilities/project-files.md#saving-and-release).
 Background file changes refresh clean views and leave dirty drafts for comparison.
+The visible document follows external edits while it stays open and catches up
+when the reader returns to the window, without requiring a tab switch.
+HTML previews also follow changes to local scripts and stylesheets referenced
+directly by the page, including a dashboard's separate data script.
 
 ## Conflict Decisions
 

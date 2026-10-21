@@ -52,6 +52,38 @@ describe('document viewer routing', () => {
     await waitFor(() =>
       expect(runtime.navigation.store.getState().find).toMatchObject({ current: 1, total: 1 }),
     );
+
+    vi.mocked(genericPreviewApi.load).mockResolvedValue({
+      content: 'export const answer = 43;\n',
+      kind: 'text',
+      name: 'src/answer.ts',
+      size: 26,
+      version: 'v2',
+    });
+    act(() => window.dispatchEvent(new Event('focus')));
+    await waitFor(() => expect(editor.state.doc.toString()).toContain('answer = 43'));
+  });
+
+  it('refreshes a preview through its newer versioned asset URL', async () => {
+    const assetApi = assetApiFake({
+      load: vi.fn(async () => ({
+        kind: 'source' as const,
+        url: 'https://example.com/image.png?v=1',
+        version: 'v1',
+      })),
+    });
+    renderSource(sourceApi(), { folderPath: '/project/notes', path: 'image.png' }, { assetApi });
+    const image = await screen.findByRole('img', { name: 'image.png' });
+    expect(image.getAttribute('src')).toContain('?v=1');
+    vi.mocked(assetApi.load).mockResolvedValue({
+      kind: 'source',
+      url: 'https://example.com/image.png?v=2',
+      version: 'v2',
+    });
+    act(() => window.dispatchEvent(new Event('focus')));
+    await waitFor(() =>
+      expect(screen.getByRole('img', { name: 'image.png' }).getAttribute('src')).toContain('?v=2'),
+    );
   });
 
   it('shows generic refusal metadata and reveals the exact source', async () => {

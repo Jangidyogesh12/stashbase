@@ -25,6 +25,7 @@ import { noteTreeChanged } from '../watcher.ts';
 import { saveFileContent, upsertSavedFile } from '../file-save.ts';
 import { readTextSnapshotAsync } from '../text-file-transaction.ts';
 import { readGenericFilePreview } from '../generic-file-preview.ts';
+import { documentAssetVersionAsync } from '../document-asset-version.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
 import {
@@ -252,7 +253,7 @@ export function mount(
       try {
         const status = await fileHeadStatusAsync(name);
         if (status === 204) {
-          const version = await fileStatVersionAsync(name);
+          const version = await documentAssetVersionAsync(name);
           if (version) res.setHeader('x-stashbase-file-version', version);
         }
         res.sendStatus(status);

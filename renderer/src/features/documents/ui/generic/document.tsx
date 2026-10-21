@@ -19,6 +19,7 @@ import {
   type GenericFilePreviewPort,
 } from '@/features/documents/application/ports';
 import { genericFilePreviewQuery } from '@/features/documents/application/queries';
+import { useDocumentRefresh } from '@/features/documents/hooks/use-document-refresh';
 import { RefreshFailedBanner } from '@/features/documents/ui/banner';
 import { CodeEditorDocument } from '@/features/documents/ui/code-editor/document';
 import type { DocumentViewerStatus } from '@/features/documents/ui/source/viewer';
@@ -48,6 +49,7 @@ export function GenericFileDocument({
   status,
 }: GenericFileDocumentProps) {
   const preview = useQuery(genericFilePreviewQuery(api, runtime.scope));
+  useDocumentRefresh(active, preview.refetch);
   const signalFor = useRequestSignals<'reveal'>();
   const [revealState, setRevealState] = useState<'error' | 'idle' | 'pending'>('idle');
   const name = runtime.scope.source.path.split('/').at(-1) ?? runtime.scope.source.path;

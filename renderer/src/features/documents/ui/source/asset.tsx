@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, type ReactNode } from 'react';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentAsset, DocumentAssetPort } from '@/features/documents/application/ports';
 import { documentAssetQuery } from '@/features/documents/application/queries';
+import { useDocumentRefresh } from '@/features/documents/hooks/use-document-refresh';
 import { RefreshFailedBanner } from '@/features/documents/ui/banner';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
@@ -50,6 +51,7 @@ export function AssetSurface({
   status,
 }: AssetSurfaceProps) {
   const asset = useQuery({ ...documentAssetQuery(api, runtime.scope), enabled: active });
+  useDocumentRefresh(active, asset.refetch);
   const source = runtime.scope.source;
 
   // Fire once per mounted document, independent of the asset load.

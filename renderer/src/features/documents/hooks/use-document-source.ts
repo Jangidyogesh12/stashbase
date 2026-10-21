@@ -1,14 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useStore } from 'zustand';
 
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentSourcePort } from '@/features/documents/application/ports';
 import { documentSourceQuery } from '@/features/documents/application/queries';
-import {
-  isDocumentDirty,
-  type DocumentConflictResolution,
-} from '@/features/documents/domain/document';
+import type { DocumentConflictResolution } from '@/features/documents/domain/document';
+
+import { useDocumentRefresh } from './use-document-refresh';
 
 export function useDocumentSource(
   runtime: DocumentRuntime,
@@ -21,20 +20,11 @@ export function useDocumentSource(
   const markdownMode = useStore(runtime.store, (state) => state.markdownMode);
   const revision = useStore(runtime.store, (state) => state.revision);
   const source = useQuery(documentSourceQuery(api, runtime.scope));
-  const { isFetching, isPending, refetch } = source;
-  const wasActive = useRef(false);
-  const dirty = editor !== null && isDocumentDirty(editor);
+  useDocumentRefresh(active, source.refetch);
 
   useEffect(() => {
     if (source.data) runtime.reconcile(source.data);
   }, [runtime, source.data]);
-
-  useEffect(() => {
-    const becameActive = active && !wasActive.current;
-    wasActive.current = active;
-    if (!becameActive || isPending || isFetching || dirty) return;
-    void refetch();
-  }, [active, dirty, isFetching, isPending, refetch]);
 
   return {
     access,

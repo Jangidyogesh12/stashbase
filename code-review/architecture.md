@@ -1021,6 +1021,21 @@ registered host boundaries; renderer shared types are a different layer.
   completions and failure notices through a scope lifetime signal. Browsing does
   not depend on reconciliation succeeding. Host tree
   revisions signal app writes and reconciliation, not filesystem events.
+  Documents owns its external-source refresh in `use-document-refresh.ts`:
+  only the active, visible document polls, with an immediate check on activation,
+  window focus, and return from hidden. App composition also deactivates viewers
+  while Chat mode or New tab covers the retained workspace. Text, generic previews,
+  and versioned assets share this trigger; derived DOCX conversion remains version-keyed.
+  Checks share a pending read rather than restarting it. Publishing an accepted
+  source write cancels older reads before updating the cache, so a late response
+  cannot roll a newly clean editor back to its previous disk text.
+  `server/document-asset-version.ts` owns HTML preview invalidation: its bounded
+  HTML read collects up to 256 directly declared local scripts/stylesheets,
+  resolves their URLs (including `base`) within the same project, and includes
+  their stat identities or absence in the preview version. It does not change
+  source-write versions or fetch remote dependencies. Asset transfers revalidate
+  with the high-resolution filesystem identity so an HTML reload cannot reuse a
+  same-size script through a coarse mtime validator; Range support remains intact.
 - Viewers declare services/capabilities in one registry. Active-owner claims govern
   Find/outline; old cleanup cannot clear new claims. CodeMirror sessions preserve
   serialized history and selection across viewer disposal. Each activated open

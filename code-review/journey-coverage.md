@@ -520,6 +520,52 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 
 ## J03: Documents
 
+**External document refresh (2026-10-21):**
+`features/documents/hooks/use-document-refresh.ts` checks the active visible
+document every two seconds and on activation, native window focus, and return
+from hidden. Text, generic previews, and versioned assets use the same trigger;
+the check does not depend on indexing or host tree revisions. Dirty or held edits
+retain their draft and enter the existing versioned comparison on save.
+`use-document-source.test.tsx` reproduces the missing refresh and covers focus,
+inactive/hidden suspension, failure recovery, held edits, slow-read coalescing,
+disposal, and an accepted save winning over an older in-flight read.
+`document-viewers.test.tsx` checks generic text and an image's versioned URL.
+`document-html.test.tsx` checks that unchanged and failed asset reads retain the
+HTML frame, while a new source version replaces it with the same opaque sandbox.
+An isolated built Electron fixture changed a same-length HTML file externally:
+the preview requested its new versioned URL and executed its updated script.
+`server/routes/html-refresh.test.ts` reproduces a data-script-only change leaving
+the old HTML version unchanged. The host now includes directly declared local
+scripts and stylesheets in that version and uses precise validators when serving
+subresources. Route tests cover same-size writes with restored mtime, stylesheet
+changes, dependency deletion/restoration, explicit project scope, base URLs,
+entities, and refusal to follow outside-project symlinks. Dynamically loaded
+resources and transitive CSS/JS dependencies are not tracked.
+The built host also detected a data-only edit in an isolated copy of the reported
+SEO dashboard and served the updated script without changing the
+HTML bytes. The data-only update has not been visually confirmed in that built
+window: native UI automation could not reliably control the isolated instance.
+A separate release-preparation fixture changed only a same-size data script,
+restored its mtime, and observed the updated script execute in the existing HTML
+tab; its refreshed preview was inspected by eye.
+`ui/workspace/refresh.test.tsx` checks that a workspace covered by Chat mode or
+New tab retains its editor without polling and catches up when shown again;
+`app/composition/layout/workspace-panes.tsx` supplies that visibility.
+An isolated built-renderer/built-host Electron pass observed an external Markdown
+edit in the same tab after 2.3 seconds, caught up after reactivation, refreshed a
+generic source preview, and retained visible text across deletion and restoration.
+A real editor input racing an external write opened comparison with both texts
+intact; disk retained the external version until the explicit resolution.
+The final-build pass repeated these flows with a kept tab and observed no source
+reads during four-second stays in either Chat mode or New tab, followed by
+immediate catch-up on return. All 12 `pnpm check:web` gates, host types,
+documentation checks, Electron tests, and the built-output native smoke passed.
+Release preparation repeated the complete source gate after integrating the
+latest `main`, then reused its builds for the refresh and conflict flows above.
+The refreshed view was inspected by eye. The existing conflict header crowds its
+copy in a narrow Documents/Chat split; that separate layout gap remains.
+This proves the source runtime, not installed-package delivery.
+
 **Move by drag (2026-10-19):** `workspace/ui/file-tree-drop.ts` resolves where a
 drag over the Files column lands, from one set of listeners on the sidebar frame:
 a folder row, a file row's folder, or the root for the project's row and the rest

@@ -120,6 +120,7 @@ export function WorkspacePanes({
           <div className="relative h-full">
             <div aria-hidden={newTab.open} className="h-full" inert={newTab.open}>
               <DocumentWorkspace
+                active={mode === 'documents' && !newTab.open}
                 assetApi={dependencies.documents.adapters.asset}
                 docxPreviewApi={dependencies.documents.adapters.docxPreview}
                 genericPreviewApi={dependencies.documents.adapters.genericPreview}
