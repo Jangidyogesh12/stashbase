@@ -63,10 +63,13 @@ test('a run stays claimable until its own window answers it', async () => {
   assert.deepEqual(runs.pending(other.window.webContents.id), []);
 });
 
-test('a window that never answers fails the run after the deadline', async () => {
+test('a window that never answers fails the run after the deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const runs = createScheduledRunCoordinator({ timeoutMs: 5 });
   const project = windowFixture(9);
-  assert.deepEqual(await runs.request(project.window, run), {
+  const outcome = runs.request(project.window, run);
+  t.mock.timers.tick(5);
+  assert.deepEqual(await outcome, {
     reason: 'The project window did not start the chat in time.',
     status: 'failed',
   });
