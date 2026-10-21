@@ -6,7 +6,7 @@ import { resolveSafeAsync } from './file-paths.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { requireCurrentFolder, runWithFolderRoot } from './folder.ts';
 import { readFileBytesBoundedAsync, saveTextAsync } from './active-file-operations.ts';
-import { decodeDirectTextBytes } from './text-decoding.ts';
+import { decodeTextSnapshotBytes } from './text-decoding.ts';
 
 export interface TextSnapshot { content: string; version: string }
 const writes = new Map<string, Promise<void>>();
@@ -35,7 +35,7 @@ export async function readTextSnapshotAsync(name: string): Promise<TextSnapshot 
   const target = await resolveSafeAsync(name, 'creatable');
   try {
     const bytes = await readFileBytesBoundedAsync(target);
-    return { content: decodeDirectTextBytes(name, bytes), version: textVersion(bytes) };
+    return { content: decodeTextSnapshotBytes(name, bytes), version: textVersion(bytes) };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;

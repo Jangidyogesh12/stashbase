@@ -185,10 +185,11 @@ permissions, with current model and tool choices checked before use.
   or re-enabling notifications. Each chat retains its latest outcome notification
   until replaced, opened or retired. Clicking opens that chat and focuses the
   result/error when present; a startup failure opens the retained input instead.
-- Every runtime works as an agent in StashBase, the reader's second brain, not
-  as a coding assistant: a native runtime is told so before its persona, since
-  its provider's own prompt describes a programming tool. A persona can narrow
-  that role.
+- Every runtime works as an agent in StashBase, the reader's second brain.
+  Its default role covers thinking and writing in ordinary projects; it can
+  also perform programming and configuration work when the reader requests it,
+  within the same project and session permissions. Document viewer and search
+  formats do not restrict Agent text-file access. A persona can narrow that role.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.

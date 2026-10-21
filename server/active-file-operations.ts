@@ -23,7 +23,8 @@ export async function readUtf8FileBoundedAsync(absPath: string, maxBytes = MAX_T
 
 /** Bounded, complete reads shared by source snapshots and text consumers. */
 export async function readFileBytesBoundedAsync(absPath: string, maxBytes = MAX_TEXT_READ_BYTES): Promise<Buffer> {
-  const handle = await fs.promises.open(absPath, 'r');
+  // Opening a FIFO must not block before the regular-file check below.
+  const handle = await fs.promises.open(absPath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
   try {
     const stat = await handle.stat();
     if (!stat.isFile()) throw new Error('path is not a file');
@@ -99,7 +100,14 @@ export async function saveBytesAsync(relPath: string, bytes: Buffer, beforePubli
   const target = await resolveSafeAsync(relPath, 'creatable');
   await fs.promises.mkdir(path.dirname(target), { recursive: true });
   await resolveSafeAsync(relPath, 'creatable');
-  await writeFileAtomicAsync(target, bytes, { beforeRename: beforePublish });
+  const mode = await fs.promises.stat(target).then(
+    (stat) => stat.mode & 0o777,
+    (err: unknown) => {
+      if (errorCode(err) !== 'ENOENT') throw err;
+      return undefined;
+    },
+  );
+  await writeFileAtomicAsync(target, bytes, { mode, beforeRename: beforePublish });
 }
 
 /** Exclusive-create variant: returns false if the file already exists

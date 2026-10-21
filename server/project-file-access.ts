@@ -9,6 +9,7 @@ import { filesystemPath } from './filesystem-path.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { isDerivedNoteName } from './format.ts';
 import { projectOperationError } from './project-operations/errors.ts';
+import { unsupportedTextControl } from './text-decoding.ts';
 
 export type { AgentContextFile } from '../shared/project-files.ts';
 
@@ -141,9 +142,12 @@ export async function normalizeProjectDirectoryPath(
  * feed + `rac`). Refuse the mutation instead of silently corrupting user data.
  */
 export function validateProjectTextMutation(content: string): void {
-  const match = content.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u);
-  if (!match) return;
-  const codePoint = match[0].codePointAt(0) ?? 0;
+  if (/[\uD800-\uDFFF]/u.test(content)) {
+    throw routeError('content contains an unpaired Unicode surrogate and cannot round-trip as UTF-8; no file was changed', 400, 'INVALID_TEXT_CONTENT');
+  }
+  const control = unsupportedTextControl(content);
+  if (control === undefined) return;
+  const codePoint = control.codePointAt(0) ?? 0;
   const printable = `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
   throw routeError(
     `content contains unsupported control character ${printable}. ` +

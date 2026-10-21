@@ -2187,6 +2187,29 @@ pricing or a newly packaged desktop journey.
 
 ## J07: Converge
 
+**Agent code and configuration (2026-10-20):** Project text reads/writes no
+longer depend on the Documents format whitelist. `project-file-mutations.ts`
+uses `file-save.ts`'s `saveTextFileContent`; `project-file-reader.ts` reads other
+UTF-8 sources by exact path. Strict bounded snapshots remain owned by
+`text-file-transaction.ts`, and atomic replacement retains existing permissions.
+`project-text-files.test.ts` drives real MCP write/read/edit calls for dotfiles,
+code, configuration, unknown extensions and extensionless names; it covers
+BOM/CRLF and version preservation, concurrent edits, restrictive/executable
+permissions, rejected binary/invalid/oversized/special sources, protected paths,
+project scope and symlink escape. Generic text calls no index operation, and
+the Documents save gate still refuses it. Runtime instructions and MCP tool
+descriptions explicitly allow requested programming and preserve filenames.
+Directory discovery, generic move/delete, automatic context and search
+eligibility retain their separate capabilities. These tests do not establish
+live-provider tool selection or packaged behavior.
+
+A controlled Electron pass using the built server and renderer in an isolated
+profile created, read and edited `.env` and a Python source through MCP. The
+Files tree kept both exact names and each opened with the edited text in its
+read-only preview. A stale version and binary overwrite were refused with disk
+content preserved. This exercises production file services and presentation;
+no live model turn or packaged application was used.
+
 **Intent:** [J07](../design-docs/journeys/README.md#j07-converge-chat-into-a-document).
 
 **Implementation:** Renderer: `renderer/src/features/agent/application/session-runtime.ts`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/app/composition/layout/workspace-panes.tsx`.
@@ -2284,6 +2307,8 @@ agent turn and is not promised for standalone external MCP clients.
 - **Contract Test:** `pnpm test:server` covers transport/operation parity, authorization, scoped
   direct/prepared reads, bounded windows, format/encoding restrictions, mutations,
   and reconcile. Current/stale/cancelled/orphaned prepared evidence is covered.
+  The J07 Agent text-file regression also exercises the external MCP transport;
+  explicit UTF-8 code/configuration access does not grant search eligibility.
 - **Driven Runtime Pass:** a 2026-09-16 isolated source HTTP client initializes
   MCP, lists tools, reads a registered Markdown file through production Project
   Operations, rejects an outside-project read, and verifies token rotation.

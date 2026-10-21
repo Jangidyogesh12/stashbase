@@ -1,6 +1,6 @@
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { toSourcePath } from './folder.ts';
-import { detectFormat, isDerivedNoteName } from './format.ts';
+import { detectFormat, isDerivedNoteName, isKnownBinaryFile } from './format.ts';
 import { fileChanged, readTextSnapshotAsync, replaceTextSnapshotAsync, withTextFileTransaction } from './text-file-transaction.ts';
 import { contentSizeError, shouldIndexFilePath } from './indexable.ts';
 import { errorMessage, logger } from './log.ts';
@@ -18,6 +18,13 @@ function fileWriteError(message: string, status = 400, code = 'INVALID_FILE_WRIT
 }
 
 export function validateEditableFileWrite(name: string): void {
+  validateTextFileWrite(name);
+  if (!detectFormat(name)) {
+    throw fileWriteError('unsupported editable format', 415, 'UNSUPPORTED_FORMAT');
+  }
+}
+
+function validateTextFileWrite(name: string): void {
   let normalized: string;
   try {
     normalized = normalizeFolderRelativePath(name, { writable: true, allowQuotes: true });
@@ -27,12 +34,15 @@ export function validateEditableFileWrite(name: string): void {
   if (isDerivedNoteName(normalized)) {
     throw fileWriteError('cannot edit app-maintained derived notes');
   }
-  if (!detectFormat(normalized)) {
-    throw fileWriteError('unsupported editable format', 415, 'UNSUPPORTED_FORMAT');
+  if (isKnownBinaryFile(normalized)) {
+    throw fileWriteError('unsupported editable format: binary files cannot be written as text', 415, 'UNSUPPORTED_FORMAT');
   }
 }
 
 export async function upsertSavedFile(name: string, content: string): Promise<string | undefined> {
+  // Explicit Agent text access does not make source code/configuration
+  // retrievable or require an index daemon to save it.
+  if (!detectFormat(name)) return undefined;
   // Saves under hidden or excluded directories (reachable once hidden files
   // are shown in the Workbench) stay outside the index. Delete any row from a
   // formerly visible identity immediately; waiting for reconcile would leave
@@ -68,10 +78,21 @@ export async function saveFileContent(
   opts: { baseVersion?: string } = {},
 ): Promise<{ content: string; indexWarning?: string; version?: string; changed: boolean }> {
   validateEditableFileWrite(name);
+  return saveTextFileContent(name, content, opts);
+}
+
+/** Agent/MCP text writes share document transactions, not editor capabilities.
+ * Keep the supplied path intact, including dotfiles and extensionless names. */
+export async function saveTextFileContent(
+  name: string,
+  content: string,
+  opts: { baseVersion?: string } = {},
+): Promise<{ content: string; indexWarning?: string; version?: string; changed: boolean }> {
+  validateTextFileWrite(name);
   return withTextFileTransaction(name, async () => {
     const previous = await readTextSnapshotAsync(name);
     const format = detectFormat(name);
-    const savedContent = format === 'md' || format === 'json' || format === 'txt'
+    const savedContent = format !== 'html'
       ? preserveTextSourceFormat(previous?.content ?? '', content)
       : content;
     // A byte-identical retry succeeds even if its original baseline is stale.

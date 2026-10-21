@@ -87,6 +87,14 @@ HTTP, agent, and MCP adapters share file/version authorities. Source capability
 follows the [format matrix](../design-docs/capabilities/project-files.md#format-capability-matrix);
 preview, content editing, and rename/delete are separate permissions.
 
+- Agent/MCP `read_file`, `write_file`, and `edit_file` accept explicitly addressed
+  UTF-8 text independently of document extension membership. Project writes use
+  `saveTextFileContent`; Documents keeps its format gate in `saveFileContent`.
+  Both use the same bounded, strict UTF-8 snapshots and versioned transaction.
+  Known binary containers and binary control bytes are refused before text
+  replacement; atomic writes preserve existing file permissions. Generic text
+  never enters indexing or automatic context merely because a tool can edit it.
+  Paths remain literal; tools never complete a filename with a document suffix.
 - Read content/version from one bounded snapshot. Hash complete bytes, not mtime.
   Serialize in-process writes, stage, then recheck the expected version before
   publishing. The queue does not provide OS compare-and-swap against external writers.
@@ -439,7 +447,8 @@ stable status without download, retry, or a new durable demand latch.
   as a coding assistant; the bundled agent states its role in its own
   configuration. That policy is the one text every runtime always
   sees, so it owns which StashBase tool orients and reads prepared text, and that
-  existing documents use `edit_file` while new documents use `write_file`; a tool description alone
+  existing text files use `edit_file` while new text files use `write_file`,
+  including requested source code and configuration; a tool description alone
   cannot own a rule, because a runtime may defer it. Neither is a permission,
   skill contents, or a project-file edit, and StashBase ships no workflow
   guidance of its own: that is the user's `AGENTS.md` / `CLAUDE.md`.

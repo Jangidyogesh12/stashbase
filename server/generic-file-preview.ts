@@ -3,19 +3,8 @@ import path from 'node:path';
 import type { GenericFilePreview } from '../shared/project-files.ts';
 import { fileStatVersion, MAX_TEXT_READ_BYTES } from './active-file-operations.ts';
 import { resolveSafe } from './file-paths.ts';
-import { detectViewerFormat } from './format.ts';
+import { detectViewerFormat, isKnownBinaryFile } from './format.ts';
 import { isCloudPlaceholderName } from './indexable.ts';
-
-/** Formats whose container bytes are never useful as a text fallback. Keep
- * this as an opening fast path, not listing vocabulary: unknown extensions
- * still get content inspection when selected. */
-const KNOWN_BINARY_EXTENSIONS = new Set([
-  '.7z', '.a', '.apk', '.app', '.avif', '.bin', '.bmp', '.bz2', '.class',
-  '.db', '.dll', '.dmg', '.dylib', '.eot', '.exe', '.gif', '.gz', '.heic',
-  '.ico', '.jar', '.lib', '.o', '.otf', '.pdb', '.ppt', '.pptx', '.psd',
-  '.pyc', '.rar', '.sqlite', '.sqlite3', '.tar', '.tif', '.tiff', '.ttf',
-  '.wasm', '.woff', '.woff2', '.xls', '.xlsx', '.xz', '.zip',
-]);
 
 function previewState(
   kind: Exclude<GenericFilePreview['kind'], 'text'>,
@@ -85,7 +74,7 @@ export function readGenericFilePreview(name: string): GenericFilePreview {
     error.status = 415;
     throw error;
   }
-  if (KNOWN_BINARY_EXTENSIONS.has(path.extname(name).toLowerCase())) {
+  if (isKnownBinaryFile(name)) {
     return previewState('binary', name, st.size);
   }
   if (st.size > MAX_TEXT_READ_BYTES) return previewState('too-large', name, st.size);

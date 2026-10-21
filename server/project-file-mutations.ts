@@ -4,7 +4,7 @@ import { queueConvertibleSource } from './conversion-dispatch.ts';
 import { clearRecord } from './conversion-status.ts';
 import { deleteDerivedForSource } from './derived-store.ts';
 import { prepareFileOperation } from './file-operation-guard.ts';
-import { saveFileContent } from './file-save.ts';
+import { saveTextFileContent } from './file-save.ts';
 import {
   deleteFileAsync,
   pathExistsAsync,
@@ -40,7 +40,7 @@ export async function writeProjectFile(
   validateProjectWritableFolderRel(target.folderRel);
   validateProjectTextMutation(content);
   return runWithFolderRoot(target.folderRoot, async () => {
-    const result = await saveFileContent(target.folderRel, content, opts);
+    const result = await saveTextFileContent(target.folderRel, content, opts);
     return { path: target.abs, version: result.version, indexWarning: result.indexWarning };
   });
 }
@@ -53,7 +53,7 @@ export async function editProjectFile(
 ): Promise<{ path: string; replacements: number; version?: string; indexWarning?: string }> {
   const current = await readProjectFile(rawPath);
   if (current.derived) {
-    throw routeError('edit_file cannot edit derived PDF/DOCX/audio text; create or edit a Markdown, HTML, JSON, or UTF-8 plain-text source file instead', 415, 'UNSUPPORTED_FORMAT');
+    throw routeError('edit_file cannot edit derived PDF/DOCX text; create or edit a UTF-8 text source file instead', 415, 'UNSUPPORTED_FORMAT');
   }
   if (!oldText) {
     if (current.content !== '') throw routeError('empty old_text only matches an empty file', 409, 'EDIT_MISMATCH');

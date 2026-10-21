@@ -11,14 +11,15 @@ editing capabilities remain explicit for each surface.
 | Source | Documents mode | Retrieval text | Agent/MCP content access |
 |---|---|---|---|
 | Markdown | Read/edit; new drafts use Markdown | Source text | Read/write source |
-| Plain text | Read/edit valid UTF-8 | Source text | Read/write valid UTF-8 |
+| Plain text (`.txt`) | Read/edit valid UTF-8 | Source text | Read/write valid UTF-8 |
 | JSON | Source-preserving editing | Source text | Read/write source |
 | HTML | Preview only | Extracted in memory | Read/write raw HTML |
 | PDF | Source preview | Prepared Markdown | Read prepared text |
 | Image | Source preview | Prepared OCR text | Native attachments depend on runtime; MCP does not return image bytes |
 | DOCX | Sanitized preview with prepared fallback | Prepared HTML | Read prepared text |
 | Audio/video | Playback when supported, otherwise open externally | None | None |
-| Generic file | Bounded read-only UTF-8 or explicit unavailable state | None | None |
+| Other UTF-8 text (code, configuration, dotfiles, extensionless files) | Bounded read-only text | None | Read/write source by exact path |
+| Other binary file | Explicit unavailable state | None | None through text tools |
 
 Playback depends on codecs. Previewability, content editing, file mutation, and
 retrieval are independent capabilities. The [glossary](../glossary.md#format-capability)
@@ -29,6 +30,15 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
 - Reads, edits, search results, and file links retain project-and-path identity.
   Missing files and invalid encoding never justify substituting another source
   or rewriting bytes lossily.
+- Agent text tools accept ordinary UTF-8 source code and configuration within
+  project and session permissions, independently of editor and search formats.
+  They preserve the requested filename, including `.env` and names without an
+  extension; a format error never authorizes appending `.md`. Existing binary
+  content, known binary containers, invalid encoding, and non-regular files
+  cannot be overwritten as text. Saved text retains BOM, line endings, and
+  existing file permissions. Generic text does not acquire indexing or automatic
+  context eligibility. Directory discovery retains its visibility rules; an
+  omitted file can be read explicitly by its exact path.
 - Workbench rename, move, and delete apply to ordinary visible files, including
   generic files. Dragging a file or folder onto a folder in Files moves it there
   under its own name; a folder moves with everything inside it and never into

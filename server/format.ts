@@ -197,3 +197,23 @@ export function detectViewerFormat(name: string): KnownViewerFormat | null {
   }
   return null;
 }
+
+/** Known containers cannot be created or overwritten through text tools even
+ * when empty or containing an ASCII-only header. Unknown names get byte
+ * inspection instead; this is not a whitelist of text extensions. */
+const BINARY_EXTENSIONS = new Set([
+  '7z', 'a', 'apk', 'app', 'avif', 'bin', 'bmp', 'bz2', 'class',
+  'db', 'dll', 'dmg', 'dylib', 'eot', 'exe', 'gif', 'gz', 'heic',
+  'ico', 'jar', 'lib', 'o', 'otf', 'pdb', 'ppt', 'pptx', 'psd',
+  'pyc', 'rar', 'sqlite', 'sqlite3', 'tar', 'tif', 'tiff', 'ttf',
+  'wasm', 'woff', 'woff2', 'xls', 'xlsx', 'xz', 'zip',
+]);
+
+export function isKnownBinaryFile(name: string): boolean {
+  const basename = pathBasename(name);
+  const dot = basename.lastIndexOf('.');
+  const extension = dot > 0 ? basename.slice(dot + 1).toLowerCase() : '';
+  return BINARY_EXTENSIONS.has(extension)
+    || CONVERTIBLE_SOURCE_PATTERN.test(basename)
+    || AUDIO_PATTERN.test(basename);
+}

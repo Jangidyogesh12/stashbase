@@ -2,7 +2,7 @@ import { readTextSnapshotAsync } from './text-file-transaction.ts';
 import path from 'node:path';
 import { derivedNoteFor, sourceForDerivedText } from './derived-store.ts';
 import { runWithFolderRoot } from './folder.ts';
-import { detectFormat, detectViewerFormat } from './format.ts';
+import { detectFormat, detectViewerFormat, isKnownBinaryFile } from './format.ts';
 import {
   fileStatVersionAsync,
   pathExistsAsync,
@@ -170,13 +170,13 @@ async function readWholeProjectFile(rawPath: unknown): Promise<ProjectFileRead> 
       if (viewerFormat === 'image') {
         throw routeError('read_file cannot return image bytes; image OCR text is used for search evidence, while the image remains the source file', 415, 'UNSUPPORTED_FORMAT');
       }
-      throw routeError('unsupported format', 415, 'UNSUPPORTED_FORMAT');
+      if (isKnownBinaryFile(target.folderRel)) throw routeError('unsupported format: binary files cannot be read as text', 415, 'UNSUPPORTED_FORMAT');
     }
     const snapshot = await readTextSnapshotAsync(target.folderRel);
     if (snapshot == null) throw routeError('not found', 404);
     return {
       path: target.abs,
-      format,
+      format: format ?? 'txt',
       ...snapshot,
     };
   });
@@ -212,4 +212,3 @@ async function readSourceDerivedFile(
     version: (await fileStatVersionAsync(folderRel)) ?? undefined,
   };
 }
-

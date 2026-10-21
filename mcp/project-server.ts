@@ -336,10 +336,12 @@ const BUILTIN_TOOLS = [
       name: 'read_file',
       description:
         'Read a file from StashBase by absolute path ' +
-        '(for example `/Users/me/notes/topic/note.md`). Markdown, HTML, JSON, and UTF-8 plain text return source text. ' +
+        '(for example `/Users/me/notes/topic/note.md`). Markdown, HTML, JSON, and UTF-8 plain text return source text, ' +
+        'including source code, configuration, dotfiles and extensionless files. ' +
         'PDFs and DOCX return current prepared text. Images are visible in ' +
         '`list_directory` and searchable through OCR evidence, but are not returned as bytes. ' +
-        'Generic Workbench-only files are not listed or readable through MCP. ' +
+        'Files omitted from `list_directory`, including code and dotfiles, can be read by their exact path. ' +
+        'Binary files and invalid UTF-8 are refused. ' +
         'Use `offset` and `limit` to read a long file one window at a time instead of ' +
         'spending your context on the whole file. A windowed response sets `partial: true`, ' +
         'reports `totalLines`, and returns `nextOffset` until the window reaches the end. ' +
@@ -358,9 +360,11 @@ const BUILTIN_TOOLS = [
     {
       name: 'write_file',
       description:
-        'Create or overwrite a Markdown, HTML, JSON, or UTF-8 plain-text file. Creates parent folders as ' +
-        'needed, writes atomically, and updates the MFS search projection. Exact search works without an ' +
-        'embedding provider; meaning-based indexing follows when one is configured.',
+        'Create or overwrite a UTF-8 text file, including Markdown, HTML, JSON, source code, configuration, ' +
+        'dotfiles such as .env, and extensionless files. Preserve the exact requested path; never append .md ' +
+        'or change the extension to satisfy a format restriction. Creates parent folders as needed and writes ' +
+        'atomically with version checks. Binary files and invalid UTF-8 are refused. Only search-eligible ' +
+        'document formats update the search projection.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -374,7 +378,9 @@ const BUILTIN_TOOLS = [
     {
       name: 'edit_file',
       description:
-        'Patch a Markdown, HTML, JSON, or UTF-8 plain-text file by exact string replacement. By default ' +
+        'Patch a UTF-8 text file, including Markdown, HTML, JSON, source code, configuration, dotfiles and ' +
+        'extensionless files, by exact string replacement. Preserve the exact path. Binary files and invalid ' +
+        'UTF-8 are refused. By default ' +
         '`old_text` must match exactly once; set `replace_all` for global replacement. Empty `old_text` ' +
         'is allowed only for an existing empty file. Changes are saved directly; the reader can review ' +
         'a built-in Chat turn afterwards with Undo/Keep.',

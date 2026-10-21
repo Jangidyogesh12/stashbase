@@ -1,6 +1,24 @@
 /** Strict decoding for source families whose contract requires safe UTF-8. */
 const fatalUtf8 = new TextDecoder('utf-8', { fatal: true });
 
+export function unsupportedTextControl(content: string): string | undefined {
+  return content.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u)?.[0];
+}
+
+/** Editable snapshots must round-trip bytes for every extension. The filename
+ * determines presentation elsewhere, never permission to decode lossily. */
+export function decodeTextSnapshotBytes(sourceName: string, bytes: Uint8Array): string {
+  try { fatalUtf8.decode(bytes); }
+  catch { throw unsupportedEncodingError(sourceName); }
+  const content = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8');
+  if (unsupportedTextControl(content) !== undefined) {
+    throw Object.assign(new Error(`${sourceName} contains binary control characters; text tools cannot read or overwrite it.`), {
+      code: 'UNSUPPORTED_FORMAT', status: 415,
+    });
+  }
+  return content;
+}
+
 export function decodeDirectTextBytes(sourceName: string, bytes: Uint8Array): string {
   if (/\.txt$/iu.test(sourceName)) {
     try {

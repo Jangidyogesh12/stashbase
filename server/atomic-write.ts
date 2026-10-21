@@ -36,6 +36,9 @@ export async function writeFileAtomicAsync(
   const tmp = temporarySibling(file);
   try {
     await fs.promises.writeFile(tmp, data, options.mode === undefined ? undefined : { mode: options.mode });
+    // Creation applies umask; an explicit mode (including a source file's
+    // existing permissions) must survive replacement exactly.
+    if (options.mode !== undefined) await fs.promises.chmod(tmp, options.mode);
     await options.beforeRename?.();
     await fs.promises.rename(tmp, file);
   } catch (err) {

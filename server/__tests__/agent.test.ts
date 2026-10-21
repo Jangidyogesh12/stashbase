@@ -108,7 +108,7 @@ test("Claude appends the Chat's Persona before hidden StashBase routing policy",
   assert.doesNotMatch(appended, /Every file operation and search targets the bound project only/);
   assert.match(appended, /read_file/);
   assert.match(appended, /do not install or run a separate parser/i);
-  assert.match(appended, /Modify existing project documents.*`edit_file`/);
+  assert.match(appended, /Modify existing project text files.*`edit_file`/);
   assert.match(appended, /Changes are written directly/);
   assert.doesNotMatch(appended, /suggest_edits/);
   assert.match(appended, /Prefer primary research notes\./);

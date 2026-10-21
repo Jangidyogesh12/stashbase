@@ -128,17 +128,17 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.match(searchTool.description, /Every request searches one Folder/);
     for (const name of ['read_file', 'write_file', 'edit_file']) {
       const tool = listed.body.result.tools.find((candidate: any) => candidate.name === name);
-      assert.match(tool.description, /Markdown.*HTML.*JSON.*(?:plain text|plain-text)/i);
+      assert.match(tool.description, /source code.*configuration.*dotfiles/i);
     }
     const createProjectTool = listed.body.result.tools.find((tool: any) => tool.name === 'create_project');
     assert.deepEqual(createProjectTool.inputSchema.required, ['name']);
     for (const name of ['write_file', 'edit_file']) {
       const tool = listed.body.result.tools.find((candidate: any) => candidate.name === name);
-      assert.match(tool.description, /Markdown, HTML, JSON, or UTF-8 plain-text/);
+      assert.match(tool.description, /UTF-8 text file/);
     }
     assert.match(
       listed.body.result.tools.find((tool: any) => tool.name === 'read_file').description,
-      /Generic Workbench-only files are not listed or readable through MCP/,
+      /can be read by their exact path/,
     );
     const readTool = listed.body.result.tools.find((tool: any) => tool.name === 'read_file');
     assert.equal(readTool.inputSchema.properties.offset.minimum, 1);

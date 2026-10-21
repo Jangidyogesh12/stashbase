@@ -315,7 +315,7 @@ $$`;
 
   const opaqueSource = path.join(root, 'Data', 'script.ts');
   fs.writeFileSync(opaqueSource, 'export const value = 1;');
-  await assert.rejects(callTool(base, token, 'read_file', { path: opaqueSource }), /415|UNSUPPORTED_FORMAT/);
+  assert.equal((await callTool(base, token, 'read_file', { path: opaqueSource })).content, 'export const value = 1;');
   await assert.rejects(callTool(base, token, 'move_file', {
     path: opaqueSource,
     new_path: path.join(root, 'Archive', 'script.ts'),

@@ -141,6 +141,8 @@ save → continue the conversation.
 Writing creates ordinary local content without stealing document focus. Discussion is
 not publication or authorization for unrelated changes. Discussion or a requested
 preview stays in Chat until the reader asks to apply it.
+Requested source code and configuration are ordinary text files too; their exact
+names are preserved even when Documents offers only a read-only preview.
 A turn's direct Markdown changes can be reviewed in the document on request;
 undoing uses ordinary saving and keeping leaves the file as the turn wrote it.
 
