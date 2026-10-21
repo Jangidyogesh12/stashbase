@@ -557,6 +557,24 @@ test('single-flight startup coalesces simultaneous initial-window requests', asy
   assert.equal(starts, 2);
 });
 
+test('source launches leave the installed app protocol untouched; packaged launches register it', () => {
+  const source = fs.readFileSync(require.resolve('./main.cjs'), 'utf8');
+  const start = source.indexOf('function registerOAuthReturnProtocol()');
+  const end = source.indexOf("app.on('open-url'", start);
+  assert.ok(start >= 0 && end > start);
+  for (const isPackaged of [false, true]) {
+    const registrations = [];
+    vm.runInNewContext(`${source.slice(start, end)}\nregisterOAuthReturnProtocol();`, {
+      app: { isPackaged, setAsDefaultProtocolClient: (...args) => { registrations.push([...args]); return true; } },
+      process: { defaultApp: !isPackaged, argv: ['electron', '/dev/stashbase'], execPath: '/dev/Electron' },
+      path, console,
+    });
+    assert.equal(registrations.length, isPackaged ? 1 : 0,
+      'development must not make generic Electron the OS protocol handler');
+    if (isPackaged) assert.equal(registrations[0][0], 'stashbase');
+  }
+});
+
 test('native activation shares pending startup and opens again after all windows close', async () => {
   // Execute the entrypoint's event registration, retaining its actual wiring
   // while replacing the native app and slow server readiness with test doubles.

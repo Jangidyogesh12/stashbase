@@ -137,6 +137,10 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   out of the website does not sign the desktop out. Short-lived API tokens renew
   through the active server session. A switch from Supabase requires one fresh
   sign-in; existing subscriptions retain their imported user identity.
+- Installed desktop apps return from the browser through their registered app
+  protocol. Source development keeps the browser result visible and asks the
+  developer to return to the running window; it must not launch generic Electron
+  or replace the installed application's protocol handler.
 - Desktop account authentication follows the operating system's proxy settings,
   including automatic proxy configuration. Sign-in failures identify the failed
   stage and the available DNS, connection, proxy, certificate or timeout code,

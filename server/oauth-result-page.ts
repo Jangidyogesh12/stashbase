@@ -13,6 +13,7 @@ export function oauthResultPage({
   autoReturn = false,
   returnStatusUrl,
   returnIntentUrl,
+  appReturnSupported = process.env.STASHBASE_PACKAGED === '1',
 }: {
   title: string;
   message: string;
@@ -20,6 +21,7 @@ export function oauthResultPage({
   autoReturn?: boolean;
   returnStatusUrl?: string;
   returnIntentUrl?: string;
+  appReturnSupported?: boolean;
 }): string {
   const safeTitle = escapeHtml(title);
   const safeMessage = escapeHtml(message);
@@ -152,21 +154,23 @@ export function oauthResultPage({
       <!-- The product mark: a fixed grey frame behind an ink S, the ink side
            following the page's own scheme. -->
       <div class="brand"><span class="brand-mark"><svg viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="var(--brand-frame)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><path d="M104 210 L104 321.1 A24 24 0 0 0 116.1 342 L216.9 399.7"/></g><g stroke="currentColor" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"><path d="M338 111 L267.9 70.84 A24 24 0 0 0 244.1 70.84 L128.3 137.2 A24 24 0 0 0 128.3 178.8 L244.1 245.2 A24 24 0 0 0 267.9 245.2 L384.1 178.6 A24 24 0 0 1 420 199.4 L420 328.1 A24 24 0 0 1 407.9 348.9 L291.9 415.4 A24 24 0 0 1 256 394.6 L256 344"/></g></svg></span>StashBase</div>
-      <section class="card" data-auto-return="${autoReturn ? 'true' : 'false'}" aria-labelledby="result-title">
+      <section class="card" data-auto-return="${autoReturn && appReturnSupported ? 'true' : 'false'}" aria-labelledby="result-title">
         ${icon}
         <h1 id="result-title">${safeTitle}</h1>
         <p class="message">${safeMessage}</p>
         <div class="return-area">
+          ${appReturnSupported ? `
           <p class="status" id="return-status" aria-live="polite">${autoReturn ? 'Returning you to StashBase…' : ''}</p>
           <a class="button" id="return-button" href="${APP_RETURN_URL}"${autoReturn ? ' hidden' : ''}>
             Open StashBase
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </a>
+          ` : '<p class="status">Return to your running StashBase window. You can close this tab.</p>'}
         </div>
       </section>
     </div>
   </main>
-  <script>
+  ${appReturnSupported ? `<script>
     (() => {
       const card = document.querySelector('.card');
       const button = document.getElementById('return-button');
@@ -246,7 +250,7 @@ export function oauthResultPage({
         status.textContent = 'StashBase didn’t open on its own.';
       }, 2800);
     })();
-  </script>
+  </script>` : ''}
 </body>
 </html>`;
 }

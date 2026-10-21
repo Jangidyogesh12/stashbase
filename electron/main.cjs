@@ -1188,9 +1188,11 @@ function focusBillingReturn() {
 }
 
 function registerOAuthReturnProtocol() {
-  const registered = process.defaultApp && process.argv[1]
-    ? app.setAsDefaultProtocolClient('stashbase', process.execPath, [path.resolve(process.argv[1])])
-    : app.setAsDefaultProtocolClient('stashbase');
+  // macOS/Linux cannot route a URL to `electron <project>`: launch arguments
+  // are a Windows-only registration option. Never replace an installed app's
+  // handler with generic Electron from a source checkout.
+  if (!app.isPackaged) return;
+  const registered = app.setAsDefaultProtocolClient('stashbase');
   if (!registered) console.warn('[electron] could not register the stashbase:// return protocol');
 }
 

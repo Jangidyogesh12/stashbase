@@ -10,8 +10,16 @@ import { oauthResultPage } from './oauth-result-page.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+test('source callbacks never launch the installed app or bare Electron', () => {
+  const html = oauthResultPage({ title: 'Signed in', message: 'Ready', autoReturn: true });
+  assert.doesNotMatch(html, /stashbase:\/\//);
+  assert.doesNotMatch(html, /window\.location|window\.close/);
+  assert.match(html, /Return to your running StashBase window/);
+});
+
 test('OAuth callback renders a safe centered card with delayed app return and fallback button', () => {
   const html = oauthResultPage({
+    appReturnSupported: true,
     title: 'Signed in <now>',
     message: 'Ready & returning',
     autoReturn: true,
@@ -40,6 +48,7 @@ test('OAuth callback renders a safe centered card with delayed app return and fa
 
 test('failed OAuth callback keeps the return button visible without automatic launch', () => {
   const html = oauthResultPage({
+    appReturnSupported: true,
     title: 'Sign-in failed',
     message: 'Try again.',
     kind: 'error',

@@ -374,6 +374,20 @@ asks users to sign in again with their original Google account; this rollout
 does not force an update. Packaged 2.16.15 installation, OS protocol return and
 cross-platform manual checks remain separate release evidence.
 
+**Development callback return (2026-10-21):** A source launch registered generic
+Electron as the `stashbase://` handler, then the callback opened that scheme.
+On macOS the additional project argument is not supported, so this could open
+Electron's default page. `multi-window.test.cjs` now exercises the entrypoint's
+registration and proves source launches leave the OS handler untouched while
+packaged launches register it. `hosted-account.test.ts` verifies source callback
+pages contain neither a protocol link nor redirect/close script, and retain
+manual return guidance. Packaged callbacks retain their authenticated native
+acknowledgement and fallback button. These regressions do not substitute for a
+real packaged OS protocol handoff. A real Google sign-in in an isolated source
+Electron profile then passed: the browser visibly retained its success page
+and manual return guidance, the existing desktop showed the signed-in account
+and active Pro subscription, and no generic Electron page opened.
+
 ## J02: Folder
 
 **Intent:** [J02](../design-docs/journeys/README.md#j02-add-and-open-a-folder).

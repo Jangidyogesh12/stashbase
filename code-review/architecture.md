@@ -704,6 +704,11 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
 - Account OAuth uses Node-owned PKCE and window-bound opaque flows. The fixed
   app-return deep link carries no code/token/flow id; authenticated native
   acknowledgement proves focus handoff. Cancelled polling is not OAuth revocation.
+  Only packaged Electron registers the OS return protocol. The callback emits
+  a protocol link and its return script only for a packaged host; source and
+  standalone Node runs retain the result page with manual switch-back guidance.
+  On macOS/Linux, registering generic Electron cannot preserve the source entry
+  path, and development must not steal the installed application's handler.
   One renderer account provider owns the browser wait for all window surfaces.
   New OAuth attempts and successful local sign-out retire earlier unfinished
   flows across windows; exchange must recheck flow identity/state after awaiting
