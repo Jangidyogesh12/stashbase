@@ -887,6 +887,9 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
 - The fixed event schema and persisted-envelope validator are the outbound
   boundary. Only versioned typed facts are queued; transport constructs metadata
   explicitly and filters credential patterns in diagnostics again before sending.
+  Distribution (`source` or `packaged`) is host-owned event metadata, persisted
+  at capture and retained by offline replay, pending-turn recovery and native
+  diagnostic spooling; it never comes from renderer event input.
   Diagnostic messages, paths, causes, stacks and bounded process output are retained;
   arbitrary request/provider objects, documents, prompts and whole logs are excluded.
   The public ingestion token is build configuration, not a user credential.
@@ -914,11 +917,12 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   not deleted by this switch.
 - `STASHBASE_TELEMETRY_DISABLED=1` suppresses collection and queue delivery before
   startup without changing saved preferences/identity. Electron passes it to Node;
-  Settings cannot override it. Unpackaged builds never collect. The host, Electron
+  Settings cannot override it. Source and packaged launches follow the same
+  default-on preference and opt-out. The host, Electron
   and MCP native entry points share `server/telemetry-environment.ts`: Node test
   workers, `NODE_ENV=test`, Vitest and Jest markers suppress admission even with
   an inherited packaged flag. The isolated host-test fixture also sets the override
-  for descendants. Manual packaged checks must still set it; collection tests
+  for descendants. Manual source/development and packaged checks must still set it; collection tests
   explicitly simulate production only with replaced transport.
 - Automatic diagnostics use this same owner, suppression and opt-out. Node emits
   bounded original messages, unknown as well as known codes, nested causes and

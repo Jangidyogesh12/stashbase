@@ -122,9 +122,12 @@ logout/direct account switching, delayed outcomes, offline queue replay, stable
 UUID/time/version, retryable/permanent refusals, capacity/expiry, corrupt config,
 opt-out cancellation, active days without restart, session expiry and subscription
 poll suppression. Its subprocess replaces outbound transport before importing the
-production owner and exercises Electron's packaged test-suppression environment,
-including inherited packaged flags in Node, Vitest, Jest and `NODE_ENV=test`
-processes, saved preferences, errors/warnings, and a normal packaged positive control.
+production owner and exercises source, Vite-development and packaged collection,
+distribution attribution, opt-out, and Electron's test-suppression environment.
+Node, Vitest, Jest and `NODE_ENV=test` markers suppress both distributions,
+including inherited packaged flags, without changing saved preferences.
+Offline replay, turn recovery and native-diagnostic tests verify the originating
+distribution survives a later host running through the other distribution.
 `server/telemetry-environment.ts` shares runtime admission with Electron/MCP native
 diagnostics; the isolated host-test fixture suppresses descendants as well.
 Renderer telemetry tests exercise trusted foreground input, quiet background days,
@@ -132,6 +135,17 @@ listener disposal, bounded edit reporting and refusal of host-only facts.
 Document lifecycle tests distinguish editing from reconciliation/no-change callbacks;
 agent usage tests cover correlation and terminal coalescing. All collection tests
 use isolated configuration and fake/local transport, never production PostHog.
+
+On 2026-10-22, the telemetry/native-diagnostic/account suites (69 tests), host and
+renderer types, documentation checks, service/renderer builds, Electron boundary
+tests and built Electron smoke passed against the updated main branch. The
+2026-10-21 driven source Electron window used the real main/preload,
+built renderer and built host with isolated settings and intercepted capture
+transport; native-main collection was suppressed separately. Welcome startup and
+trusted input produced `source` events. Settings opt-out cleared identity/queue
+and stopped collection; re-enable resumed input collection under a fresh anonymous
+identity after the normal minute suppression window. This does not establish
+production PostHog receipt or a Vite-HMR desktop pass.
 
 Diagnostic serialization is shared in `shared/protocols/diagnostics.ts`; host/renderer error
 adapters feed the same collector. Tests cover bounded causes/codes, unquoted private

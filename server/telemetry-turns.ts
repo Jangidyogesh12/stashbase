@@ -30,7 +30,7 @@ export function finishTelemetryTurn(state: TelemetryState, turn: PendingTurn, in
     installationId: turn.installationId, anonymousId: turn.anonymousId,
     firstSeenAt: turn.firstSeenAt, ...(turn.userId ? { userId: turn.userId } : {}),
     ...(turn.sessionId ? { sessionId: turn.sessionId } : {}),
-    version: turn.version, os: turn.os, uuid: turn.turnId, timestamp, event,
+    version: turn.version, distribution: turn.distribution, os: turn.os, uuid: turn.turnId, timestamp, event,
   };
   (state.queue ??= []).push(queued);
   state.turns = state.turns?.filter((item) => item.turnId !== turn.turnId);

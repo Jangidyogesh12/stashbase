@@ -54,7 +54,8 @@ async function main() {
 
 const configPath = process.env.STASHBASE_DIAGNOSTICS_CONFIG;
 const diagnostics = createNativeDiagnostics({
-  available: telemetryAvailable(process.env.STASHBASE_PACKAGED === '1') && Boolean(configPath && process.env.STASHBASE_DIAGNOSTICS_ROOT),
+  available: telemetryAvailable() && Boolean(configPath && process.env.STASHBASE_DIAGNOSTICS_ROOT),
+  distribution: process.env.STASHBASE_PACKAGED === '1' ? 'packaged' : 'source',
   version: packageInfo.version, directory: process.env.STASHBASE_DIAGNOSTICS_ROOT,
   // The launcher pins the host's paths, even under Default Agent's private home.
   read: () => readAppConfigStrict(configPath),

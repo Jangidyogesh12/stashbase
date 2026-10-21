@@ -38,6 +38,11 @@ running `pnpm electron` or `pnpm dev`.
 and waits for both development servers. Restart it after changing Electron or
 shared boundary code so the desktop uses the updated modules.
 
+Source runs share usage statistics under the same Settings privacy switch as
+packaged builds, with `app_distribution=source`. To exclude your own development
+session, launch with `env -u ELECTRON_RUN_AS_NODE STASHBASE_TELEMETRY_DISABLED=1 pnpm dev`.
+This process-only override leaves the saved preference unchanged.
+
 For local PDF and image OCR extraction from this checkout, run
 `pnpm setup:python-extract`. To build the independent PDF/OCR component payload,
 run `pnpm build:python-extract-sidecar`.
@@ -73,8 +78,8 @@ Build and lint commands do only their named work.
 Host test workers automatically suppress production telemetry, including when
 `STASHBASE_PACKAGED=1` is inherited. The shared isolated fixture also suppresses
 child processes. Automated Electron and packaged-server smoke launches disable it too.
-Manual packaged checks must set `STASHBASE_TELEMETRY_DISABLED=1` before launching;
-see [testing packaged builds](docs/usage-statistics.md#testing-packaged-builds).
+Manual source and packaged checks must set `STASHBASE_TELEMETRY_DISABLED=1` before launching;
+see [testing and development](docs/usage-statistics.md#testing-and-development).
 
 `test:server`, `test:agent` and `test:mcp` preload `server/__tests__/isolated-home.ts`,
 which points the home directory, app data and agent settings at a temporary

@@ -9,12 +9,13 @@ import { z } from 'zod';
 import { readAppConfigStrict, type AppConfigFile } from './app-config.ts';
 import { appDataRoot } from './local-data.ts';
 import { writeFileAtomic } from './atomic-write.ts';
-import { usageState, accountUsageId, QUEUE_TTL } from './telemetry-state.ts';
+import { usageState, accountUsageId, QUEUE_TTL, usageDistributionSchema } from './telemetry-state.ts';
 import { diagnosticSchema, errorDiagnostic } from '../shared/protocols/diagnostics.ts';
 import { boundedDiagnosticContext, diagnosticContextSchema, type DiagnosticContext } from '../shared/protocols/http/telemetry.ts';
 
 const recordSchema = z.object({
   uuid: z.string().uuid(), timestamp: z.string().datetime(), version: z.string().max(80),
+  distribution: usageDistributionSchema,
   os: z.string().max(20), accountId: z.string().optional(),
   identity: z.object({ installationId: z.string().uuid(), anonymousId: z.string().uuid(),
     firstSeenAt: z.string().datetime(), userId: z.string().optional() }).optional(),
@@ -26,6 +27,7 @@ export type NativeDiagnostic = z.infer<typeof recordSchema>;
 
 export function createNativeDiagnostics(options: {
   available: boolean; version: string; directory?: string;
+  distribution: NativeDiagnostic['distribution'];
   read?: () => AppConfigFile; now?: () => number;
 }) {
   const directory = options.directory ?? path.join(appDataRoot(), 'native-diagnostics');
@@ -46,7 +48,7 @@ export function createNativeDiagnostics(options: {
           ? { installationId: state.installationId, anonymousId: state.anonymousId, firstSeenAt: state.firstSeenAt,
             ...(accountUsageId(config) ? { userId: accountUsageId(config) } : {}) } : undefined;
         const record = recordSchema.parse({ uuid: randomUUID(), timestamp: new Date(now()).toISOString(),
-          version: options.version, os: process.platform, accountId: accountUsageId(config), identity,
+          version: options.version, distribution: options.distribution, os: process.platform, accountId: accountUsageId(config), identity,
           operation, severity, diagnostic: errorDiagnostic(error), context: boundedDiagnosticContext(context) });
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
         const file = path.join(directory, `${record.uuid}.json`);

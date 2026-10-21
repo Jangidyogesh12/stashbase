@@ -36,7 +36,7 @@ issue reports. Check an item only after observing the result; record a concise
 reason when a platform cannot exercise it.
 
 Before launching any test package, follow the
-[packaged telemetry suppression instructions](../docs/usage-statistics.md#testing-packaged-builds).
+[telemetry suppression instructions](../docs/usage-statistics.md#testing-and-development).
 Start the app with `STASHBASE_TELEMETRY_DISABLED=1` and verify the local telemetry
 preferences report `available: false` before exercising flows. Reapply the override
 to each new process, including update verification; versions without the override

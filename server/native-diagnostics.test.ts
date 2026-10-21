@@ -9,14 +9,14 @@ import { createTelemetry } from './telemetry.ts';
 import { randomUUID } from 'node:crypto';
 import type { AppConfigFile } from './app-config.ts';
 
-test('native failures survive host restart with original time/version, then opt-out erases them', async (t) => {
+test('native failures survive host restart with original time/version/distribution, then opt-out erases them', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-native-diagnostics-'));
   let config: AppConfigFile = {};
   let now = Date.now();
   const read = () => structuredClone(config);
   const write = (value: AppConfigFile) => { config = structuredClone(value); };
-  const native = createNativeDiagnostics({ directory, available: true, version: '2.15.10', now: () => now, read });
+  const native = createNativeDiagnostics({ directory, available: true, distribution: 'source', version: '2.15.10', now: () => now, read });
   try {
     native.record(Object.assign(new Error('Update download failed: checksum mismatch token=secret-value'), { code: 'ERR_SHA512' }), 'app-update', { stage: 'downloading', target_version: '2.15.11' });
     const files = fs.readdirSync(directory);
@@ -25,7 +25,7 @@ test('native failures survive host restart with original time/version, then opt-
     assert.ok(!JSON.stringify(pending).includes('secret-value'));
     const sent: any[] = [];
     now += 60_000;
-    const service = createTelemetry({ available: true, version: '2.15.11', os: 'darwin', projectToken: 'fixture', host: 'https://example.invalid',
+    const service = createTelemetry({ available: true, distribution: 'packaged', version: '2.15.11', os: 'darwin', projectToken: 'fixture', host: 'https://example.invalid',
       read, write, now: () => now, native, fetch: async (_url, init) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } });
     t.mock.timers.tick(5000);
     await service.flush();
@@ -33,6 +33,7 @@ test('native failures survive host restart with original time/version, then opt-
     assert.equal(sent[0].uuid, pending.uuid);
     assert.equal(sent[0].timestamp, pending.timestamp);
     assert.equal(sent[0].properties.app_version, '2.15.10');
+    assert.equal(sent[0].properties.app_distribution, 'source');
     assert.equal(sent[0].properties.diagnostic.code, 'ERR_SHA512');
     assert.deepEqual(sent[0].properties.context, { stage: 'downloading', target_version: '2.15.11' });
     assert.deepEqual(fs.readdirSync(directory), []);
@@ -48,9 +49,9 @@ test('native suppression creates no files and an unowned startup failure cannot 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-native-suppression-'));
   let config: AppConfigFile = {};
   try {
-    createNativeDiagnostics({ directory, available: false, version: 'test', read: () => config }).record(new Error('suppressed'), 'startup');
+    createNativeDiagnostics({ directory, available: false, distribution: 'source', version: 'test', read: () => config }).record(new Error('suppressed'), 'startup');
     assert.deepEqual(fs.readdirSync(directory), []);
-    const native = createNativeDiagnostics({ directory, available: true, version: 'test', read: () => config });
+    const native = createNativeDiagnostics({ directory, available: true, distribution: 'source', version: 'test', read: () => config });
     native.record(new Error('before sign-in'), 'startup');
     config = { account: { session: { userId: 'later-user' } } } as AppConfigFile;
     native.drain(() => { assert.fail('must not attribute a first-launch failure to a different account'); });
@@ -66,8 +67,8 @@ test('native update warnings aggregate hourly across checks, preserve occurrence
   const read = () => structuredClone(config);
   const write = (value: AppConfigFile) => { config = structuredClone(value); };
   const sent: any[] = [];
-  const native = createNativeDiagnostics({ directory, available: true, version: '2.16.3', now: () => now, read });
-  const options = { available: true, version: '2.16.4', os: process.platform, projectToken: 'fixture', host: 'https://example.invalid',
+  const native = createNativeDiagnostics({ directory, available: true, distribution: 'packaged', version: '2.16.3', now: () => now, read });
+  const options = { available: true, distribution: 'source' as const, version: '2.16.4', os: process.platform, projectToken: 'fixture', host: 'https://example.invalid',
     read, write, now: () => now, native, fetch: async (_url: unknown, init?: RequestInit) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } };
   const service = createTelemetry(options);
   const failure = new Error('net::ERR_INTERNET_DISCONNECTED');
@@ -93,6 +94,7 @@ test('native update warnings aggregate hourly across checks, preserve occurrence
     assert.equal(sent[1].uuid, repeated.uuid);
     assert.equal(sent[1].timestamp, repeated.timestamp);
     assert.equal(sent[1].properties.app_version, '2.16.3');
+    assert.equal(sent[1].properties.app_distribution, 'packaged');
     record();
     await drain();
     now += 15 * 60_000;
@@ -115,13 +117,13 @@ test('offline native warnings retain account boundaries and opt-out erases count
   let config: AppConfigFile = { account: { session: { userId: 'first-user' } }, telemetry: { enabled: true, installationId: randomUUID(), anonymousId: randomUUID(), firstSeenAt: new Date(now).toISOString(), userId: 'first-user' } } as AppConfigFile;
   const read = () => structuredClone(config);
   const write = (value: AppConfigFile) => { config = structuredClone(value); };
-  const native = createNativeDiagnostics({ directory, available: true, version: 'test', now: () => now, read });
+  const native = createNativeDiagnostics({ directory, available: true, distribution: 'source', version: 'test', now: () => now, read });
   const failure = new Error('net::ERR_NETWORK_CHANGED');
   const record = () => native.record(failure, 'app-update', { stage: 'checking' }, 'warning');
   // Deliberately reverse the spool order: filename ordering must not define windows.
   now += 15 * 60_000; record(); now -= 15 * 60_000; record(); now += 15 * 60_000;
   const sent: any[] = [];
-  const service = createTelemetry({ available: true, version: 'test', os: 'win32', projectToken: 'fixture', host: 'https://example.invalid',
+  const service = createTelemetry({ available: true, distribution: 'source', version: 'test', os: 'win32', projectToken: 'fixture', host: 'https://example.invalid',
     read, write, now: () => now, native, fetch: async (_url, init) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } });
   try {
     t.mock.timers.tick(5000); await service.flush();

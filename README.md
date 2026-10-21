@@ -97,7 +97,7 @@ to Claude Haiku 5.5 by default.
 queries to your chosen embedding provider. Default Agent credits don't cover
 this service.
 
-Official builds share basic usage statistics by default, excluding document
+Packaged builds and source runs share usage statistics and error diagnostics by default, excluding document
 and conversation content. You can turn this off in
 `Settings → General → Privacy`. See [Usage statistics](docs/usage-statistics.md) for details.
 

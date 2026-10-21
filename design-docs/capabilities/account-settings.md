@@ -211,8 +211,10 @@ reader to current credits rather than claiming all credits are spent.
   remain retryable and report as warnings. Repeated identical check warnings
   are counted in hourly windows; download, installation, certificate and
   integrity failures remain errors.
-- Official desktop builds disclose default-on usage statistics and detailed error
-  diagnostics under one opt-out. Signing in associates the preceding anonymous
+- Packaged desktop builds and source runs disclose default-on usage statistics
+  and detailed error diagnostics under one opt-out. Reports distinguish source
+  from packaged activity without treating source use as necessarily development.
+  Signing in associates the preceding anonymous
   activity with the stable StashBase account, across installations. Installation
   and person identities remain separate; signing out or switching accounts retires
   the prior anonymous identity. No hardware fingerprint or document/chat content
@@ -230,7 +232,8 @@ reader to current credits rather than claiming all credits are spent.
   activity. A signed-in account can be associated again after re-enabling.
   [Usage statistics](../../docs/usage-statistics.md) owns the event definitions,
   identity conventions, measurement limits and operator return views.
-  Test launches of official builds suppress collection before startup without
+  Automated tests and explicitly suppressed development or packaged checks
+  disable collection before startup without
   changing the user's saved preference or analytics state.
 - Bug reporting is a separate explicit review and local handoff. The approved
   snapshot cannot change during preparation; StashBase does not submit the report.

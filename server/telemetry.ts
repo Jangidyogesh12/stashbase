@@ -29,6 +29,7 @@ export function createTelemetry(options: {
   projectToken: string;
   host: string;
   version: string;
+  distribution: QueuedUsage['distribution'];
   os: string;
   native?: ReturnType<typeof createNativeDiagnostics>;
   read(): AppConfigFile;
@@ -60,7 +61,7 @@ export function createTelemetry(options: {
   };
   const entry = (identity: UsageIdentity, event: QueuedUsage['event'], sessionId?: string): QueuedUsage => ({
     ...identity, uuid: randomUUID(), timestamp: new Date(now()).toISOString(),
-    version: options.version, os: options.os, ...(sessionId ? { sessionId } : {}), event,
+    version: options.version, distribution: options.distribution, os: options.os, ...(sessionId ? { sessionId } : {}), event,
   });
   const cancel = () => {
     generation++;
@@ -228,7 +229,7 @@ export function createTelemetry(options: {
           // The key is the redacted event, so every counted repeat carries
           // exactly the diagnostic that was reported for its window.
           const diagnosticIdentity = captured ?? identity;
-          const key = JSON.stringify([diagnosticIdentity.anonymousId, diagnosticIdentity.userId, native?.version, native?.os, event]);
+          const key = JSON.stringify([diagnosticIdentity.anonymousId, diagnosticIdentity.userId, native?.version, native?.distribution, native?.os, event]);
           const bucket = occurrences.get(key);
           const occurredAt = native ? Date.parse(native.timestamp) : now();
           if (bucket && windowOpen(bucket, occurredAt)) {
@@ -246,7 +247,7 @@ export function createTelemetry(options: {
             // Saved below with this event; a nested capture would be overwritten.
             if (oldest.repeated && turnCapacity(state) < QUEUE_LIMIT - 3) {
               const summary = entry(oldest.identity, { ...oldest.event, occurrences: oldest.repeated });
-              if (oldest.native) Object.assign(summary, { uuid: oldest.native.uuid, timestamp: oldest.native.timestamp, version: oldest.native.version, os: oldest.native.os });
+              if (oldest.native) Object.assign(summary, { uuid: oldest.native.uuid, timestamp: oldest.native.timestamp, version: oldest.native.version, distribution: oldest.native.distribution, os: oldest.native.os });
               (state.queue ??= []).push(summary);
             }
           }
@@ -279,12 +280,12 @@ export function createTelemetry(options: {
         state.subscription = status;
       }
       const queued = entry(captured ?? identity, event, turn?.sessionId ?? (currentIdentity ? state.sessionId : undefined));
-      if (native) Object.assign(queued, { uuid: native.uuid, timestamp: native.timestamp, version: native.version, os: native.os });
+      if (native) Object.assign(queued, { uuid: native.uuid, timestamp: native.timestamp, version: native.version, distribution: native.distribution, os: native.os });
       if (!state.queue?.some((item) => item.uuid === queued.uuid)) (state.queue ??= []).push(queued);
       if (event.event === 'agent_turn_started' && event.turn_id) {
         (state.turns ??= []).push({ ...identity, turnId: event.turn_id, runtime: event.runtime,
           startedAt: queued.timestamp, observedAt: queued.timestamp, stage: 'preparing', sequence: 0,
-          version: queued.version, os: queued.os, ...(state.sessionId ? { sessionId: state.sessionId } : {}) });
+          version: queued.version, distribution: queued.distribution, os: queued.os, ...(state.sessionId ? { sessionId: state.sessionId } : {}) });
       }
       save(config, state);
       if (event.event === 'agent_turn_started' && event.turn_id) {
@@ -423,11 +424,12 @@ export function createTelemetry(options: {
   };
 }
 
-const available = telemetryAvailable(process.env.STASHBASE_PACKAGED === '1')
+const available = telemetryAvailable()
   && destination.projectToken.startsWith('phc_') && destination.host.startsWith('https://');
+const distribution = process.env.STASHBASE_PACKAGED === '1' ? 'packaged' : 'source';
 export const telemetry = createTelemetry({
-  available,
-  native: createNativeDiagnostics({ available, version: packageInfo.version }),
+  available, distribution,
+  native: createNativeDiagnostics({ available, distribution, version: packageInfo.version }),
   projectToken: destination.projectToken, host: destination.host,
   version: packageInfo.version, os: process.platform,
   read: readAppConfigStrict, write: writeAppConfigStrict,

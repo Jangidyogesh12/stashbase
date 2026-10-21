@@ -1,9 +1,10 @@
 # Usage statistics
 
-Official desktop builds send product activity and detailed error diagnostics to
+Packaged desktop builds and source runs (including `pnpm dev` and `pnpm start`)
+send product activity and detailed error diagnostics to
 PostHog by default. **Settings → General → Privacy → Share usage statistics**
-controls both. All features remain available when collection is off. Development
-builds and builds without a destination do not send. Website activity is outside
+controls both. All features remain available when collection is off. Automated
+tests, explicitly suppressed runs and builds without a destination do not send. Website activity is outside
 this desktop collection.
 
 ## Identity and sign-in
@@ -26,12 +27,19 @@ installation identity.
 
 ## Events and interpretation
 
-Schema version 6 carries an event UUID, occurrence time, app version, OS,
+Schema version 7 carries an event UUID, occurrence time, app version, distribution, OS,
 installation ID, anonymous ID, installation first-observed time, and, when signed
 in, the account ID. Active work also establishes a session ID shared across
 windows; 30 minutes without reported activity starts another session. The first
 observed time means entry into this measurement, not a proven download/install
 date. Older builds do not supply the same activity or identity evidence.
+
+`app_distribution` is `source` for source runs and `packaged` for packaged builds.
+It describes the process where the event originated, not the person: source use
+can be real writing or development. Filter or break down reports by this property
+to compare the two. Offline replay, recovered turns and native diagnostics retain
+their original distribution. Events predating this property remain unclassified
+in provider history; absence is not evidence of source use.
 
 | Event | Meaning | Additional fields |
 |---|---|---|
@@ -198,7 +206,7 @@ The host atomically saves bounded, validated event envelopes in the owner-only
 application configuration before sending. The queue holds at most 500 events for
 seven days. Network failures, timeouts, rate limiting and service failures retry
 with bounded backoff; permanent request refusals are dropped. UUIDs, event times,
-identities and app versions stay fixed during retry and across process restarts.
+identities, app versions and distributions stay fixed during retry and across process restarts.
 PostHog receives the stable event UUID for deduplication. Admission is limited to
 120 ordinary events per minute. Up to 100 admitted pending turns each reserve
 one of the 500 queue slots for their terminal record. Terminals consume that
@@ -374,7 +382,7 @@ and host, never a Personal API key or secret. Forks should clear or replace it.
 Disable IP retention in the receiving project and choose its event retention
 period independently from the seven-day local delivery limit.
 
-### Testing packaged builds
+### Testing and development
 
 Node test workers, `NODE_ENV=test`, Vitest and Jest processes automatically disable
 production collection and native diagnostic spooling, even if they inherit
@@ -382,7 +390,9 @@ production collection and native diagnostic spooling, even if they inherit
 `STASHBASE_TELEMETRY_DISABLED=1` to descendants. Collection unit tests use explicit
 fixtures with fake transport; production-admission tests replace transport before import.
 
-For manual packaged checks, set `STASHBASE_TELEMETRY_DISABLED=1` before starting an app/server test process.
+For manual checks or development sessions that should not count as usage, set
+`STASHBASE_TELEMETRY_DISABLED=1` before starting an app/server process, whether
+running from source or a packaged build.
 
 It suppresses all collection and queue delivery, including identity links,
 without changing saved preferences or analytics state. Settings cannot override
@@ -390,6 +400,8 @@ it. Verify `/api/telemetry` reports `available: false` before exercising flows.
 Smoke launchers set it themselves. For example:
 
 ```bash
+env -u ELECTRON_RUN_AS_NODE STASHBASE_TELEMETRY_DISABLED=1 pnpm dev
+
 env -u ELECTRON_RUN_AS_NODE STASHBASE_TELEMETRY_DISABLED=1 \
   /Applications/StashBase.app/Contents/MacOS/StashBase
 ```

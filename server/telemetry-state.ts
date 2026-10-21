@@ -5,6 +5,7 @@ import type { AppConfigFile } from './app-config.ts';
 
 export const QUEUE_LIMIT = 500;
 export const QUEUE_TTL = 7 * 86400_000;
+export const usageDistributionSchema = z.enum(['source', 'packaged']);
 const id = z.string().uuid();
 const userId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 const timestamp = z.string().datetime();
@@ -19,6 +20,7 @@ const queuedSchema = identitySchema.extend({
   uuid: id,
   timestamp,
   version: z.string().max(80),
+  distribution: usageDistributionSchema,
   os: z.string().max(20),
   sessionId: id.optional(),
   event: z.union([telemetryEventSchema, z.object({ event: z.literal('$identify') }).strict()]),
@@ -28,6 +30,7 @@ export type QueuedUsage = z.infer<typeof queuedSchema>;
 const turnSchema = identitySchema.extend({
   turnId: id, runtime: z.enum(['stashbase', 'claude', 'codex', 'antigravity']),
   version: z.string().max(80), os: z.string().max(20), sessionId: id.optional(),
+  distribution: usageDistributionSchema,
   startedAt: timestamp, observedAt: timestamp, stage: agentTurnStageSchema,
   sequence: z.number().int().nonnegative(),
   context: diagnosticContextSchema.optional(),
@@ -113,7 +116,7 @@ export function usagePayload(entry: QueuedUsage) {
       installation_first_seen_at: entry.firstSeenAt,
       ...(entry.sessionId ? { $session_id: entry.sessionId } : {}),
       ...(event === '$identify' ? { $anon_distinct_id: entry.anonymousId } : {}),
-      app_version: entry.version, os: entry.os, schema_version: 6,
+      app_version: entry.version, app_distribution: entry.distribution, os: entry.os, schema_version: 7,
       $process_person_profile: Boolean(entry.userId), $geoip_disable: true, $ip: null,
     },
   };

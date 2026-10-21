@@ -45,19 +45,19 @@ test('process shutdown evidence survives delivery without recounting its caught 
   f.service.close();
 });
 
-test('test launches suppress every event without changing saved preferences, including through Electron', () => {
-  const cases = [
-    { packaged: '1', disabled: '1', available: false },
-    { packaged: '1', disabled: '0', available: true },
-    { packaged: '0', disabled: '0', available: false },
-    { packaged: '1', disabled: '0', available: false, marker: { NODE_TEST_CONTEXT: 'child-v8' } },
-    { packaged: '1', disabled: '0', available: false, marker: { NODE_ENV: 'test' } },
-    { packaged: '1', disabled: '0', available: false, marker: { VITEST: 'true' } },
-    { packaged: '1', disabled: '0', available: false, marker: { JEST_WORKER_ID: '1' } },
-  ];
+test('source and packaged launches collect while tests and explicit suppression preserve saved preferences', () => {
+  const cases = ['0', '1'].flatMap(packaged => [
+    { packaged, disabled: '1', available: false },
+    { packaged, disabled: '0', available: true },
+    { packaged, disabled: '0', available: true, marker: { STASHBASE_DEV_VITE: '1', NODE_ENV: 'development' } },
+    { packaged, disabled: '0', available: false, marker: { NODE_TEST_CONTEXT: 'child-v8' } },
+    { packaged, disabled: '0', available: false, marker: { NODE_ENV: 'test' } },
+    { packaged, disabled: '0', available: false, marker: { VITEST: 'true' } },
+    { packaged, disabled: '0', available: false, marker: { JEST_WORKER_ID: '1' } },
+  ]);
   for (const { packaged, disabled, available, marker } of cases) {
     const environment = { ...process.env };
-    for (const key of ['NODE_TEST_CONTEXT', 'NODE_ENV', 'VITEST', 'JEST_WORKER_ID']) delete environment[key];
+    for (const key of ['NODE_TEST_CONTEXT', 'NODE_ENV', 'VITEST', 'JEST_WORKER_ID', 'STASHBASE_DEV_VITE']) delete environment[key];
     const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', `
       import './server/__tests__/isolated-home.ts';
       import assert from 'node:assert/strict';
@@ -74,10 +74,13 @@ test('test launches suppress every event without changing saved preferences, inc
         shutdownToken: 'test-shutdown', oauthReturnToken: 'test-oauth', instanceId: 'test',
       }));
       const sent = [];
+      const distributions = [];
       // Replace the outbound transport before importing the production owner.
       // Even the positive control must never contact the production destination.
       globalThis.fetch = async (_url, init) => {
-        sent.push(JSON.parse(init.body).event);
+        const payload = JSON.parse(init.body);
+        sent.push(payload.event);
+        distributions.push(payload.properties.app_distribution);
         return new Response(null, { status: 200 });
       };
       const { telemetry } = await import('./server/telemetry.ts');
@@ -102,9 +105,15 @@ test('test launches suppress every event without changing saved preferences, inc
       await telemetry.flush();
       assert.deepEqual(sent, available ? ['app_opened', 'agent_turn_started', 'document_write_result', 'application_error', 'application_warning'] : []);
       assert.deepEqual(telemetry.preferences(), { enabled: true, available });
+      assert.deepEqual(distributions, sent.map(() => packaged ? 'packaged' : 'source'));
       if (!available) assert.deepEqual(readAppConfigStrict(), saved);
 
       telemetry.update({ enabled: false });
+      const beforeOptOut = sent.length;
+      telemetry.capture({ event: 'document_engaged', activity: 'read', format: 'md' });
+      await telemetry.flush();
+      assert.equal(sent.length, beforeOptOut);
+      assert.deepEqual(readAppConfigStrict().telemetry, { enabled: false });
       telemetry.update({ enabled: true });
       telemetry.capture({ event: 'project_entry_result', outcome: 'success' });
       await tick();
@@ -120,7 +129,7 @@ test('test launches suppress every event without changing saved preferences, inc
       const fs = await import('node:fs');
       const path = await import('node:path');
       const directory = path.join(process.env.STASHBASE_LOCAL_DATA_ROOT, 'native-admission');
-      const native = createNativeDiagnostics({ available: telemetryAvailable(packaged), version: 'test', directory });
+      const native = createNativeDiagnostics({ available: telemetryAvailable(), distribution: packaged ? 'packaged' : 'source', version: 'test', directory });
       native.record(new Error('test native failure'), 'startup');
       assert.equal(fs.existsSync(directory), available);
     `], {
@@ -139,7 +148,7 @@ function fixture(available = true) {
   let now = Date.UTC(2026, 8, 15);
   const sent: Array<{ body: Record<string, any>; signal: AbortSignal }> = [];
   const options = {
-    available, projectToken: 'phc_test', host: 'https://example.test', version: '2.7.0', os: 'linux',
+    available, distribution: 'source' as const, projectToken: 'phc_test', host: 'https://example.test', version: '2.7.0', os: 'linux',
     read() { if (readFails) throw new Error('private config path'); return structuredClone(config); },
     write(next: AppConfigFile) { if (writeFails) throw new Error('private config path'); config = structuredClone(next); },
     now: () => now,
@@ -166,7 +175,7 @@ test('default-on manual collection has only allowed fields and no source or acco
   f.service.capture({ event: 'project_entry_result', outcome: 'success', path: '/private' } as any);
   await tick();
   assert.equal(f.sent.length, 1);
-  assert.equal(f.sent[0].body.properties.schema_version, 6);
+  assert.equal(f.sent[0].body.properties.schema_version, 7);
   assert.equal(f.sent[0].body.properties.$process_person_profile, false);
   assert.equal(f.sent[0].body.properties.$geoip_disable, true);
   assert.equal(f.sent[0].body.properties.$ip, null);
@@ -198,9 +207,9 @@ test('opt-out discards pending events without a final request and rotates on re-
   f.service.close(); restarted.close();
 });
 
-test('read errors, malformed preferences, development builds, and failed disable persistence do not send', async () => {
-  for (const kind of ['read', 'malformed', 'dev', 'write'] as const) {
-    const f = fixture(kind !== 'dev');
+test('read errors, malformed preferences, unavailable collection, and failed disable persistence do not send', async () => {
+  for (const kind of ['read', 'malformed', 'unavailable', 'write'] as const) {
+    const f = fixture(kind !== 'unavailable');
     if (kind === 'read') f.readFails();
     if (kind === 'malformed') f.setConfig({ telemetry: { enabled: 'yes' } as any });
     if (kind === 'write') {
@@ -491,9 +500,9 @@ test('logout and direct account switches never merge two accounts on the same in
   f.service.close();
 });
 
-test('offline queue survives restart and keeps occurrence identity, time, version and UUID', async () => {
+test('offline queue survives a distribution change and keeps occurrence identity, time, version and UUID', async () => {
   const f = fixture();
-  const offline = createTelemetry({ ...f.options, fetch: async () => { throw new Error('offline'); } });
+  const offline = createTelemetry({ ...f.options, distribution: 'packaged', fetch: async () => { throw new Error('offline'); } });
   offline.capture({ event: 'document_engaged', activity: 'edit', format: 'md' });
   await offline.flush();
   const queued = structuredClone(f.config().telemetry!.queue![0]);
@@ -506,6 +515,7 @@ test('offline queue survives restart and keeps occurrence identity, time, versio
   assert.equal(delivered.uuid, queued.uuid);
   assert.equal(delivered.distinct_id, queued.anonymousId);
   assert.equal(delivered.properties.app_version, queued.version);
+  assert.equal(delivered.properties.app_distribution, 'packaged');
   assert.equal(f.config().telemetry!.queue!.length, 0);
   f.service.close();
 });
@@ -672,7 +682,7 @@ test('oversized operation context cannot discard an otherwise actionable diagnos
 });
 
 
-test('turn recovery retains the originating identity/version and never invents a completion time', async () => {
+test('turn recovery retains the originating identity/version/distribution and never invents a completion time', async () => {
   const f = fixture();
   const turn_id = crypto.randomUUID();
   account(f, 'A');
@@ -684,11 +694,12 @@ test('turn recovery retains the originating identity/version and never invents a
   f.service.close(); // No observed shutdown: simulate losing the host.
   account(f, 'B');
   f.advance(60_000);
-  const recovered = createTelemetry({ ...f.options, version: 'next-version' });
+  const recovered = createTelemetry({ ...f.options, version: 'next-version', distribution: 'packaged' });
   await recovered.flush();
   const result = f.sent.find(({ body }) => body.event === 'agent_turn_finished')!.body;
   assert.equal(result.distinct_id, 'user:A');
   assert.equal(result.properties.app_version, '2.7.0');
+  assert.equal(result.properties.app_distribution, 'source');
   assert.equal(result.properties.last_observed_at, pending.observedAt);
   assert.equal(result.properties.outcome, 'interrupted');
   assert.equal(result.properties.reason, 'host_restarted');
