@@ -709,14 +709,17 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   flows across windows; exchange must recheck flow identity/state after awaiting
   the provider and before persistence. Refresh is single-flight and can update
   only the session it began with; stale work cannot borrow a newer account token.
-  Only structured provider errors confirming an invalid session may clear matching
-  saved credentials. Network, timeout, rate-limit, and server failures preserve them.
+  Only an authenticated service rejection (401) or an explicit null session
+  may clear matching saved credentials. Malformed successful responses are not
+  evidence of revocation. Network, timeout, rate-limit, and server failures preserve them.
 - `server/hosted-auth-transport.ts` sends desktop Auth exchange, refresh, profile
   and logout requests through `electron/account/auth-network.ts`. Electron owns
   an in-memory Chromium session in system-proxy mode; Node retains PKCE, session
   persistence and flow retirement. The process-private relay binds IPv4 loopback
   on an ephemeral port, requires a per-launch capability, rejects browser Origins,
-  and admits only four fixed Supabase Auth operations. It forbids redirects,
+  and admits only four fixed Better Auth operations on `api.stashbase.ai`: POST
+  `/api/auth/electron/token`, GET `/api/auth/get-session`, GET `/api/auth/token`,
+  and POST `/api/auth/sign-out`. It forbids redirects,
   cookies and arbitrary hosts, bounds concurrency/body sizes/time, and aborts on
   disconnect or shutdown. The host consumes and removes the capability from its
   environment before spawning tools. A missing/failed desktop relay never falls
@@ -726,6 +729,14 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   and explanations; raw messages containing credentials/URLs are not relayed.
   OAuth failure telemetry retains this structured error rather than just its
   outer message. No automatic retry consumes an uncertain one-time code.
+- Better Auth owns Google OAuth and creates a separate desktop session through
+  a one-use PKCE transfer. Node persists that opaque `sessionToken` and a short-lived
+  API JWT; it renews the session with `get-session` before minting each replacement
+  JWT. The loopback callback validates `state` against its pending flow. Expired
+  API tokens, shared refreshes and account replacement keep the same flow guards.
+  Old Supabase refresh tokens are never sent to Better Auth; upgraded clients
+  require a fresh sign-in. Trusted server-side identity import preserves the
+  business user UUID and subscription ownership, without email-based auto-linking.
 - Avatar proxying is restricted to validated HTTPS provider hosts with bounded
   redirects/time/bytes/type; it is not a general fetch endpoint.
 - OpenQuill receives a random session-local model broker credential, not

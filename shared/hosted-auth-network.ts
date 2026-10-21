@@ -1,12 +1,15 @@
 /** Private host/native transport. Never exposed through the renderer bridge. */
-export const SUPABASE_URL = 'https://vqtfigkoihpuziaimluf.supabase.co';
-export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_D-S7Ry-IWC9pTdDx6DHHHw_-mmaTp3b';
+export const AUTH_BASE_URL = 'https://api.stashbase.ai/api/auth';
 export const AUTH_REQUEST_LIMIT = 64 * 1024;
 export const AUTH_RESPONSE_LIMIT = 1024 * 1024;
 export const AUTH_TIMEOUT_MS = 10_000;
 export const AUTH_PATHS = new Set([
-  '/token?grant_type=pkce', '/token?grant_type=refresh_token', '/logout?scope=local', '/user',
+  '/electron/token', '/get-session', '/token', '/sign-out',
 ]);
+
+export function authMethod(path: string): 'GET' | 'POST' {
+  return path === '/get-session' || path === '/token' ? 'GET' : 'POST';
+}
 
 /** Only error codes cross the native boundary; raw transport messages can
  * contain URLs, proxy credentials or authentication payloads. */

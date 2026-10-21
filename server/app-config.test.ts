@@ -169,7 +169,7 @@ test('retired folder metadata does not escape project APIs or survive a membersh
 
 test('credential and preference mutations never overwrite malformed config through a fallback read', () => {
   const statements = [
-    `config.setHostedAccountSession({ accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'person@example.com' });`,
+    `config.setHostedAccountSession({ accessToken: 'access', sessionToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'person@example.com' });`,
     `config.setEmbedderConfig({ provider: 'openai', apiKey: 'sk-test' });`,
     `config.setWorkspacePreferences({ showHiddenFiles: true });`,
   ];

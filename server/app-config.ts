@@ -61,7 +61,7 @@ export interface EmbedderConfig {
 
 export interface HostedAccountSession {
   accessToken: string;
-  refreshToken: string;
+  sessionToken: string;
   expiresAt: number;
   userId: string;
   email: string;
@@ -256,7 +256,7 @@ export function getHostedAccountSession(): HostedAccountSession | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   if (
     typeof raw.accessToken !== 'string' || !raw.accessToken ||
-    typeof raw.refreshToken !== 'string' || !raw.refreshToken ||
+    typeof raw.sessionToken !== 'string' || !raw.sessionToken ||
     typeof raw.expiresAt !== 'number' || !Number.isFinite(raw.expiresAt) ||
     typeof raw.userId !== 'string' || !raw.userId ||
     typeof raw.email !== 'string' || !raw.email
@@ -267,7 +267,7 @@ export function getHostedAccountSession(): HostedAccountSession | undefined {
   // future credentials must never hitchhike into the normalized session.
   return {
     accessToken: raw.accessToken,
-    refreshToken: raw.refreshToken,
+    sessionToken: raw.sessionToken,
     expiresAt: raw.expiresAt,
     userId: raw.userId,
     email: raw.email,

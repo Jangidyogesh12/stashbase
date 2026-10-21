@@ -25,28 +25,21 @@ import {
 } from './app-config.ts';
 import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
 import { hostedAuthRequest } from './hosted-auth-transport.ts';
-import { SUPABASE_URL } from '../shared/hosted-auth-network.ts';
+import { AUTH_BASE_URL } from '../shared/hosted-auth-network.ts';
 
 export const STASHBASE_API_URL = 'https://api.stashbase.ai';
 const CLIENT_VERSION = packageJson.version;
 
-interface SupabaseUser {
+interface AuthUser {
   id?: string;
   email?: string;
-  user_metadata?: Record<string, unknown>;
-  identities?: Array<{ provider?: string; identity_data?: Record<string, unknown> }>;
+  emailVerified?: boolean;
+  name?: string;
+  image?: string;
 }
-interface SupabaseTokenResponse {
-  code?: string;
-  error_code?: string;
-  access_token?: string;
-  refresh_token?: string;
-  expires_at?: number;
-  expires_in?: number;
-  user?: SupabaseUser;
-  error?: string;
-  error_description?: string;
-  msg?: string;
+interface AuthSessionResponse {
+  session: { id: string; expiresAt: string };
+  user: AuthUser;
 }
 
 interface ErrorPayload {
@@ -81,12 +74,6 @@ const AVATAR_MAX_REDIRECTS = 2;
 const AVATAR_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
 let avatarCache: { key: string; contentType: string; bytes: Uint8Array } | null = null;
 
-// Supabase's structured session errors, not message text or any generic 4xx:
-// https://supabase.com/docs/guides/auth/debugging/error-codes
-const INVALID_SESSION_CODES = new Set([
-  'refresh_token_not_found', 'refresh_token_already_used', 'session_not_found',
-  'session_expired', 'user_not_found', 'user_banned',
-]);
 class HostedAuthError extends Error {
   constructor(message: string, readonly invalidSession: boolean) { super(message); }
 }
@@ -99,64 +86,47 @@ async function jsonBody<T>(response: Response): Promise<T | null> {
   try { return await response.json() as T; } catch { return null; }
 }
 
-export function normalizedGoogleProfile(user: SupabaseUser | undefined): Pick<HostedAccountSession, 'displayName' | 'avatarUrl'> {
-  const metadata = user?.user_metadata;
-  const identity = user?.identities?.find((candidate) => candidate.provider === 'google')?.identity_data;
-  const displayName = [metadata?.full_name, metadata?.name, identity?.full_name, identity?.name]
-    .map(normalizeHostedDisplayName).find((value) => value !== undefined);
-  const avatarUrl = [metadata?.avatar_url, metadata?.picture, identity?.avatar_url, identity?.picture]
-    .map(parseGoogleAvatarUrl).find((value) => value !== undefined)?.toString();
-  return {
-    ...(displayName ? { displayName } : {}),
-    ...(avatarUrl ? { avatarUrl } : {}),
-  };
+export function normalizedGoogleProfile(user: AuthUser | undefined): Pick<HostedAccountSession, 'displayName' | 'avatarUrl'> {
+  const displayName = normalizeHostedDisplayName(user?.name);
+  const avatarUrl = parseGoogleAvatarUrl(user?.image)?.toString();
+  return { ...(displayName ? { displayName } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
 }
 
-function sessionFrom(value: SupabaseTokenResponse, fallback?: HostedAccountSession): HostedAccountSession {
-  const accessToken = value.access_token;
-  const refreshToken = value.refresh_token ?? fallback?.refreshToken;
-  const userId = value.user?.id ?? fallback?.userId;
-  const email = value.user?.email ?? fallback?.email;
-  const expiresAt = value.expires_at ?? (value.expires_in ? Math.floor(Date.now() / 1000) + value.expires_in : fallback?.expiresAt);
-  if (!accessToken || !refreshToken || !userId || !email || !expiresAt) {
-    throw new Error('Supabase returned an incomplete login session.');
-  }
-  const profile = normalizedGoogleProfile(value.user);
-  return {
-    accessToken, refreshToken, userId, email, expiresAt,
-    ...(profile.displayName ? { displayName: profile.displayName } : fallback?.displayName ? { displayName: fallback.displayName } : {}),
-    ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : fallback?.avatarUrl ? { avatarUrl: fallback.avatarUrl } : {}),
-  };
-}
-
-async function supabaseAuth(path: string, body: Record<string, unknown>, accessToken?: string): Promise<SupabaseTokenResponse> {
-  const response = await hostedAuthRequest(path, {
-    body, accessToken,
-    signal: AbortSignal.timeout(10_000),
-  });
-  const payload = await jsonBody<SupabaseTokenResponse>(response);
+async function authRequest<T>(path: string, sessionToken?: string, body?: Record<string, unknown>, signal = AbortSignal.timeout(10_000)): Promise<T | null> {
+  const response = await hostedAuthRequest(path, { body, accessToken: sessionToken, signal });
+  let payload: (T & ErrorPayload) | null;
+  try { payload = await response.json() as (T & ErrorPayload) | null; } catch { throw new Error("The authentication service returned an unreadable response."); }
   if (!response.ok) throw new HostedAuthError(
-    messageOf(payload ?? null, `Supabase authentication failed (HTTP ${response.status}).`),
-    response.status >= 400 && response.status < 500 && response.status !== 429
-      && INVALID_SESSION_CODES.has(payload?.error_code ?? payload?.code ?? ''),
+    messageOf(payload, `Account authentication failed (HTTP ${response.status}).`),
+    response.status === 401,
   );
-  return payload ?? {};
+  return payload;
 }
 
-async function supabaseUser(accessToken: string): Promise<SupabaseUser> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PROFILE_TIMEOUT_MS);
-  try {
-    const response = await hostedAuthRequest('/user', {
-      accessToken,
-      signal: controller.signal,
-    });
-    const payload = await jsonBody<SupabaseUser & ErrorPayload>(response);
-    if (!response.ok) throw new Error(messageOf(payload, `Supabase profile lookup failed (HTTP ${response.status}).`));
-    return payload ?? {};
-  } finally {
-    clearTimeout(timeout);
-  }
+async function readSession(sessionToken: string, signal: AbortSignal): Promise<AuthSessionResponse> {
+  const value = await authRequest<AuthSessionResponse>('/get-session', sessionToken, undefined, signal);
+  if (value === null) throw new HostedAuthError('Your session expired. Sign in again.', true);
+  if (!value.session?.id || !value.user?.id || !value.user.email || value.user.emailVerified !== true
+    || !(Date.parse(value.session.expiresAt) > Date.now())) throw new Error('The authentication service returned an incomplete session.');
+  return value;
+}
+
+async function sessionFrom(sessionToken: string, fallback?: HostedAccountSession): Promise<HostedAccountSession> {
+  const signal = AbortSignal.timeout(10_000);
+  const value = await readSession(sessionToken, signal);
+  if (fallback && (value.user.id !== fallback.userId || getHostedAccountSession()?.accessToken !== fallback.accessToken || getHostedAccountSession()?.sessionToken !== fallback.sessionToken)) throw new Error('The hosted account changed while its token was refreshing.');
+  const result = await authRequest<{ token: string }>('/token', sessionToken, undefined, signal);
+  // The API verifies signatures. Here we check the token's lifetime and binding
+  // before caching it; decoding alone is never used to authorize an operation.
+  let claims;
+  try { claims = JSON.parse(Buffer.from(result?.token.split('.')[1] ?? '', 'base64url').toString()); } catch { /* rejected below */ }
+  if (!result?.token || claims?.sub !== value.user.id || claims?.session_id !== value.session.id
+    || !Number.isFinite(claims?.exp) || claims.exp <= Date.now() / 1000) throw new Error('The authentication service returned an invalid API token.');
+  return {
+    accessToken: result.token, sessionToken, expiresAt: claims.exp,
+    userId: value.user.id!, email: value.user.email!,
+    ...normalizedGoogleProfile(value.user),
+  };
 }
 
 function base64Url(bytes: Buffer): string {
@@ -192,11 +162,11 @@ export function beginHostedOAuth(
   pruneOAuthFlows();
   const origin = assertLoopbackCallbackOrigin(callbackOrigin);
   retireOAuthFlows('A newer sign-in request was started. Continue in the latest browser tab.');
-  const flowId = base64Url(crypto.randomBytes(24));
+  const flowId = crypto.randomBytes(32).toString('hex');
   const verifier = base64Url(crypto.randomBytes(48));
   const challenge = base64Url(crypto.createHash('sha256').update(verifier).digest());
   const callback = new URL('/api/account/oauth/callback', origin);
-  callback.searchParams.set('flow', flowId);
+  callback.hostname = '127.0.0.1';
 
   pendingOAuthFlows.set(flowId, {
     provider,
@@ -207,11 +177,10 @@ export function beginHostedOAuth(
     state: 'pending',
   });
 
-  const authorize = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
-  authorize.searchParams.set('provider', provider);
-  authorize.searchParams.set('redirect_to', callback.toString());
-  authorize.searchParams.set('code_challenge', challenge);
-  authorize.searchParams.set('code_challenge_method', 's256');
+  const authorize = new URL(`${AUTH_BASE_URL}/desktop/start`);
+  authorize.searchParams.set('state', flowId);
+  authorize.searchParams.set('challenge', challenge);
+  authorize.searchParams.set('callback', callback.toString());
   telemetry.capture({ event: 'account_login_started' });
   return { flowId, provider, purpose, url: authorize.toString() };
 }
@@ -220,18 +189,23 @@ export async function exchangeHostedOAuthCode(flowId: string, authCode: string):
   pruneOAuthFlows();
   const flow = pendingOAuthFlows.get(flowId);
   if (!flow || flow.state !== 'pending') throw new Error(flow?.error ?? 'This sign-in request expired. Start again from StashBase.');
-  if (!authCode.trim()) throw new Error('Supabase did not return an authorization code.');
+  if (!authCode.trim()) throw new Error('The sign-in service did not return an authorization code.');
   flow.state = 'exchanging';
   try {
-    const payload = await supabaseAuth('/token?grant_type=pkce', {
-      auth_code: authCode,
+    const payload = await authRequest<{ token: string }>('/electron/token', undefined, {
+      token: authCode, state: flowId,
       code_verifier: flow.verifier,
     });
     pruneOAuthFlows();
     if (pendingOAuthFlows.get(flowId) !== flow || flow.state !== 'exchanging') {
       throw new Error(flow.error ?? 'This sign-in request expired. Start again from StashBase.');
     }
-    const session = sessionFrom(payload);
+    if (!payload?.token) throw new Error('The sign-in service returned no session.');
+    const session = await sessionFrom(payload.token);
+    pruneOAuthFlows();
+    if (pendingOAuthFlows.get(flowId) !== flow || flow.state !== 'exchanging') {
+      throw new Error(flow.error ?? 'This sign-in request expired. Start again from StashBase.');
+    }
     setHostedAccountSession(session);
     telemetry.identityChanged();
     // A completed sign-in answers the sign-in banner for good.
@@ -335,23 +309,22 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
   const session = getHostedAccountSession();
   if (!session) throw new Error('Sign in to StashBase to use the Default Agent and its free credits.');
   if (!options.forceRefresh && session.expiresAt > Math.floor(Date.now() / 1000) + 60) return session.accessToken;
-  const sessionKey = `${session.userId}\0${session.refreshToken}\0${session.accessToken}`;
+  const sessionKey = `${session.userId}\0${session.sessionToken}\0${session.accessToken}`;
   if (tokenRefresh?.sessionKey === sessionKey) return tokenRefresh.promise;
 
   const promise = (async () => {
     try {
-      const payload = await supabaseAuth('/token?grant_type=refresh_token', { refresh_token: session.refreshToken });
+      const refreshed = await sessionFrom(session.sessionToken, session);
       const current = getHostedAccountSession();
-      if (!current || `${current.userId}\0${current.refreshToken}\0${current.accessToken}` !== sessionKey) {
+      if (!current || `${current.userId}\0${current.sessionToken}\0${current.accessToken}` !== sessionKey) {
         throw new Error('The hosted account changed while its token was refreshing.');
       }
-      const refreshed = sessionFrom(payload, session);
       setHostedAccountSession(refreshed);
       return refreshed.accessToken;
     } catch (error) {
       const current = getHostedAccountSession();
       if (error instanceof HostedAuthError && error.invalidSession
-        && current && `${current.userId}\0${current.refreshToken}\0${current.accessToken}` === sessionKey) {
+        && current && `${current.userId}\0${current.sessionToken}\0${current.accessToken}` === sessionKey) {
         setHostedAccountSession(undefined);
         telemetry.identityChanged();
       }
@@ -380,7 +353,7 @@ export async function signOutHostedAccount(): Promise<void> {
   // so it shows again; a Not now from then on holds until the next sign-out.
   // A sign-out with no session is not one, and leaves a Not now standing.
   try { forgetAccountOfferSeen('sign-in'); } catch { /* the sign-out stands without the banner */ }
-  try { await supabaseAuth('/logout?scope=local', {}, session.accessToken); } catch { /* local sign-out still succeeds */ }
+  try { await authRequest('/sign-out', session.sessionToken, {}); } catch { /* local sign-out still succeeds */ }
 }
 
 async function hydrateHostedProfile(session: HostedAccountSession): Promise<void> {
@@ -391,7 +364,8 @@ async function hydrateHostedProfile(session: HostedAccountSession): Promise<void
     if (now - profileHydration.attemptedAt < PROFILE_HYDRATION_RETRY_MS) return profileHydration.promise;
   }
   const promise = (async () => {
-    const user = await supabaseUser(session.accessToken);
+    const { user } = await readSession(session.sessionToken, AbortSignal.timeout(PROFILE_TIMEOUT_MS));
+    if (user.id !== session.userId) return;
     const profile = normalizedGoogleProfile(user);
     if (!profile.displayName && !profile.avatarUrl) return;
     const current = getHostedAccountSession();

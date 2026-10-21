@@ -441,7 +441,7 @@ test('non-JSON asset failures report status without reading private response con
 function account(f: ReturnType<typeof fixture>, userId?: string) {
   const config = f.config();
   config.account = userId ? { session: { userId, email: 'private@example.com', accessToken: 'secret-access',
-    refreshToken: 'secret-refresh', expiresAt: 9999999999 } } : {};
+    sessionToken: 'secret-refresh', expiresAt: 9999999999 } } : {};
   f.setConfig(config);
   f.service.identityChanged();
 }

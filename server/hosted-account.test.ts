@@ -87,6 +87,19 @@ test('a data-free native return focuses the window attached to the browser retur
   assert.equal(output.second.appReturned, undefined);
 });
 
+function apiToken(label: string, userId = 'user-1') {
+  return `fixture.${Buffer.from(JSON.stringify({ sub: userId, session_id: 'session-id', exp: 4102444800 })).toString('base64url')}.${label}`;
+}
+const authFixture = `
+  const apiToken = ${apiToken.toString()};
+  const authReply = (url, { accessToken = 'access-1', sessionToken = 'refresh-1', user = { id: 'user-1', email: 'person@example.com' } } = {}) => {
+    if (String(url).endsWith('/electron/token')) return Response.json({ token: sessionToken });
+    if (String(url).endsWith('/get-session')) return Response.json({ session: { id: 'session-id', expiresAt: '2100-01-01T00:00:00.000Z' }, user: { emailVerified: true, ...user } });
+    if (String(url).endsWith('/token')) return Response.json({ token: apiToken(accessToken, user.id) });
+    throw Error('Unexpected auth fixture operation: ' + url);
+  };
+`;
+
 function runIsolated(source: string) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-hosted-account-test-'));
   try {
@@ -96,7 +109,7 @@ function runIsolated(source: string) {
       'tsx',
       '--input-type=module',
       '--eval',
-      source,
+      authFixture + source,
     ], {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -111,11 +124,11 @@ function runIsolated(source: string) {
 test('the sign-in banner: sign-in answers it, sign-out brings it back, Not now holds until the next sign-out', () => {
   const result = runIsolated(`
     globalThis.fetch = async (url) => {
-      if (String(url).endsWith('/auth/v1/token?grant_type=pkce')) return Response.json({
-        access_token: 'access-1', refresh_token: 'refresh-1', expires_at: 4102444800,
+      if (['/electron/token', '/get-session', '/token'].some(path => String(url).endsWith(path))) return authReply(url, {
+        accessToken: 'access-1', sessionToken: 'refresh-1',
         user: { id: 'user-1', email: 'person@example.com' },
       });
-      if (String(url).includes('/auth/v1/logout')) return new Response(null, { status: 204 });
+      if (String(url).includes('/api/auth/sign-out')) return new Response(null, { status: 204 });
       throw new Error('unexpected URL ' + url);
     };
     const account = await import('./server/hosted-account.ts');
@@ -153,14 +166,7 @@ test('billing calls carry the desktop session, refresh once on 401, and open onl
     globalThis.fetch = async (url, init = {}) => {
       const target = String(url);
       calls.push({ url: target, method: init.method ?? 'GET', body: init.body ? JSON.parse(String(init.body)) : null, authorization: new Headers(init.headers).get('authorization') });
-      if (target.endsWith('/auth/v1/token?grant_type=pkce')) return Response.json({
-        access_token: 'access-1', refresh_token: 'refresh-1', expires_at: 4102444800,
-        user: { id: 'user-1', email: 'person@example.com' },
-      });
-      if (target.endsWith('/auth/v1/token?grant_type=refresh_token')) return Response.json({
-        access_token: 'access-2', refresh_token: 'refresh-2', expires_at: 4102444800,
-        user: { id: 'user-1', email: 'person@example.com' },
-      });
+      if (target.includes('/api/auth/')) return authReply(url, { accessToken: statusAttempts ? 'access-2' : 'access-1' });
       if (target.endsWith('/v1/billing/status')) {
         statusAttempts += 1;
         if (statusAttempts === 1) return Response.json({ code: 'unauthorized', message: 'Expired.' }, { status: 401 });
@@ -184,14 +190,14 @@ test('billing calls carry the desktop session, refresh once on 401, and open onl
   `);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
-  assert.deepEqual(output.calls.slice(0, 3).map((call: { authorization: string }) => call.authorization), ['Bearer access-1', 'Bearer access-2', 'Bearer access-2']);
+  assert.deepEqual(output.calls.slice(0, 3).map((call: { authorization: string }) => call.authorization), [`Bearer ${apiToken('access-1')}`, `Bearer ${apiToken('access-2')}`, `Bearer ${apiToken('access-2')}`]);
   assert.equal(output.status.status, 'free');
   assert.deepEqual(output.calls[2].body, { priceId: 'price_plus' });
   assert.equal(output.checkout.url, 'https://checkout.stripe.com/c/pay/cs_test_1');
   assert.equal(output.portal, 'Billing returned an unexpected page.');
   assert.equal(output.insecure, 'Billing returned an unexpected page.');
   assert.deepEqual(output.calls.at(-1).body, { action: 'downgrade', priceId: 'price_plus' });
-  assert.equal(output.calls.at(-1).authorization, 'Bearer access-2');
+  assert.equal(output.calls.at(-1).authorization, `Bearer ${apiToken('access-2')}`);
 });
 
 test('a stalled billing response times out and a later attempt can recover', () => {
@@ -218,11 +224,9 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
     const calls = [];
     globalThis.fetch = async (url, init = {}) => {
       calls.push({ url: String(url), body: init.body ? JSON.parse(String(init.body)) : null, authorization: new Headers(init.headers).get('authorization') });
-      if (String(url).endsWith('/auth/v1/token?grant_type=pkce')) return Response.json({
-        access_token: 'access-1', refresh_token: 'refresh-1', expires_at: 4102444800,
-        user: { id: 'user-1', email: 'person@example.com', user_metadata: {
-          full_name: 'Ada Lovelace', avatar_url: 'https://lh3.googleusercontent.com/a/profile-photo',
-        } },
+      if (['/electron/token', '/get-session', '/token'].some(path => String(url).endsWith(path))) return authReply(url, {
+        accessToken: 'access-1', sessionToken: 'refresh-1',
+        user: { id: 'user-1', email: 'person@example.com', name: 'Ada Lovelace', image: 'https://lh3.googleusercontent.com/a/profile-photo' },
       });
       if (String(url).endsWith('/v1/agent/usage?include=reservations')) return Response.json({
         profile: 'stashbase-agent-default', remainingPercent: 75, reservedPercent: 10,
@@ -244,28 +248,30 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   const authorize = new URL(output.started.url);
-  assert.equal(authorize.pathname, '/auth/v1/authorize');
-  assert.equal(authorize.searchParams.get('provider'), 'google');
-  const redirectTo = authorize.searchParams.get('redirect_to');
+  assert.equal(authorize.pathname, '/api/auth/desktop/start');
+  assert.match(output.started.flowId, /^[0-9a-f]{64}$/);
+  const redirectTo = authorize.searchParams.get('callback');
   assert.ok(redirectTo);
-  assert.equal(new URL(redirectTo).searchParams.get('flow'), output.started.flowId);
-  assert.equal(output.calls[0].body.auth_code, 'auth-code-1');
+  assert.equal(new URL(redirectTo).pathname, '/api/account/oauth/callback');
+  assert.equal(new URL(redirectTo).search, '');
+  assert.equal(authorize.searchParams.get('state'), output.started.flowId);
+  assert.equal(output.calls[0].body.token, 'auth-code-1');
   const expectedChallenge = crypto.createHash('sha256').update(output.calls[0].body.code_verifier).digest('base64url');
-  assert.equal(authorize.searchParams.get('code_challenge'), expectedChallenge);
+  assert.equal(authorize.searchParams.get('challenge'), expectedChallenge);
   assert.equal(output.status.state, 'complete');
   assert.equal(output.status.appReturned, true);
-  assert.equal(output.calls[1].authorization, 'Bearer access-1');
-  assert.equal(output.calls[1].authorization, 'Bearer access-1');
+  assert.equal(output.calls[1].authorization, 'Bearer refresh-1');
+  assert.equal(output.calls[3].authorization, `Bearer ${apiToken('access-1')}`);
   assert.equal(output.agentAllowance.remainingPercent, 75);
   assert.equal(output.agentAllowance.reservedPercent, 10);
-  assert.equal(output.session.refreshToken, 'refresh-1');
+  assert.equal(output.session.sessionToken, 'refresh-1');
   assert.equal(output.source, 'openai');
   assert.equal(output.state.email, 'person@example.com');
   assert.equal(output.state.displayName, 'Ada Lovelace');
   assert.equal(output.state.avatarUrl, '/api/account/avatar');
   assert.equal('userId' in output.state, false);
   assert.equal('accessToken' in output.state, false);
-  assert.equal('refreshToken' in output.state, false);
+  assert.equal('sessionToken' in output.state, false);
   assert.equal('user_metadata' in output.state, false);
 });
 
@@ -286,7 +292,7 @@ test('OAuth callback explains transport failures without exposing login credenti
         globalThis.fetch = async () => {
           throw new TypeError('fetch failed', { cause: Object.assign(new Error('private-auth-code private-verifier'), { code }) });
         };
-        const response = await localFetch('http://127.0.0.1:' + server.address().port + '/api/account/oauth/callback?code=private-auth-code&flow=' + flow.flowId);
+        const response = await localFetch('http://127.0.0.1:' + server.address().port + '/api/account/oauth/callback?code=private-auth-code&state=' + flow.flowId);
         replies.push({ code, status: response.status, html: await response.text(), flow: account.hostedOAuthStatus(flow.flowId) });
       }
       process.stdout.write(JSON.stringify(replies));
@@ -310,7 +316,7 @@ test('allowance HTTP failures preserve upstream metadata and network causes only
     const { errorDiagnostic } = await import('./server/error-diagnostics.ts');
     const { mount } = await import('./server/routes/account.ts');
     const config = await import('./server/app-config.ts');
-    config.setHostedAccountSession({ userId: 'account-test', email: 'account@example.test', accessToken: 'private-access', refreshToken: 'private-refresh', expiresAt: 4102444800000 });
+    config.setHostedAccountSession({ userId: 'account-test', email: 'account@example.test', accessToken: 'private-access', sessionToken: 'private-refresh', expiresAt: 4102444800000 });
     const localFetch = globalThis.fetch;
     let networkFailure = false;
     globalThis.fetch = async () => {
@@ -349,32 +355,17 @@ test('allowance HTTP failures preserve upstream metadata and network causes only
   assert.doesNotMatch(JSON.stringify(output), /private-access|private-refresh|private-token|private-response-body/);
 });
 
-test('Google profile normalization accepts display-safe metadata and rejects unsafe avatars', () => {
+test('Google profile normalization accepts safe fields and rejects unsafe avatars', () => {
   const result = runIsolated(`
     const account = await import('./server/hosted-account.ts');
     process.stdout.write(JSON.stringify({
-      safe: account.normalizedGoogleProfile({ user_metadata: {
-        name: '  Grace   Hopper  ', picture: 'https://lh3.googleusercontent.com/a/photo',
-      } }),
-      identity: account.normalizedGoogleProfile({ identities: [{ provider: 'google', identity_data: {
-        full_name: 'Katherine Johnson', avatar_url: 'https://lh3.googleusercontent.com/a/identity-photo',
-      } }] }),
-      invalidPrimary: account.normalizedGoogleProfile({
-        user_metadata: { full_name: ' \\u0000 ', avatar_url: 'http://not-allowed.example/avatar' },
-        identities: [{ provider: 'google', identity_data: {
-          full_name: 'Dorothy Vaughan', picture: 'https://lh3.googleusercontent.com/a/valid-fallback',
-        } }],
-      }),
-      unsafe: account.normalizedGoogleProfile({ user_metadata: {
-        full_name: 'Person', avatar_url: 'http://lh3.googleusercontent.com/a/photo', raw_provider_token: 'secret',
-      } }),
+      safe: account.normalizedGoogleProfile({ name: '  Grace   Hopper  ', image: 'https://lh3.googleusercontent.com/a/photo' }),
+      unsafe: account.normalizedGoogleProfile({ name: 'Person', image: 'http://lh3.googleusercontent.com/a/photo', raw_provider_token: 'secret' }),
     }));
   `);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), {
     safe: { displayName: 'Grace Hopper', avatarUrl: 'https://lh3.googleusercontent.com/a/photo' },
-    identity: { displayName: 'Katherine Johnson', avatarUrl: 'https://lh3.googleusercontent.com/a/identity-photo' },
-    invalidPrimary: { displayName: 'Dorothy Vaughan', avatarUrl: 'https://lh3.googleusercontent.com/a/valid-fallback' },
     unsafe: { displayName: 'Person' },
   });
 });
@@ -383,7 +374,7 @@ test('persisted account sessions normalize and allowlist optional profile fields
   const result = runIsolated(`
     const config = await import('./server/app-config.ts');
     config.setHostedAccountSession({
-      accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800,
+      accessToken: 'access', sessionToken: 'refresh', expiresAt: 4102444800,
       userId: 'user', email: 'person@example.com', displayName: '  Ada  \\u0000 Lovelace  ',
       avatarUrl: 'http://lh3.googleusercontent.com/a/unsafe', rawProviderToken: 'secret',
     });
@@ -392,7 +383,7 @@ test('persisted account sessions normalize and allowlist optional profile fields
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), {
     accessToken: 'access',
-    refreshToken: 'refresh',
+    sessionToken: 'refresh',
     expiresAt: 4_102_444_800,
     userId: 'user',
     email: 'person@example.com',
@@ -400,12 +391,12 @@ test('persisted account sessions normalize and allowlist optional profile fields
   });
 });
 
-test('a legacy session stays signed in when optional profile hydration fails', () => {
+test('a session without cached profile stays signed in when optional profile hydration fails', () => {
   const result = runIsolated(`
     globalThis.fetch = async () => { throw new Error('profile offline'); };
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
-    config.setHostedAccountSession({ accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'legacy@example.com' });
+    config.setHostedAccountSession({ accessToken: 'access', sessionToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'legacy@example.com' });
     const state = await account.hostedAccountState(false);
     process.stdout.write(JSON.stringify({ state, session: config.getHostedAccountSession() }));
   `);
@@ -419,12 +410,12 @@ test('a legacy session stays signed in when optional profile hydration fails', (
 test('a hanging optional profile lookup does not delay usable account state', () => {
   const result = runIsolated(`
     globalThis.fetch = async (url) => {
-      if (String(url).endsWith('/auth/v1/user')) return new Promise(() => {});
+      if (String(url).endsWith('/api/auth/get-session')) return new Promise(() => {});
       throw new Error('unexpected URL ' + url);
     };
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
-    config.setHostedAccountSession({ accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'legacy@example.com' });
+    config.setHostedAccountSession({ accessToken: 'access', sessionToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'legacy@example.com' });
     const outcome = await Promise.race([
       account.hostedAccountState(false).then((state) => ({ kind: 'state', state })),
       new Promise((resolve) => setTimeout(() => resolve({ kind: 'timeout' }), 100)),
@@ -439,18 +430,15 @@ test('a hanging optional profile lookup does not delay usable account state', ()
   assert.equal(output.state.email, 'legacy@example.com');
 });
 
-test('a legacy session hydrates optional profile data without signing in again', () => {
+test('a session without cached profile hydrates optional profile data without signing in again', () => {
   const result = runIsolated(`
     globalThis.fetch = async (url) => {
-      if (String(url).endsWith('/auth/v1/user')) return Response.json({
-        id: 'user', email: 'legacy@example.com',
-        user_metadata: { full_name: 'Legacy Person', picture: 'https://lh3.googleusercontent.com/a/legacy' },
-      });
+      if (String(url).endsWith('/api/auth/get-session')) return authReply(url, { user: { id: 'user', email: 'legacy@example.com', name: 'Legacy Person', image: 'https://lh3.googleusercontent.com/a/legacy' } });
       return Response.json({ error: 'quota offline' }, { status: 503 });
     };
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
-    config.setHostedAccountSession({ accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'legacy@example.com' });
+    config.setHostedAccountSession({ accessToken: 'access', sessionToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'legacy@example.com' });
     await account.hostedAccountState(false);
     await new Promise((resolve) => setImmediate(resolve));
     const state = await account.hostedAccountState(false);
@@ -474,7 +462,7 @@ test('avatar fetch is same-host, typed, bounded, and cached', () => {
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
     config.setHostedAccountSession({
-      accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800,
+      accessToken: 'access', sessionToken: 'refresh', expiresAt: 4102444800,
       userId: 'user', email: 'person@example.com', avatarUrl: 'https://lh3.googleusercontent.com/a/photo',
     });
     const first = await account.hostedAccountAvatar();
@@ -490,7 +478,7 @@ test('avatar fetch rejects oversized or incorrectly typed provider responses', (
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
     config.setHostedAccountSession({
-      accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800,
+      accessToken: 'access', sessionToken: 'refresh', expiresAt: 4102444800,
       userId: 'user', email: 'person@example.com', avatarUrl: 'https://lh3.googleusercontent.com/a/photo',
     });
     globalThis.fetch = async () => new Response('not an image', { headers: { 'content-type': 'text/html' } });
@@ -511,7 +499,7 @@ test('sign out clears display profile data with the local session', () => {
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
     config.setHostedAccountSession({
-      accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800,
+      accessToken: 'access', sessionToken: 'refresh', expiresAt: 4102444800,
       userId: 'user', email: 'person@example.com', displayName: 'Person',
       avatarUrl: 'https://lh3.googleusercontent.com/a/photo',
     });
@@ -526,18 +514,14 @@ test('concurrent hosted token refreshes share one request', () => {
   const result = runIsolated(`
     let refreshCalls = 0;
     globalThis.fetch = async (url) => {
-      if (!String(url).endsWith('/auth/v1/token?grant_type=refresh_token')) throw new Error('unexpected URL ' + url);
-      refreshCalls += 1;
+      if (String(url).endsWith('/api/auth/token')) refreshCalls += 1;
       await new Promise((resolve) => setTimeout(resolve, 20));
-      return Response.json({
-        access_token: 'access-new', refresh_token: 'refresh-new', expires_at: 4102444800,
-        user: { id: 'user', email: 'person@example.com' },
-      });
+      return authReply(url, { accessToken: 'access-new', user: { id: 'user', email: 'person@example.com', name: 'Existing Person', image: 'https://lh3.googleusercontent.com/a/existing' } });
     };
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
     config.setHostedAccountSession({
-      accessToken: 'access-old', refreshToken: 'refresh-old', expiresAt: 1,
+      accessToken: 'access-old', sessionToken: 'refresh-old', expiresAt: 1,
       userId: 'user', email: 'person@example.com', displayName: 'Existing Person',
       avatarUrl: 'https://lh3.googleusercontent.com/a/existing',
     });
@@ -547,8 +531,8 @@ test('concurrent hosted token refreshes share one request', () => {
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.refreshCalls, 1);
-  assert.deepEqual(output.tokens, ['access-new', 'access-new', 'access-new']);
-  assert.equal(output.session.refreshToken, 'refresh-new');
+  assert.deepEqual(output.tokens, Array(3).fill(apiToken('access-new', 'user')));
+  assert.equal(output.session.sessionToken, 'refresh-old');
   assert.equal(output.session.displayName, 'Existing Person');
   assert.equal(output.session.avatarUrl, 'https://lh3.googleusercontent.com/a/existing');
 });
@@ -559,24 +543,24 @@ test('a stale failed refresh cannot clear a newer hosted session', () => {
     globalThis.fetch = async () => new Promise((resolve) => { finishRefresh = resolve; });
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
-    config.setHostedAccountSession({ accessToken: 'access-old', refreshToken: 'refresh-old', expiresAt: 1, userId: 'user-old', email: 'old@example.com' });
+    config.setHostedAccountSession({ accessToken: 'access-old', sessionToken: 'refresh-old', expiresAt: 1, userId: 'user-old', email: 'old@example.com' });
     const pending = account.hostedAccessToken().catch((error) => error.message);
     await new Promise((resolve) => setImmediate(resolve));
-    config.setHostedAccountSession({ accessToken: 'access-new', refreshToken: 'refresh-new', expiresAt: 4102444800, userId: 'user-new', email: 'new@example.com' });
-    finishRefresh(Response.json({ error_code: 'refresh_token_not_found' }, { status: 400 }));
+    config.setHostedAccountSession({ accessToken: 'access-new', sessionToken: 'refresh-new', expiresAt: 4102444800, userId: 'user-new', email: 'new@example.com' });
+    finishRefresh(Response.json({ code: 'UNAUTHORIZED' }, { status: 401 }));
     await pending;
     process.stdout.write(JSON.stringify(config.getHostedAccountSession()));
   `);
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(JSON.parse(result.stdout).refreshToken, 'refresh-new');
+  assert.equal(JSON.parse(result.stdout).sessionToken, 'refresh-new');
 });
 
-test('transient refresh failures preserve credentials, while a revoked refresh token clears them', () => {
+test('transient refresh failures preserve credentials, while a revoked session clears them', () => {
   const result = runIsolated(`
     const assert = (await import('node:assert/strict')).default;
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
-    const session = { accessToken: 'access', refreshToken: 'refresh', expiresAt: 1, userId: 'user', email: 'person@example.com' };
+    const session = { accessToken: 'access', sessionToken: 'refresh', expiresAt: 1, userId: 'user', email: 'person@example.com' };
     for (const failure of [
       async () => { throw new Error('Network unavailable'); },
       async () => Response.json({ error_code: 'unexpected_failure' }, { status: 503 }),
@@ -589,7 +573,7 @@ test('transient refresh failures preserve credentials, while a revoked refresh t
       await assert.rejects(account.hostedAccessToken());
       assert.deepEqual(config.getHostedAccountSession(), session);
     }
-    globalThis.fetch = async () => Response.json({ error_code: 'refresh_token_not_found' }, { status: 400 });
+    globalThis.fetch = async () => Response.json({ code: 'UNAUTHORIZED' }, { status: 401 });
     await assert.rejects(account.hostedAccessToken());
     assert.equal(config.getHostedAccountSession(), undefined);
   `);
@@ -606,7 +590,7 @@ test('sign-out invalidates both delayed and not-yet-exchanged OAuth callbacks', 
     globalThis.fetch = async () => new Promise(resolve => { finish = resolve; });
     const pending = account.exchangeHostedOAuthCode(flow.flowId, 'code');
     await account.signOutHostedAccount();
-    finish(Response.json({access_token:'late',refresh_token:'late',expires_at:4102444800,user:{id:'late',email:'late@example.com'}}));
+    finish(Response.json({ token: 'late-session' }));
     await assert.rejects(pending);
     assert.equal(config.getHostedAccountSession(), undefined);
     const unopened = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'window');
@@ -623,15 +607,15 @@ test('a newer OAuth attempt wins over an older exchange that is already in fligh
     const assert = (await import('node:assert/strict')).default;
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
-    const payload = (name) => Response.json({access_token:name,refresh_token:name,expires_at:4102444800,user:{id:name,email:name+'@example.com'}});
+    const payload = (url, name) => authReply(url, { sessionToken: name, user: { id: name, email: name+'@example.com' } });
     let finish;
     globalThis.fetch = async () => new Promise(resolve => { finish = resolve; });
     const older = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'first');
     const pending = account.exchangeHostedOAuthCode(older.flowId, 'old-code');
     const newer = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'second');
-    finish(payload('old'));
+    finish(payload('/electron/token', 'old'));
     await assert.rejects(pending);
-    globalThis.fetch = async () => payload('new');
+    globalThis.fetch = async (url) => payload(url, 'new');
     await account.exchangeHostedOAuthCode(newer.flowId, 'new-code');
     assert.equal(config.getHostedAccountSession().userId, 'new');
   `);
@@ -646,13 +630,47 @@ test('a stale successful refresh neither overwrites nor returns a newer account 
     globalThis.fetch = async () => new Promise(resolve => { finish = resolve; });
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
-    config.setHostedAccountSession({accessToken:'old',refreshToken:'old',expiresAt:1,userId:'old',email:'old@example.com'});
+    config.setHostedAccountSession({accessToken:'old',sessionToken:'old',expiresAt:1,userId:'old',email:'old@example.com'});
     const pending = account.hostedAccessToken();
-    const next = {accessToken:'new',refreshToken:'new',expiresAt:4102444800,userId:'new',email:'new@example.com'};
+    const next = {accessToken:'new',sessionToken:'new',expiresAt:4102444800,userId:'new',email:'new@example.com'};
     config.setHostedAccountSession(next);
-    finish(Response.json({access_token:'refreshed-old',refresh_token:'refreshed-old',expires_at:4102444800,user:{id:'old',email:'old@example.com'}}));
+    finish(authReply('/get-session', { user: { id: 'old', email: 'old@example.com' } }));
     await assert.rejects(pending, /changed while.*refreshing/);
     assert.deepEqual(config.getHostedAccountSession(), next);
+  `);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('Supabase credentials require a fresh sign-in and are never sent to Better Auth', () => {
+  const result = runIsolated(`
+    const assert = (await import('node:assert/strict')).default;
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    let sent = 0;
+    globalThis.fetch = async () => { sent++; throw Error('must not send old credentials'); };
+    config.setHostedAccountSession({accessToken:'legacy-access',refreshToken:'legacy-refresh',expiresAt:4102444800,userId:'old',email:'old@example.test'});
+    assert.equal(config.getHostedAccountSession(), undefined);
+    await assert.rejects(account.hostedAccessToken(), /Sign in/);
+    assert.equal(sent, 0);
+  `);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('sign-out during the post-exchange session read cannot restore the account', () => {
+  const result = runIsolated(`
+    const assert = (await import('node:assert/strict')).default;
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    let finish;
+    globalThis.fetch = async url => String(url).endsWith('/get-session')
+      ? new Promise(resolve => { finish = resolve; }) : authReply(url);
+    const flow = account.beginHostedOAuth('google', 'http://127.0.0.1:8090');
+    const pending = account.exchangeHostedOAuthCode(flow.flowId, 'code');
+    await new Promise(resolve => setImmediate(resolve));
+    await account.signOutHostedAccount();
+    finish(authReply('/get-session'));
+    await assert.rejects(pending, /signed out/);
+    assert.equal(config.getHostedAccountSession(), undefined);
   `);
   assert.equal(result.status, 0, result.stderr);
 });

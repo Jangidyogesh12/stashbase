@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import {
   AUTH_PATHS, AUTH_REQUEST_LIMIT, AUTH_RESPONSE_LIMIT, AUTH_TIMEOUT_MS,
-  SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, authNetworkError,
+  AUTH_BASE_URL, authMethod, authNetworkError,
 } from '../../shared/hosted-auth-network.ts';
 
 /** A bounded, process-private relay to Chromium's system-proxy-aware session.
@@ -45,15 +45,14 @@ export async function createAuthNetworkBridge(options: { fetch: typeof fetch }) 
         response.writeHead(400).end(); return;
       }
       controller.signal.removeEventListener('abort', abort);
-      const upstream = await options.fetch(`${SUPABASE_URL}/auth/v1${input.path}`, {
-        method: input.path === '/user' ? 'GET' : 'POST',
+      const upstream = await options.fetch(`${AUTH_BASE_URL}${input.path}`, {
+        method: authMethod(input.path),
         headers: {
-          apikey: SUPABASE_PUBLISHABLE_KEY,
           'content-type': 'application/json',
           'cache-control': 'no-store',
           ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
         },
-        ...(input.path !== '/user' ? { body: input.body } : {}),
+        ...(authMethod(input.path) === 'POST' ? { body: input.body } : {}),
         credentials: 'omit', redirect: 'error', signal: controller.signal,
       });
       const reader = upstream.body?.getReader();

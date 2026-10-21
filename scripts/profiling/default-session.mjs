@@ -44,7 +44,7 @@ const moduleAt = (file) => import(pathToFileURL(path.join(checkout, 'server', fi
 const { setHostedAccountSession } = await moduleAt('app-config.ts');
 const { createOpenCodeSessionRuntime, stopOpenCodeRuntime } = await moduleAt('opencode-runtime.ts');
 setHostedAccountSession({ userId: 'profile-fixture', email: 'fixture@example.invalid',
-  accessToken: 'fixture', refreshToken: 'fixture', expiresAt: Math.floor(Date.now() / 1000) + 3600 });
+  accessToken: 'fixture', sessionToken: 'fixture', expiresAt: Math.floor(Date.now() / 1000) + 3600 });
 const revision = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim()
   + (execFileSync('git', ['status', '--porcelain'], { cwd: checkout, encoding: 'utf8' }).trim() ? '+dirty' : '');
 async function connect() {

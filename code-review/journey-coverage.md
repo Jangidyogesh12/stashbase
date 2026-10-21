@@ -342,6 +342,23 @@ browser; the full diagnostic and return button fit the card. These controlled
 fixtures do not establish live Google/Supabase login, authenticated corporate
 proxies, OS settings on Windows/Linux, or the reporting user's network.
 
+**Better Auth client integration (2026-10-21, local only):**
+`server/hosted-account.ts` now uses the API's PKCE desktop transfer, opaque host
+session, cookie-free native relay, and short-lived API JWTs. Its focused tests
+cover exchange, renewal, revocation, stale refreshes, post-exchange sign-out,
+legacy-token refusal, profile failure and safe renderer state. The native PAC
+smoke passes against the new fixed API host. An isolated built-host/Electron
+runtime pass used the actual API with disposable PostgreSQL and a Google protocol
+fixture: login completed through the real loopback route, the imported UUID kept
+its Plus subscription, an expired JWT renewed the database session, and sign-out
+revoked the JWT. The website passed its own Google-button/callback, reload,
+session-renewal, subscription and logout flow against that same local API;
+website logout left the independent desktop session active. No production state
+was changed. **Gaps:** real Google consent still requires a separate local OAuth
+callback configuration; released installers and OS protocol registration have
+not been validated by this local pass. These are rollout prerequisites, not
+claims of a completed production cutover.
+
 ## J02: Folder
 
 **Intent:** [J02](../design-docs/journeys/README.md#j02-add-and-open-a-folder).

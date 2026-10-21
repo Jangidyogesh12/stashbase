@@ -132,6 +132,11 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   new attempts and sign-out retire prior local continuations across windows.
 - Network/provider failure preserves credentials. Clear a session only on explicit
   sign-out or confirmed invalidation; repair does not implicitly send or replay work.
+- Account sign-in uses Google through the StashBase API's Better Auth service.
+  Desktop sessions remain host-owned and separate from browser sessions; signing
+  out of the website does not sign the desktop out. Short-lived API tokens renew
+  through the active server session. A switch from Supabase requires one fresh
+  sign-in; existing subscriptions retain their imported user identity.
 - Desktop account authentication follows the operating system's proxy settings,
   including automatic proxy configuration. Sign-in failures identify the failed
   stage and the available DNS, connection, proxy, certificate or timeout code,

@@ -1,7 +1,7 @@
 import http from 'node:http';
 import {
   AUTH_PATHS, AUTH_REQUEST_LIMIT, AUTH_RESPONSE_LIMIT, AUTH_TIMEOUT_MS,
-  SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, authNetworkError,
+  AUTH_BASE_URL, authMethod, authNetworkError,
 } from '../shared/hosted-auth-network.ts';
 
 /** Desktop auth uses Chromium via a private loopback relay. Standalone Node
@@ -16,12 +16,12 @@ export function createHostedAuthRequest(bridge: { port?: string; token?: string;
       const port = Number(bridge.port);
       const token = bridge.token;
       if (!port && !token && !bridge.required) {
-        return await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
-          method: path === '/user' ? 'GET' : 'POST',
-          headers: { apikey: SUPABASE_PUBLISHABLE_KEY, 'content-type': 'application/json',
+        return await fetch(`${AUTH_BASE_URL}${path}`, {
+          method: authMethod(path),
+          headers: { 'content-type': 'application/json',
             ...(options.accessToken ? { authorization: `Bearer ${options.accessToken}` } : {}) },
-          ...(options.body ? { body: JSON.stringify(options.body) } : {}),
-          signal: options.signal, redirect: 'error',
+          ...(authMethod(path) === 'POST' && options.body ? { body: JSON.stringify(options.body) } : {}),
+          signal: options.signal, redirect: 'error', credentials: 'omit',
         });
       }
       if (!Number.isInteger(port) || port < 1 || port > 65535 || !token) {
@@ -64,8 +64,8 @@ export function createHostedAuthRequest(bridge: { port?: string; token?: string;
       });
     } catch (error) {
       const detail = authNetworkError(options.signal.aborted ? options.signal.reason : error);
-      const stage = path.includes('pkce') ? 'exchange the sign-in code' : path.includes('refresh_token') ? 'refresh the sign-in session' : path === '/user' ? 'read the signed-in profile' : 'sign out';
-      throw Object.assign(new Error(`Could not ${stage} with ${new URL(SUPABASE_URL).hostname}. ${detail.message}`, { cause: detail }), { code: detail.code });
+      const stage = path === '/electron/token' ? 'exchange the sign-in code' : path === '/token' ? 'refresh the sign-in session' : path === '/get-session' ? 'read the signed-in profile' : 'sign out';
+      throw Object.assign(new Error(`Could not ${stage} with ${new URL(AUTH_BASE_URL).hostname}. ${detail.message}`, { cause: detail }), { code: detail.code });
     }
   };
 }

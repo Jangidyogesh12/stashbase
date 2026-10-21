@@ -697,7 +697,7 @@ test('prewarmed native chats retain attribution, refresh configuration and relea
   });
   const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-warm-native-')));
   setHostedAccountSession({
-    userId: 'warm-fixture', email: 'fixture@example.invalid', accessToken: 'fixture-only', refreshToken: 'fixture-only',
+    userId: 'warm-fixture', email: 'fixture@example.invalid', accessToken: 'fixture-only', sessionToken: 'fixture-only',
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
   });
   let profiles = SMOKE_PROFILES.map(profile => ({ ...profile,

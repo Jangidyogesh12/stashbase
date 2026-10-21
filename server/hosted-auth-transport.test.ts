@@ -2,24 +2,24 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAuthNetworkBridge } from '../electron/account/auth-network.ts';
 import { createHostedAuthRequest } from './hosted-auth-transport.ts';
-import { AUTH_REQUEST_LIMIT, AUTH_RESPONSE_LIMIT, SUPABASE_URL } from '../shared/hosted-auth-network.ts';
+import { AUTH_REQUEST_LIMIT, AUTH_RESPONSE_LIMIT, AUTH_BASE_URL } from '../shared/hosted-auth-network.ts';
 
 test('desktop auth uses only the native transport for exchange, refresh, profile and logout', async t => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const bridge = await createAuthNetworkBridge({ fetch: async (url, init) => {
     calls.push({ url: String(url), init });
-    return String(url).includes('logout') ? new Response(null, { status: 204 })
+    return String(url).includes('sign-out') ? new Response(null, { status: 204 })
       : Response.json({ access_token: 'fixture-access' });
   } });
   t.after(() => bridge.close());
   const request = createHostedAuthRequest({ port: String(bridge.port), token: bridge.token, required: true });
-  for (const path of ['/token?grant_type=pkce', '/token?grant_type=refresh_token', '/user', '/logout?scope=local']) {
+  for (const path of ['/electron/token', '/token', '/get-session', '/sign-out']) {
     const response = await request(path, { body: { auth_code: 'fixture-code' }, accessToken: 'fixture-access', signal: AbortSignal.timeout(2000) });
-    assert.equal(response.status, path.includes('logout') ? 204 : 200);
+    assert.equal(response.status, path.includes('sign-out') ? 204 : 200);
     if (response.status === 200) assert.deepEqual(await response.json(), { access_token: 'fixture-access' });
   }
   assert.equal(calls.length, 4);
-  assert.equal(calls[0].url, `${SUPABASE_URL}/auth/v1/token?grant_type=pkce`);
+  assert.equal(calls[0].url, `${AUTH_BASE_URL}/electron/token`);
   assert.equal(calls[0].init?.body, JSON.stringify({ auth_code: 'fixture-code' }));
   for (const call of calls) {
     assert.equal(call.init?.redirect, 'error');
@@ -58,7 +58,7 @@ test('native transport retains provider rejection but sends only safe network er
   } });
   t.after(() => bridge.close());
   const request = createHostedAuthRequest({ port: String(bridge.port), token: bridge.token, required: true });
-  const invoke = () => request('/token?grant_type=pkce', { body: {}, signal: AbortSignal.timeout(2000) });
+  const invoke = () => request('/electron/token', { body: {}, signal: AbortSignal.timeout(2000) });
   const rejected = await invoke();
   assert.equal(rejected.status, 400);
   assert.deepEqual(await rejected.json(), { error_code: 'flow_state_expired', msg: 'Expired authorization' });
@@ -89,7 +89,7 @@ test('caller cancellation and desktop shutdown abort upstream requests without r
     const started = new Promise<void>(resolve => { entered = resolve; });
     const stopped = new Promise<void>(resolve => { aborted = resolve; });
     const controller = new AbortController();
-    const result = request('/token?grant_type=pkce', { body: {}, signal: controller.signal });
+    const result = request('/electron/token', { body: {}, signal: controller.signal });
     const rejection = assert.rejects(result, /cancelled|interrupted|ECONNRESET/);
     await started;
     if (closing) bridge.close(); else controller.abort();
@@ -103,12 +103,12 @@ test('desktop missing or failed relay never silently falls back to direct fetch'
   let direct = 0;
   globalThis.fetch = async () => { direct++; return Response.json({}); };
   try {
-    await assert.rejects(createHostedAuthRequest({ required: true })('/user', { signal: AbortSignal.timeout(1000) }), /AUTH_BRIDGE_UNAVAILABLE/);
+    await assert.rejects(createHostedAuthRequest({ required: true })('/get-session', { signal: AbortSignal.timeout(1000) }), /AUTH_BRIDGE_UNAVAILABLE/);
     const bridge = await createAuthNetworkBridge({ fetch: globalThis.fetch });
     bridge.close();
-    await assert.rejects(createHostedAuthRequest({ required: true, port: String(bridge.port), token: bridge.token })('/user', { signal: AbortSignal.timeout(1000) }));
+    await assert.rejects(createHostedAuthRequest({ required: true, port: String(bridge.port), token: bridge.token })('/get-session', { signal: AbortSignal.timeout(1000) }));
     assert.equal(direct, 0);
-    await createHostedAuthRequest({ required: false })('/user', { signal: AbortSignal.timeout(1000) });
+    await createHostedAuthRequest({ required: false })('/get-session', { signal: AbortSignal.timeout(1000) });
     assert.equal(direct, 1);
   } finally { globalThis.fetch = oldFetch; }
 });

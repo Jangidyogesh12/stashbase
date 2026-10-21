@@ -36,14 +36,14 @@ app.whenReady().then(async () => {
   bridge = await createAuthNetworkBridge({ fetch: (url, init) => authSession.fetch(url, init) });
   const send = () => fetch(`http://127.0.0.1:${bridge.port}/`, {
     method: 'POST', headers: { 'x-stashbase-auth-network-token': bridge.token },
-    body: JSON.stringify({ path: '/token?grant_type=pkce', body: JSON.stringify({ auth_code: 'fixture-only', code_verifier: 'fixture-only' }) }),
+    body: JSON.stringify({ path: '/electron/token', body: JSON.stringify({ token: 'fixture-only', state: 'fixture-only', code_verifier: 'fixture-only' }) }),
   });
   const reply = await send();
   assert.equal(reply.status, 502);
   assert.equal((await reply.json()).errorCode, 'ERR_TUNNEL_CONNECTION_FAILED');
   // Assert the Auth request itself: Chromium can also probe connections through
   // the configured proxy. Relay destination restrictions have their own tests.
-  assert.ok(tunnels.includes('vqtfigkoihpuziaimluf.supabase.co:443'),
+  assert.ok(tunnels.includes('api.stashbase.ai:443'),
     `Chromium must send Auth through the PAC-selected proxy; observed ${JSON.stringify(tunnels)}`);
   await authSession.closeAllConnections();
   await new Promise(resolve => proxy.close(resolve));

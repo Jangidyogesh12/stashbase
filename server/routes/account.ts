@@ -171,7 +171,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
   });
 
   app.get('/api/account/oauth/callback', async (req, res) => {
-    const flowId = typeof req.query.flow === 'string' ? req.query.flow : '';
+    const flowId = typeof req.query.state === 'string' ? req.query.state : '';
     const authCode = typeof req.query.code === 'string' ? req.query.code : '';
     const providerError = typeof req.query.error_description === 'string'
       ? req.query.error_description
