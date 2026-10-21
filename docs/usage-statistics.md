@@ -247,42 +247,99 @@ unidentified events request no profile. IP and GeoIP enrichment are disabled in
 payloads. The receiving service still sees the connection IP; operators must
 also disable IP retention in PostHog.
 
-## Retention views
+## Return views
 
-Use schema version 3 and later, one fixed UTC calendar, event occurrence time,
-and only cohorts whose observation window has elapsed. Keep installation and
-person views separate. In person views, use PostHog's resolved person identity
-so linked anonymous and authenticated histories count once; do not simply
-coalesce each row's user ID with its installation ID. Later identity merges can
-change historical cohort membership. Never filter the initial population to
-signed-in people only.
+StashBase is used on demand: people open it when they have something to read
+or write, and gaps of one to three weeks are normal. These views therefore ask
+whether a person came back within a window, not whether they appeared on one
+exact day.
 
-Recommended saved views:
+Use schema version 3 and later, the UTC calendar and event occurrence time.
+Keep installation and person views separate. In person views, use PostHog's
+resolved person identity so linked anonymous and authenticated histories count
+once; do not simply coalesce each row's user ID with its installation ID. Later
+identity merges can change historical cohort membership. Never filter the
+initial population to signed-in people only.
 
-- **Observed return retention:** first `app_active` → later `app_active`.
-- **Core-use retention:** first `document_engaged` or `agent_turn_started` →
-  another event from that same union. Include blocked attempts here, then inspect
-  success/failure separately.
-- **After first result:** first successful `agent_turn_finished` or successful
-  `document_write_result` with `changed = true` → subsequent core use. This
-  measures retention after a result, not only among people who log in.
+**Core use** is `document_engaged` (read or edit) or `agent_turn_started`,
+including blocked attempts; inspect success and failure separately. A person's
+entry day is their first core-use day, and day N is N calendar days after it.
+Entry cohorts group people by the UTC week (starting Monday) of their entry day.
+
+The dashboard has three measures:
+
+| Measure | Population | Counts as returned | Final |
+|---|---|---|---|
+| 7-day return | Weekly entry cohort | Core use on any of days 1–7 | 14 days after the cohort week starts |
+| Next-month return | Weekly entry cohort | Core use on any of days 30–59 | 66 days after the cohort week starts |
+| Weekly active people | Everyone | Core use during that UTC week | When the week ends |
+
+A cohort's value is its returned people divided by all of its people, never an
+average of daily percentages. Until the last member's window has elapsed, show
+the cumulative value so far and mark it in progress. It can only rise, so it is
+a lower bound: an in-progress value above the previous cohort's final value
+already shows improvement, while a lower one needs the final value. Show no
+value before any member has reached the window's first day.
+
+7-day return shows whether first use was worth coming back for. Next-month
+return shows who is still using after the first month. Its 30-day window keeps
+long gaps from counting as loss, and it excludes people who came back once and
+then stopped. Weekly active people shows the overall direction without waiting
+for cohorts to finish.
+
+Other saved views:
+
+- **App-open return:** the same windows with `app_active` as both entry and
+  return, separating opening the app from core use.
+- **After first result:** entry is the first successful `agent_turn_finished` or
+  successful `document_write_result` with `changed = true`; return is later core
+  use in the same windows. This measures return after a result, not only among
+  people who log in.
 - **Activation funnel:** first active use → successful project entry → core
   attempt → first result. Login is an optional branch, not a universal prerequisite.
 - **Account funnel:** login started → login success → subsequent core use.
 - **Desktop subscription funnel:** Checkout page obtained → confirmed paid rights.
   Deduplicate by person and label it observed conversion, not payment revenue.
 
-D1, D7 and D30 mean return on exactly that calendar day after cohort entry. W1
-means at least one return on days 7–13; W4 means days 28–34. Divide returning
-identities by eligible identities in that entry cohort, not all current users.
-Use unique installations for installation retention and resolved persons for
-person retention. Break down event-time OS, version, mode and agent runtime;
-do not substitute mutable current profile properties for cohort-entry attributes.
+Use unique installations for installation views and resolved persons for person
+views. Break down event-time OS, version, mode and agent runtime; do not
+substitute mutable current profile properties for cohort-entry attributes.
 
 These views describe reporting activity, not all users. Missing events can mean
-offline use, blocked transport, opt-out, reinstall or abandonment. Do not label
-all missing activity as confirmed churn. Historical schema-2 installation counts
-are not directly comparable with schema-3 person or foreground retention.
+offline use, blocked transport, opt-out, reinstall or abandonment. A person
+without next-month return was not observed in that window, which is not
+confirmed churn. Historical schema-2 installation counts are not directly
+comparable with schema-3 person or foreground return.
+
+### Backend activity supplement
+
+The agreed operator reporting extension counts all hosted AI request attempts,
+including Agent calls, indexing and semantic search, as activity. Automatic
+background requests count under this definition; it does not establish foreground
+engagement. This supplement is not yet connected to the saved PostHog views.
+
+Use each request's original creation time and the same UTC calendar. Ledger
+settlement, reconciliation, refunds and other updates do not establish another
+active day. Include failed attempts that reached the request ledger; activity is
+independent of payment or successful completion. Re-reading the same request
+does not change its original activity date. A real later call attempt counts on
+its own start date; embedding retries can reuse a ledger row, so the original
+row's creation time alone is not a complete history of call attempts.
+
+Resolve the backend account's auth subject to its PostHog person before unioning
+activity days. Preserve linked anonymous history and deduplicate by person and
+day. Backend accounts with no PostHog identity still count once in weekly active
+people. For the existing core-entry return view, retain first observed core use
+as entry and accept either core use or a backend request in its return windows.
+Do not infer new-user entry from the first retained backend request: request
+history can be pruned. Label supplemented views explicitly so they are not
+mistaken for desktop core-use-only measures.
+
+This is a reporting join over existing operational records, not a change to
+desktop collection or its opt-out. Do not manufacture desktop events or replay
+disabled client activity to fill gaps. Until the backend source and identity
+join are verified, missing PostHog return remains unobserved return, not confirmed
+inactivity or churn.
 
 ## Turn diagnosis views
 

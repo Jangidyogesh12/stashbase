@@ -977,7 +977,7 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   so the original cause and the surrounding operation both survive. HTTP 4xx responses are
   warnings and 5xx are errors.
 - [Usage statistics](../docs/usage-statistics.md) owns event interpretation,
-  retention definitions, IP-retention setup and delivery limits. An absent event
+  return definitions, IP-retention setup and delivery limits. An absent event
   proves neither abandonment nor continued use after opt-out; subscription rights
   observed by a desktop are not a hosted payment ledger.
 

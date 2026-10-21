@@ -219,7 +219,7 @@ reader to current credits rather than claiming all credits are spent.
   pending delivery and erases queued work; re-enabling never backfills disabled
   activity. A signed-in account can be associated again after re-enabling.
   [Usage statistics](../../docs/usage-statistics.md) owns the event definitions,
-  identity conventions, measurement limits and operator retention views.
+  identity conventions, measurement limits and operator return views.
   Test launches of official builds suppress collection before startup without
   changing the user's saved preference or analytics state.
 - Bug reporting is a separate explicit review and local handoff. The approved
