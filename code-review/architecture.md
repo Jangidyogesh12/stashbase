@@ -328,6 +328,9 @@ stable status without download, retry, or a new durable demand latch.
   different app instance on the default port.
 - Codex MCP setup parses TOML and replaces only StashBase table ranges, preserving
   unrelated configuration. Invalid or unsupported configuration fails untouched.
+  Its stdio `env_vars` explicitly forwards `STASHBASE_WINDOW_ID` and
+  `STASHBASE_AGENT_SESSION_ID`; Codex filters custom parent variables otherwise.
+  Configuration stores variable names, never a live chat's identity or folder.
   `server/agent-config-paths.ts` owns configuration identity for setup and Claude
   model metadata; MCP writes respect the same `CODEX_HOME` / `CLAUDE_CONFIG_DIR`
   inherited by provider processes.

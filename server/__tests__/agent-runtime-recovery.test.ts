@@ -11,6 +11,14 @@ import { ownAgentProcess, retireAgentProcess, closeAgentProcesses, agentProcessC
 import { once } from 'node:events';
 import { telemetry } from '../telemetry.ts';
 import { telemetryEventSchema, type TelemetryEvent } from '../../shared/protocols/http/telemetry.ts';
+import express from 'express';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { parseTOML, getStaticTOMLValue } from 'toml-eslint-parser';
+import { registerProjectFolderAsync } from '../folder.ts';
+import { registerAttributedAgentSession, unregisterAttributedAgentSession } from '../agent-session-registry.ts';
+import { createProjectOperations } from '../project-operations/index.ts';
+import { mount as mountProjectFiles } from '../routes/project-files.ts';
 
 test('MCP preparation uses each CLI custom config home without changing default configs', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-custom-agent-home-'));
@@ -51,6 +59,71 @@ test('MCP setup preserves unrelated commented/quoted tables and multiline text, 
   assert.throws(() => ensureAgentMcp('codex'), /leaving it untouched/);
   assert.equal(fs.readFileSync(config, 'utf8'), malformed);
   fs.rmSync(config);
+});
+
+test('generated Codex MCP config retains each chat project through the stdio and HTTP boundaries', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-mcp-scope-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const folders = [path.join(root, 'one'), path.join(root, 'two')];
+  for (const [i, folder] of folders.entries()) {
+    fs.mkdirSync(folder);
+    fs.writeFileSync(path.join(folder, 'note.txt'), `project ${i}`);
+    await registerProjectFolderAsync(folder);
+    registerAttributedAgentSession(`codex-mcp-${i}`, {
+      agentId: 'codex', windowId: 'shared-window', boundFolder: () => folder, turnInFlight: () => true,
+    });
+    t.after(() => unregisterAttributedAgentSession(`codex-mcp-${i}`));
+  }
+  const received: Array<{ session?: string; window?: string; folder?: string }> = [];
+  const searched: string[] = [];
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    received.push({ session: req.header('x-stashbase-agent-session-id'), window: req.header('x-stashbase-window-id'), folder: req.body?.folder });
+    next();
+  });
+  mountProjectFiles(app, createProjectOperations({
+    hasEmbeddingKey: () => false,
+    retrieval: { search: async ({ folderRoot }) => {
+      searched.push(folderRoot);
+      return { evidence: [], availability: { state: 'ready' as const }, truncated: false };
+    } },
+  }));
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+
+  ensureAgentMcp('codex');
+  const config = getStaticTOMLValue(parseTOML(fs.readFileSync(path.join(os.homedir(), '.codex', 'config.toml'), 'utf8'))) as {
+    mcp_servers: { stashbase: { command: string; env_vars?: string[] } };
+  };
+  const mcp = config.mcp_servers.stashbase;
+  const clients: Client[] = [];
+  t.after(async () => { await Promise.all(clients.map(client => client.close())); });
+  for (let i = 0; i < folders.length; i++) {
+    const parentEnv: Record<string, string> = { STASHBASE_AGENT_SESSION_ID: `codex-mcp-${i}`, STASHBASE_WINDOW_ID: 'shared-window' };
+    // Codex forwards only allowed custom variables to stdio MCP children.
+    // Drive the generated config rather than giving the child its identity directly.
+    const env = Object.fromEntries((mcp.env_vars ?? []).filter(key => key in parentEnv).map(key => [key, parentEnv[key]]));
+    const client = new Client({ name: 'codex-mcp-scope-test', version: '1' });
+    clients.push(client);
+    await client.connect(new StdioClientTransport({ command: mcp.command, args: [`--port=${address.port}`], env, stderr: 'pipe' }));
+    const result = await client.callTool({ name: 'search_project', arguments: { query: 'draft' } });
+    assert.notEqual(result.isError, true, JSON.stringify(result));
+    assert.deepEqual(received.at(-1), { session: `codex-mcp-${i}`, window: 'shared-window', folder: undefined });
+  }
+  assert.deepEqual(searched, folders);
+  for (const [name, args] of [
+    ['search_project', { query: 'draft', folder: folders[1] }],
+    ['read_file', { path: path.join(folders[1], 'note.txt') }],
+  ] as const) {
+    await assert.rejects(clients[0].callTool({ name, arguments: args }), /PROJECT_SCOPE_MISMATCH/);
+  }
+  unregisterAttributedAgentSession('codex-mcp-0');
+  await assert.rejects(clients[0].callTool({ name: 'search_project', arguments: { query: 'draft' } }), /SESSION_UNAVAILABLE/);
+  assert.deepEqual(searched, folders, 'cross-project and retired calls never reach retrieval or inherit the other active chat');
 });
 
 test('Claude MCP setup keeps the user\'s other settings and asks for StashBase tools to stay loaded', () => {

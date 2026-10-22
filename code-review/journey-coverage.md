@@ -1075,6 +1075,28 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Codex MCP project attribution (2026-10-22):** `server/agent-mcp.ts` now
+allowlists the window and private session variable names in Codex's stdio
+`env_vars`. Setting them on the parent app-server alone left the MCP child
+unattributed: omitted-folder searches returned `FOLDER_REQUIRED`, and file
+operations lost the Chat's project constraint. The generated configuration
+stores no session values. `agent-runtime-recovery.test.ts` drives that config
+through real stdio MCP and production HTTP/scope handling, with controlled
+retrieval: two active Chats in one window search their own projects without a
+folder argument; cross-project search/read and retired identities are refused.
+An isolated Codex CLI 0.160.0 app-server pass through the built MCP launcher
+reproduced the original 400 with both headers absent, then returned 200 for
+each Chat after the fix, 403 for cross-project search/read, and 409 after
+retirement. It used native `mcpServer/tool/call`, no model request, and controlled
+retrieval; this does not establish packaged desktop behavior or retrieval quality.
+A follow-up built-host pass mounted two real Codex sessions through the production
+WebSocket endpoint, then used their identities with native tool-call clients and
+the built MCP launcher against a real MFS index. Each omitted-folder search found
+only its project's source; cross-project search/read and a closed session were
+refused. Host/renderer types, 851 server tests, documentation checks, Electron
+tests, and the built-output Electron smoke passed. No live model turn or packaged
+desktop journey was exercised.
+
 **Cleanup timeout recovery (2026-10-20):** `agent-process.ts` owns one bounded
 retirement attempt and a separate final-closure barrier. A deadline rejects its
 original callers with `AGENT_PROCESS_CLOSE_TIMEOUT` while retaining the child;

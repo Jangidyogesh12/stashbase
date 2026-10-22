@@ -205,6 +205,9 @@ function configureCodex(file: string, wrapper: string): void {
   const block = [
     '[mcp_servers.stashbase]',
     `command = ${JSON.stringify(wrapper)}`,
+    // Codex filters the parent environment for stdio MCP children. Forward
+    // identity by name so each chat keeps its own scope; never persist ids.
+    'env_vars = ["STASHBASE_WINDOW_ID", "STASHBASE_AGENT_SESSION_ID"]',
     'default_tools_approval_mode = "prompt"',
     '',
     ...CODEX_AUTO_APPROVED_STASHBASE_TOOLS.flatMap((tool) => [

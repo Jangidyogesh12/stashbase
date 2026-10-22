@@ -48,6 +48,10 @@ an empty project and a conversation without references are valid.
 | External MCP | Select one authorized registered project explicitly. |
 | Tool search without an explicit mode | Use keyword without an embedding key, hybrid with one, according to current configuration. |
 
+A project-bound Chat may omit the search tool's project parameter. The runtime
+carries the Chat's identity to the tool host, which supplies its bound project;
+the agent does not need to repeat the folder in each call.
+
 Search offers a direct setup entry when search by meaning is not configured.
 An explicit search mode is honored. Missing configuration or provider failure
 cannot silently change strategies. Removing the embedding key retains keyword
