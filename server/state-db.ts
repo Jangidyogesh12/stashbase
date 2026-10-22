@@ -3,7 +3,8 @@ import { createRequire } from 'node:module';
 import type BetterSqlite3 from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import { appStateDbPath } from './local-data.ts';
+import { appDataRoot, appStateDbPath } from './local-data.ts';
+import { errorCode, logger } from './log.ts';
 import { filesystemPath } from './filesystem-path.ts';
 
 export type ConversionStatus = 'in-flight' | 'done' | 'failed' | 'cancelled';
@@ -25,6 +26,71 @@ type StatusWrite = { pathKey: string; status: ConversionStatus; opts: { error?: 
 // Failed terminal writes remain pending in this process. Reads fail closed until
 // storage is usable, then replay them before discovery can admit more work.
 const pendingWrites = new Map<string, Map<string, StatusWrite>>();
+
+export type PreparationStorageCheck =
+  | { ok: true }
+  | { ok: false; code: 'PREPARATION_NATIVE_UNAVAILABLE' | 'PREPARATION_STORAGE_UNAVAILABLE'; message: string };
+
+function storageFailure(cause: unknown): Extract<PreparationStorageCheck, { ok: false }> {
+  const code = errorCode(cause);
+  const native = code === 'ERR_DLOPEN_FAILED' || code === 'MODULE_NOT_FOUND'
+    || (cause instanceof Error && /Could not locate the bindings file/.test(cause.message));
+  if (native) {
+    const recovery = process.env.STASHBASE_PACKAGED === '1'
+      ? 'Reinstall StashBase using the installer for this computer, then reopen it. If this continues, report a bug.'
+      : `With the Node runtime used to start StashBase (${process.version}, ABI ${process.versions.modules}), run pnpm rebuild better-sqlite3 in the source checkout, then restart StashBase.`;
+    return { ok: false, code: 'PREPARATION_NATIVE_UNAVAILABLE',
+      message: `Preparation status is unavailable because the local database module could not load. ${recovery}` };
+  }
+  return { ok: false, code: 'PREPARATION_STORAGE_UNAVAILABLE',
+    message: 'Preparation status could not be saved or read. Check free disk space and write permissions for the StashBase application data directory, then restart StashBase. If this continues, report a bug; keep the existing data for recovery.' };
+}
+
+/** Check the runtime that actually owns SQLite, before any project is opened.
+ * Reopening a disposable disk database verifies persistence and WAL support,
+ * not just module resolution or a directory's advertised permissions. */
+export function checkPreparationStorage(): PreparationStorageCheck {
+  let probe: BetterSqlite3.Database | undefined;
+  let temporary: string | undefined;
+  try {
+    try {
+      DatabaseCtor ??= nodeRequire('better-sqlite3') as typeof BetterSqlite3;
+      // Load the native binding before touching storage, so an ABI mismatch
+      // is diagnosed even when the app data directory has not been created.
+      probe = new DatabaseCtor(':memory:');
+      probe.close();
+      probe = undefined;
+      fs.mkdirSync(appDataRoot(), { recursive: true });
+      temporary = fs.mkdtempSync(path.join(appDataRoot(), '.storage-check-'));
+      const filename = path.join(temporary, 'probe.db');
+      probe = new DatabaseCtor(filename, { timeout: 1_000 });
+      probe.pragma('journal_mode = WAL');
+      probe.exec('CREATE TABLE probe (value TEXT NOT NULL)');
+      probe.prepare('INSERT INTO probe (value) VALUES (?)').run('storage-check');
+      probe.close();
+      probe = new DatabaseCtor(filename, { readonly: true, fileMustExist: true });
+      const row = probe.prepare('SELECT value FROM probe').get() as { value: string } | undefined;
+      if (row?.value !== 'storage-check') throw new Error('Local database round trip failed');
+      // A writable scratch directory does not prove the existing state file
+      // is readable. Preserve it and report failure instead of replacing it.
+      const state = getStateDb();
+      // Acquire write access without changing a row. Existing read-only state
+      // must not pass merely because the parent allows scratch files.
+      state.transaction(() => {
+        state.prepare('UPDATE conversions SET attempts = attempts WHERE 0').run();
+      }).immediate();
+    } finally {
+      try { probe?.close(); }
+      finally { if (temporary) fs.rmSync(temporary, { recursive: true, force: true }); }
+    }
+    return { ok: true };
+  } catch (cause) {
+    closeStateDb();
+    const failure = storageFailure(cause);
+    logger('preparation-storage').warn(failure.message, cause);
+    return failure;
+  }
+}
 
 function stateDbPath(): string {
   return appStateDbPath();
@@ -52,7 +118,7 @@ function getStateDb(): BetterSqlite3.Database {
     return db;
   } catch (cause: unknown) {
     closeStateDb();
-    throw new Error('Preparation status could not be saved or read. Check local storage and retry.', { cause });
+    throw new Error(storageFailure(cause).message, { cause });
   }
 }
 

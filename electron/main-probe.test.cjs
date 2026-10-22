@@ -349,3 +349,39 @@ test('host startup diagnostics retain a bounded log tail and tolerate unavailabl
     assert.equal(readServerLogTail(path.join(directory, 'absent')), undefined);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+
+test('storage warning crosses a verified health probe without blocking source reuse or owned startup', async (t) => {
+  const http = require('node:http');
+  const warning = 'Preparation status is unavailable. Repair local storage and restart.';
+  let currentInstance;
+  let body = { ...health(), preparationStorage: {
+    ok: false, code: 'PREPARATION_STORAGE_UNAVAILABLE', message: warning,
+  } };
+  const server = http.createServer((_req, res) => res.end(JSON.stringify({ ...body, instanceId: currentInstance })));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const ready = [];
+  const shared = {
+    port,
+    probe: (instanceId) => probeServerHealth(port, 1000, { ...identity, instanceId }),
+    onReady: (result) => ready.push(result.preparationStorageWarning),
+  };
+  assert.equal(await startServer({ ...shared, packaged: false, spawn: () => assert.fail('must reuse') }), null);
+  assert.deepEqual(ready, [warning]);
+  const fixture = startupFixture();
+  let spawned = false;
+  assert.equal(await startServer({ ...fixture.options, ...shared,
+    probe: (instanceId) => spawned ? shared.probe(instanceId) : { compatible: false, occupied: false },
+    spawn: (instanceId) => { spawned = true; currentInstance = instanceId; return fixture.child; },
+  }), fixture.child);
+  assert.deepEqual(ready, [warning, warning]);
+
+  body = { ...body, appRoot: '/foreign' };
+  assert.equal((await shared.probe(currentInstance)).preparationStorageWarning, undefined);
+  body = { ...body, appRoot: identity.appRoot, preparationStorage: { ok: true } };
+  assert.equal((await shared.probe(currentInstance)).preparationStorageWarning, undefined);
+  body.preparationStorage = { ok: false, code: 'UNRECOGNIZED', message: warning };
+  assert.equal((await shared.probe(currentInstance)).preparationStorageWarning, undefined);
+});

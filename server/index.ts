@@ -44,7 +44,7 @@ import { logger } from './log.ts';
 import { cancelAllConversions, setDerivedNoteIndexer } from './conversion.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { indexer } from './state.ts';
-import { closeStateDb } from './state-db.ts';
+import { checkPreparationStorage, closeStateDb } from './state-db.ts';
 import { requireFolder, withWindowContext } from './http.ts';
 import { mount as mountWindowContextRoutes } from './routes/window-context.ts';
 import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
@@ -228,6 +228,9 @@ for (const dir of ['cmaps', 'standard_fonts', 'wasm']) {
 // can be listening on :8090 and even answer `/api/folder`; the main
 // process should only reuse a server that explicitly identifies itself
 // as StashBase.
+// This is a startup snapshot; component failure does not change server identity
+// or prevent independent editing. Restart rechecks the repaired environment.
+const preparationStorage = checkPreparationStorage();
 app.get('/api/health', (_req, res) => {
   res.json({
     app: 'stashbase',
@@ -237,6 +240,7 @@ app.get('/api/health', (_req, res) => {
     resourcesPath: RESOURCES_ROOT,
     pid: process.pid,
     instanceId: process.env.STASHBASE_SERVER_INSTANCE_ID,
+    preparationStorage,
   });
 });
 

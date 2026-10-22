@@ -49,6 +49,27 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Preparation storage preflight (2026-10-22):** `server/state-db.ts` checks the
+actual native addon, temporary database persistence, and existing state access
+before the host listens. `/api/health` retains liveness/identity and includes a
+separate startup storage result. `electron/main-probe.cjs` carries an actionable
+warning from the verified instance to one foreground desktop window, including
+source-server reuse; background windows defer it until shown. Source failures
+identify the running Node/ABI and rebuild command; packaged failures recommend
+reinstallation rather than asking readers to manage Node.
+`server/preparation-storage.test.ts` exercises real SQLite read/write/reopen,
+injected ABI/permission/disk-full failures, corrupt/read-only existing state,
+preserved cancellation records, cleanup, and repair. `main-probe.test.cjs` drives
+real loopback warning handoff while retaining identity and launch availability.
+An isolated built-server runtime pass exercised healthy and injected ABI-failure
+starts, project open, Markdown read, versioned save, and saved-byte verification.
+A source Electron pass loaded the built renderer, intercepted one warning dialog
+with recovery detail and Continue, and reached a visually inspected Welcome
+window. The dialog adapter was substituted; native dialog appearance and signed
+packaged execution remain release checks. Telemetry was disabled for both passes.
+Validation passed the server suite (850), Electron suites (350), host types,
+documentation and test-inventory checks, and the server build.
+
 **Readiness evidence (2026-10-18):** `electron/main-probe.cjs` owns bounded fresh
 loopback probes and preserves the final result, identity mismatch field, count
 and timing in startup diagnostics. `main-probe.test.cjs` drives real HTTP

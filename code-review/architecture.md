@@ -177,6 +177,14 @@ recovery remain separate responsibilities.
 
 ## Preparation and Retrieval
 
+`server/state-db.ts` owns the startup preparation-storage check: load the native
+addon in the actual server runtime, round-trip a disposable WAL database in app
+data, and verify the existing status database permits a write transaction without
+changing records. The health response carries this startup snapshot separately
+from server identity. Electron relays only a verified server's bounded warning,
+once on a foreground window; unavailable preparation does not block editing.
+Checks never replace damaged state or rebuild dependencies inside the running app.
+
 StashBase owns preparation so previews and readable text work independently of
 vector indexing. It sends complete text into MFS Internal namespaces; MFS alone
 owns revisions, unchanged classification, chunking, and index status. Do not add

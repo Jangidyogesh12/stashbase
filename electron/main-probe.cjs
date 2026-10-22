@@ -88,7 +88,12 @@ async function probeServerHealth(port, timeoutMs, expected) {
   const mismatch = serverHealthMismatch(health.body, expected);
   if (health.statusCode === 200 && health.result !== 'invalid_json' && !mismatch) {
     return { compatible: true, occupied: true, legacyStashBase: false, transient: false,
-      ...evidence, probe_result: 'ready' };
+      ...evidence, probe_result: 'ready',
+      ...(health.body.preparationStorage?.ok === false
+        && ['PREPARATION_NATIVE_UNAVAILABLE', 'PREPARATION_STORAGE_UNAVAILABLE'].includes(health.body.preparationStorage.code)
+        && typeof health.body.preparationStorage.message === 'string'
+        && health.body.preparationStorage.message.length <= 1_000
+        ? { preparationStorageWarning: health.body.preparationStorage.message } : {}) };
   }
   const result = health.statusCode !== 200 ? 'http_error'
     : health.result === 'invalid_json' ? 'invalid_json'
@@ -148,13 +153,14 @@ async function startServer({
   probe,
   spawn,
   probeOptions,
+  onReady = () => {},
   timeoutMs = serverStartupTimeoutMs({ packaged }),
   handoffTimeoutMs = 12_000,
   now = Date.now,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
   let existing = await waitForStableServerProbe(probe, probeOptions);
-  if (existing.compatible && !packaged) return null;
+  if (existing.compatible && !packaged) { onReady(existing); return null; }
   if (packaged && existing.compatible) {
     // A replacement launch can begin while the prior Electron instance is
     // still waiting for its owned server to finish shutdown. Binding now
@@ -209,7 +215,7 @@ async function startServer({
           : `server exited with signal ${child.signalCode}`;
         throw new Error(`${detail} before reporting healthy on :${port}`);
       }
-      if (health.compatible) return child;
+      if (health.compatible) { onReady(health); return child; }
       await sleep(Math.min(150, Math.max(0, deadline - now())));
     }
     throw new Error(`server did not come up on :${port} within ${timeoutMs / 1000}s`);

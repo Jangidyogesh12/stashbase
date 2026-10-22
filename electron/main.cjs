@@ -139,6 +139,7 @@ app.on('child-process-gone', (_event, details) => {
 });
 let serverProc = null;
 let serverStartPromise = null;
+let preparationStorageWarning = null;
 let authNetworkBridge = null;
 const mainWindows = new Set();
 let quitRequested = false;
@@ -784,6 +785,7 @@ async function startOrReuseServer() {
       packaged: app.isPackaged,
       port: SERVER_PORT,
       probe: (instanceId) => probeServer(SERVER_PORT, 300, instanceId),
+      onReady: (health) => { preparationStorageWarning = health.preparationStorageWarning ?? null; },
       spawn: (instanceId) => { spawnedChild = spawnServer(instanceId); return spawnedChild; },
     });
     if (!child) console.log(`[electron] reusing existing server at ${SERVER_URL}`);
@@ -1097,6 +1099,23 @@ async function createWindow({ background = false, reopensProject = false } = {})
   // windows load the same document and there is one answer to "how does a
   // window learn its folder" rather than two.
   win.loadURL(USE_DEV_VITE ? SERVER_URL : APP_URL);
+  // Claim the warning once across windows. Background scheduled work must
+  // not steal focus; show it only when a reader opens or reveals a window.
+  const showPreparationStorageWarning = () => {
+    if (!preparationStorageWarning || win.isDestroyed()) return;
+    const detail = preparationStorageWarning;
+    preparationStorageWarning = null;
+    void dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'StashBase',
+      message: 'File preparation is unavailable',
+      detail: `${detail}\n\nYou can continue browsing and editing your documents.`,
+      buttons: ['Continue'],
+      noLink: true,
+    }).catch((error) => console.warn('[electron] Could not show storage warning:', error));
+  };
+  if (background) win.once('show', showPreparationStorageWarning);
+  else showPreparationStorageWarning();
   return win;
 }
 

@@ -30,6 +30,10 @@ an empty project and a conversation without references are valid.
   Explain the limitation without downloading incompatible binaries or blocking
   project browsing and editing. Search can be unavailable on systems where its
   native backend cannot run; neither search mode may pretend to succeed there.
+- Startup verifies local database loading, disk read/write, and preparation-state
+  access before project work begins. A failure explains recovery appropriate to
+  the installed app or source checkout, while browsing and editing remain available.
+  Checks preserve existing data; relaunch verifies repairs.
 - Explicit source cancellation remains stopped until Reprocess. Shutdown interruption
   is recoverable. Storage failure must not report durable cancellation or silently
   restart work whose state cannot be established.

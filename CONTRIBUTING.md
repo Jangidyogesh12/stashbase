@@ -113,6 +113,20 @@ the scenarios, and how to add one.
 
 ## Debugging
 
+Startup checks `better-sqlite3` in the server's actual runtime, reads back a
+temporary database in application data, and verifies the existing preparation
+state. A failed check appears once in the desktop and in server logs; document
+editing remains available. `/api/health` reports this startup snapshot under
+`preparationStorage` separately from its server-identity `ok` flag.
+
+After changing Node versions or packaging locally, a source checkout may contain
+a native addon built for another runtime. Use the Node runtime that starts the
+source server, run `pnpm rebuild better-sqlite3` in the checkout, then restart.
+Packaged users should reinstall the matching StashBase installer; changing a
+system Node installation cannot repair Electron's bundled runtime. For storage
+failures, check application-data permissions and disk space. Preserve a damaged
+state database for diagnosis instead of deleting it as an automatic repair.
+
 - Renderer logs: **View -> Toggle Developer Tools**
 - Packaged-app server logs: `~/Library/Logs/StashBase/`
 - Useful env vars: `STASHBASE_LOG=debug`, `STASHBASE_PYTHON=/path/to/python`, `STASHBASE_BUILD_EXTRACT=1`
