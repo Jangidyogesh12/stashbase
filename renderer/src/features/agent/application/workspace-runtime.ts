@@ -117,6 +117,7 @@ export function createAgentWorkspaceRuntime({
       id,
       onFilesChanged,
       onEffortChange: projectAgents.rememberEffort,
+      onModelChange: projectAgents.rememberModel,
       port,
       recordUsage,
       scheduler,
@@ -164,7 +165,7 @@ export function createAgentWorkspaceRuntime({
         return false;
       if (agent !== current.agent && !session.changeAgent(agent))
         runtime.newChat(agent, current.scope);
-      else if (agent !== current.agent) projectAgents.seedEffort(session);
+      else if (agent !== current.agent) projectAgents.seedRuntimeChoices(session);
       return true;
     },
     choosePersona: (persona) => !disposed && projectAgents.choose(runtime.activeSession(), persona),

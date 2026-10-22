@@ -61,6 +61,7 @@ export function createAgentSessionRuntime({
   id,
   onFilesChanged,
   onEffortChange,
+  onModelChange,
   recordUsage,
   port,
   scheduler = createDefaultScheduler(),
@@ -206,6 +207,8 @@ export function createAgentSessionRuntime({
       started = false;
     },
     onInterrupt: () => usage.interrupt(),
+    onEffortChange,
+    onModelChange,
     ledger,
     transientFiles,
   });
@@ -310,13 +313,7 @@ export function createAgentSessionRuntime({
     },
     setAccessMode: controls.setAccessMode,
     ...controls.persona,
-    setEffort(effort) {
-      const previous = state().effort;
-      controls.setEffort(effort);
-      const current = state();
-      if (current.effort !== previous)
-        onEffortChange?.(current.scope, current.agent, current.effort);
-    },
+    setEffort: controls.setEffort,
     setModel: controls.setModel,
     setSkill(skill) {
       if (disposed || state().skill === skill) return;

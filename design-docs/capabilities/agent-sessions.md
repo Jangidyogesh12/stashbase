@@ -12,9 +12,9 @@ actual capabilities through this common experience.
   duplicate titles are valid. Automatic naming never replaces a manual title.
 - A completely blank chat may be reused. Drafts, context, queued requests, and
   started transcripts remain reachable when navigating or switching modes.
-- Changing agent before the first send preserves the draft and resets model,
-  thinking, and skill choices without a switch notice. The selected agent's saved
-  thinking preference applies when supported. Unsupported context still needs an
+- Changing agent before the first send preserves the draft and clears the skill
+  choice without a switch notice. The selected agent's saved model and thinking
+  preferences apply when supported. Unsupported context still needs an
   actionable explanation. Changing agent after starting creates another
   conversation; it does not transfer history.
 - Project removal stops active work, retains transcripts, and disables sending.
@@ -89,10 +89,12 @@ permissions, with current model and tool choices checked before use.
   files fail visibly; content is never silently truncated or omitted. The full
   model request, including retained history, also has a transport size limit.
 - Model, effort, skills, and permission options follow the selected runtime.
-  Remember explicitly chosen thinking effort per project and agent for new chats,
-  including after restart. A model that does not support that effort uses its own
-  default. Restoring history keeps that conversation's effort and never changes
-  the preference; selecting Default explicitly clears the saved effort.
+  Remember explicitly chosen models and thinking effort per project and agent
+  when switching agents and starting new chats, including after restart.
+  An unavailable model or unsupported effort uses the runtime's own default
+  without overwriting the saved choice. Other open chats keep their choices.
+  Restoring history keeps that conversation's native choices and never changes
+  the preferences; explicitly returning a choice to Default clears that preference.
   Without an explicit model choice, a chat runs on the model the runtime's own
   settings name; StashBase never resets a runtime to a built-in default the user
   did not choose. A model named by an alias shows the release that alias

@@ -191,6 +191,7 @@ export interface AgentContextPort {
 export interface ProjectAgentPreference {
   scope: string;
   agent: AgentId;
+  models?: Partial<Record<AgentId, string | null | undefined>> | undefined;
   efforts?: Partial<Record<AgentId, string | null | undefined>> | undefined;
   /** The persona this project's next new Chat starts with. */
   persona?: string | null | undefined;
@@ -202,7 +203,7 @@ export interface AgentPreferencesPort {
     scope: AgentScope,
     agent: AgentId,
     signal: AbortSignal,
-    change?: { effort?: string | null; persona?: string | null },
+    change?: { model?: string | null; effort?: string | null; persona?: string | null },
   ): Promise<void>;
 }
 

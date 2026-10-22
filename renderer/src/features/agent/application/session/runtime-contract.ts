@@ -111,6 +111,7 @@ export interface AgentSessionRuntimeOptions {
   onFilesChanged?: ((change: AgentFilesChanged) => void) | undefined;
   /** Explicit composer choices only; native replay and catalog defaults do not save preferences. */
   onEffortChange?: ((scope: AgentScope, agent: AgentId, effort: string | null) => void) | undefined;
+  onModelChange?: ((scope: AgentScope, agent: AgentId, model: string | null) => void) | undefined;
   port: AgentSessionPort;
   scheduler?: AgentReconnectScheduler | undefined;
   scope: AgentScope;

@@ -39,8 +39,8 @@ Chat, Documents assistance, and runtimes.
    also locates the quoted phrase, or says the file no longer holds it. Agent writes do not take focus.
 5. Return through history or change modes without losing the conversation or unsent
    work. Rename is deliberate; deleting a chat does not delete project files.
-   New Chat reuses the last explicitly selected thinking effort for that project's
-   agent when supported, instead of resetting to the runtime default.
+   Switching agents and New Chat reuse the last explicitly selected model and
+   thinking effort for that project's agent when supported.
 
 ## First Send
 

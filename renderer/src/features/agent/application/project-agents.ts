@@ -1,3 +1,5 @@
+/** Explicit project choices seed new chats and agent switches; native history
+ *  and catalog fallback never overwrite the remembered preferences. */
 import { createStore } from 'zustand/vanilla';
 
 import type {
@@ -22,10 +24,16 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
   let loading: Promise<boolean> | null = null;
   let saving = false;
   let pendingSave = Promise.resolve(true);
-  const seedEffort = (session: AgentSessionRuntime) => {
+  const seedRuntimeChoices = (session: AgentSessionRuntime) => {
     const state = session.store.getState();
-    const effort = choices.get(agentScopeKey(state.scope))?.efforts?.[state.agent] ?? null;
-    session.store.setState({ effort: supportedEffort(state, effort) });
+    const preference = choices.get(agentScopeKey(state.scope));
+    const preferredModel = preference?.models?.[state.agent] ?? null;
+    const model =
+      state.models.length && !state.models.some((entry) => entry.id === preferredModel)
+        ? null
+        : preferredModel;
+    const effort = preference?.efforts?.[state.agent] ?? null;
+    session.store.setState({ model, effort: supportedEffort({ ...state, model }, effort) });
   };
   /** A new Chat starts with its project's persona; a started one keeps the
    *  persona it already runs under. */
@@ -38,7 +46,7 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
   const save = (
     scope: AgentScope,
     agent: AgentId,
-    change?: { effort?: string | null; persona?: string | null },
+    change?: Parameters<AgentPreferencesPort['save']>[3],
   ) => {
     pendingSave = pendingSave.then(async () => {
       if (signal.aborted) return false;
@@ -77,13 +85,34 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
       });
     return loading;
   };
+  const remember = (
+    scope: AgentScope,
+    agent: AgentId,
+    change: { model?: string | null; effort?: string | null },
+  ) => {
+    if (signal.aborted || store.getState().loading || store.getState().failure) return;
+    const key = agentScopeKey(scope);
+    const previous = choices.get(key);
+    choices.set(key, {
+      ...previous,
+      scope: key,
+      agent: previous?.agent ?? agent,
+      ...(change.model === undefined
+        ? {}
+        : { models: { ...previous?.models, [agent]: change.model } }),
+      ...(change.effort === undefined
+        ? {}
+        : { efforts: { ...previous?.efforts, [agent]: change.effort } }),
+    });
+    void save(scope, agent, change);
+  };
   return {
     store,
     load,
-    seedEffort,
-    /** What a new or reused Chat starts from: its project's effort and persona. */
+    seedRuntimeChoices,
+    /** What a new or reused Chat starts from: its project's model, effort and persona. */
     seed(session: AgentSessionRuntime) {
-      seedEffort(session);
+      seedRuntimeChoices(session);
       seedPersona(session);
     },
     apply(session: AgentSessionRuntime) {
@@ -91,20 +120,15 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
       if (!agentSessionIsUnstarted(state)) return;
       const agent = choices.get(agentScopeKey(state.scope))?.agent ?? DEFAULT_AGENT_ID;
       if (state.agent !== agent) session.changeAgent(agent);
-      seedEffort(session);
+      seedRuntimeChoices(session);
       seedPersona(session);
     },
     get: (scope: AgentScope) => choices.get(agentScopeKey(scope))?.agent ?? DEFAULT_AGENT_ID,
     rememberEffort(scope: AgentScope, agent: AgentId, effort: string | null) {
-      if (signal.aborted || store.getState().loading || store.getState().failure) return;
-      const key = agentScopeKey(scope);
-      const previous = choices.get(key);
-      choices.set(key, {
-        scope: key,
-        agent: previous?.agent ?? agent,
-        efforts: { ...previous?.efforts, [agent]: effort },
-      });
-      void save(scope, agent, { effort });
+      remember(scope, agent, { effort });
+    },
+    rememberModel(scope: AgentScope, agent: AgentId, model: string | null) {
+      remember(scope, agent, { model });
     },
     /** Runs a Chat under a persona, or none. A persona chosen in any Chat
      *  becomes the one this project's next new Chat starts with. Refused while

@@ -23,6 +23,7 @@ export function createAgentPreferencesAdapter(client: HttpClient): AgentPreferen
         body: {
           scope: agentScopeKey(scope),
           agent,
+          ...(change.model === undefined ? {} : { model: change.model }),
           ...(change.effort === undefined ? {} : { effort: change.effort }),
           ...(change.persona === undefined ? {} : { persona: change.persona }),
         },

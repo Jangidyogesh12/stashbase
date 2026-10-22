@@ -13,7 +13,7 @@ import type { AgentTransport } from './connection';
 import type { AgentPromptDispatcher } from './dispatch';
 import { planQueue, type AgentPromptLedger } from './prompts';
 /** Request controls own cancellation and queue advancement independently of the mounted composer. */
-import type { AgentSessionRuntime } from './runtime-contract';
+import type { AgentSessionRuntime, AgentSessionRuntimeOptions } from './runtime-contract';
 
 export function createSessionControls({
   state,
@@ -25,6 +25,8 @@ export function createSessionControls({
   resetStart,
   isStarted,
   onInterrupt,
+  onEffortChange,
+  onModelChange,
   ledger,
   transientFiles,
 }: {
@@ -37,6 +39,8 @@ export function createSessionControls({
   resetStart(): void;
   isStarted(): boolean;
   onInterrupt(): void;
+  onEffortChange?: AgentSessionRuntimeOptions['onEffortChange'];
+  onModelChange?: AgentSessionRuntimeOptions['onModelChange'];
   ledger: AgentPromptLedger;
   transientFiles: Map<string, File>;
 }) {
@@ -82,6 +86,7 @@ export function createSessionControls({
       if (effort && !modelChoice(current).efforts.includes(effort)) return;
       transition({ effort, kind: 'set-effort' });
       if (isStarted()) transport.open({ resume: current.nativeSessionId ?? undefined });
+      onEffortChange?.(current.scope, current.agent, effort);
     },
     requestComposerFocus(requested = true) {
       if (disposed() || state().composerFocusRequested === requested) return;
@@ -121,6 +126,7 @@ export function createSessionControls({
       transition({ model, kind: 'set-model' });
       if (nextEffort !== current.effort) transition({ effort: nextEffort, kind: 'set-effort' });
       transport.applyModel(model);
+      onModelChange?.(current.scope, current.agent, model);
     },
     setQueue(queue: Parameters<AgentSessionRuntime['setQueue']>[0]) {
       if (disposed()) return;

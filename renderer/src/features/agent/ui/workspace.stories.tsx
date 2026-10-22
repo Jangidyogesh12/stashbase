@@ -108,12 +108,25 @@ const abilities: Agent['abilities'] = {
   skills: true,
 };
 
+const codexModels = [
+  {
+    id: 'gpt-5.3-codex',
+    label: 'GPT-5.3 Codex',
+    supportedEfforts: ['low', 'medium', 'high', 'xhigh'],
+  },
+  {
+    id: 'gpt-5.2-codex',
+    label: 'GPT-5.2 Codex (recommended for agentic coding)',
+    supportedEfforts: ['low', 'medium', 'high'],
+  },
+];
+
 const agents: Agent[] = [
   {
     abilities,
     id: 'codex',
     label: 'Codex',
-    models: [],
+    models: codexModels,
     needsSignIn: false,
     ready: true,
     updatable: true,
@@ -214,18 +227,7 @@ function WorkspacePreview({
       activeModel: 'gpt-5.3-codex',
       effort: 'high',
       model: 'gpt-5.3-codex',
-      models: [
-        {
-          id: 'gpt-5.3-codex',
-          label: 'GPT-5.3 Codex',
-          supportedEfforts: ['low', 'medium', 'high', 'xhigh'],
-        },
-        {
-          id: 'gpt-5.2-codex',
-          label: 'GPT-5.2 Codex (recommended for agentic coding)',
-          supportedEfforts: ['low', 'medium', 'high'],
-        },
-      ],
+      models: codexModels,
       connection: interrupted
         ? { kind: 'closed', message: 'Agent stream failed: connection reset by peer.' }
         : empty

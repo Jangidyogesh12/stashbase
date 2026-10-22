@@ -1779,14 +1779,27 @@ production renewal collection, browser card replacement, and packaged cross-brow
 checks; local and Stripe test-mode checks do not establish those behaviors.
 
 
-**Agent switching:** `application/session/controls.ts` resets runtime-specific
-choices without adding a composer notice. The session recovery test switches a
-Codex draft with model, effort, and skill selections to Default, verifying the
-draft survives and no context issue is introduced. A driven built-Storybook pass
-also switched a Codex draft with a selected model and High effort to Default,
-confirming the draft remained and no notice appeared. This uses controlled ports,
-not a packaged app or live provider. All 12 renderer gates, host types, Electron
-tests and smoke, service builds, and documentation validation passed.
+**Agent switching and model memory (2026-10-22):** `application/project-agents.ts`
+remembers explicit models and effort per project and agent through the Node-owned
+preferences route. Switching an unsent draft and creating a new chat seed the model
+before checking effort; clearing runtime-specific session state still removes skills
+without adding a notice. `model-preferences.test.ts` first reproduced the lost model
+and resulting effort reset, then covered switching, new-chat connection parameters,
+restart loading, project isolation, persona/draft retention, ordered saves, explicit
+clearing, refused changes and save failure. History restore clears the new-chat
+model before reconnecting; catalog fallback never overwrites preferences.
+`server/routes/agent-preferences.test.ts` covers disk persistence for all native
+agents, independent model/effort/persona updates, invalid inputs, project removal
+and corrupt-config preservation. A driven built-Storybook pass selected GPT-5.2
+Codex and High, switched to Claude and back, and confirmed both choices and the
+draft remained. The Story catalog now supplies its Codex models after switching.
+These controlled tests and browser pass do not establish native provider model
+availability or packaged behavior.
+Validation passed host types, 14 configuration/preference tests, Electron tests
+and built-output smoke, and documentation checks. `pnpm check:web` passed its
+other eleven gates; the full coverage run hit five-second UI test timeouts at
+default concurrency. Repeating all 351 suites with `--maxWorkers=2` passed all
+1,751 tests and coverage thresholds without changing timeouts.
 
 **New-chat thinking effort (2026-09-16):** project preferences persist explicit
 effort separately for each agent. Workspace/session tests reproduce High reverting

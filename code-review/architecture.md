@@ -403,11 +403,13 @@ stable status without download, retry, or a new durable demand latch.
   deltas cannot cross session, message, or turn boundaries.
 - Project agent preferences are explicit choices in Node-owned app config, keyed
   by registered project scope. Readiness and history restore never write them.
-  Thinking effort is stored separately per agent in that project. Composer choices
+  Model and thinking effort are stored separately per agent in that project. Composer choices
   update the window cache immediately and persist in order; new/blank chats seed
-  from that cache, while history keeps its native effort. Catalog admission clears
-  unsupported effort in the session without overwriting the saved choice. Effort
-  writes preserve the preferred agent and other runtimes' efforts.
+  from that cache, while history clears the new-chat model before resuming and
+  restores its native effort. Seed the model before validating its effort.
+  Catalog admission clears unavailable models and unsupported effort in the session
+  without overwriting the saved choices. Model and effort writes preserve the
+  preferred agent, persona, and other runtimes' choices.
   Missing preference means Default; failed preference reads/writes remain visible.
   Access requested on Send retains a scope/session/draft snapshot and cancellation
   owner. Only confirmed readiness may continue that same submission once; navigation,

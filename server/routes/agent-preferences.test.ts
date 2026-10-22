@@ -62,6 +62,23 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       chosen = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
       assert.equal(chosen.persona, null);
       assert.equal((await choose(project, 'claude', '../escape')).status, 400);
+      const chooseModel = (scope, agent, model) => fetch(url, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({scope,agent,model}) });
+      assert.equal((await chooseModel(project, 'codex', 'writer')).status, 200);
+      assert.equal((await chooseModel(project, 'claude', 'opus')).status, 200);
+      assert.equal((await chooseModel(project, 'antigravity', 'gemini')).status, 200);
+      assert.equal((await save(project, 'codex', 'high')).status, 200);
+      assert.equal((await choose(project, 'codex', 'journalist')).status, 200);
+      chosen = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      assert.deepEqual(chosen.models, { codex: 'writer', claude: 'opus', antigravity: 'gemini' });
+      assert.deepEqual(chosen.efforts, { codex: 'high', claude: 'medium', antigravity: 'high' });
+      assert.equal(chosen.agent, 'claude');
+      assert.equal(chosen.persona, 'journalist');
+      assert.equal((await chooseModel(project, 'codex', null)).status, 200);
+      assert.equal(config.readAppConfigStrict().agentPreferences.find(entry => entry.scope === filesystemPath.absolute(project)).models.codex, null);
+      for (const model of ['', 'x'.repeat(201), 42]) {
+        assert.equal((await chooseModel(project, 'codex', model)).status, 400);
+      }
+      assert.equal((await chooseModel('/unregistered', 'codex', 'writer')).status, 404);
       assert.equal(config.readAppConfigStrict().workspace.showHiddenFiles, true);
       const { removeRecentAsync } = await import('./server/folder.ts');
       await removeRecentAsync(project);

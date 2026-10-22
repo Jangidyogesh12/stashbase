@@ -91,6 +91,7 @@ export interface AppConfigFile {
   agentPreferences?: Array<{
     scope: string;
     agent: 'stashbase' | 'codex' | 'claude' | 'antigravity';
+    models?: Partial<Record<'stashbase' | 'codex' | 'claude' | 'antigravity', string | null>>;
     efforts?: Partial<Record<'stashbase' | 'codex' | 'claude' | 'antigravity', string | null>>;
     /** The library persona this project's next new Chat starts with. */
     persona?: string | null;

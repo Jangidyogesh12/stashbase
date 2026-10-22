@@ -324,6 +324,9 @@ export function transitionAgentSession(
     case 'begin-restore':
       return {
         ...state,
+        // New-chat preferences must not override the resumed native conversation.
+        model: null,
+        activeModel: null,
         connection: { kind: 'restoring' },
         delivery: state.delivery === 'unknown' ? 'unknown' : 'idle',
         title: action.title,
