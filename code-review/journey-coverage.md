@@ -49,6 +49,18 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Installer CDN (2026-10-22, source deployment pending):** the
+[release mirror](release-pipeline.md#installer-download-cdn) adds Cloudflare R2
+delivery for website installer downloads. The mirror suite covers checksum
+rejection, immutable conflicts, interrupted upload recovery and publish-last
+discovery. The website's download suite covers complete-manifest validation and
+CDN/GitHub failure recovery. The live R2 mirror contains all five 2.16.17
+installers. Public Range/CORS checks passed for each; the Apple Silicon DMG
+passed a full public SHA-256 check and returned a cache hit. A built website
+preview resolved all four download buttons to the live CDN and updated their
+analytics destinations. Production website deployment and the first hosted
+mirror workflow run remain pending; app updates and Homebrew still use GitHub.
+
 **Preparation storage preflight (2026-10-22):** `server/state-db.ts` checks the
 actual native addon, temporary database persistence, and existing state access
 before the host listens. `/api/health` retains liveness/identity and includes a

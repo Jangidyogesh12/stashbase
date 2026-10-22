@@ -33,6 +33,58 @@ draft, calls all platform Adapters, verifies the complete update set, and only
 then makes the release public. A client must never observe a new latest version
 before its metadata and payloads coexist.
 
+### Installer Download CDN
+
+The reusable `download-mirror.yml` workflow runs after the coordinator publishes
+the GitHub release, independently of Homebrew, or manually for a public stable
+tag. GitHub remains the release and in-app update origin.
+`scripts/mirror-release-downloads.mjs` mirrors the two DMGs,
+Windows installer, Debian package and AppImage into the `stashbase-downloads`
+Cloudflare R2 Standard bucket, served at `https://downloads.stashbase.ai`.
+It downloads only official asset URLs, checks GitHub's SHA-256 and byte count,
+and uses a conditional create plus Content-MD5 for each versioned object. Existing
+objects must match their recorded SHA-256 and size; an interrupted mirror can
+resume without replacing released bytes. Only after all five installers exist
+does it write the latest.json manifest, and only if GitHub still identifies that
+tag as latest.
+The mirror workflow serializes runs without cancelling uploads.
+
+Repository variable `CLOUDFLARE_ACCOUNT_ID` identifies the account. Repository
+secrets `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` must be an R2 Object Read &
+Write credential restricted to this bucket. The local Wrangler OAuth session
+is for setup, never a CI secret. The website's build and browser resolve the
+CDN manifest, then GitHub on failure; the existing GitHub release page remains
+the manual fallback. Homebrew and electron-updater continue using GitHub.
+
+Cloudflare setup: bind the download hostname to this bucket with TLS 1.2 or later,
+apply `scripts/packaging/download-cors.json` through `wrangler r2 bucket cors set`,
+and add a Cache Rule matching only `http.host eq "downloads.stashbase.ai"` with
+cache eligibility enabled and origin Cache-Control respected. Versioned files
+carry a one-year immutable TTL; the latest.json manifest carries a 60-second TTL.
+Do not apply the immutable TTL to the manifest. Keep `r2.dev` disabled. Free/Pro/Business edge
+caching accepts files up to 512 MB; exceeding that size requires revisiting
+delivery before claiming edge caching for that artifact.
+
+`scripts/packaging/download-mirror.test.mjs` exercises integrity rejection,
+immutable conflicts, interrupted-upload recovery, publication ordering and old-tag
+retries. Website tests live in `stashbase-web`'s `test:downloads` command.
+Live R2 upload, public full-file checksum, Range/CORS and a repeated cache-hit
+check are separate deployment evidence; unit fixtures do not establish them.
+
+Bootstrap evidence (2026-10-22): the bucket, TLS 1.2 download domain, scoped
+Cache Rule, read-only public CORS and repository variable/secrets were configured.
+The CLI mirrored all five public 2.16.17 installers with digest checks; a repeat
+run reused every immutable object. All five public URLs returned correct byte
+counts and HTTP 206 ranges matching local bytes, with CORS headers. The Apple
+Silicon DMG also passed a full public SHA-256 comparison after an initial
+full-fetch timeout; its cached response and the manifest returned HIT. The built
+website preview resolved all four buttons and analytics destinations to this
+live CDN. Production source deployment and the first hosted Download CDN workflow
+run remain pending; this bootstrap does not establish either.
+For a local retry using already downloaded artifacts, the CLI accepts
+`--source-dir release.nosync/download-cdn-v2.16.17`; the same SHA-256 checks still
+apply, and the caller-owned directory is preserved.
+
 ## Source CI
 
 Source jobs are bounded to 30 minutes, renderer behavior to 10 minutes, and the

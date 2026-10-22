@@ -167,6 +167,15 @@ jobs:
 
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
 
+  publish-downloads:
+    needs: [prepare-draft, publish-release]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/download-mirror.yml
+    with:
+      tag: ${{ needs.prepare-draft.outputs.tag }}
+    secrets: inherit
+
   publish-homebrew:
     needs: [prepare-draft, publish-release]
     runs-on: macos-latest

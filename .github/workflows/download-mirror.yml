@@ -1,0 +1,51 @@
+name: Download CDN
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+    secrets:
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Public stable release to mirror, for example v2.16.17
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: download-cdn
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.repository == 'liliu-z/stashbase'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Mirror verified installers and publish the download manifest last
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          node scripts/mirror-release-downloads.mjs "$INPUT_TAG"
