@@ -241,8 +241,9 @@ export function buildOpenCodeConfig(
     .map((name) => path.resolve(directory, name)).find((file) => fs.existsSync(file));
   const defaultModel = defaultHostedAgentProfile(profiles)?.id ?? model.model;
   const permission = {
-    // Native edit/write/patch tools share this permission; MCP writes stay explicit.
-    edit: 'deny',
+    // Native edit/write/patch tools handle requested files outside the project.
+    // Their grants stay separate from automatic project MCP edits.
+    edit: 'ask',
     bash: 'ask',
     webfetch: 'ask',
     doom_loop: 'ask',

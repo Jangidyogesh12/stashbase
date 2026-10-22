@@ -441,8 +441,6 @@ export class AgentSession implements AttributedAgentSession {
           // Apply the shared Access choice when the native session starts.
           // Later changes still use the SDK's live setPermissionMode API.
           permissionMode: this.access,
-          // Project documents use StashBase transactions and their version checks.
-          disallowedTools: ['Edit', 'MultiEdit', 'Write'],
           // Preserve Claude's native preset, then append the Chat's chosen
           // Persona plus StashBase's internal project routing policy. The
           // policy is never stored in the Persona.

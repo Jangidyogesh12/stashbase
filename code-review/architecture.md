@@ -575,12 +575,13 @@ stable status without download, retry, or a new durable demand latch.
   authority. `create_project` needs an explicit request or visible approval.
 - Shared instructions require StashBase `edit_file` for existing project
   documents and `write_file` for creation, including after a failed native attempt.
-  Claude removes native Edit/MultiEdit/Write from its tools and shares the bounded
-  MCP Edit-mode approval predicate with Codex in `server/agent-file-permissions.ts`; OpenQuill denies the
-  native edit permission shared by edit/write/patch. Codex has no independently
-  verified native-edit disable switch in the current app-server integration, so
-  its routing remains guidance, as it does for Antigravity's native writes. Shells and subagents are not a filesystem
-  isolation guarantee. Turn review therefore continues to detect all scanned
+  Explicitly requested external writes use native tools under runtime permissions;
+  project MCP scope, conversation ownership, and project turn review do not expand.
+  Claude exposes native Edit/MultiEdit/Write; OpenQuill asks for the native edit
+  permission shared by edit/write/patch and denies it in Plan. Native writes do
+  not receive the shared bounded MCP Edit-mode grant in
+  `server/agent-file-permissions.ts`. Project tool routing is guidance, not a
+  filesystem isolation guarantee. Turn review continues to detect all scanned
   Markdown changes regardless of the writing tool. External MCP clients have no
   app-owned turn socket and do not receive Chat turn-review cards.
 - Codex modes use on-request approval with mode-specific sandbox/review policy;

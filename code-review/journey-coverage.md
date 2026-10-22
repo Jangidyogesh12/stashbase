@@ -1570,6 +1570,19 @@ ESM imports on Windows.
 This establishes adapter/native protocol behavior, not live-model judgment,
 the owner's X script, or a released desktop build.
 
+**Requested external writes (2026-10-22):** `agent-runtime-instructions.ts` routes
+requested external output through native tools without changing the chat's
+project. Claude no longer removes its native write tools; Default asks instead
+of denying native edit/write/patch, and Plan still denies changes. Adapter tests
+cover approval and mode handling. The pinned OpenCode smoke exercises real
+external file creation, editing, rejected overwrite, and Plan refusal with a
+controlled gateway. A driven source desktop pass (2026-10-23), using the built
+renderer/server, real bundled runtime, and a controlled model gateway, displayed
+the external-file approvals, created the file after Allow, and preserved its
+content after Reject on a subsequent overwrite. The empty project stayed empty.
+Live-provider routing and packaged desktop behavior remain unproven. External
+changes are outside project turn review.
+
 **Explicit external reads (2026-10-07):** `agent-runtime-instructions.ts` now
 makes the bound project the default read/search scope and routes explicitly
 requested external paths through native tools under runtime permissions.
@@ -2381,13 +2394,13 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   and real document services, clicks both Open and a local Markdown link from
   Chats. Both select Documents and display the file while retaining the same
   agent session and unfinished follow-up.
-- **File tool routing (2026-10-08):** shared runtime instructions require
+- **File tool routing (2026-10-22):** shared runtime instructions require
   `edit_file` for existing documents and `write_file` for new ones; `suggest_edits`
   and its approval exceptions are removed from HTTP/MCP and all built-in runtimes.
-  Claude retains `alwaysLoad` for StashBase MCP and removes native edit/write
-  tools; OpenQuill denies native edits. Codex tool routing remains an instruction,
-  not a verified native-tool gate. Shell/subagent writes remain detectable by
-  the common turn scan. `project-file-mutations.test.ts` covers edits of empty
+  Claude retains `alwaysLoad` for StashBase MCP. Native write tools remain
+  available for requested external output under runtime permissions; project
+  tool routing is an instruction, not a native-tool gate. Shell/subagent writes
+  remain detectable by the common turn scan. `project-file-mutations.test.ts` covers edits of empty
   files, nonempty-match rejection and stale versions through real MCP.
 - **Driven runtime pass (2026-10-08):** the production renderer in a source
   Electron launch, with a disposable project and a project-local MCP port

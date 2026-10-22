@@ -327,7 +327,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     .find((candidate) => candidate.name === agent)
     ?.permission.filter((rule) => (rule.permission === permission || rule.permission === '*') && rule.pattern === '*').at(-1)?.action;
   assert.equal(actionFor('stashbase-folder', 'bash'), 'ask');
-  assert.equal(actionFor('stashbase-folder', 'edit'), 'deny');
+  assert.equal(actionFor('stashbase-folder', 'edit'), 'ask');
   assert.equal(actionFor('stashbase-folder', 'stashbase_edit_file'), 'ask');
   assert.equal(actionFor('stashbase-folder', 'stashbase_write_file'), 'ask');
   assert.equal(actionFor('stashbase-folder', 'external_directory'), 'ask');
@@ -490,8 +490,9 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   await runPanelTurn();
   assert.equal(fs.readFileSync(modeFile, 'utf8'), 'Edit allowed', 'Plan must reject shell writes');
   socket.request({ t: 'set-mode', mode: 'default' });
+  let allowPermission = true;
   socket.on('server-event', (event: { t: string; id?: string }) => {
-    if (event.t === 'permission') socket.request({ t: 'permission-reply', id: event.id, allow: true });
+    if (event.t === 'permission') socket.request({ t: 'permission-reply', id: event.id, allow: allowPermission });
   });
   nextTool = { name: 'stashbase_write_file', arguments: JSON.stringify({ path: modeFile, content: 'Ask approved' }) };
   await runPanelTurn();
@@ -525,6 +526,27 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.equal(reviews.length, 2);
   assert.equal(reviews[1].max_tokens, 256);
   delayedReview = undefined;
+
+  stage = 'external native writes';
+  socket.request({ t: 'set-mode', mode: 'acceptEdits' });
+  const externalOutput = path.join(outside, 'draft.txt');
+  const externalStart = socket.events.length;
+  nextTool = { name: 'write', arguments: JSON.stringify({ filePath: externalOutput, content: 'Requested external draft' }) };
+  await runPanelTurn(false, `Create ${externalOutput} with the requested draft.`);
+  assert.equal(fs.readFileSync(externalOutput, 'utf8'), 'Requested external draft');
+  assert.ok(socket.events.slice(externalStart).some(event => event.t === 'permission'), 'Edit must ask for external native writes');
+  nextTool = { name: 'edit', arguments: JSON.stringify({ filePath: externalOutput, oldString: 'Requested', newString: 'Revised' }) };
+  await runPanelTurn(false, `Revise ${externalOutput}.`);
+  assert.equal(fs.readFileSync(externalOutput, 'utf8'), 'Revised external draft');
+  allowPermission = false;
+  nextTool = { name: 'write', arguments: JSON.stringify({ filePath: externalOutput, content: 'Rejected overwrite' }) };
+  await runPanelTurn(false, `Overwrite ${externalOutput}.`);
+  assert.equal(fs.readFileSync(externalOutput, 'utf8'), 'Revised external draft', 'rejection must preserve the external file');
+  allowPermission = true;
+  socket.request({ t: 'set-mode', mode: 'plan' });
+  nextTool = { name: 'write', arguments: JSON.stringify({ filePath: externalOutput, content: 'Plan overwrite' }) };
+  await runPanelTurn(false, `Discuss changes to ${externalOutput}.`);
+  assert.equal(fs.readFileSync(externalOutput, 'utf8'), 'Revised external draft', 'Plan must still refuse native writes');
 
   socket.request({ t: 'set-mode', mode: 'acceptEdits' });
   stage = 'empty response recovery';

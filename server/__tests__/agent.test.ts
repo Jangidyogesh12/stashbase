@@ -88,7 +88,9 @@ test("Claude appends the Chat's Persona before hidden StashBase routing policy",
     undefined,
     ((request: { options: { systemPrompt?: { append?: string }; disallowedTools?: string[] } }) => {
       appended = request.options.systemPrompt?.append ?? '';
-      assert.deepEqual(request.options.disallowedTools, ['Edit', 'MultiEdit', 'Write']);
+      for (const tool of ['Edit', 'MultiEdit', 'Write']) {
+        assert.ok(!request.options.disallowedTools?.includes(tool), `${tool} must remain available for external files`);
+      }
       return fakeClaudeQuery();
     }) as never,
     () => '/fake/claude',
@@ -105,6 +107,7 @@ test("Claude appends the Chat's Persona before hidden StashBase routing policy",
   assert.match(appended, /Default file reads and searches to the bound project/);
   assert.match(appended, /explicitly specifies files or directories outside the project/);
   assert.match(appended, /native filesystem or shell tools.*runtime permissions/);
+  assert.match(appended, /create or modify files outside the project.*native filesystem or shell tools/);
   assert.doesNotMatch(appended, /Every file operation and search targets the bound project only/);
   assert.match(appended, /read_file/);
   assert.match(appended, /do not install or run a separate parser/i);
@@ -268,6 +271,16 @@ test('Claude permission callback asks for mutations and unknown tools, and settl
   assert.equal(outsidePermission.toolUseId, 'outside-edit');
   ws.emit('message', JSON.stringify({ t: 'permission-reply', id: outsidePermission.id, allow: false }));
   assert.equal((await outsideEdit).behavior, 'deny');
+  for (const name of ['Write', 'Edit', 'MultiEdit']) {
+    const input = { file_path: path.join(external, 'requested.txt'), content: 'External draft' };
+    const pending = canUseTool(name, input, { signal: new AbortController().signal, toolUseID: `external-${name}` });
+    await settle();
+    const approval = permissionEvents().at(-1);
+    assert.equal(approval.toolUseId, `external-${name}`, 'external native writes ask instead of receiving a project grant');
+    const allow = name !== 'MultiEdit';
+    ws.emit('message', JSON.stringify({ t: 'permission-reply', id: approval.id, allow }));
+    assert.equal((await pending).behavior, allow ? 'allow' : 'deny');
+  }
   const controller = new AbortController();
   const pending = canUseTool('mcp__stashbase__move_file', {}, { signal: controller.signal, toolUseID: 'abort' });
   await settle();

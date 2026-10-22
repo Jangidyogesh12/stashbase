@@ -48,6 +48,12 @@ permissions, with current model and tool choices checked before use.
   through native tools, subject to runtime permissions. It does not move the
   conversation or create an implicit global search. Project MCP tools retain
   their project boundary.
+- Requested output may also live outside the project. The agent creates or
+  modifies those files through native tools under the selected runtime's
+  permissions, without requiring import or moving the conversation. Native
+  writes remain available; Default asks for them in Ask, Edit, and Auto, while
+  Plan refuses changes. Project text edits use project file tools. External
+  files do not become project search results or participate in project turn review.
 
 - Capture text, context, and choices on Send. Clear only the accepted snapshot.
   Refused delivery retains it; uncertain delivery forbids automatic resend.
@@ -190,7 +196,7 @@ permissions, with current model and tool choices checked before use.
 - Every runtime works as an agent in StashBase, the reader's second brain.
   Its default role covers thinking and writing in ordinary projects; it can
   also perform programming and configuration work when the reader requests it,
-  within the same project and session permissions. Document viewer and search
+  within session permissions. Document viewer and search
   formats do not restrict Agent text-file access. A persona can narrow that role.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.

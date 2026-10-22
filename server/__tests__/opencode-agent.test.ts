@@ -417,6 +417,8 @@ for (const access of ['default', 'acceptEdits', 'plan', 'auto'] as const) {
       ['edit', 'stashbase_edit_file', { path: path.join(folder, 'note.md') }],
       ['write', 'stashbase_write_file', { path: path.join(folder, 'new.md') }],
       ['escape', 'stashbase_write_file', { path: path.join(folder, 'escape', 'new.md') }],
+      ['external-write', 'write', { filePath: path.join(outside, 'new.txt'), content: 'External draft' }],
+      ['external-edit', 'edit', { filePath: path.join(outside, 'draft.txt'), oldString: 'old', newString: 'new' }],
       ['delete', 'stashbase_delete_file', { path: path.join(folder, 'note.md') }],
       ['command', 'bash', { command: 'node workflows/scripts/x-search.mjs 24' }],
     ] as const) {
@@ -439,7 +441,7 @@ for (const access of ['default', 'acceptEdits', 'plan', 'auto'] as const) {
     }
     harness.send({ t: 'permission-reply', id: 'unrequested', allow: true });
     await settle();
-    assert.equal(harness.replies.length, 5);
+    assert.equal(harness.replies.length, 7);
   });
 }
 
@@ -641,7 +643,7 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
   assert.equal(config.autoupdate, false);
   assert.equal(config.share, 'disabled');
   assert.deepEqual(config.enabled_providers, ['stashbase']);
-  assert.equal(config.permission?.edit, 'deny');
+  assert.equal(config.permission?.edit, 'ask');
   assert.equal(config.permission?.bash, 'ask');
   assert.equal(config.permission?.external_directory, 'ask');
   assert.equal(config.agent?.['stashbase-folder']?.mode, 'primary');
