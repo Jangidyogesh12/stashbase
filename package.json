@@ -252,7 +252,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-    "createStartMenuShortcut": true
+      "createStartMenuShortcut": true
     },
     "linux": {
       "category": "Office",
