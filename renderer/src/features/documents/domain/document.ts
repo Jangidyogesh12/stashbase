@@ -1,8 +1,9 @@
 /** Versioned editor state and explicit save/conflict decisions for one open source. */
+import { isExternalSource } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { basePathName } from '@/shared/utils/file-path';
 
-import type { DocumentTextFormat } from './document-format';
+import { documentTextFormat, type DocumentTextFormat } from './document-format';
 import type { DocumentRevision } from './revision';
 
 export interface DocumentScope {
@@ -132,7 +133,11 @@ export function sourceName(source: SourceReference): string {
   return basePathName(source.path);
 }
 
+/** A document is edited where it lives: in the window's own project, or as an
+ *  external text file the reader dropped in, which saves through its grant. A
+ *  source from another project folder is only read here. */
 export function documentAccess(source: SourceReference, activeFolderPath: string): DocumentAccess {
+  if (isExternalSource(source)) return documentTextFormat(source.path) ? 'editable' : 'read-only';
   return source.folderPath === activeFolderPath ? 'editable' : 'read-only';
 }
 

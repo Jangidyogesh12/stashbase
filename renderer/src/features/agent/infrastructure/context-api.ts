@@ -19,7 +19,7 @@ type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 function resolveFailure({ response, serverMessage }: TransportFailure): AgentContextError | null {
   const cause = serverMessage === null ? undefined : { cause: new Error(serverMessage) };
   if (response.status === 404) {
-    return new AgentContextError('not-found', 'That file is no longer in this folder.', cause);
+    return new AgentContextError('not-found', 'That file is no longer in this project.', cause);
   }
   return response.status === 415
     ? new AgentContextError('unsupported', 'This file type cannot be given to the agent.', cause)

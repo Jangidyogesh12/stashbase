@@ -10,6 +10,7 @@ import {
   type ViewerFormat,
 } from '@/contracts/file-formats';
 import type { AgentScope } from '@/features/agent/domain/session';
+import { isExternalSource } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { basePathName } from '@/shared/utils/file-path';
 
@@ -31,6 +32,9 @@ export type AgentContextItem =
       format: AgentSourceFormat;
       /** Conversion version seen when the item was bound; null when unknown. */
       boundVersion: number | null;
+      /** Bound by dropping the file on the document pane rather than by the
+       *  reader's own choice here, so it leaves the draft with the file's tab. */
+      dropped?: true | undefined;
     }
   | {
       kind: 'passage';
@@ -60,12 +64,20 @@ function quoteDigest(quote: string): string {
   return (hash >>> 0).toString(16);
 }
 
+/** An external file is named by its own path, so binding it again under a
+ *  later read grant is still the same item. */
+function sourceKey(source: SourceReference): string {
+  return isExternalSource(source)
+    ? `external:${source.path}`
+    : `${source.folderPath}/${source.path}`;
+}
+
 export function contextItemKey(item: AgentContextItem): string {
   switch (item.kind) {
     case 'source':
-      return `source:${item.source.folderPath}/${item.source.path}`;
+      return `source:${sourceKey(item.source)}`;
     case 'passage':
-      return `passage:${item.source.folderPath}/${item.source.path}#${quoteDigest(item.quote)}`;
+      return `passage:${sourceKey(item.source)}#${quoteDigest(item.quote)}`;
     case 'transient':
       return `transient:${item.path}`;
   }
@@ -217,6 +229,20 @@ export interface ContextEnvironment {
   hasUpload?: ((path: string) => boolean) | undefined;
 }
 
+function passageValidation(
+  item: Extract<AgentContextItem, { kind: 'passage' }>,
+  key: string,
+): ContextValidation {
+  return item.quote.length > PASSAGE_QUOTE_LIMIT
+    ? {
+        item,
+        key,
+        reason: `This passage is longer than ${PASSAGE_QUOTE_LIMIT.toLocaleString('en-US')} characters. Select less and ask again.`,
+        status: 'stale',
+      }
+    : { item, key, reason: null, status: 'ready' };
+}
+
 function validateItem(item: AgentContextItem, environment: ContextEnvironment): ContextValidation {
   const key = contextItemKey(item);
   if (item.kind === 'transient')
@@ -228,26 +254,25 @@ function validateItem(item: AgentContextItem, environment: ContextEnvironment): 
           status: 'stale',
         }
       : { item, key, reason: null, status: 'ready' };
+  // An external file is read from its own path, so the project's listing and
+  // preparation say nothing about it; only a passage's length can refuse it.
+  if (isExternalSource(item.source)) {
+    return item.kind === 'passage'
+      ? passageValidation(item, key)
+      : { item, key, reason: null, status: 'ready' };
+  }
   if (environment.scope.kind !== 'folder' || environment.scope.path !== item.source.folderPath) {
-    return { item, key, reason: 'This file belongs to a different folder.', status: 'stale' };
+    return { item, key, reason: 'This file belongs to a different project.', status: 'stale' };
   }
   if (
     environment.listing &&
     !environment.listing.files.some((file) => file.path === item.source.path)
   ) {
-    return { item, key, reason: 'This file is no longer in the folder.', status: 'stale' };
+    return { item, key, reason: 'This file is no longer in the project.', status: 'stale' };
   }
   // The quote travels in the prompt, so neither a later edit nor preparation
   // changes what a passage says; only its length can refuse it.
-  if (item.kind === 'passage')
-    return item.quote.length > PASSAGE_QUOTE_LIMIT
-      ? {
-          item,
-          key,
-          reason: `This passage is longer than ${PASSAGE_QUOTE_LIMIT.toLocaleString('en-US')} characters. Select less and ask again.`,
-          status: 'stale',
-        }
-      : { item, key, reason: null, status: 'ready' };
+  if (item.kind === 'passage') return passageValidation(item, key);
   const version = environment.versions?.[item.source.path];
   if (version !== undefined && item.boundVersion !== null && version !== item.boundVersion)
     return {
@@ -355,8 +380,8 @@ export interface AgentScopeEnvironment {
    *  list can lead with what the user is looking at. */
   openPaths?: readonly string[];
   /** The document in front of the reader while the Agent docks beside it,
-   *  which the composer offers to attach. Null in Chats, where no document
-   *  is on screen. */
+   *  which the composer offers to attach: a source of this folder, or an
+   *  external file. Null in Chats, where no document is on screen. */
   activeSource?: SourceReference | null;
   readiness: Readonly<Record<string, AgentContextReadiness>>;
   versions: Readonly<Record<string, number>>;

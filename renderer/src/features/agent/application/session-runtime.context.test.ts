@@ -158,7 +158,7 @@ describe('AgentSessionRuntime context', () => {
     expect(test.sent).toEqual([]);
     expect(runtime.store.getState()).toMatchObject({
       context: [reportSource],
-      contextIssue: 'This file is no longer in the folder.',
+      contextIssue: 'This file is no longer in the project.',
       draft: 'Summarize @papers/report.pdf',
     });
     runtime.setDraft('Summarize @papers/report.pdf again');
@@ -171,7 +171,7 @@ describe('AgentSessionRuntime context', () => {
       agent: 'codex',
       context: agentContextPort({
         resolve: vi.fn(async () => {
-          throw new AgentContextError('not-found', 'That file is no longer in this folder.');
+          throw new AgentContextError('not-found', 'That file is no longer in this project.');
         }),
       }),
       id: 'chat-1',
@@ -184,7 +184,7 @@ describe('AgentSessionRuntime context', () => {
 
     await expect(runtime.sendPrompt('Read it')).resolves.toEqual({ ok: false, reason: 'stale' });
     expect(test.sent).toEqual([]);
-    expect(runtime.store.getState().contextIssue).toBe('That file is no longer in this folder.');
+    expect(runtime.store.getState().contextIssue).toBe('That file is no longer in this project.');
   });
 
   it('sends a queued prompt with the context it was queued with', async () => {

@@ -75,7 +75,7 @@ describe('document source API', () => {
       lost.load({ folderPath: '/project/notes', path: 'notes.txt' }, new AbortController().signal),
     ).rejects.toMatchObject({
       kind: 'scope-lost',
-      message: 'The document folder is no longer available in this window.',
+      message: "The document's project is no longer available in this window.",
     });
   });
 

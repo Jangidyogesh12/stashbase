@@ -21,11 +21,14 @@ import {
   documentTextSourceRequestSchema,
   documentTextSourceResponseSchema,
 } from '@/protocols/http/files';
+import { externalFileToken } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { encodePathSegments } from '@/shared/utils/file-path';
 
-const READ_SCOPE_LOST = 'The document folder is no longer available in this window.';
-const SAVE_SCOPE_LOST = 'The document folder is no longer active in this window.';
+import { externalFileRoute } from './external-file-api';
+
+const READ_SCOPE_LOST = "The document's project is no longer available in this window.";
+const SAVE_SCOPE_LOST = "The document's project is no longer active in this window.";
 
 function cause(serverMessage: string | null): ErrorOptions | undefined {
   return serverMessage === null ? undefined : { cause: new Error(serverMessage) };
@@ -112,6 +115,25 @@ function documentPath(folderPath: string, entryPath: string): string {
   return `/api/files/${encodePathSegments(entryPath)}?${query}`;
 }
 
+/** An external file reads through its grant; a project file by its folder. */
+function textSourcePath(source: SourceReference): string {
+  const token = externalFileToken(source);
+  if (token) return externalFileRoute(token, '/text');
+  const identity = documentTextSourceRequestSchema.safeParse(source);
+  if (!identity.success) {
+    throw new DocumentSourceError('unavailable', 'The document identity is invalid.');
+  }
+  return documentPath(identity.data.folderPath, identity.data.path);
+}
+
+/** An external file saves through its grant; a project file by its folder. */
+function savePath(source: SourceReference, identity: { folderPath: string; path: string }): string {
+  const token = externalFileToken(source);
+  return token
+    ? externalFileRoute(token, '/text')
+    : documentPath(identity.folderPath, identity.path);
+}
+
 export function createDocumentSourceAdapter(client: HttpClient): DocumentSourcePort {
   return {
     async load(source, signal) {
@@ -121,15 +143,11 @@ export function createDocumentSourceAdapter(client: HttpClient): DocumentSourceP
           'This document format is not available in the text source loader.',
         );
       }
-      const identity = documentTextSourceRequestSchema.safeParse(source);
-      if (!identity.success) {
-        throw new DocumentSourceError('unavailable', 'The document identity is invalid.');
-      }
       const body = await request(client, {
         error: DocumentSourceError,
         failure: readScopeFailure,
         failureSchema: documentTextSourceFailureSchema,
-        path: documentPath(identity.data.folderPath, identity.data.path),
+        path: textSourcePath(source),
         schema: documentTextSourceResponseSchema,
         signal,
       });
@@ -164,7 +182,7 @@ export function createDocumentSourceAdapter(client: HttpClient): DocumentSourceP
         source,
         await request(client, {
           ...saveRequest(
-            documentPath(data.folderPath, data.path),
+            savePath(source, data),
             { content: data.content, overwrite: true },
             signal,
           ),
@@ -186,7 +204,7 @@ export function createDocumentSourceAdapter(client: HttpClient): DocumentSourceP
         source,
         await request(client, {
           ...saveRequest(
-            documentPath(data.folderPath, data.path),
+            savePath(source, data),
             { baseVersion: data.baseVersion, content: data.content },
             signal,
           ),

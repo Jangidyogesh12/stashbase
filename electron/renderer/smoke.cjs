@@ -283,6 +283,10 @@ app
       await new Promise((resolve) => setTimeout(resolve, 25));
       const popup = window.open('https://example.com/');
       return {
+        // A File built in script has no location on disk, so it can never
+        // name a file for main to grant.
+        externalFilesScripted: await window.stashbase.externalFiles.open(new File(['# x'], 'scripted.md')),
+        externalFilesFrozen: Object.isFrozen(window.stashbase.externalFiles),
         externalNavigation: await window.stashbase.externalNavigation.open('https://example.com/docs'),
         externalNavigationFrozen: Object.isFrozen(window.stashbase.externalNavigation),
         folderResult: await window.stashbase.project.chooseFolder(),
@@ -325,12 +329,18 @@ app
   `);
 
     assert.deepEqual(result, {
+      externalFilesFrozen: true,
+      externalFilesScripted: {
+        failure: { kind: 'invalid-request', message: 'This file has no location on disk.' },
+        ok: false,
+      },
       externalNavigation: { ok: true },
       externalNavigationFrozen: true,
       notificationsFrozen: true,
       notificationsRead: { enabled: true, categories: { 'agent-confirmation': true, 'agent-completed': true, 'agent-failed': true }, supported: false, settingsTarget: 'manual', delivery: 'unknown' },
       folderResult: { ok: true, folderPath: null },
       globalKeys: [
+        'externalFiles',
         'externalNavigation',
         'notifications',
         'runtime',

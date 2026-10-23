@@ -21,6 +21,7 @@ const {
   createServerArguments,
   createServerChildEnvironment,
   probeServerHealth,
+  readDevelopmentExternalFileToken,
   requestJson,
   startServer,
 } = require('./main-probe.cjs');
@@ -125,6 +126,7 @@ const RENDERER_ORIGIN = USE_DEV_VITE ? SERVER_URL : APP_ORIGIN;
 const SERVER_PROTOCOL_VERSION = 1;
 const SERVER_SHUTDOWN_TOKEN = crypto.randomBytes(32).toString('hex');
 const OAUTH_RETURN_TOKEN = crypto.randomBytes(32).toString('hex');
+const EXTERNAL_FILE_TOKEN = crypto.randomBytes(32).toString('hex');
 const PROJECT_ROOT = app.isPackaged ? app.getAppPath() : path.resolve(__dirname, '..');
 const SERVER_ENTRY = app.isPackaged
   ? path.join(PROJECT_ROOT, 'dist', 'server', 'index.mjs')
@@ -152,6 +154,7 @@ let projectLifecycleCapability = null;
 let workspaceSessionCapability = null;
 let windowLifecycleCapability = null;
 let externalNavigationCapability = null;
+let externalFilesCapability = null;
 let updatesCapability = null;
 let textServicesCapability = null;
 let notificationsCapability = null;
@@ -203,6 +206,13 @@ function installReplacementBoundary() {
     'dist',
     'electron',
     'external-navigation',
+    'handler.cjs',
+  ));
+  const externalFiles = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'external-files',
     'handler.cjs',
   ));
   const lifecycle = require(path.join(
@@ -315,6 +325,7 @@ function installReplacementBoundary() {
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
   windowLifecycleCapability = windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY;
   externalNavigationCapability = externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY;
+  externalFilesCapability = externalFiles.EXTERNAL_FILES_CAPABILITY;
   updatesCapability = updates.UPDATES_CAPABILITY;
   textServicesCapability = textServices.TEXT_SERVICES_CAPABILITY;
   scheduledTasksCapability = scheduledTasks.SCHEDULED_TASKS_CAPABILITY;
@@ -338,6 +349,40 @@ function installReplacementBoundary() {
       replacementWindowCapabilities.get(win)?.has(capability) === true
     ),
     openExternal: (url) => shell.openExternal(url),
+  });
+  // A dropped file reaches the server only through main: preload reads the
+  // path off the File, main stamps this window's identity, and the
+  // process-private token keeps other local clients from granting reads.
+  externalFiles.registerExternalFiles({
+    BrowserWindow,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+    windowIdFor: (win) => windowRegistry.idForWindow(win) ?? null,
+    register: async (windowId, filePath) => {
+      const body = JSON.stringify({ path: filePath });
+      const send = (token) => requestJson(SERVER_PORT, '/api/internal/external-files', 10_000, {
+        method: 'POST',
+        headers: {
+          'content-length': Buffer.byteLength(body),
+          'content-type': 'application/json',
+          'x-stashbase-external-file-token': token,
+          'x-stashbase-window-id': windowId,
+        },
+        body,
+      });
+      let result = await send(EXTERNAL_FILE_TOKEN);
+      // A source launch may have reused a development server it did not
+      // start; that server left its own token for main instead.
+      const developmentToken = !app.isPackaged && result.statusCode === 403
+        ? readDevelopmentExternalFileToken()
+        : null;
+      if (developmentToken) result = await send(developmentToken);
+      return result.reachable && result.statusCode === 200 ? result.body : null;
+    },
   });
   boundary.registerDialog({
     BrowserWindow,
@@ -726,6 +771,7 @@ function spawnServer(instanceId) {
       packagedEnv,
       shutdownToken: SERVER_SHUTDOWN_TOKEN,
       oauthReturnToken: OAUTH_RETURN_TOKEN,
+      externalFileToken: EXTERNAL_FILE_TOKEN,
       instanceId,
       authNetwork: authNetworkBridge,
     }),
@@ -1018,6 +1064,7 @@ async function createWindow({ background = false, reopensProject = false } = {})
     workspaceSessionCapability &&
     windowLifecycleCapability &&
     externalNavigationCapability &&
+    externalFilesCapability &&
     updatesCapability &&
     textServicesCapability &&
     notificationsCapability &&
@@ -1031,6 +1078,7 @@ async function createWindow({ background = false, reopensProject = false } = {})
         workspaceSessionCapability,
         windowLifecycleCapability,
         externalNavigationCapability,
+        externalFilesCapability,
         updatesCapability,
         textServicesCapability,
         notificationsCapability,

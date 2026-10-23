@@ -9,6 +9,7 @@ import {
 import { sourceReadiness } from '@/features/preparation/public';
 import type { FolderIndexStatus } from '@/features/preparation/public';
 import type { WorkspaceListing } from '@/features/workspace/public';
+import { isExternalSource } from '@/shared/domain/external-source';
 
 export interface AgentEnvironment {
   /** What the Agent may bind context against, or null while the folder's
@@ -43,8 +44,14 @@ export function useAgentEnvironment(
 ): AgentEnvironment {
   const openSources = useOpenDocumentSources(documents);
   const activeSource = useActiveDocumentSource(documents);
+  // An external file in front is offered too: it belongs to no folder, and
+  // the chat beside it reads it by its own path.
   const shownSource =
-    documentsShown && activeSource?.folderPath === folderPath ? activeSource : null;
+    documentsShown &&
+    activeSource &&
+    (activeSource.folderPath === folderPath || isExternalSource(activeSource))
+      ? activeSource
+      : null;
 
   // The selected folder, not the mounted workspace: a chat is scoped the
   // moment the reader picks a folder, before its workspace has settled.

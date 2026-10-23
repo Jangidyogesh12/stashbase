@@ -14,6 +14,8 @@ await build({
     'bug-report/review-ipc': 'electron/bug-report/review-ipc.ts',
     'bug-report/review-preload': 'electron/bug-report/review-preload.ts',
     'bug-report/review-window-preload': 'electron/bug-report/review-window-preload.ts',
+    'external-files/handler': 'electron/external-files/handler.ts',
+    'external-files/preload': 'electron/external-files/preload.ts',
     'external-navigation/handler': 'electron/external-navigation/handler.ts',
     'external-navigation/preload': 'electron/external-navigation/preload.ts',
     'project/dialog': 'electron/project/dialog.ts',

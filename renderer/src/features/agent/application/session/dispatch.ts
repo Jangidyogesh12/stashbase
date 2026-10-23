@@ -30,6 +30,7 @@ import {
   type AgentSessionAction,
   type AgentSessionState,
 } from '@/features/agent/domain/session';
+import { isExternalSource } from '@/shared/domain/external-source';
 
 export type AgentSendResult =
   | { ok: true }
@@ -104,7 +105,10 @@ export function createPromptDispatcher({
   ): Promise<ResolvedContextLine[] | 'stale'> => {
     const results = await Promise.allSettled(
       context.map(async (item): Promise<ResolvedContextLine> => {
-        if (item.kind !== 'source') return { item, resolved: null };
+        // An external file has no project identity to resolve; the Agent
+        // reads it by its own path.
+        if (item.kind !== 'source' || isExternalSource(item.source))
+          return { item, resolved: null };
         return {
           item,
           resolved: await contextPort.resolve(item.source, signal, telemetryTurnId?.()),
@@ -190,7 +194,7 @@ export function createPromptDispatcher({
           return { ok: false, reason: 'stale' };
         }
         if (lines === 'stale') {
-          refuse('That file is no longer in this folder.');
+          refuse('That file is no longer in this project.');
           return { ok: false, reason: 'stale' };
         }
         if (agentTurnIsActive(current.connection)) return { ok: false, reason: 'busy' };

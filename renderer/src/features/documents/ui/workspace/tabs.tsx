@@ -22,6 +22,7 @@ import type { NewTab } from '@/features/documents/hooks/use-new-tab';
 import { documentViewerEntry } from '@/features/documents/ui/source/registry';
 import type { IconComponentProps } from '@/lib/icon-context';
 import { cn } from '@/lib/utils';
+import { isExternalSource } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { writeSourceDrag } from '@/shared/utils/source-drag';
 
@@ -99,7 +100,7 @@ function DocumentTab({
       onKeyDown={(event) => onKeyDown(event, value)}
       onTrailingClick={() => onClose(value)}
       ref={(element) => register(value, element)}
-      title={`${source.folderPath}/${source.path}${dirty ? ' — Unsaved changes' : ''}`}
+      title={`${isExternalSource(source) ? source.path : `${source.folderPath}/${source.path}`}${dirty ? ' · unsaved changes' : ''}`}
       trailingIcon={dirty ? UnsavedIndicator : X}
       value={value}
     />

@@ -111,7 +111,41 @@ export const VIEWER_FORMATS = [
 
 export type ViewerFormat = (typeof VIEWER_FORMATS)[number];
 
+/** The viewer format a file name's extension claims; an unclaimed name is
+ *  `generic`. The server's listing reaches the same answer for every name it
+ *  shows, so a tab and a tree row agree. */
+export function viewerFormatOfPath(path: string): ViewerFormat {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  const dot = name.lastIndexOf('.');
+  const extension = dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+  const claims = (extensions: readonly string[]) => extensions.includes(extension);
+  if (claims(MARKDOWN_NOTE_EXTENSIONS)) return 'md';
+  if (claims(STRUCTURED_DATA_EXTENSIONS)) return 'json';
+  if (claims(PLAIN_TEXT_EXTENSIONS)) return 'txt';
+  if (claims(HTML_NOTE_EXTENSIONS)) return 'html';
+  if (claims(DOCX_EXTENSIONS)) return 'docx';
+  if (claims(PDF_EXTENSIONS)) return 'pdf';
+  if (claims(AUDIO_SOURCE_EXTENSIONS)) return 'audio';
+  return claims(IMAGE_SOURCE_EXTENSIONS) ? 'image' : 'generic';
+}
+
 /** Search and automatic Agent context may consume only these formats. */
 export function isRetrievableViewerFormat(format: ViewerFormat): format is Exclude<KnownViewerFormat, 'audio'> {
   return format !== 'generic' && format !== 'audio';
+}
+
+/**
+ * Formats an external file (one outside the project, dropped on the document
+ * pane) may open in place. Only a preview that needs nothing but the file
+ * itself qualifies: no prepared output and no neighbouring files. DOCX falls
+ * back to prepared output and HTML loads relative resources, so both must be
+ * copied into the project; audio and video qualify but are not needed.
+ * `generic` opens for UTF-8 text.
+ */
+export const EXTERNAL_FILE_VIEWER_FORMATS = ['md', 'json', 'txt', 'pdf', 'image', 'generic'] as const;
+
+export type ExternalFileViewerFormat = (typeof EXTERNAL_FILE_VIEWER_FORMATS)[number];
+
+export function isExternalFileViewerFormat(format: ViewerFormat): format is ExternalFileViewerFormat {
+  return (EXTERNAL_FILE_VIEWER_FORMATS as readonly string[]).includes(format);
 }

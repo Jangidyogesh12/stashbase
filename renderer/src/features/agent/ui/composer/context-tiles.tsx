@@ -1,18 +1,19 @@
 /**
  * Bound context outside the text. A visual source (an image or a PDF) is a
- * square tile like the composer's own thumbnails; a non-visual source sent
- * without a mention is a compact chip with its type glyph and name, and a
- * selected passage is the same chip with a quote glyph and its first words.
- * Tiles share one box surface, chips one hairline frame, and all one spring.
- * State reads as a dot and a word, and only a missing or failed source turns
- * red.
+ * square tile like the composer's own thumbnails; any other source bound
+ * without a mention, and a file the reader opened here, is a compact chip
+ * with its type glyph and name, and a selected passage is the same chip with
+ * a quote glyph and its first words. The draft and the sent turn make that
+ * choice with one predicate, so a file looks the same before and after it is
+ * sent. Tiles and chips are paper, a hairline with no fill, and share one
+ * spring. State reads as a dot and a word, and only a missing or failed
+ * source turns red.
  */
 import { AnimatePresence, motion } from 'framer-motion';
-import { TextQuote, X } from 'lucide-react';
+import { TextQuote } from 'lucide-react';
 
 import { FileThumbnail } from '@/components/ui/file-thumbnail';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
-import { Tooltip } from '@/components/ui/tooltip';
 import {
   contextItemKey,
   contextItemName,
@@ -21,14 +22,15 @@ import {
   type ContextStatus,
   type ContextValidation,
 } from '@/features/agent/domain/context';
+import { showsAsDocumentChip } from '@/features/agent/domain/draft-context';
 import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { spring } from '@/lib/springs';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-import { CHIP_FRAME, ChipCloseButton } from './chip';
-import { STATUS_WORD } from './mention-widgets';
+import { CHIP_FRAME, ChipRemove } from './chip';
+import { RemoveBadge, StatusLine, TileBox } from './tile-parts';
 
 type SourceItem = Extract<AgentContextItem, { kind: 'source' }>;
 type PassageItem = Extract<AgentContextItem, { kind: 'passage' }>;
@@ -51,71 +53,13 @@ export function isVisualSource(item: SourceItem): boolean {
   return item.format === 'image' || item.format === 'pdf';
 }
 
-/** The square every tile shares with `FileThumbnail`. */
-function TileBox({
-  children,
-  className,
-  size,
-  title,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  size: number;
-  title?: string;
-}) {
-  const shape = useShape();
-  return (
-    <div
-      className={cn(
-        'relative shrink-0 overflow-hidden border border-border bg-accent',
-        shape.bg,
-        className,
-      )}
-      style={{ height: size, width: size }}
-      title={title}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** State as form under the name: a dot and a word, never a colored tile. */
-function StatusLine({ status }: { status: Exclude<ContextStatus, 'ready'> }) {
-  const alarming = status === 'stale' || status === 'failed';
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center justify-center gap-1 text-ui-10 leading-tight font-medium',
-        alarming ? 'text-destructive' : 'text-muted-foreground',
-      )}
-    >
-      <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
-      {STATUS_WORD[status]}
-    </span>
-  );
-}
-
-/** The hover-revealed remove badge, the composer's own recipe: a fixed dark
- *  circle with a white X so it reads over any tile content. */
-function RemoveBadge({ name, onRemove }: { name: string; onRemove: () => void }) {
-  return (
-    <Tooltip content="Remove" side="top">
-      <button
-        aria-label={`Remove ${name}`}
-        className={cn(
-          'absolute top-1 right-1 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white opacity-0 transition-opacity duration-fast outline-none group-hover/tile:opacity-100 focus-visible:opacity-100',
-          focusRing(),
-        )}
-        onClick={(event) => {
-          event.stopPropagation();
-          onRemove();
-        }}
-        type="button"
-      >
-        <X size={12} strokeWidth={2.5} />
-      </button>
-    </Tooltip>
-  );
+/** Whether a bound source is drawn as a square tile rather than a chip. The
+ *  draft and the sent turn both ask this one question, so a file keeps its
+ *  look across the send: a visual source is a tile, unless the reader opened
+ *  it here, by a drop or as an external file, when it keeps the chip it was
+ *  offered as. */
+function showsAsSquareTile(item: SourceItem): boolean {
+  return isVisualSource(item) && !showsAsDocumentChip(item);
 }
 
 /** The retry a failed source offers. The frame differs between a tile and a
@@ -188,14 +132,25 @@ function SourceTile({
   );
 }
 
-/** A non-visual source: the glyph and name in one line, state beside them.
- *  It is sent context, so it appears in the transcript, not the draft. */
-function SourceChip({ item, onReprocess, reason, status = 'ready' }: SourceProps) {
+/** A source known by its name rather than its look: the glyph and name in one
+ *  line, state beside them. In a draft it carries its own remove. */
+function SourceChip({
+  item,
+  onRemove,
+  onReprocess,
+  reason,
+  status = 'ready',
+}: SourceProps & { onRemove?: (() => void) | undefined }) {
   const shape = useShape();
   const name = contextItemName(item);
   return (
     <div
-      className={cn(CHIP_FRAME, 'max-w-64 gap-1.5 pr-2.5 pl-2 text-foreground', shape.bg)}
+      className={cn(
+        CHIP_FRAME,
+        'max-w-64 gap-1.5 pl-2 text-foreground',
+        onRemove ? 'pr-0' : 'pr-2.5',
+        shape.bg,
+      )}
       title={reason ?? item.source.path}
     >
       <FileTypeIcon
@@ -216,6 +171,7 @@ function SourceChip({ item, onReprocess, reason, status = 'ready' }: SourceProps
           source={item.source}
         />
       )}
+      <ChipRemove name={name} onRemove={onRemove} />
     </div>
   );
 }
@@ -240,11 +196,7 @@ function PassageChip({
       <span className="max-w-32 shrink-0 truncate text-foreground">{name}</span>
       <span className="min-w-0 truncate text-muted-foreground">{passageExcerpt(item.quote)}</span>
       {status !== 'ready' && <StatusLine status={status} />}
-      {onRemove && (
-        <Tooltip content="Remove" side="top">
-          <ChipCloseButton label={`Remove ${name}`} onClick={onRemove} />
-        </Tooltip>
-      )}
+      <ChipRemove name={name} onRemove={onRemove} />
     </div>
   );
 }
@@ -301,7 +253,15 @@ export function DraftSourceTiles({
             role="listitem"
             transition={spring.fast}
           >
-            {item.kind === 'source' ? (
+            {item.kind === 'source' && !showsAsSquareTile(item) ? (
+              <SourceChip
+                item={item}
+                onRemove={() => onRemove(item)}
+                onReprocess={onReprocess}
+                reason={validation.reason}
+                status={validation.status}
+              />
+            ) : item.kind === 'source' ? (
               <SourceTile
                 item={item}
                 onReprocess={onReprocess}
@@ -325,7 +285,8 @@ export function DraftSourceTiles({
                 <span className="text-caption text-destructive">Unavailable</span>
               </div>
             )}
-            {item.kind !== 'passage' && (
+            {/* A chip carries its own remove; only a tile needs the badge. */}
+            {(item.kind === 'transient' || (item.kind === 'source' && showsAsSquareTile(item))) && (
               <RemoveBadge name={contextItemName(item)} onRemove={() => onRemove(item)} />
             )}
           </motion.div>
@@ -360,7 +321,7 @@ export function SentContextTiles({
     >
       {items.map((item) => {
         if (item.kind === 'source') {
-          return isVisualSource(item) ? (
+          return showsAsSquareTile(item) ? (
             <SourceTile item={item} key={contextItemKey(item)} size={size} />
           ) : (
             <SourceChip item={item} key={contextItemKey(item)} />

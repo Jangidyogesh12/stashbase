@@ -13,7 +13,8 @@ import { exactRegisteredFolderRootAsync, runWithFolderRoot, toSourcePath } from 
 import { sendError } from '../http.ts';
 
 
-const MIME: Record<string, string> = {
+/** Content types for files the asset routes serve, by lowercase extension. */
+export const ASSET_MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -63,7 +64,7 @@ export function mountFileAssetRoutes(app: express.Express): void {
           res.type('text/html').send(preparedHtml);
           return;
         }
-        res.type(MIME[ext] ?? 'application/octet-stream');
+        res.type(ASSET_MIME_TYPES[ext] ?? 'application/octet-stream');
         // Relative subresources keep the same URL across HTML reloads. Use
         // the source's precise identity instead of sendFile's size/mtime
         // validator, which can reuse stale bytes after an external write.

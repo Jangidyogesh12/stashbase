@@ -209,6 +209,10 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
             statusField,
             mentionDecorations,
             EditorView.lineWrapping,
+            // A dropped desktop file is the message box's attachment, never pasted text.
+            EditorView.domEventHandlers({
+              drop: (event) => Array.from(event.dataTransfer?.types ?? []).includes('Files'),
+            }),
             placeholderCompartment.current.of(placeholder(ctxRef.current.placeholder)),
             placeholderMotion.current.of([]),
             editable.current.of(EditorView.editable.of(!ctxRef.current.disabled)),

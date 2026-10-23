@@ -243,7 +243,7 @@ describe('Agent context composer', () => {
     });
 
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'This file belongs to a different folder.',
+      'This file belongs to a different project.',
     );
   });
 });

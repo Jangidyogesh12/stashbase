@@ -107,7 +107,7 @@ describe('startScheduledRun', () => {
     const { runtime, session } = setup(['topics.md']);
     await expect(
       startScheduledRun(runtime, agentCatalogPort(), request, new AbortController().signal),
-    ).resolves.toEqual({ reason: 'This file is no longer in the folder.', status: 'failed' });
+    ).resolves.toEqual({ reason: 'This file is no longer in the project.', status: 'failed' });
     expect(session.port.connect).not.toHaveBeenCalled();
     expect(runtime.store.getState().tabs.map((tab) => tab.id)).toEqual(['chat-1']);
   });

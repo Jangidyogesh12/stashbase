@@ -2,6 +2,9 @@
 
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const {
   probeServerHealth,
@@ -9,6 +12,7 @@ const {
   isCompatibleServerHealth,
   startServer,
   createServerChildEnvironment,
+  readDevelopmentExternalFileToken,
   waitForStableServerProbe,
   serverStartupTimeoutMs,
 } = require('./main-probe.cjs');
@@ -384,4 +388,20 @@ test('storage warning crosses a verified health probe without blocking source re
   assert.equal((await shared.probe(currentInstance)).preparationStorageWarning, undefined);
   body.preparationStorage = { ok: false, code: 'UNRECOGNIZED', message: warning };
   assert.equal((await shared.probe(currentInstance)).preparationStorageWarning, undefined);
+});
+
+test('main reads a development server\'s registration token only when it is well formed', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-dev-token-'));
+  try {
+    assert.equal(readDevelopmentExternalFileToken(home), null);
+    fs.mkdirSync(path.join(home, '.stashbase'));
+    const file = path.join(home, '.stashbase', 'dev-external-file-token');
+    fs.writeFileSync(file, 'not-a-token');
+    assert.equal(readDevelopmentExternalFileToken(home), null);
+    const token = 'a'.repeat(64);
+    fs.writeFileSync(file, `${token}\n`);
+    assert.equal(readDevelopmentExternalFileToken(home), token);
+  } finally {
+    fs.rmSync(home, { force: true, recursive: true });
+  }
 });

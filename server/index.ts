@@ -47,6 +47,8 @@ import { indexer } from './state.ts';
 import { checkPreparationStorage, closeStateDb } from './state-db.ts';
 import { requireFolder, withWindowContext } from './http.ts';
 import { mount as mountWindowContextRoutes } from './routes/window-context.ts';
+import { mount as mountExternalFileRoutes } from './routes/external-files.ts';
+import { externalFileRegistrationToken } from './external-files.ts';
 import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
 import { mount as mountProjectRoutes } from './routes/project.ts';
 import { mount as mountGalleryRoutes } from './routes/gallery.ts';
@@ -281,6 +283,9 @@ if (!DEV_VITE) {
 // before a window has an open folder, so mount them before the gate.
 mountWindowContextRoutes(app);
 mountProjectRoutes(app);
+// External files are read by grant token, never by a project path, so the
+// project gate below (whose `/asset` prefix they share) does not apply.
+mountExternalFileRoutes(app, { registrationToken: externalFileRegistrationToken() });
 // Gallery browsing works before any folder is open too.
 mountGalleryRoutes(app);
 

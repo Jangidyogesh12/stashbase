@@ -68,6 +68,28 @@ export function recordDocumentVisit(
   return { entries, index: entries.length - 1 };
 }
 
+/**
+ * Drops every visit to `source`, keeping the cursor on the same place where
+ * that place survives. An external file's read grant ends with its tab, so
+ * the history must not offer a step back to a file it can no longer read.
+ */
+export function forgetDocumentSource(
+  state: DocumentHistoryState,
+  source: SourceReference,
+): DocumentHistoryState {
+  if (!state.entries.some((visit) => sameSource(visit.source, source))) return state;
+  let index = state.index;
+  const entries: DocumentVisit[] = [];
+  state.entries.forEach((visit, position) => {
+    if (!sameSource(visit.source, source)) entries.push(visit);
+    else if (position <= state.index) index -= 1;
+  });
+  return {
+    entries,
+    index: entries.length === 0 ? -1 : Math.max(0, Math.min(index, entries.length - 1)),
+  };
+}
+
 /** The visit one step back, or null at the start of the history. */
 export function previousDocumentVisit(state: DocumentHistoryState): DocumentVisit | null {
   return state.index > 0 ? (state.entries[state.index - 1] ?? null) : null;

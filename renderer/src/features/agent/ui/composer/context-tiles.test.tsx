@@ -47,6 +47,49 @@ describe('bound context tiles', () => {
     expect(onRemove).toHaveBeenCalledWith(sourceItem('chart.png', 'image'));
   });
 
+  it('shows a file opened by a drop as the chip it was offered as, not a tile', async () => {
+    const onRemove = vi.fn();
+    const dropped: SourceItem = {
+      boundVersion: null,
+      dropped: true,
+      format: 'image',
+      kind: 'source',
+      source: {
+        folderPath: 'external:grant-token-abcdefghijklmn',
+        path: '/Users/reader/header-wave.png',
+      },
+    };
+    render(<DraftSourceTiles onRemove={onRemove} size={80} validations={[validation(dropped)]} />);
+
+    expect(screen.queryByRole('img', { name: 'header-wave.png' })).toBeNull();
+    expect(screen.getByText('header-wave.png')).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove header-wave.png' }));
+    expect(onRemove).toHaveBeenCalledWith(dropped);
+  });
+
+  it('draws each source the same way in the draft and in the sent turn', () => {
+    const dropped: SourceItem = { ...sourceItem('header-wave.png', 'image'), dropped: true };
+    const items = [sourceItem('chart.png', 'image'), sourceItem('notes.md', 'md'), dropped];
+    const tiles = (container: HTMLElement) =>
+      items.map(
+        (item) => within(container).queryByRole('img', { name: item.source.path }) !== null,
+      );
+
+    const draft = render(
+      <DraftSourceTiles
+        onRemove={vi.fn()}
+        size={80}
+        validations={items.map((item) => validation(item))}
+      />,
+    );
+    const drafted = tiles(draft.container);
+    draft.unmount();
+    const sent = render(<SentContextTiles items={items} />);
+
+    expect(drafted).toEqual([true, false, false]);
+    expect(tiles(sent.container)).toEqual(drafted);
+  });
+
   it('states a non-ready source as a word and offers reprocessing only when it failed', async () => {
     const onReprocess = vi.fn();
     const { rerender } = render(

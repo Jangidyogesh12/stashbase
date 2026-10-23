@@ -183,6 +183,7 @@ export function createDependencies(): AppDependencies {
     },
     documents: {
       adapters: createDocumentAdapters({
+        externalFiles: bridge.externalFiles,
         http,
         serverOrigin: bridge.runtime.serverOrigin,
         windowLifecycle: bridge.windowLifecycle,

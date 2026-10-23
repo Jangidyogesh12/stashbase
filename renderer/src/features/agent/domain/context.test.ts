@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 
+import { externalSource } from '@/shared/domain/external-source';
+
 import {
   addContextItem,
   contextItemKey,
@@ -15,6 +17,7 @@ import {
   type AgentContextItem,
   type AgentScopeListing,
 } from './context';
+import { suggestedContextSource } from './draft-context';
 import { renderPromptContext } from './prompt-context';
 
 const listing: AgentScopeListing = {
@@ -169,7 +172,7 @@ describe('context validation', () => {
     });
     expect(validations.map((v) => [v.status, v.reason])).toEqual([
       ['ready', null],
-      ['stale', 'This file is no longer in the folder.'],
+      ['stale', 'This file is no longer in the project.'],
       ['preparing', 'Searchable text is still being prepared.'],
       ['failed', 'Preparation failed; the agent gets the source only.'],
       ['blocked', 'Preparation is blocked.'],
@@ -185,7 +188,7 @@ describe('context validation', () => {
         readiness: {},
         scope: { kind: 'folder', path: '/project/Research' },
       })[0],
-    ).toMatchObject({ reason: 'This file belongs to a different folder.', status: 'stale' });
+    ).toMatchObject({ reason: 'This file belongs to a different project.', status: 'stale' });
     expect(
       validateContext([source('docs/agent.md')], {
         listing: null,
@@ -216,7 +219,77 @@ describe('context validation', () => {
     );
     expect(validations.map((v) => v.status)).toEqual(['ready', 'stale', 'stale']);
     expect(validations[1]?.reason).toContain('longer than');
-    expect(validations[2]?.reason).toBe('This file is no longer in the folder.');
+    expect(validations[2]?.reason).toBe('This file is no longer in the project.');
+  });
+});
+
+const outside = (token: string, format: 'md' | 'pdf' = 'pdf'): AgentContextItem => ({
+  boundVersion: null,
+  format,
+  kind: 'source',
+  source: externalSource(token, `/Users/reader/Desktop/report.${format}`),
+});
+
+describe('external files', () => {
+  const scope = { kind: 'folder', path: '/Library/Research' } as const;
+
+  it('binds by its own path whatever grant it was opened under', () => {
+    expect(contextItemKey(outside('grant-one-abcdefghijklmn'))).toBe(
+      contextItemKey(outside('grant-two-abcdefghijklmn')),
+    );
+    expect(
+      addContextItem([outside('grant-one-abcdefghijklmn')], outside('grant-two-abcdefghijklmn')),
+    ).toHaveLength(1);
+  });
+
+  it('is ready outside the listing and gives the Agent its absolute path', () => {
+    const passageItem = passageContextItem(
+      externalSource('grant-one-abcdefghijklmn', '/Users/reader/Desktop/report.md'),
+      'Quote.',
+    );
+    if (!passageItem) throw new Error('empty passage');
+    const validations = validateContext([outside('grant-one-abcdefghijklmn'), passageItem], {
+      listing,
+      readiness: {},
+      scope,
+    });
+    expect(validations.map((v) => v.status)).toEqual(['ready', 'ready']);
+    expect(
+      renderPromptContext('What does it say?', [
+        { item: passageItem, resolved: null },
+        { item: outside('grant-one-abcdefghijklmn'), resolved: null },
+      ]),
+    ).toBe(
+      [
+        'What does it say?',
+        '',
+        'Selected passages:',
+        '- /Users/reader/Desktop/report.md',
+        '  > Quote.',
+        '',
+        'Attached files:',
+        '- /Users/reader/Desktop/report.pdf',
+      ].join('\n'),
+    );
+  });
+
+  it('is offered while in front, but not as a generic file or once bound', () => {
+    const environment = (path: string) => ({
+      activeSource: externalSource('grant-one-abcdefghijklmn', path),
+      folderPath: '/Library/Research',
+      listing,
+      readiness: {},
+      versions: {},
+    });
+    expect(suggestedContextSource(environment('/Users/reader/report.pdf'), [])?.path).toBe(
+      '/Users/reader/report.pdf',
+    );
+    expect(suggestedContextSource(environment('/Users/reader/data.csv'), [])).toBeNull();
+    expect(
+      suggestedContextSource(environment('/Users/reader/Desktop/report.pdf'), [
+        outside('grant-two-abcdefghijklmn'),
+      ]),
+    ).toBeNull();
   });
 });
 

@@ -82,6 +82,8 @@ export function agentCliEnv(extraEnv: NodeJS.ProcessEnv = {}, extraDirs: string[
     ...extraEnv,
     PATH: agentCliPath(extraDirs, extraEnv.PATH ?? process.env.PATH ?? ''),
     ELECTRON_RUN_AS_NODE: undefined,
+    // Main's capability for granting dropped files is never an agent's.
+    STASHBASE_EXTERNAL_FILE_TOKEN: undefined,
   } as NodeJS.ProcessEnv;
 }
 

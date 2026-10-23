@@ -13,8 +13,15 @@ source mutations, saving, and release guarantees.
 2. Keep a preview or start editing to retain its tab. New draft creates an ordinary
    Markdown file; New tab creates only a starting point. Import copies files into
    the current project and refreshes the list without taking document focus.
+   Desktop files dropped on Files are imported; dropped on the document pane or the
+   chat beside it, even with no document open, each opens where it is as an
+   [external file](../capabilities/project-files.md#external-files), in a tab of its
+   own, without copying.
 3. Read/edit and move between documents, outline, search, and agent assistance.
    Commands act on the visible surface. Opening a document never attaches it to Chat.
+   Dropping a desktop file there is the reader handing it over, so it attaches to
+   the chat beside the document without opening that pane; the attachment leaves
+   the draft when the file's tab closes.
    From an agent turn's changes in Chat, review what that turn changed in a
    document, undoing or keeping each change or the remaining set.
    Select prose and choose a Heading menu entry to turn the selected blocks into

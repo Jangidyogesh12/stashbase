@@ -159,7 +159,7 @@ describe('AgentWorkspace composer context', () => {
     typeInto(composer, 'Summarise these');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'This file is no longer in the folder.',
+      'This file is no longer in the project.',
     );
     expect(draftOf(runtime)).toBe('Summarise these');
     expect(port.connect).not.toHaveBeenCalled();

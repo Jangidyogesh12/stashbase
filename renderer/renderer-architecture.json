@@ -52,6 +52,7 @@
   "wireSchemaModules": [
     "shared/protocols/agent-model.ts",
     "shared/protocols/electron/bug-report-review.ts",
+    "shared/protocols/electron/external-files.ts",
     "shared/protocols/electron/external-navigation.ts",
     "shared/protocols/electron/project.ts",
     "shared/protocols/electron/runtime.ts",
@@ -71,6 +72,7 @@
     "shared/protocols/http/turn-changes.ts",
     "shared/protocols/http/telemetry.ts",
     "shared/protocols/http/embedder.ts",
+    "shared/protocols/http/external-files.ts",
     "shared/protocols/http/files.ts",
     "shared/protocols/http/gallery.ts",
     "shared/protocols/http/github-import.ts",

@@ -29,10 +29,11 @@ import {
   type AgentScopeEnvironment,
   type ContextStatus,
 } from '@/features/agent/domain/context';
-import { isDraftTile } from '@/features/agent/domain/draft-context';
+import { fileContextItem, isDraftTile } from '@/features/agent/domain/draft-context';
 import { agentSkills } from '@/features/agent/domain/session';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import { isExternalSource } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { FailureLine } from '@/shared/ui/failure-notice';
 import { dragCarriesSource, readSourceDrag } from '@/shared/utils/source-drag';
@@ -244,8 +245,8 @@ export function AgentContextComposer({
     bindSource({ folderPath: scope.path, path });
   };
   const onMentionRemoved = (path: string) => {
-    if (scope.kind !== 'folder') return;
-    session.removeContext(`source:${scope.path}/${path}`);
+    const bound = context.find((item) => item.kind === 'source' && item.source.path === path);
+    if (bound) session.removeContext(contextItemKey(bound));
   };
 
   const removeTile = (item: AgentContextItem) => {
@@ -254,6 +255,12 @@ export function AgentContextComposer({
   };
 
   const attachSource = (source: SourceReference) => {
+    // An external file has no listing entry or project name to mention; it
+    // binds by its own path, as the chip it was offered as.
+    if (isExternalSource(source)) {
+      session.addContext(fileContextItem(source));
+      return;
+    }
     const listed = scoped?.listing.files.find((file) => file.path === source.path);
     const visual =
       listed !== undefined &&
@@ -308,6 +315,9 @@ export function AgentContextComposer({
       )}
       <InputMessage
         accept={ATTACH_ACCEPT}
+        // A row dragged from the tree or a tab is taken by `onDropCapture`
+        // above; the box lights for it as it does for a desktop file.
+        acceptsDrag={dragCarriesSource}
         // The card above carries the surface and the focus ring; the inner
         // component must not draw its own edge, including its inline one.
         className="bg-transparent shadow-none!"

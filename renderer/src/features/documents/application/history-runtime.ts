@@ -10,6 +10,7 @@ import { createStore, type StoreApi } from 'zustand/vanilla';
 import { sameSource } from '@/features/documents/domain/document';
 import {
   createDocumentHistoryState,
+  forgetDocumentSource,
   nextDocumentVisit,
   previousDocumentVisit,
   recordDocumentVisit,
@@ -26,6 +27,8 @@ export interface DocumentHistoryRuntime {
   previous(): DocumentVisit | null;
   /** The visit one step forward, or null at the end. */
   next(): DocumentVisit | null;
+  /** Drops every visit to a source the window can no longer reopen. */
+  forget(source: SourceReference): void;
   remember(source: SourceReference, scroll: { top: number; left: number }): void;
   record(visit: DocumentVisit): void;
   rename(folderPath: string, from: string, to: string): void;
@@ -37,6 +40,9 @@ export function createDocumentHistoryRuntime(): DocumentHistoryRuntime {
   const store = createStore<DocumentHistoryState>(createDocumentHistoryState);
   return {
     store,
+    forget(source) {
+      store.setState((state) => forgetDocumentSource(state, source));
+    },
     next: () => nextDocumentVisit(store.getState()),
     previous: () => previousDocumentVisit(store.getState()),
     rename(folderPath, from, to) {

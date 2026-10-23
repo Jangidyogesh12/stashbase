@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { DocumentTextSaveResult } from '@/features/documents/domain/document';
+import { externalSource } from '@/shared/domain/external-source';
 import { documentQueryScope, sourceApi, textSource } from '@/test/fakes/documents';
 
 import type { DocumentSourcePort } from './ports';
@@ -438,6 +439,30 @@ describe('Document tabs runtime previews and history', () => {
     await runtime.open(notes('four.md'), { preview: true });
     expect(visited()).toEqual(['one.md', 'two.md', 'four.md']);
     expect(runtime.history.next()).toBeNull();
+  });
+
+  it('edits an external text file in place but keeps it out of the session and closed history', async () => {
+    const runtime = createRuntime();
+    const outside = externalSource('grant-token-abcdefghijklmn', '/Users/reader/Desktop/notes.md');
+    const visited = () =>
+      runtime.history.store.getState().entries.map((entry) => entry.source.path);
+    await runtime.open(notes('one.md'));
+    const opened = await runtime.open(outside);
+    expect(opened?.store.getState().access).toBe('editable');
+    const pdf = await runtime.open(
+      externalSource('grant-token-abcdefghijklmn', '/Users/reader/paper.pdf'),
+    );
+    expect(pdf?.store.getState().access).toBe('read-only');
+    await runtime.closeSource(
+      externalSource('grant-token-abcdefghijklmn', '/Users/reader/paper.pdf'),
+    );
+    expect(runtime.toSession().tabs).toEqual([{ id: 'tab-1', path: 'one.md' }]);
+    expect(visited()).toEqual(['one.md', '/Users/reader/Desktop/notes.md']);
+
+    // Its read grant ends with the tab, so history cannot step back to it.
+    await runtime.closeSource(outside);
+    expect(visited()).toEqual(['one.md']);
+    expect(runtime.history.previous()).toBeNull();
   });
 
   it('records a tab activation as a visit but not the neighbour a close lands on', async () => {

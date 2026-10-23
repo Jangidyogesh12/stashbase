@@ -1,6 +1,8 @@
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 
 /** Capture only the tail of Electron's own host log after a startup/crash
  * failure, including failures that happened before the host collector loaded. */
@@ -74,7 +76,7 @@ function requestJson(port, requestPath, timeoutMs, options = {}) {
       else socket.once('connect', () => { connected = true; });
     });
     req.on('error', (error) => failed(error.code === 'ECONNREFUSED' ? 'connection_refused' : 'transport_error'));
-    req.end();
+    req.end(options.body);
   });
 }
 
@@ -119,6 +121,7 @@ function createServerChildEnvironment({
   packagedEnv,
   shutdownToken,
   oauthReturnToken,
+  externalFileToken,
   instanceId,
   authNetwork,
 }) {
@@ -127,6 +130,7 @@ function createServerChildEnvironment({
     ...packagedEnv,
     STASHBASE_SHUTDOWN_TOKEN: shutdownToken,
     STASHBASE_OAUTH_RETURN_TOKEN: oauthReturnToken,
+    STASHBASE_EXTERNAL_FILE_TOKEN: externalFileToken,
     STASHBASE_SERVER_INSTANCE_ID: instanceId,
   };
   delete environment.STASHBASE_AUTH_NETWORK_PORT;
@@ -265,8 +269,21 @@ async function waitForStableServerProbe(probe, options = {}) {
   return result;
 }
 
+/** The registration token a development server that Electron did not start
+ * leaves for main (`server/external-files.ts`), or null. Only a source launch
+ * reuses such a server, so a packaged app never reads it. */
+function readDevelopmentExternalFileToken(homeDir = os.homedir()) {
+  try {
+    const token = fs.readFileSync(path.join(homeDir, '.stashbase', 'dev-external-file-token'), 'utf8').trim();
+    return /^[0-9a-f]{64}$/u.test(token) ? token : null;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   probeServerHealth,
+  readDevelopmentExternalFileToken,
   requestJson,
   readServerLogTail,
   createServerArguments,

@@ -32,6 +32,8 @@ export { DocumentTabs } from './ui/workspace/tabs';
 export { DocumentHistoryButtons } from './ui/workspace/history-buttons';
 export { DocumentOutline, DocumentOutlineEmpty } from './ui/workspace/outline';
 export { DocumentWorkspace } from './ui/workspace/workspace';
+export { DocumentDropZone, type DocumentDropNotice } from './ui/workspace/drop-zone';
+export type { ExternalFileOpening, ExternalFilePort } from './application/ports';
 export type { DocumentNavigationTarget } from './ui/source/viewer';
 export { passageSearchTarget } from './domain/location';
 export type { DocumentSelection } from './domain/selection';

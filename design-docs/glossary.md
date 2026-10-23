@@ -160,6 +160,12 @@ The browsing, reading, editing, and navigation capability in Documents mode.
 A temporary tab reused by browsing. Editing makes it a **kept tab**; only kept
 tabs restore on relaunch. Do not call it pinned.
 
+## External file
+
+A file outside the project that the reader dropped on the workspace to read
+where it is, without copying it. It stays open for the session; Markdown, text,
+and JSON save in place. It is never prepared, indexed, or listed. Not a **preview tab**, which is about browsing.
+
 ## Document history
 
 The sequence of documents visited in a project. It records files, not only

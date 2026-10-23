@@ -42,6 +42,7 @@ import {
   type InputMessageQueueProps,
   type QueuedMessage,
 } from '@/components/ui/input-message-queue';
+import { DROP_TARGET } from '@/lib/local/drop-target';
 import { useShape } from '@/lib/shape-context';
 import { SizeProvider, type SizeVariant } from '@/lib/size-context';
 import { surfaceClasses } from '@/lib/surface-classes';
@@ -101,6 +102,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       accept = DEFAULT_ACCEPT,
       maxFiles,
       filePreviewSize = 80,
+      acceptsDrag,
       previewSlot,
       editor,
       fieldProps,
@@ -127,7 +129,14 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       editorHostRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
     }, []);
 
-    const composerFiles = useComposerFiles({ accept, disabled, files, maxFiles, onFilesChange });
+    const composerFiles = useComposerFiles({
+      accept,
+      acceptsDrag,
+      disabled,
+      files,
+      maxFiles,
+      onFilesChange,
+    });
 
     /** Puts a queued message back only when the current draft can be preserved. */
     const restoreQueued = useCallback(
@@ -192,14 +201,15 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       [composerFiles.items, composerFiles.openFilePicker],
     );
 
-    // The edge is the box-shadow's 1px ring, recoloured per state (drag >
-    // hover) so the stroke gains contrast without appearing to thicken; with
-    // none active the className's `shadow-surface-2` supplies the resting
-    // edge. Holding focus paints nothing — the caret is the focus indicator.
+    // The edge is the box-shadow's 1px ring, recoloured on hover so the
+    // stroke gains contrast without appearing to thicken; with none active
+    // the className's `shadow-surface-2` supplies the resting edge. A drag the
+    // composer takes draws no edge of its own: the box wears the one neutral
+    // drop-target look every drop target shares (see the className below).
+    // Holding focus paints nothing — the caret is the focus indicator.
     // Inline, not a `shadow-*` utility, which mangles multi-layer values.
-    const edgeShadow = composerFiles.dragOver
-      ? `0 0 0 1px var(--focus-ring), ${EDGE_DROP}`
-      : hovered && clickToFocus && !disabled
+    const edgeShadow =
+      hovered && clickToFocus && !disabled && !composerFiles.dragOver
         ? `0 0 0 1px var(--border), ${EDGE_DROP}`
         : undefined;
 
@@ -211,14 +221,20 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
         role="presentation"
         ref={ref}
         onMouseDown={handleContainerMouseDown}
+        // Marks the one place a desktop file attaches rather than opens, so
+        // a drop zone around the composer leaves this drop to it.
+        data-file-drop="attach"
         {...composerFiles.dropHandlers}
         className={cn(
-          'flex flex-col gap-1 p-2 transition-[box-shadow,color] duration-fast',
+          'flex flex-col gap-1 p-2 transition-[background-color,box-shadow,color] duration-fast',
           surfaceClasses(2, 2),
           shape.card,
           clickToFocus && !disabled && 'cursor-text',
           disabled && 'pointer-events-none opacity-50',
           className,
+          // After the caller's classes, so the drop target's faint fill wins
+          // over whatever surface the box wears while the drag lasts.
+          composerFiles.dragOver && DROP_TARGET,
         )}
         style={edgeShadow ? { boxShadow: edgeShadow, ...style } : style}
         onMouseEnter={() => setHovered(true)}

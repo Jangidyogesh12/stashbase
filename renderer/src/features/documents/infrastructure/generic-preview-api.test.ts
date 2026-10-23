@@ -76,7 +76,7 @@ describe('generic file preview API', () => {
       api.load({ folderPath: '/project/notes', path: 'source.ts' }, new AbortController().signal),
     ).rejects.toMatchObject({
       kind: 'scope-lost',
-      message: 'The file folder is no longer available in this window.',
+      message: "The file's project is no longer available in this window.",
     });
   });
 });

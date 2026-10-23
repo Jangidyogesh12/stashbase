@@ -288,10 +288,10 @@ describe('Agent session domain', () => {
     const bound = transitionAgentSession(initial, { context, kind: 'set-context' });
     expect(agentSessionIsBlank(bound)).toBe(false);
     const refused = transitionAgentSession(bound, {
-      message: 'This file is no longer in the folder.',
+      message: 'This file is no longer in the project.',
       kind: 'set-context-issue',
     });
-    expect(refused.contextIssue).toBe('This file is no longer in the folder.');
+    expect(refused.contextIssue).toBe('This file is no longer in the project.');
     expect(transitionAgentSession(refused, { draft: 'x', kind: 'set-draft' }).contextIssue).toBe(
       null,
     );

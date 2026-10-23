@@ -10,9 +10,13 @@ import {
   documentTextSourceRequestSchema,
   genericFilePreviewResponseSchema,
 } from '@/protocols/http/files';
+import { externalFileToken } from '@/shared/domain/external-source';
+import type { SourceReference } from '@/shared/domain/source-reference';
 import { encodePathSegments } from '@/shared/utils/file-path';
 
-const SCOPE_LOST = 'The file folder is no longer available in this window.';
+import { externalFileRoute } from './external-file-api';
+
+const SCOPE_LOST = "The file's project is no longer available in this window.";
 
 /** Two refusals the shared ladder cannot see: a format that belongs to a
  *  dedicated viewer, and a folder the server names in the body. */
@@ -63,20 +67,27 @@ function mapPreview(body: PreviewResponse, expectedName: string): GenericFilePre
 
 type PreviewResponse = ReturnType<typeof genericFilePreviewResponseSchema.parse>;
 
+/** An external file previews through its grant; a project file by its folder. */
+function previewPath(source: SourceReference): string {
+  const token = externalFileToken(source);
+  if (token) return externalFileRoute(token, '/preview');
+  const identity = documentTextSourceRequestSchema.safeParse(source);
+  if (!identity.success) {
+    throw new GenericFilePreviewError('unavailable', 'The file identity is invalid.');
+  }
+  const query = new URLSearchParams({ folder: identity.data.folderPath });
+  return `/api/file-preview/${encodePathSegments(identity.data.path)}?${query}`;
+}
+
 export function createGenericFilePreviewAdapter(client: HttpClient): GenericFilePreviewPort {
   return {
     async load(source, signal) {
-      const identity = documentTextSourceRequestSchema.safeParse(source);
-      if (!identity.success) {
-        throw new GenericFilePreviewError('unavailable', 'The file identity is invalid.');
-      }
-      const query = new URLSearchParams({ folder: identity.data.folderPath });
       return mapPreview(
         await request(client, {
           error: GenericFilePreviewError,
           failure: previewFailure,
           failureSchema: documentTextSourceFailureSchema,
-          path: `/api/file-preview/${encodePathSegments(identity.data.path)}?${query}`,
+          path: previewPath(source),
           schema: genericFilePreviewResponseSchema,
           signal,
         }),

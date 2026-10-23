@@ -3,14 +3,16 @@
 import { X } from 'lucide-react';
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 
+import { Tooltip } from '@/components/ui/tooltip';
 import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
 /** Every chip's frame, at the composer's control height. A hairline on the
  *  composer's own paper, not a grey fill: a filled chip beside the draft
- *  read as a smudge. Callers add `shape.bg`, their width, and their padding. */
-export const CHIP_FRAME = 'inline-flex h-7 items-center border border-border text-ui-12';
+ *  read as a smudge. It is the same light hairline the tiles beside it wear.
+ *  Callers add `shape.bg`, their width, and their padding. */
+export const CHIP_FRAME = 'inline-flex h-7 items-center border border-border/50 text-ui-12';
 
 /** A chip's own remove: a quiet X inside the chip's frame, shared by the
  *  passage chip and the suggested source, rather than the tiles' dark badge,
@@ -44,3 +46,19 @@ export const ChipCloseButton = forwardRef<
     </button>
   );
 });
+
+/** A draft chip's remove, named for the chip it takes away. */
+export function ChipRemove({
+  name,
+  onRemove,
+}: {
+  name: string;
+  onRemove?: (() => void) | undefined;
+}) {
+  if (!onRemove) return null;
+  return (
+    <Tooltip content="Remove" side="top">
+      <ChipCloseButton label={`Remove ${name}`} onClick={onRemove} />
+    </Tooltip>
+  );
+}

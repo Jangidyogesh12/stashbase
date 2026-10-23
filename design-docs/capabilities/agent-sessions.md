@@ -63,14 +63,23 @@ permissions, with current model and tool choices checked before use.
   that turn; an interim reply must not show Completed or release queued work.
 - Validate context before sending. Opening a document does not attach it; missing
   or changed context needs replacement, refresh, or explicit removal.
-- The agent pane beside Documents suggests the document in front of the reader
-  as a quiet chip. One click attaches it like a mention; dismissing it hides the
+- A file dropped on the workspace outside the message box does attach, to the
+  chat beside it, without a click and without opening the pane. It shows as the
+  suggestion's chip, attached, since opening it is what made it context. An attachment added that way leaves the
+  draft when the file's tab closes; one the reader adds by hand stays. An
+  [external file](project-files.md#external-files) attaches by its absolute path,
+  and each runtime reads it with its own tools under its own permissions, so
+  Default asks before reading outside the project. Project MCP tools keep
+  refusing it.
+- The agent pane beside Documents suggests the document in front of the reader,
+  including an external file, as a quiet chip. One click attaches it like a mention; dismissing it hides the
   suggestion until another document comes to the front. Chat mode shows no
   suggestion, since no document is on screen there.
 - A **passage** is selected text bound as context, from **Ask agent** on a
   Markdown selection. Its words travel with the request, so later edits to the
   file do not change what was asked about; it is refused only when its file
-  leaves the project or it exceeds 6,000 characters. Reloaded history shows it
+  leaves the project or it exceeds 6,000 characters. A passage of an external
+  file goes to the chat beside it and carries the file's absolute path. Reloaded history shows it
   as the same passage chip.
 - Antigravity offers Auto, Ask, Edit, and Plan. Running for StashBase, it
   cannot ask the reader itself, so StashBase reviews each tool call before it

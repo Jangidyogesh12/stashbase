@@ -1,3 +1,4 @@
+import { isExternalSource } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 export type DocumentLinkTarget =
@@ -51,6 +52,8 @@ export function resolveDocumentLink(rawHref: string, owner: SourceReference): Do
 
   const external = explicitExternalLink(raw);
   if (external) return external;
+  // An external file's grant covers that file alone, never its neighbours.
+  if (isExternalSource(owner)) return { kind: 'ignore' };
   if (raw.startsWith('/') || raw.startsWith('\\') || raw.startsWith('//')) {
     return { kind: 'ignore' };
   }

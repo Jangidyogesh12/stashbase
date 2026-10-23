@@ -12,8 +12,10 @@ import type {
 } from '@/app/composition/commands/use-workspace-commands';
 import { useDependencies } from '@/app/composition/dependency-context';
 import type { DocumentSources } from '@/app/composition/folder/use-document-sources';
+import { useExternalFiles } from '@/app/composition/folder/use-external-files';
 import { AgentWorkspace, type AgentWorkspaceRuntime } from '@/features/agent/public';
 import {
+  DocumentDropZone,
   DocumentWorkspace,
   NewTabPage,
   type DocumentSelection,
@@ -26,7 +28,8 @@ import {
   ReadingTextMenu,
   useAccountView,
 } from '@/features/settings/public';
-import type { WorkspaceSessionController } from '@/features/workspace/public';
+import type { WorkspaceRuntime, WorkspaceSessionController } from '@/features/workspace/public';
+import { isExternalSource } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { AgentDocumentWorkspace } from './agent-document-workspace';
@@ -56,6 +59,7 @@ export interface WorkspacePanesProps {
   settings: SettingsCommand;
   sources: DocumentSources;
   status: FolderIndexStatus | null;
+  workspace: WorkspaceRuntime | null;
 }
 
 export function WorkspacePanes({
@@ -75,100 +79,124 @@ export function WorkspacePanes({
   settings,
   sources,
   status,
+  workspace,
 }: WorkspacePanesProps) {
   const dependencies = useDependencies();
+  // Files dropped on the workspace open in place and go to the chat beside
+  // them; Files keeps the copy.
+  const externalFiles = useExternalFiles({
+    agent: agent.runtime,
+    documents,
+    externalFiles: dependencies.documents.adapters.externalFiles,
+    onOpened: onShowDocuments,
+    workspace,
+  });
   const account = useAccountView();
   return (
-    <AgentDocumentWorkspace
-      chatPaneOpen={chatPaneOpen}
-      documentsShown={mode === 'documents'}
-      newTabOpen={newTab.open}
-      agent={
-        <AgentWorkspace
-          catalog={dependencies.agent.catalog}
-          accountSignedIn={account.account?.signedIn ?? false}
-          header={mode === 'documents'}
-          persona={dependencies.agent.persona}
-          scheduledTasks={dependencies.agent.scheduledTasks}
-          tools={dependencies.agent.tools}
-          onBrowsePersonas={onBrowsePersonas}
-          onOpenAgentSettings={() => settings.openSettings('agents')}
-          onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
-          onOpenSource={(source, phrase) => {
-            if (phrase) void sources.locatePassage(source, phrase);
-            else sources.open(source);
-            onShowDocuments();
-          }}
-          onReprocess={onReprocess}
-          onReviewTurnChange={(request) => {
-            onReviewTurnChange(request);
-            onShowDocuments();
-          }}
-          // The bundled runtime's only gate is the account, so the picker's
-          // row starts the same browser sign-in the sidebar's footer row does.
-          onSignIn={(signal) => (signal ? account.signInAndWait(signal) : account.signIn())}
-          runtime={agent.runtime}
-        />
-      }
-      onPaneWidthChange={session.runtime.setAgentPaneWidth}
-      paneWidth={session.shell.agentPaneWidth}
-      runtime={documents}
-      document={
-        documents ? (
-          // The New tab's page lies over the document rather than replacing
-          // it, so the editors underneath keep their state for its close.
-          <div className="relative h-full">
-            <div aria-hidden={newTab.open} className="h-full" inert={newTab.open}>
-              <DocumentWorkspace
-                active={mode === 'documents' && !newTab.open}
-                assetApi={dependencies.documents.adapters.asset}
-                docxPreviewApi={dependencies.documents.adapters.docxPreview}
-                genericPreviewApi={dependencies.documents.adapters.genericPreview}
-                recordUsage={dependencies.recordUsage}
-                onAskAgent={onAskAgent}
-                onNavigate={sources.navigate}
-                onOpenExternal={dependencies.documents.openExternal}
-                onOpenPrepared={onPrepare}
-                onReveal={(source, signal) =>
-                  dependencies.workspace.adapters.files.reveal(
-                    source.folderPath,
-                    source.path,
-                    signal,
-                  )
-                }
-                renderPreparation={(source, format) => (
-                  <>
-                    {(format === 'pdf' || format === 'image') &&
-                      status?.folderPath === source.folderPath &&
-                      status.pendingConversions.includes(source.path) && (
-                        <LocalComponentRecovery port={dependencies.settings.localComponentApi} />
-                      )}
-                    <SourcePreparationStatus
-                      controlApi={dependencies.preparation.controlApi}
-                      format={format}
-                      source={source}
-                      status={status}
-                    />
-                  </>
-                )}
-                renderReadingControl={() => (
-                  <ReadingTextMenu appearanceApi={dependencies.settings.appearanceApi} />
-                )}
-                revealLabel={dependencies.workspace.revealLabel}
-                runtime={documents}
-                sourceApi={dependencies.documents.adapters.source}
-              />
+    // The whole row opens a dropped desktop file, so it works before any
+    // document is open; the message box inside keeps attaching.
+    <DocumentDropZone
+      notice={externalFiles.notice}
+      onDropFiles={documents ? externalFiles.dropFiles : undefined}
+    >
+      <AgentDocumentWorkspace
+        chatPaneOpen={chatPaneOpen}
+        documentsShown={mode === 'documents'}
+        newTabOpen={newTab.open}
+        agent={
+          <AgentWorkspace
+            catalog={dependencies.agent.catalog}
+            accountSignedIn={account.account?.signedIn ?? false}
+            header={mode === 'documents'}
+            persona={dependencies.agent.persona}
+            scheduledTasks={dependencies.agent.scheduledTasks}
+            tools={dependencies.agent.tools}
+            onBrowsePersonas={onBrowsePersonas}
+            onOpenAgentSettings={() => settings.openSettings('agents')}
+            onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
+            onOpenSource={(source, phrase) => {
+              if (phrase) void sources.locatePassage(source, phrase);
+              else sources.open(source);
+              onShowDocuments();
+            }}
+            onReprocess={onReprocess}
+            onReviewTurnChange={(request) => {
+              onReviewTurnChange(request);
+              onShowDocuments();
+            }}
+            // The bundled runtime's only gate is the account, so the picker's
+            // row starts the same browser sign-in the sidebar's footer row does.
+            onSignIn={(signal) => (signal ? account.signInAndWait(signal) : account.signIn())}
+            runtime={agent.runtime}
+          />
+        }
+        onPaneWidthChange={session.runtime.setAgentPaneWidth}
+        paneWidth={session.shell.agentPaneWidth}
+        runtime={documents}
+        document={
+          documents ? (
+            // The New tab's page lies over the document rather than replacing
+            // it, so the editors underneath keep their state for its close.
+            <div className="relative h-full">
+              <div aria-hidden={newTab.open} className="h-full" inert={newTab.open}>
+                <DocumentWorkspace
+                  active={mode === 'documents' && !newTab.open}
+                  assetApi={dependencies.documents.adapters.asset}
+                  docxPreviewApi={dependencies.documents.adapters.docxPreview}
+                  genericPreviewApi={dependencies.documents.adapters.genericPreview}
+                  recordUsage={dependencies.recordUsage}
+                  onAskAgent={onAskAgent}
+                  onNavigate={sources.navigate}
+                  onOpenExternal={dependencies.documents.openExternal}
+                  onOpenPrepared={onPrepare}
+                  onReveal={(source, signal) =>
+                    isExternalSource(source)
+                      ? dependencies.documents.adapters.externalFiles.reveal(source, signal)
+                      : dependencies.workspace.adapters.files.reveal(
+                          source.folderPath,
+                          source.path,
+                          signal,
+                        )
+                  }
+                  // An external file is never prepared, so it has no status row.
+                  renderPreparation={(source, format) =>
+                    isExternalSource(source) ? null : (
+                      <>
+                        {(format === 'pdf' || format === 'image') &&
+                          status?.folderPath === source.folderPath &&
+                          status.pendingConversions.includes(source.path) && (
+                            <LocalComponentRecovery
+                              port={dependencies.settings.localComponentApi}
+                            />
+                          )}
+                        <SourcePreparationStatus
+                          controlApi={dependencies.preparation.controlApi}
+                          format={format}
+                          source={source}
+                          status={status}
+                        />
+                      </>
+                    )
+                  }
+                  renderReadingControl={() => (
+                    <ReadingTextMenu appearanceApi={dependencies.settings.appearanceApi} />
+                  )}
+                  revealLabel={dependencies.workspace.revealLabel}
+                  runtime={documents}
+                  sourceApi={dependencies.documents.adapters.source}
+                />
+              </div>
+              {newTab.open && (
+                <NewTabPage
+                  className="absolute inset-0"
+                  onClose={newTab.close}
+                  onCreateDraft={onCreateDraft}
+                />
+              )}
             </div>
-            {newTab.open && (
-              <NewTabPage
-                className="absolute inset-0"
-                onClose={newTab.close}
-                onCreateDraft={onCreateDraft}
-              />
-            )}
-          </div>
-        ) : null
-      }
-    />
+          ) : null
+        }
+      />
+    </DocumentDropZone>
   );
 }

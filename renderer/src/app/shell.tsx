@@ -315,6 +315,7 @@ function WorkspaceWindow() {
             chatPaneOpen={chatPaneOpen}
             agent={{ runtime }}
             documents={documents}
+            workspace={workspace}
             mode={chrome.navigator.mode}
             onAskAgent={askAgent}
             onBrowsePersonas={gallery.browsePersonas}

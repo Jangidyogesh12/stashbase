@@ -1142,6 +1142,30 @@ server's `/asset/` route and temporary attachment previews through
 `/api/agent/attachment-preview`, alongside bundled/data/blob images and the
 Gallery proxy. Asset reads retain the server's project membership and path checks.
 
+External files (`server/external-files.ts`, `server/routes/external-files.ts`)
+are read only through an exact-file grant. `DocumentDropZone` wraps the whole
+content row; it leaves drops on the composer (`data-file-drop="attach"`) to the
+composer and lets preview frames pass drag events through while a file is dragged. Preload's `externalFiles` methods take a
+dropped `File` and read its location with `webUtils.getPathForFile`, so the
+renderer never names a path. Main registers that path for the sender's window
+through the process-private `/api/internal/external-files` route. A development
+server that Electron did not start writes its token to an owner-only file under
+`~/.stashbase`, which a source launch reads after its own token is refused. The server
+resolves the real path, answers with the project file when it lies inside the
+window's project or another registered project (the latter opening read-only),
+and otherwise issues an opaque token only for the formats
+`shared/file-formats.ts` admits. The registration token is removed from the
+server's environment once read and never passed to an agent CLI, so no agent
+can grant itself a file. Token routes serve that one file, re-check its
+real path on every read, save Markdown, text, and JSON against the version read
+(preserving BOM, line endings, and permissions, never indexing), are bound to the
+window for `/api/` reads and saves, and serve
+browser-loaded PDF and image bytes under `/asset/__external/`, inside the
+existing CSP. Revocation follows the tab, project switch, and window close. A
+grant never reaches preparation, indexing, upload, MCP, or agent-context
+resolution; the renderer marks the source with an `external:` folder marker that
+every project route refuses.
+
 Markdown renders schema nodes; DOCX is sanitized inside its worker with the shared
 policy. Local HTML's scripts run in an opaque sandbox without same-origin/preload,
 form, popup, or navigation authority. Frame messages validate source, shape, and

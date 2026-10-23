@@ -4,7 +4,10 @@
  *  chip carries no role of its own. The decoration set that maps markers onto
  *  these widgets lives here too, since it is the only reader of both. */
 import { EditorView, WidgetType, type DecorationSet, Decoration } from '@codemirror/view';
+import { createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 
+import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import type { ContextStatus } from '@/features/agent/domain/context';
 import { shapeTokens } from '@/lib/shape-context';
 import { prefersReducedMotion } from '@/shared/runtime/appearance-surface';
@@ -23,7 +26,28 @@ export const STATUS_WORD: Record<ContextStatus, string> = {
   stale: 'Stale',
 };
 
-const CHIP_CLASS = `mx-px inline-flex max-w-full items-center gap-1 ${shapeTokens.chip} bg-foreground/8 px-1.5 align-baseline font-medium whitespace-nowrap text-foreground`;
+/** A token in running text is paper like every chip: a light hairline and
+ *  no fill. The hairline is an inset ring rather than a border, because a
+ *  border would add two pixels to the line the token sits in. */
+const CHIP_CLASS = `mx-px inline-flex max-w-full items-center gap-1 ${shapeTokens.chip} px-1.5 align-baseline font-medium whitespace-nowrap text-foreground ring-1 ring-border/50 ring-inset`;
+
+/** The root drawing each mention's glyph, keyed by the chip it sits in. */
+const glyphRoots = new WeakMap<HTMLElement, Root>();
+
+/** A mention's glyph is the shared `FileTypeIcon` itself, the mark the @ list
+ *  and the sent bubble draw, so a file keeps one glyph from the moment it is
+ *  picked. CodeMirror owns the chip's DOM, so a small React root draws the
+ *  icon into a box of its size, and the chip's widget retires that root with
+ *  the chip. */
+function fileGlyph(chip: HTMLElement, path: string): HTMLElement {
+  const host = chip.ownerDocument.createElement('span');
+  host.className = 'flex size-3 shrink-0 text-muted-foreground';
+  host.setAttribute('aria-hidden', 'true');
+  const glyph = createRoot(host);
+  glyph.render(createElement(FileTypeIcon, { 'aria-hidden': true, path, size: 12 }));
+  glyphRoots.set(chip, glyph);
+  return host;
+}
 
 function popIn(chip: HTMLElement, root: Document) {
   if (typeof chip.animate !== 'function' || prefersReducedMotion(root.defaultView)) return;
@@ -93,25 +117,12 @@ class MentionWidget extends WidgetType {
     chip.title = this.path;
     chip.setAttribute('data-mention', this.path);
 
-    const glyph = root.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    glyph.setAttribute('width', '12');
-    glyph.setAttribute('height', '12');
-    glyph.setAttribute('viewBox', '0 0 24 24');
-    glyph.setAttribute('fill', 'none');
-    glyph.setAttribute('stroke', 'currentColor');
-    glyph.setAttribute('stroke-width', '1.5');
-    glyph.setAttribute('stroke-linecap', 'round');
-    glyph.setAttribute('stroke-linejoin', 'round');
-    glyph.setAttribute('aria-hidden', 'true');
-    glyph.classList.add('shrink-0', 'text-muted-foreground');
-    for (const d of ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z', 'M14 3v5h5']) {
-      const path = root.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', d);
-      glyph.append(path);
-    }
-    chip.append(glyph);
+    chip.append(fileGlyph(chip, this.path));
 
+    // A long name gives way before the line does: the chip is at most the
+    // line's width, and the name truncates inside it.
     const name = root.createElement('span');
+    name.className = 'truncate';
     name.textContent = basePathName(this.path);
     chip.append(name);
 
@@ -136,6 +147,16 @@ class MentionWidget extends WidgetType {
 
     if (this.fresh) popIn(chip, root);
     return chip;
+  }
+
+  override destroy(dom: HTMLElement) {
+    const glyph = glyphRoots.get(dom);
+    if (!glyph) return;
+    glyphRoots.delete(dom);
+    // CodeMirror can drop a chip while React is committing, as when the
+    // editor is torn down from an effect, and React refuses to unmount a root
+    // synchronously then; the root goes once that work has finished.
+    queueMicrotask(() => glyph.unmount());
   }
 
   override ignoreEvent() {

@@ -1,7 +1,8 @@
 import { createNotificationsPreload } from '../notifications/preload.ts';
 
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
+import { createExternalFilesPreload } from '../external-files/preload.ts';
 import { createExternalNavigationPreload } from '../external-navigation/preload.ts';
 import { createProjectPreload } from '../project/preload.ts';
 import { createScheduledTasksPreload } from '../scheduled-tasks/preload.ts';
@@ -17,6 +18,7 @@ stampDocumentMarks(ipcRenderer, document, process.platform);
 contextBridge.exposeInMainWorld(
   'stashbase',
   Object.freeze({
+    externalFiles: createExternalFilesPreload(ipcRenderer, (file) => webUtils.getPathForFile(file)),
     externalNavigation: createExternalNavigationPreload(ipcRenderer),
     notifications: createNotificationsPreload(ipcRenderer),
     runtime: createRuntimeConfig(process.argv),

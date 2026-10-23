@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 
+import { externalSource } from '@/shared/domain/external-source';
+
 import { resolveDocumentLink } from './link-target';
 
 const owner = { folderPath: '/project/notes', path: 'guides/current.md' };
@@ -26,6 +28,16 @@ describe('document link navigation', () => {
     ).toEqual({
       kind: 'source',
       source: { folderPath: '/project/archive', path: 'guides/sibling.md' },
+    });
+  });
+
+  it('follows no relative link out of an external file, whose grant covers it alone', () => {
+    const external = externalSource('grant-token-abcdefghijklmn', '/Users/reader/Desktop/notes.md');
+    expect(resolveDocumentLink('sibling.md', external)).toEqual({ kind: 'ignore' });
+    expect(resolveDocumentLink('#intro', external)).toEqual({ id: 'intro', kind: 'anchor' });
+    expect(resolveDocumentLink('https://example.com/a', external)).toEqual({
+      href: 'https://example.com/a',
+      kind: 'external',
     });
   });
 

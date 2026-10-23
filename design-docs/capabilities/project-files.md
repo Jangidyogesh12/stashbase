@@ -78,6 +78,37 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
   reconciles external additions, renames, and deletions. Browsing those changes
   does not wait for search indexing, and the refresh preserves open documents.
 
+## External Files
+
+A desktop file dropped on the workspace opens in place without being copied. The drop target decides: Files imports, the message box attaches, and the
+rest of the content area opens, the document pane and the chat alike, so no
+document needs to be open first. A drop in Chats mode brings Documents on screen.
+A drop is accepted only while a project is open, and a file whose real path is
+inside the current project opens as that project file. A file inside another
+registered project opens as that project's file, read-only like any source
+from another project folder.
+
+- A file opens in place only when its preview needs nothing but the file itself:
+  Markdown, plain text, JSON, PDF, images, and other UTF-8 text. DOCX falls back
+  to prepared output and HTML loads neighbouring resources, so both must be
+  copied into the project; audio and video qualify but are not offered. Other
+  binary files and folders are refused. One drop reports all its refusals in a
+  single message the reader dismisses. It offers no copy of its own: it names
+  Files, where a dropped file is copied into the project.
+- Each dropped file gets a kept tab of its own, like any other document, with its
+  full path in the tab's tooltip. Markdown, plain text, and JSON are edited in
+  place and saved to the file itself under the same versioned save and conflict
+  rules as a project file; the rest are read-only. It is never prepared, indexed,
+  or listed in Files, Quick Open, search, document history once closed, or
+  restored sessions; dropping it on Files copies it in. A changed source refreshes
+  like a project file; a missing one is reported and written back only by the
+  reader's explicit choice. Relative
+  links in it are not followed.
+- Reading or saving it needs a grant for that one file in that window. The grant
+  does not widen project scope, MCP, upload, or agent tool access, and it ends
+  when the tab closes, the project changes, or the window closes. A deleted file
+  is written back only by the reader's explicit choice, into the same folder.
+
 ## Saving and Release
 
 Save against the version that was read. Preserve source formatting and unrelated

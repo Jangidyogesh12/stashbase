@@ -596,6 +596,60 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 
 ## J03: Documents
 
+**External files (2026-10-23):** `features/documents/ui/workspace/drop-zone.tsx`
+wraps the whole content row, document pane and chat alike, so a drop works with no
+document open. It outlines the row while a desktop file is over it, lets preview
+frames pass drag events through, takes the drop before an editor can, and leaves
+drops on the message box (`data-file-drop="attach"`) to the composer, whose
+editor no longer pastes a dropped file's text.
+`app/composition/folder/use-external-files.ts` opens each file through the
+`externalFiles` preload bridge, main's `electron/external-files/handler.ts`, and
+the process-private grant in `server/external-files.ts`; reads go through
+`server/routes/external-files.ts` by token only. The source is a
+`SourceReference` whose folder is an `external:` marker (`shared/domain/external-source.ts`),
+so the existing read-only, unpersisted cross-folder tab applies, and the Agent
+binds it by absolute path (`features/agent/application/ask-about.ts`).
+`server/routes/external-files.test.ts` covers the registration token, window
+binding of reads and revocation, sibling bytes refused whatever the URL names, a
+symlink swapped into the path, the project-copy/grant/refusal decision per format,
+generic-text preview, reveal, revocation when the window leaves its project, and
+saves that keep BOM, line endings, and permissions, refuse a stale version or
+another window, and write a deleted file back only on an explicit overwrite.
+`electron/external-files/*.test.cjs` cover the preload sending only a path read
+off a real file and sender authorization;
+the built-renderer smoke confirms in real Electron that a `File` built in script
+is refused before it reaches main.
+Renderer tests cover grant-only adapter routes, read-only tabs left out of the
+session and dropped from history on close, unresolved relative links, the veil and
+capture of a drop, refusal wording, the drop card's attach and release,
+external validation and prompt paths, and preparation status matched by folder.
+An isolated built-renderer/source-host Electron pass dropped files with Chromium's
+real drag pipeline (`Input.dispatchDragEvent` with file paths). Markdown, PDF, and
+CSV opened as tabs, bound in the chat beside them as attached chips in the
+frame the composer offers the document in front with, and typing in the
+Markdown tab autosaved to the external file itself with nothing beside it; DOCX and a binary file were refused in one notice, and
+nothing was copied or written beside the sources. The PDF rendered through
+`/asset/__external/`. Closing the Markdown tab sent its revoke and removed its
+card. The refusal's Copy into project and Open in default app actions were
+later removed, so it now only names Files. A dropped project file opened as itself, and an image dropped
+over an HTML preview after entering from the tab strip opened through the veil.
+A drop on the chat with no document open opened the file, a drop on the
+message box attached it without opening it or pasting its text, and a drop in
+Chats mode opened the file and brought Documents back. A second pass reused a
+separately started development server, as `pnpm dev` does: main's own token was
+refused, it read the owner-only token file, and the drops opened.
+The outline was inspected by eye in the light theme at a narrow pane width.
+The refusal has since moved to the shared floating card below the panes'
+header rows. A later driven pass of the built app dropped an outside DOCX
+through `Input.dispatchDragEvent`: main answered copy-required, and the card
+floated over the row with the sentence naming Files and Dismiss alone. These passes found and fixed a veil removed before React
+received the drop, a notice covering the document, and the development server
+refusing main's token. A banner marking external tabs was removed at the
+reader's request: they read like any other tab.
+**Gap:** a physical Finder drag, a drag that enters the window directly over a
+preview frame, a live Agent turn reading an external path, and Windows/Linux
+`getPathForFile` behavior are unproven.
+
 **External document refresh (2026-10-21):**
 `features/documents/hooks/use-document-refresh.ts` checks the active visible
 document every two seconds and on activation, native window focus, and return
@@ -2851,7 +2905,8 @@ not the truth of a test's claims or intent metadata.
   `account-access-dialog.test.tsx`, `runtime-row.test.tsx`, the installer
   tests, `menu-item.test.tsx`, `file-tree-menu.test.tsx`,
   `conversation-tree.test.tsx`, `context-tiles.test.tsx` (one chip or tile
-  predicate before and after sending). A built-app pass showed the tree's "…" and its
+  predicate before and after sending) and `use-external-files.test.tsx` (a
+  failed open reported once). A built-app pass showed the tree's "…" and its
   shared menu with Delete last in the error colour; Storybook showed the paper
   turn-changes, approval and upgrade cards, the Agents panel and the account
   dialog. Real CLI and browser sign-in, the stop route against a live login,
@@ -2877,6 +2932,7 @@ not the truth of a test's claims or intent metadata.
   bar, left its controls uncovered, and Dismiss cleared it, in light and dark.
   The corner card, the strips, and the long-sentence wrap were reviewed in
   Storybook only.
+  The external-file drop refusal floats from `drop-zone.tsx`.
 - **Native crash recovery (2026-09-16):** confirmed renderer termination
   releases its save barrier; a live renderer timeout still blocks close.
   Lifecycle tests cover reload and refusal, and an isolated real Electron

@@ -19,6 +19,7 @@ import {
   previewDocumentTab,
   type DocumentTabsState,
 } from '@/features/documents/domain/tabs';
+import { isExternalSource } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { createScopeGuard } from '@/shared/runtime/scope-guard';
 
@@ -143,6 +144,9 @@ export function createDocumentTabsRuntime({
     document.dispose();
     documents.delete(id);
     sourceIds.delete(sourceIdentity(document.scope.source));
+    // An external file's grant ends with its tab, so history cannot step back
+    // to it once the tab is gone.
+    if (isExternalSource(document.scope.source)) history.forget(document.scope.source);
   };
 
   const requestDocumentLocation = (document: DocumentRuntime, options: DocumentLocation) => {

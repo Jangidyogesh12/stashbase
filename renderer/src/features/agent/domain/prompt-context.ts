@@ -3,6 +3,7 @@
  * its runtime should open, each passage quoted, appended to the typed text.
  */
 import type { AgentContextItem } from '@/features/agent/domain/context';
+import { isExternalSource } from '@/shared/domain/external-source';
 
 export interface ResolvedContextFile {
   path: string;
@@ -22,7 +23,11 @@ export interface ResolvedContextLine {
 const PREPARED_FORMATS = new Set(['pdf', 'docx', 'audio']);
 
 function absolutePath(item: AgentContextItem): string {
-  return item.kind === 'transient' ? item.path : `${item.source.folderPath}/${item.source.path}`;
+  if (item.kind === 'transient') return item.path;
+  // An external file's path is already absolute; its folder is only a marker.
+  return isExternalSource(item.source)
+    ? item.source.path
+    : `${item.source.folderPath}/${item.source.path}`;
 }
 
 function contextLine({ item, resolved }: ResolvedContextLine): string {

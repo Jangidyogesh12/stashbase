@@ -12,6 +12,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -46,6 +47,11 @@ export interface InputMessageFileProps {
   maxFiles?: number;
   /** Side of each preview tile in pixels. Defaults to 80. */
   filePreviewSize?: number;
+  /** A drag payload other than a desktop file that the consumer takes on
+   *  drop itself, such as a row dragged from the file tree. The composer
+   *  lights its drop target for it as it does for a file; the drop itself is
+   *  the consumer's to handle. */
+  acceptsDrag?: (dataTransfer: DataTransfer) => boolean;
   /** Extra tiles rendered in the preview row ahead of the attached files,
    *  for attachments the consumer binds itself (a project mention, say).
    *  Pass it only when there is something to show; the row collapses when
@@ -65,6 +71,8 @@ interface ComposerFilesOptions {
   maxFiles: number | undefined;
   /** The composer as a whole is disabled: no drops, no picker. */
   disabled: boolean | undefined;
+  /** Another payload the consumer takes; see `InputMessageFileProps`. */
+  acceptsDrag: ((dataTransfer: DataTransfer) => boolean) | undefined;
 }
 
 /** Everything the composer needs to know about its attachments. */
@@ -73,7 +81,8 @@ interface ComposerFiles {
   items: File[];
   /** Whether attachment behavior is wired at all. */
   supported: boolean;
-  /** A file drag is hovering the composer. */
+  /** A drag the composer takes, a desktop file or a payload the consumer
+   *  accepts, is hovering it. */
   dragOver: boolean;
   /** Opens the native picker. `acceptOverride` narrows it for one invocation. */
   openFilePicker: (acceptOverride?: string) => void;
@@ -100,9 +109,12 @@ export function useComposerFiles({
   accept,
   maxFiles,
   disabled,
+  acceptsDrag,
 }: ComposerFilesOptions): ComposerFiles {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  /** The document the drag is in, so the highlight can hear its drop. */
+  const dragDocument = useRef<Document | null>(null);
   const items = useMemo(() => files ?? [], [files]);
   const supported = onFilesChange !== undefined;
 
@@ -184,15 +196,41 @@ export function useComposerFiles({
 
   const onDragOver = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      if (!supported || disabled) return;
-      // Only treat as a file drag — text/HTML drags shouldn't trigger.
-      if (!Array.from(event.dataTransfer.types).includes('Files')) return;
+      if (disabled) return;
+      // A desktop file is the composer's own drop; any other payload counts
+      // only when the consumer takes it. Text and HTML drags shouldn't trigger.
+      const carriesFiles = supported && Array.from(event.dataTransfer.types).includes('Files');
+      if (!carriesFiles && !acceptsDrag?.(event.dataTransfer)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
+      dragDocument.current = event.currentTarget.ownerDocument;
       setDragOver(true);
     },
-    [supported, disabled],
+    [acceptsDrag, supported, disabled],
   );
+
+  // A consumer that takes its own payload may stop the drop before it gets
+  // here, so `onDrop` below never hears it. The drag ends wherever the drop
+  // lands, so while one is over the composer the highlight also listens to
+  // the whole document. It lowers only once the drop has been dispatched, as
+  // the content row's drop zone does: re-rendering the field while the event
+  // is still on its way could take the drop's target out from under it.
+  useEffect(() => {
+    const root = dragDocument.current;
+    if (!dragOver || !root) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settle = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => setDragOver(false));
+    };
+    root.addEventListener('drop', settle, true);
+    root.addEventListener('dragend', settle, true);
+    return () => {
+      clearTimeout(timer);
+      root.removeEventListener('drop', settle, true);
+      root.removeEventListener('dragend', settle, true);
+    };
+  }, [dragOver]);
 
   const onDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
     const wrapper = event.currentTarget;

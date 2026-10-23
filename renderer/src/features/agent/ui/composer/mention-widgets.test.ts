@@ -1,5 +1,6 @@
 import { EditorState, type StateEffect } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { ContextStatus } from '@/features/agent/domain/context';
@@ -23,6 +24,8 @@ function markerDoc(count: number): string {
   return Array.from({ length: count }, () => MENTION).join(' ');
 }
 
+/** A mention's glyph is drawn by a React root of its own, so the view is
+ *  built inside `act`, which lets that root finish before the test reads. */
 function createView(doc: string, effects: StateEffect<MentionEffect>[] = []): EditorView {
   const parent = document.createElement('div');
   document.body.append(parent);
@@ -34,7 +37,7 @@ function createView(doc: string, effects: StateEffect<MentionEffect>[] = []): Ed
     }),
   });
   views.push(view);
-  if (effects.length > 0) view.dispatch({ effects });
+  if (effects.length > 0) act(() => view.dispatch({ effects }));
   return view;
 }
 

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  agentCliEnv,
   agentCliExecutableCandidates,
   agentCliVersion,
   isWindowsLaunchableAgentCliPath,
@@ -12,6 +13,17 @@ import {
   resolveNativeAgentCli,
 } from '../agent-cli.ts';
 import { agentCliLaunch } from '../agent-cli-launch.ts';
+
+test('an agent CLI never inherits the token that grants dropped files', (t) => {
+  const previous = process.env.STASHBASE_EXTERNAL_FILE_TOKEN;
+  process.env.STASHBASE_EXTERNAL_FILE_TOKEN = 'main-only';
+  t.after(() => {
+    if (previous === undefined) delete process.env.STASHBASE_EXTERNAL_FILE_TOKEN;
+    else process.env.STASHBASE_EXTERNAL_FILE_TOKEN = previous;
+  });
+  assert.equal(agentCliEnv().STASHBASE_EXTERNAL_FILE_TOKEN, undefined);
+  assert.equal(agentCliEnv({ STASHBASE_EXTERNAL_FILE_TOKEN: 'passed' }).STASHBASE_EXTERNAL_FILE_TOKEN, undefined);
+});
 
 test('native installations win over npm copies, while explicit executable overrides still win', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-cli-choice-'));

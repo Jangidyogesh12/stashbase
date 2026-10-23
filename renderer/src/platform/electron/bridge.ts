@@ -3,6 +3,7 @@ import {
   rendererRuntimeConfigSchema,
 } from '@/protocols/electron/runtime';
 
+import { isExternalFilesBridge, type ExternalFilesBridge } from './external-files';
 import type { ExternalNavigationBridge } from './external-navigation';
 import type { ProjectBridge } from './folder-picker';
 import type { NotificationsBridge } from './notifications';
@@ -20,6 +21,9 @@ interface DesktopWorkspaceSessionBridge {
 interface DesktopProjectBridge extends ProjectBridge, ProjectLifecycleBridge {}
 
 interface DesktopBridge {
+  /** Optional: opening a dropped file in place needs its location on disk,
+   *  which only the desktop shell can read. */
+  externalFiles?: ExternalFilesBridge;
   notifications?: NotificationsBridge;
   /** Optional: opening the bug-report review exists only in the desktop shell. */
   externalNavigation: ExternalNavigationBridge;
@@ -39,6 +43,7 @@ declare global {
     stashbase?: {
       notifications?: NotificationsBridge;
       bugReportReview?: unknown;
+      externalFiles?: unknown;
       externalNavigation?: ExternalNavigationBridge;
       project?: DesktopProjectBridge;
       runtime?: unknown;
@@ -98,7 +103,9 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   }
   const updates = globalWindow.stashbase?.updates;
   const scheduledTasks = globalWindow.stashbase?.scheduledTasks;
+  const externalFiles = globalWindow.stashbase?.externalFiles;
   return {
+    ...(isExternalFilesBridge(externalFiles) ? { externalFiles } : {}),
     ...(globalWindow.stashbase?.notifications
       ? { notifications: globalWindow.stashbase.notifications }
       : {}),

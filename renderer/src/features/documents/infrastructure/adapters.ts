@@ -4,13 +4,16 @@ import type {
   DocumentTurnChangesPort,
   DocumentWindowLifecyclePort,
   DocxPreviewPort,
+  ExternalFilePort,
   GenericFilePreviewPort,
 } from '@/features/documents/application/ports';
+import type { ExternalFilesBridge } from '@/platform/electron/external-files';
 import type { WindowLifecycleBridge } from '@/platform/electron/window-lifecycle';
 import type { HttpClient } from '@/platform/http/client';
 
 import { createDocumentAssetAdapter } from './asset-api';
 import { createDocxPreviewAdapter } from './docx-preview-api';
+import { createExternalFileAdapter } from './external-file-api';
 import { createGenericFilePreviewAdapter } from './generic-preview-api';
 import { createDocumentSourceAdapter } from './source-api';
 import { createDocumentTurnChangesAdapter } from './turn-change-api';
@@ -21,6 +24,7 @@ import { createDocumentWindowLifecycleAdapter } from './window-lifecycle';
 export interface DocumentAdapters {
   asset: DocumentAssetPort;
   docxPreview: DocxPreviewPort;
+  externalFiles: ExternalFilePort;
   genericPreview: GenericFilePreviewPort;
   source: DocumentSourcePort;
   turnChanges: DocumentTurnChangesPort;
@@ -28,6 +32,8 @@ export interface DocumentAdapters {
 }
 
 export interface DocumentAdapterOptions {
+  /** Absent in the web build, where a dropped file has no location. */
+  externalFiles?: ExternalFilesBridge | undefined;
   http: HttpClient;
   serverOrigin: string;
   windowLifecycle: WindowLifecycleBridge;
@@ -42,6 +48,7 @@ export interface DocumentAdapterOptions {
  * port ends up on is not the app's business.
  */
 export function createDocumentAdapters({
+  externalFiles,
   http,
   serverOrigin,
   windowLifecycle,
@@ -49,6 +56,7 @@ export function createDocumentAdapters({
   return {
     asset: createDocumentAssetAdapter(http, serverOrigin),
     docxPreview: createDocxPreviewAdapter({ reportError: http.reportError }),
+    externalFiles: createExternalFileAdapter(http, externalFiles),
     genericPreview: createGenericFilePreviewAdapter(http),
     source: createDocumentSourceAdapter(http),
     turnChanges: createDocumentTurnChangesAdapter(http),

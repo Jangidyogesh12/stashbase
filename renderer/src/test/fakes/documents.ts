@@ -1,3 +1,9 @@
+/**
+ * Documents ports and runtimes as tests build them: every fake answers the
+ * way the real transport would on success, and each takes overrides one port
+ * at a time.
+ */
+
 import { vi } from 'vite-plus/test';
 
 import type { AppDependencies } from '@/app/dependencies';
@@ -8,6 +14,7 @@ import type {
   DocumentTurnChangesPort,
   DocumentWindowLifecyclePort,
   DocxPreviewPort,
+  ExternalFilePort,
   GenericFilePreviewPort,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntimeOptions } from '@/features/documents/application/tabs-runtime';
@@ -47,6 +54,21 @@ export function assetApi(overrides: Partial<DocumentAssetPort> = {}): DocumentAs
 
 export function docxPreviewApi(overrides: Partial<DocxPreviewPort> = {}): DocxPreviewPort {
   return { load: vi.fn(async () => ({ html: '' })), ...overrides };
+}
+
+/** A desktop shell that refuses every drop until a test says otherwise. */
+export function externalFilesApi(overrides: Partial<ExternalFilePort> = {}): ExternalFilePort {
+  return {
+    available: true,
+    open: vi.fn(async (file: File) => ({
+      kind: 'refused' as const,
+      name: file.name,
+      reason: 'unavailable' as const,
+    })),
+    reveal: vi.fn(async () => undefined),
+    revoke: vi.fn(async () => undefined),
+    ...overrides,
+  };
 }
 
 export function genericPreviewApi(
@@ -110,6 +132,7 @@ export function documentAdapters(overrides: Partial<DocumentAdapters> = {}): Doc
   return {
     asset: assetApi(),
     docxPreview: docxPreviewApi(),
+    externalFiles: externalFilesApi(),
     genericPreview: genericPreviewApi(),
     source: sourceApi(),
     turnChanges: turnChangesApi(),

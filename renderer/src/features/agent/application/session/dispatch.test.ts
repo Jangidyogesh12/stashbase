@@ -128,7 +128,7 @@ describe('prompt dispatcher', () => {
       ok: false,
       reason: 'stale',
     });
-    expect(test.state().contextIssue).toBe('That file is no longer in this folder.');
+    expect(test.state().contextIssue).toBe('That file is no longer in this project.');
   });
 
   it('refuses to send while a turn is already running', async () => {

@@ -7,6 +7,7 @@
  * recovery by `kind` and `failure-messages` owns the sentence. Adapters
  * implement these in `../infrastructure`; nothing here knows they exist.
  */
+
 import type {
   DocumentTextSaveResult,
   DocumentTextSource,
@@ -35,6 +36,29 @@ export interface DocumentSourcePort {
 
 export interface GenericFilePreviewPort {
   load(source: SourceReference, signal: AbortSignal): Promise<GenericFilePreview>;
+}
+
+/** Why a dropped file did not open in place. */
+type ExternalFileRefusal = 'copy-required' | 'directory' | 'no-project' | 'unavailable';
+
+/** What one file dropped on the document pane resolved to: a read grant for
+ *  a file outside the project, the project's own path when the file already
+ *  lives there, or a refusal. */
+export type ExternalFileOpening =
+  | { kind: 'external'; source: SourceReference }
+  /** A project file: the window's own, or another registered project's
+   *  (`folderPath`), which opens read-only as that project's. */
+  | { kind: 'project'; path: string; folderPath?: string }
+  | { kind: 'refused'; name: string; reason: ExternalFileRefusal };
+
+/** Files the reader dropped on the document pane to read without copying. */
+export interface ExternalFilePort {
+  /** False in the web build, where a dropped file has no location on disk. */
+  readonly available: boolean;
+  open(file: File): Promise<ExternalFileOpening>;
+  reveal(source: SourceReference, signal: AbortSignal): Promise<void>;
+  /** Drops the read grant once nothing shows the file any more. */
+  revoke(source: SourceReference): Promise<void>;
 }
 
 interface SourceDocumentAsset {
