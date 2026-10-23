@@ -41,10 +41,21 @@ export function PdfPage({
     return () => observer.disconnect();
   }, []);
 
+  // Resizing to zero releases a canvas's backing store; clearRect and DOM
+  // removal do not. That happens when the page leaves view or closes, never on
+  // a zoom, so the drawn page stays until its new rendering replaces it.
   useEffect(() => {
     if (!nearViewport) return;
     const visibleCanvas = canvasRef.current;
     const visibleText = textRef.current;
+    return () => {
+      if (visibleCanvas) visibleCanvas.width = visibleCanvas.height = 0;
+      visibleText?.replaceChildren();
+    };
+  }, [nearViewport]);
+
+  useEffect(() => {
+    if (!nearViewport) return;
     let rendered: HTMLCanvasElement | null = null;
     let cancelled = false;
     let page: PDFPageProxy | null = null;
@@ -114,7 +125,6 @@ export function PdfPage({
         }
       })
       .finally(() => {
-        // clearRect and DOM removal do not release canvas backing storage.
         // Wait for cancelled rendering to settle before resizing its target.
         if (rendered) rendered.width = rendered.height = 0;
         page?.cleanup();
@@ -124,8 +134,6 @@ export function PdfPage({
       renderTask?.cancel();
       textLayer?.cancel();
       page?.cleanup();
-      if (visibleCanvas) visibleCanvas.width = visibleCanvas.height = 0;
-      visibleText?.replaceChildren();
     };
   }, [nearViewport, pageNumber, pdf, scale, reportError]);
 

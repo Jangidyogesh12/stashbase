@@ -64,7 +64,7 @@ function fixture({ pending = false } = {}) {
   const view = render(
     <PdfPage document={pdf} pageNumber={1} placeholder={{ height: 792, width: 612 }} scale={3} />,
   );
-  return { cancel, draw, intersect, page, scratch: () => scratch, view };
+  return { cancel, draw, intersect, page, pdf, scratch: () => scratch, view };
 }
 
 it('bounds raster allocation at high DPI and zoom while keeping the full page layout', async () => {
@@ -90,6 +90,26 @@ it('releases displayed backing storage as soon as a page leaves the viewport', a
   act(() => test.intersect(false));
   expect(canvas.width * canvas.height).toBe(0);
   expect(test.page.cleanup).toHaveBeenCalled();
+});
+
+it('keeps the drawn page through a zoom until its new rendering replaces it', async () => {
+  const test = fixture();
+  await waitFor(() => expect(test.draw).toHaveBeenCalledOnce());
+  const canvas = test.view.container.querySelector('canvas'); // dom-contract: the drawn backing store is what stays on screen.
+  if (!canvas) throw new Error('Missing visible canvas');
+  const drawn = canvas.width * canvas.height;
+  test.page.render.mockReturnValue({ cancel: test.cancel, promise: new Promise<void>(noop) });
+  test.view.rerender(
+    <PdfPage
+      document={test.pdf}
+      pageNumber={1}
+      placeholder={{ height: 792, width: 612 }}
+      scale={2}
+    />,
+  );
+  await waitFor(() => expect(test.page.render).toHaveBeenCalledTimes(2));
+  expect(drawn).toBeGreaterThan(0);
+  expect(canvas.width * canvas.height).toBe(drawn);
 });
 
 it('cancels an in-flight page and releases its scratch buffer without publishing stale pixels', async () => {

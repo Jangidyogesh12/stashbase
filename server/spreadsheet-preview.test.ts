@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import * as XLSX from 'xlsx';
-import { spreadsheetFixture } from './__tests__/spreadsheet-fixtures.ts';
+import { spreadsheetFixture, worksheetFixture, worksheetRows } from './__tests__/spreadsheet-fixtures.ts';
 import { clearCurrentFolder, openProjectFolder } from './folder.ts';
 import { readGenericFilePreview } from './generic-file-preview.ts';
 import { spreadsheetFilePreview } from './spreadsheet-preview.ts';
@@ -60,6 +60,41 @@ test('large sheet dimensions are reported while preview rows and columns stay bo
   assert.equal(result.rows[0].length, 64);
 });
 
+test('a dense sheet previews its first rows with its true extent, even under a wrong dimension', async () => {
+  const { spreadsheetAgentText } = await import('./spreadsheet-preview.ts');
+  // Nearly a million cells: parsing them all exhausted the worker and
+  // aborted the whole host process. The dimension claims ten rows.
+  const preview = await spreadsheetFilePreview(
+    worksheetFixture(`<dimension ref="A1:B10"/><sheetData>${worksheetRows(80_000, 12)}</sheetData>`),
+    'dense.xlsx',
+  );
+  assert.equal(preview.kind, 'spreadsheet');
+  if (preview.kind !== 'spreadsheet') return;
+  const [sheet] = preview.workbook.sheets;
+  assert.equal(sheet.rowCount, 80_000);
+  assert.equal(sheet.columnCount, 12);
+  assert.equal(sheet.rows.length, 1000);
+  assert.deepEqual(sheet.rows[999], Array.from({ length: 12 }, (_, column) => String((1000 + column) % 10)));
+  assert.match(
+    spreadsheetAgentText('dense.xlsx', preview.workbook),
+    /\(80,000 rows × 12 columns in the sheet\)\.\nOnly rows 1–1000 and columns A–L are included; the rest of this sheet is not\./,
+  );
+});
+
+test('cells that start past the first thousand rows preview from there, and a sheet too wide is refused', async () => {
+  const late = await spreadsheetFilePreview(
+    worksheetFixture(`<sheetData>${worksheetRows(3, 2, 1500)}</sheetData>`),
+    'late.xlsx',
+  );
+  assert.equal(late.kind, 'spreadsheet');
+  if (late.kind === 'spreadsheet') {
+    assert.equal(late.workbook.sheets[0].firstRow, 1499);
+    assert.deepEqual(late.workbook.sheets[0].rows, [['0', '1'], ['1', '2'], ['2', '3']]);
+  }
+  const wide = await spreadsheetFilePreview(worksheetFixture(`<sheetData>${worksheetRows(1000, 600)}</sheetData>`), 'wide.xlsx');
+  assert.equal(wide.kind === 'invalid-spreadsheet' && wide.message, 'This workbook is too large to preview. Open it in a spreadsheet app.');
+});
+
 test('invalid and oversized archives fail visibly, and cancellation does not publish a preview', async () => {
   const invalid = await spreadsheetFilePreview(Buffer.from('not a workbook'), 'broken.xlsx');
   assert.equal(invalid.kind, 'invalid-spreadsheet');
@@ -74,6 +109,14 @@ test('invalid and oversized archives fail visibly, and cancellation does not pub
   expanded.writeUInt32LE(100 * 1024 * 1024, directory + 24);
   const rejected = await spreadsheetFilePreview(expanded, 'expanded.xlsx');
   assert.equal(rejected.kind, 'invalid-spreadsheet');
+  // SheetJS reads the last end-of-directory signature, so the checked record
+  // must end the file: one inside its comment would bypass the bound above.
+  const fixture = spreadsheetFixture();
+  const commented = Buffer.concat([fixture, Buffer.from([0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 0, 0])]);
+  commented.writeUInt16LE(10, fixture.length - 2);
+  assert.equal((await spreadsheetFilePreview(commented, 'commented.xlsx')).kind, 'invalid-spreadsheet');
+  const trailing = Buffer.concat([fixture, Buffer.from('trailing bytes')]);
+  assert.equal((await spreadsheetFilePreview(trailing, 'trailing.xlsx')).kind, 'invalid-spreadsheet');
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(spreadsheetFilePreview(spreadsheetFixture(), 'cancelled.xlsx', controller.signal), { name: 'AbortError' });

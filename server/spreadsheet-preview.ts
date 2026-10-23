@@ -22,17 +22,63 @@ export function isSpreadsheetFile(name: string): boolean {
 const WORKER_SOURCE = String.raw`
 const { parentPort, workerData } = require('node:worker_threads');
 const { inflateRawSync } = require('node:zlib');
+// The preview holds at most ROWS rows and COLUMNS columns of a worksheet.
+// SheetJS is asked for only the rows shown, and the cells in them are counted
+// from the XML first: a worker out of memory can abort the whole host.
+const ROWS = 1000, COLUMNS = 64, CELL_BUDGET = 500000;
+const tooLarge = () => new Error('This workbook is too large to preview. Open it in a spreadsheet app.');
+
+/** The cells a worksheet's XML lists, whatever its <dimension> claims: their
+ *  extent, how many lie in the first ROWS rows, and how many in the ROWS rows
+ *  from the first cell. A cell without a reference follows the one before it. */
+function scanCells(data) {
+  const tag = /<(?:[\w.-]+:)?(row|c)\b([^>]*)>/g, ref = /\sr="([A-Za-z]*)(\d*)"/;
+  const text = data.toString('latin1');
+  const found = { cells: 0, early: 0, window: 0, firstRow: Infinity, lastRow: -1, firstColumn: Infinity, lastColumn: -1 };
+  let row = -1, column = -1, start = -1;
+  for (let match; (match = tag.exec(text)); ) {
+    const at = ref.exec(match[2]);
+    if (match[1] === 'row') {
+      row = at && at[2] ? Number(at[2]) - 1 : row + 1;
+      column = -1;
+      continue;
+    }
+    if (at && at[1]) {
+      column = 0;
+      for (const letter of at[1].toUpperCase()) column = column * 26 + letter.charCodeAt(0) - 64;
+      column -= 1;
+      row = Number(at[2]) - 1;
+    } else column += 1;
+    if (found.cells++ === 0) start = row;
+    found.firstRow = Math.min(found.firstRow, row);
+    found.lastRow = Math.max(found.lastRow, row);
+    found.firstColumn = Math.min(found.firstColumn, column);
+    found.lastColumn = Math.max(found.lastColumn, column);
+    // A self-closed cell is formatting without a value; SheetJS creates none.
+    if (match[2].endsWith('/')) continue;
+    if (row < ROWS) found.early++;
+    // Rows are listed in order; one out of order leaves no window to trust.
+    if (row < start) found.window = Infinity;
+    else if (row < start + ROWS) found.window++;
+  }
+  return found;
+}
+
 try {
   const bytes = Buffer.from(workerData.bytes);
-  // Bound expansion before the parser inflates OOXML entries. ZIP64 and
-  // encrypted containers are outside this preview's supported input.
-  let end = bytes.length - 22;
-  const floor = Math.max(0, end - 65535);
+  // Bound expansion before the parser inflates OOXML entries. SheetJS reads
+  // the last end-of-directory record in the file, so that record must be the
+  // one that ends the file; another inside its comment could list entries
+  // this check never saw. ZIP64 and encrypted containers are not supported.
+  let end = bytes.length - 4;
+  const floor = Math.max(0, bytes.length - 22 - 65535);
   while (end >= floor && bytes.readUInt32LE(end) !== 0x06054b50) end--;
-  if (end < floor || bytes.readUInt16LE(end + 4) || bytes.readUInt16LE(end + 6))
+  if (end < floor || end + 22 > bytes.length || end + 22 + bytes.readUInt16LE(end + 20) !== bytes.length
+    || bytes.readUInt16LE(end + 4) || bytes.readUInt16LE(end + 6) || bytes.readUInt16LE(end + 8) !== bytes.readUInt16LE(end + 10))
     throw new Error('This file is not a supported XLSX workbook.');
   const count = bytes.readUInt16LE(end + 10);
   const directoryStart = bytes.readUInt32LE(end + 16);
+  const worksheets = new Map(), parts = new Map();
   let offset = directoryStart, expanded = 0;
   if (count > 10000) throw new Error('This workbook is too complex to preview.');
   for (let i = 0; i < count; i++) {
@@ -56,23 +102,58 @@ try {
     const packed = bytes.subarray(start, start + compressed);
     const unpacked = method === 0 ? packed : inflateRawSync(packed, { maxOutputLength: Math.max(1, uncompressed) });
     if (unpacked.length !== uncompressed) throw new Error('This workbook archive is damaged.');
+    const name = bytes.toString('utf8', offset + 46, offset + 46 + bytes.readUInt16LE(offset + 28)).toLowerCase();
+    if (/^xl\/(?:worksheets|macrosheets)\/[^/]+\.xml$/.test(name)) worksheets.set(name, scanCells(unpacked));
+    else if (name === 'xl/workbook.xml' || name === 'xl/_rels/workbook.xml.rels') parts.set(name, unpacked.toString('utf8'));
     offset += 46 + bytes.readUInt16LE(offset + 28) + bytes.readUInt16LE(offset + 30) + bytes.readUInt16LE(offset + 32);
   }
+  // SheetJS parses every worksheet, hidden ones too, up to the rows asked for.
+  let early = 0;
+  for (const found of worksheets.values()) early += found.early;
+  if (early > CELL_BUDGET) throw tooLarge();
+  // Each sheet's XML by workbook order, as its relationship names it.
+  const targets = new Map();
+  for (const [relationship] of (parts.get('xl/_rels/workbook.xml.rels') ?? '').matchAll(/<(?:[\w.-]+:)?Relationship\b[^>]*>/g)) {
+    const id = /\sId="([^"]*)"/.exec(relationship)?.[1], target = /\sTarget="([^"]*)"/.exec(relationship)?.[1];
+    if (id && target) targets.set(id, (target.startsWith('/') ? target.slice(1) : 'xl/' + target).toLowerCase());
+  }
+  const paths = [...(parts.get('xl/workbook.xml') ?? '').matchAll(/<(?:[\w.-]+:)?sheet\b[^>]*>/g)]
+    .map(([sheet]) => targets.get(/\s[\w.-]+:id="([^"]*)"/.exec(sheet)?.[1]));
   const XLSX = require(workerData.xlsxModule);
-  const book = XLSX.read(bytes, { type: 'buffer', cellHTML: false, cellFormula: true });
+  const read = (options) => XLSX.read(bytes, { type: 'buffer', cellHTML: false, cellFormula: true, dense: true, ...options });
+  const book = read({ sheetRows: ROWS });
   if (!book.Workbook) throw new Error('This file is not an XLSX workbook.');
-  const names = book.SheetNames.filter((name, i) => !book.Workbook.Sheets?.[i]?.Hidden);
+  const visible = book.SheetNames.map((name, index) => ({ name, index })).filter(({ index }) => !book.Workbook.Sheets?.[index]?.Hidden);
   let characters = 0, hasFormulas = false;
-  const sheets = names.slice(0, 20).map(name => {
-    const sheet = book.Sheets[name];
-    if (!sheet?.['!ref']) return { name, firstRow: 0, firstColumn: 0, rowCount: 0, columnCount: 0, rows: [], formulas: [] };
-    const range = XLSX.utils.decode_range(sheet['!ref']);
+  const sheets = visible.slice(0, 20).map(({ name, index }) => {
+    let sheet = book.Sheets[name], limit = ROWS;
+    const found = worksheets.get(paths[index]);
+    // The extent covers the declared range, the cells the XML lists and the
+    // cells parsed, so a wrong <dimension> neither hides nor miscounts data.
+    const range = { s: { r: Infinity, c: Infinity }, e: { r: -1, c: -1 } };
+    const cover = (s, e) => {
+      range.s = { r: Math.min(range.s.r, s.r), c: Math.min(range.s.c, s.c) };
+      range.e = { r: Math.max(range.e.r, e.r), c: Math.max(range.e.c, e.c) };
+    };
+    const declared = sheet?.['!fullref'] ?? sheet?.['!ref'];
+    if (declared) { const d = XLSX.utils.decode_range(declared); cover(d.s, d.e); }
+    if (found?.cells) cover({ r: found.firstRow, c: found.firstColumn }, { r: found.lastRow, c: found.lastColumn });
+    (sheet?.['!data'] ?? []).forEach((cells, r) => cells?.forEach((cell, c) => cell && cover({ r, c }, { r, c })));
+    if (range.e.r < 0) return { name, firstRow: 0, firstColumn: 0, rowCount: 0, columnCount: 0, rows: [], formulas: [] };
+    // A sheet whose cells start past the rows read is read again from there;
+    // no cells precede its first, so the same bound holds.
+    if (range.s.r >= limit && found?.cells) {
+      if (found.window > CELL_BUDGET) throw tooLarge();
+      limit = range.s.r + ROWS;
+      sheet = read({ sheets: index, sheetRows: limit }).Sheets[name];
+    }
     const rowCount = range.e.r - range.s.r + 1, columnCount = range.e.c - range.s.c + 1;
+    const data = sheet?.['!data'] ?? [];
     const rows = [], formulas = [];
-    for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 999); r++) {
+    for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + ROWS - 1, limit - 1); r++) {
       const row = [];
-      for (let c = range.s.c; c <= Math.min(range.e.c, range.s.c + 63); c++) {
-        const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+      for (let c = range.s.c; c <= Math.min(range.e.c, range.s.c + COLUMNS - 1); c++) {
+        const cell = data[r]?.[c];
         if (cell?.f) {
           hasFormulas = true;
           if (formulas.length < 2000) {
@@ -91,7 +172,7 @@ try {
     }
     return { name, firstRow: range.s.r, firstColumn: range.s.c, rowCount, columnCount, rows, formulas };
   });
-  parentPort.postMessage({ workbook: { sheets, sheetCount: names.length, hasFormulas } });
+  parentPort.postMessage({ workbook: { sheets, sheetCount: visible.length, hasFormulas } });
 } catch (error) {
   parentPort.postMessage({ error: error.message });
 }
@@ -195,7 +276,10 @@ export function spreadsheetAgentText(name: string, workbook: Workbook): string {
     lines.push('', `## Sheet ${index + 1}: ${sheet.name}`, '');
     const columns = sheet.rows[0]?.length ?? 0;
     if (sheet.rows.length === 0 || columns === 0) {
-      lines.push('This worksheet is empty.');
+      // Cells the preview could not reach are left out, not called empty.
+      lines.push(sheet.rowCount === 0
+        ? 'This worksheet is empty.'
+        : `Rows ${sheet.firstRow + 1}–${sheet.firstRow + sheet.rowCount} of this sheet are not included.`);
       return;
     }
     const column = (offset: number) => spreadsheetColumnLabel(sheet.firstColumn + offset);

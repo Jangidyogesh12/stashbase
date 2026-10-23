@@ -101,6 +101,11 @@ preview, content editing, and rename/delete are separate permissions.
   and to `read_file` in `project-file-reader.ts`, which renders that same parse as
   Markdown tables (`spreadsheetAgentText`) marked as derived. Archive expansion,
   parsing time, worker heap, worksheet count, cell range and output text are bounded.
+  The end-of-directory record must end the file, since SheetJS reads the last one.
+  The worker counts each worksheet's cells from its XML before parsing, asks
+  SheetJS (dense) for only the first 1,000 rows, and refuses more than 500,000
+  cells there, because a worker out of heap can abort the host. Sheet extents
+  cover the declared range, the listed cells and the parsed cells.
   A bounded content-hash cache reuses unchanged parses across both. The renderer
   displays text, never workbook HTML, hyperlinks or executable formulas. Neither
   path widens the binary-file write gate, preparation or retrieval; `edit_file`
@@ -112,7 +117,8 @@ preview, content editing, and rename/delete are separate permissions.
   rules in one resumable byte-level record reader shared by the full-file scan
   (strict UTF-8, a checkpoint every 256 records, the widest record) and page reads
   that seek to the nearest checkpoint. Scans yield between 1 MiB chunks, stop at
-  512 MiB, are cached by stat identity, and run again when the file changes
+  512 MiB, are cached by stat identity and shared by concurrent reads, stop once
+  no read waits for them, and run again when the file changes
   underneath; one response is bounded in rows and characters. A non-UTF-8 file
   reports a likely encoding instead of being decoded. A CSV save restores the line
   endings of unchanged lines (`keepUnchangedLineEndings`), matched by a bounded
@@ -1122,7 +1128,9 @@ registered host boundaries; renderer shared types are a different layer.
   owners and disposal. One window has one query client, not durable authority.
   The PDF page owner caps each raster backing store at four megapixels and
   4096 pixels per edge, independently of CSS zoom and text-layer coordinates.
-  Effect cleanup resets the captured visible canvas even after React detaches it;
+  The visible canvas is reset when its page leaves view or unmounts, even after
+  React detaches it, but not on a zoom, which keeps its pixels until the new
+  rendering replaces them;
   scratch storage is reset after rendering or cancellation settles.
 - Main's one-shot folder claim and server binding decide entry, not saved layout.
   The startup window, and each window a launch reopens a project in, claims

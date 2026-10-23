@@ -184,7 +184,16 @@ type TableProblem =
   | { kind: 'too-large'; size: number }
   | { kind: 'binary' };
 
-const indexes = new Map<string, Promise<TableIndex | TableProblem>>();
+/** One scan per file version, shared by every read that needs it. It stops
+ *  once no read waits for it, so closing a large table ends its scan. */
+interface SharedScan {
+  readonly controller: AbortController;
+  readonly result: Promise<TableIndex | TableProblem>;
+  settled: boolean;
+  waiting: number;
+}
+
+const indexes = new Map<string, SharedScan>();
 
 function statVersion(st: fs.BigIntStats): string {
   return `stat:${st.dev}:${st.ino}:${st.size}:${st.mtimeNs}:${st.ctimeNs}`;
@@ -254,7 +263,7 @@ export function guessTableEncoding(sample: Uint8Array): TableEncoding | null {
   return null;
 }
 
-async function scanTable(target: string, name: string): Promise<TableIndex | TableProblem> {
+async function scanTable(target: string, name: string, signal: AbortSignal): Promise<TableIndex | TableProblem> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const handle = await fs.promises.open(target, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
     try {
@@ -281,6 +290,7 @@ async function scanTable(target: string, name: string): Promise<TableIndex | Tab
       });
       const utf8 = new TextDecoder('utf-8', { fatal: true });
       for (let offset = bom; offset < size; ) {
+        signal.throwIfAborted();
         const chunk = Buffer.alloc(Math.min(SCAN_CHUNK_BYTES, size - offset));
         const read = (await handle.read(chunk, 0, chunk.length, offset)).bytesRead;
         if (!read) break;
@@ -313,17 +323,40 @@ async function scanTable(target: string, name: string): Promise<TableIndex | Tab
   });
 }
 
-async function tableIndex(target: string, name: string): Promise<TableIndex | TableProblem> {
+async function tableIndex(target: string, name: string, signal?: AbortSignal): Promise<TableIndex | TableProblem> {
   const version = statVersion(await fs.promises.stat(target, { bigint: true }));
   const key = `${target}\0${version}`;
-  let pending = indexes.get(key);
-  if (!pending) {
-    pending = scanTable(target, name);
-    pending.catch(() => indexes.delete(key));
+  let scan = indexes.get(key);
+  if (!scan) {
+    const controller = new AbortController();
+    const created: SharedScan = { controller, result: scanTable(target, name, controller.signal), settled: false, waiting: 0 };
+    created.result.then(
+      () => { created.settled = true; },
+      () => {
+        created.settled = true;
+        if (indexes.get(key) === created) indexes.delete(key);
+      },
+    );
     if (indexes.size >= 8) indexes.delete(indexes.keys().next().value!);
-    indexes.set(key, pending);
+    indexes.set(key, created);
+    scan = created;
   }
-  return pending;
+  const shared = scan;
+  shared.waiting += 1;
+  try {
+    return await new Promise<TableIndex | TableProblem>((resolve, reject) => {
+      const abort = () => reject(signal?.reason);
+      if (signal?.aborted) return abort();
+      signal?.addEventListener('abort', abort, { once: true });
+      shared.result.then(resolve, reject).finally(() => signal?.removeEventListener('abort', abort));
+    });
+  } finally {
+    shared.waiting -= 1;
+    if (shared.waiting === 0 && !shared.settled && signal?.aborted) {
+      if (indexes.get(key) === shared) indexes.delete(key);
+      shared.controller.abort();
+    }
+  }
 }
 
 /** Rows `start`…`start + count` of the delimited file at `target`, with the
@@ -339,7 +372,7 @@ export async function readDelimitedTable(
 ): Promise<DelimitedTable> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     signal?.throwIfAborted();
-    const index = await tableIndex(target, name);
+    const index = await tableIndex(target, name, signal);
     signal?.throwIfAborted();
     if (!('checkpoints' in index)) return { ...index, name };
     const page = await readPage(target, name, index, start, count, signal);

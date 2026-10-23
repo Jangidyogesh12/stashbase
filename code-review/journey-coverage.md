@@ -644,6 +644,20 @@ response budget only once it is decoded; XLSX workers have no concurrency cap;
 Copy of a narrow column in a wide CSV reads whole pages; an attached or
 mentioned XLSX gets no `read_file` hint in the prompt; hidden rows and columns
 appear in the preview and agent text.
+A release review (2026-10-24) found that a dense 120,000 × 12 workbook (3.9 MB)
+aborted the whole process under Electron 39's Node 22 when its preview worker
+ran out of heap. Parsing now reads only the first 1,000 rows and refuses more
+than 500,000 cells there. A built-host pass (2026-10-24) ran the bundled server
+under Electron's Node with an isolated HOME: `/api/file-preview` returned the
+60,000- and 120,000-row workbooks at their true sizes with 1,000 rows shown
+(0.5 s and 1.0 s), `/api/project/file` returned derived text stating that only
+rows 1–1000 are included, and the host stayed up.
+`spreadsheet-preview.test.ts` covers a dense 80,000-row sheet under an
+understated dimension, cells starting after row 1,000, a refused wide sheet and
+the end-record checks, and `delimited-table.test.ts` a cancelled scan shared with
+another read. **Gaps:** that test does not prove the scan stops early, and a
+sheet whose file the workbook's relationships do not locate, with cells only
+after row 1,000, still reads as empty in the grid.
 
 **XLSX preview (2026-10-23):** project and granted external XLSX files use
 `server/spreadsheet-preview.ts` through the existing generic-preview adapters;

@@ -29,8 +29,11 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
 
 PDF preview keeps zoomed page geometry and selectable text while bounding raster
 resolution. Pages outside the nearby viewport release their canvas storage;
-zooming or closing a preview cancels obsolete rendering. Extremely large pages
-may appear less sharp at high zoom to keep preview memory bounded.
+zooming or closing a preview cancels obsolete rendering, and a zoomed page keeps
+its last drawing until the new one replaces it. Each page is drawn with at most
+four megapixels and 4,096 pixels on its longest side, so on a high-DPI display a
+Letter or A4 page is drawn below screen resolution beyond about 140% zoom, and
+larger pages sooner.
 
 ## Shared Rules and Differences
 
@@ -140,8 +143,10 @@ so a long table scrolls as freely as a short one.
 - **XLSX.** Visible worksheets, row and column coordinates, and formatted cell
   values, read-only. The reader switches sheets. Formulas show saved results
   when present, or their formula text when no result was saved; StashBase does
-  not recalculate them. Preview limits are stated beside the table. Empty,
-  damaged, encrypted, and oversized workbooks have explicit states. Preview
+  not recalculate them. Preview limits are stated beside the table; a sheet's
+  size counts the cells the file holds, not the size it declares. Empty,
+  damaged, encrypted, and oversized workbooks, including one with more than
+  500,000 cells in its sheets' first 1,000 rows, have explicit states. Preview
   never changes the workbook or adds search eligibility.
 - **Agent reading.** `read_file` returns an XLSX from the same parse the
   preview uses: Markdown tables of its visible worksheets with each sheet's

@@ -120,6 +120,26 @@ test(
   }),
 );
 
+test(
+  'a cancelled read stops waiting for the scan without failing other reads or later ones',
+  withFile('large.csv', 'a,b\n'.repeat(1_000_000), async (target) => {
+    const cancelled = new AbortController();
+    const waiting = readDelimitedTable(target, 'large.csv', 0, 1, cancelled.signal);
+    const kept = readDelimitedTable(target, 'large.csv', 0, 1);
+    cancelled.abort();
+    await assert.rejects(waiting, { name: 'AbortError' });
+    const table = await kept;
+    assert.equal(table.kind === 'table' && table.rowCount, 1_000_000);
+    // Alone, a cancelled read ends the scan of a new version; the next read scans again.
+    fs.appendFileSync(target, 'c,d\n');
+    const alone = new AbortController();
+    const stopped = readDelimitedTable(target, 'large.csv', 0, 1, alone.signal);
+    alone.abort();
+    await assert.rejects(stopped, { name: 'AbortError' });
+    assert.deepEqual(await rows(target, 1_000_000, 1), [['c', 'd']]);
+  }),
+);
+
 test('text that is not UTF-8 is named by its likely encoding instead of being decoded lossily', async () => {
   const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('name,value\r\nA,1\r\n', 'utf16le')]);
   await withFile('utf16.csv', utf16, async (target) => {
