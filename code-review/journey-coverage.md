@@ -1235,6 +1235,44 @@ refused. Host/renderer types, 851 server tests, documentation checks, Electron
 tests, and the built-output Electron smoke passed. No live model turn or packaged
 desktop journey was exercised.
 
+**Multimodal context admission and recovery (2026-10-21):** The adjacent
+stashbase-api estimator separates UTF-8 text/context estimation from media's
+financial fallback. Gateway regressions admit 23 small images across history and
+a 23-page blank PDF, preserve forwarded bytes, and check content-free context
+refusal diagnostics including configuration races. A 33 KB PDF whose compressed
+object stream expands to 32 MiB verifies that estimation does not inflate it;
+production admission no longer imports a PDF parser. Workerd tests exercise the
+same media/text split. Financial media estimates remain approximate and can
+under/overestimate costs; these tests do not establish provider token counts.
+Gateway regressions now pass actual tokenizer output through the real
+`fitAgentOutputBudget` function: one small image, 23 images across history, and a
+23-page blank PDF fit low user balances while retaining the full provider input
+reserve. Cases also cover output reduction, an affordable full reservation, zero
+balance and a text floor exceeding balance. Refusal diagnostics retain the full
+and user-funded media shares without content. This fixes the former fake ledger
+coverage gap; it does not exercise PostgreSQL locking or live-provider billing.
+
+`server/__tests__/opencode-native-smoke.test.ts` drives the pinned executable
+through controlled HTTP 413 responses. For fresh images/PDFs first rejected before
+being read, the broker ends the request without compaction or continuation, the
+translator marks the turn failed, and an explicit same-session retry still sends
+original media. A separate controlled wire-adapter/session-runtime pass verifies
+that the failed turn pauses the queue and retains the next prompt without dispatch.
+Separate text-only coverage
+checks prior text reaching the summary, the current task reaching continuation,
+unchanged model selection, successful settlement, and termination if the summary
+also receives 413. Translator tests cover unfinished recovery and cancellation.
+These are macOS native fixtures, not Momento's historical Windows trace or a
+live-provider measurement. Summary fidelity is not established by the fixture.
+
+Focused broker/translator/native tests passed (100), as did API unit/HTTP tests
+(243), workerd tests (8), API and desktop host/Electron-boundary types, Node/Worker
+builds and documentation checks. The full Agent suite passed 376/377 before the
+additional upload-ceiling regression; its installer-capability assertion also
+failed in the previous untouched-HEAD reproduction. The upload-ceiling test
+verifies a visible terminal error instead of a socket close. No deployment,
+packaged Windows pass or real-provider validation was performed.
+
 **Cleanup timeout recovery (2026-10-20):** `agent-process.ts` owns one bounded
 retirement attempt and a separate final-closure barrier. A deadline rejects its
 original callers with `AGENT_PROCESS_CLOSE_TIMEOUT` while retaining the child;
@@ -2559,6 +2597,17 @@ A table selection (2026-10-23) is the same passage kind: Documents builds its
 text (`domain/table.ts`) and binds it through the same `askAbout` path, so
 validation, prompt rendering and history replay are unchanged; replay now
 recognizes CSV, TSV and XLSX paths.
+
+**Composer context shrink (2026-10-23):** the preview and queue regions now
+measure their inner content with `useMeasuredSize`; the animated parent's
+`scrollHeight` was floored by its previous height and left a blank row after
+removing a wrapped source suggestion. Both regions keep spacing inside the
+measured content as padding. `input-message.test.tsx` reproduces that browser
+measurement floor and verifies the preview shrinks while retaining the passage.
+A local Electron composer harness using the real session runtime and UI added
+an Ask agent passage, then dismissed the original file suggestion: the gap
+between the remaining chip and editor fell from 44px to 8px. This verifies the
+composer layout, not a packaged application or a provider turn.
 
 Additional hosted accounting evidence (API repository):
 *agent-credit-admission.test.ts* reproduces the long-context/remaining-credit

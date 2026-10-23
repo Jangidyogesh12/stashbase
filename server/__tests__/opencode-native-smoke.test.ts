@@ -155,6 +155,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   let finishReview: (() => void) | undefined;
   t.after(() => releaseReview?.());
   let emptyResponses = 0;
+  let contextRefusals = 0;
   let emptyAfterTool = false;
   let interruptions = 0;
   let interruptionsAfterTool = 0;
@@ -169,6 +170,12 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
       version: request.headers['x-stashbase-agent-profile-version'] as string | undefined,
     });
     const body = gatewayRequests.at(-1)!;
+    if (contextRefusals > 0) {
+      contextRefusals--;
+      response.writeHead(413, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ code: 'agent_context_too_large', message: 'The Agent request exceeds the model context limit.' }));
+      return;
+    }
     const reviewing = Array.isArray(body.messages) && body.messages.some((message) =>
       message.role === 'system' && String(message.content).startsWith('Review one proposed action'));
     if (reviewing) {
@@ -661,6 +668,94 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.match(followUp, /ATTACHMENT_TEXT_OK/);
   assert.ok(followUp.includes(imageBytes.toString('base64')), 'the next model request retains image content');
   assert.ok(followUp.includes(pdfBytes.toString('base64')), 'the next model request retains PDF content');
+
+  stage = 'fresh media refusal stops without lossy recovery';
+  const mediaTranslator = new OpenCodeEventTranslator();
+  mediaTranslator.bindSession(attachmentsSession.id);
+  const mediaSubscription = await client.event.subscribe({ signal: subscriptions.signal, sseMaxRetryAttempts: 1 });
+  const mediaEvents: ReturnType<OpenCodeEventTranslator['translate']> = [];
+  const mediaConsumed = (async () => {
+    for await (const event of mediaSubscription.stream) {
+      mediaEvents.push(...mediaTranslator.translate(event));
+      if (event.type === 'session.idle' && event.properties.sessionID === attachmentsSession.id) return;
+    }
+  })();
+  const beforeMediaRefusal = gatewayRequests.length;
+  contextRefusals = 1;
+  await client.session.prompt({
+    throwOnError: true, path: { id: attachmentsSession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder', parts: [
+      { type: 'text', text: 'Read the exact text in the newly attached image and PDF.' },
+      { type: 'file', mime: 'image/png', filename: 'unread-new-image.png', url: `data:image/png;base64,${imageBytes.toString('base64')}` },
+      { type: 'file', mime: 'application/pdf', filename: 'unread-new.pdf', url: `data:application/pdf;base64,${pdfBytes.toString('base64')}` },
+    ] },
+  });
+  await mediaConsumed;
+  assert.equal(gatewayRequests.length - beforeMediaRefusal, 1, 'no summary or continuation may drop unread media');
+  assert.ok(mediaEvents.some(event => event.t === 'error' && event.message.includes('new chat')), JSON.stringify(mediaEvents));
+  assert.deepEqual(mediaEvents.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }], 'the queue must pause');
+  const refusedHistory = (await client.session.messages({ throwOnError: true, path: { id: attachmentsSession.id } })).data;
+  assert.ok(!refusedHistory.some(message => message.info.role === 'assistant' && message.info.summary));
+  assert.ok(refusedHistory.some(message => message.parts.some(part => part.type === 'file' && part.filename === 'unread-new-image.png' && part.url.includes(imageBytes.toString('base64')))));
+  assert.ok(refusedHistory.some(message => message.parts.some(part => part.type === 'file' && part.filename === 'unread-new.pdf' && part.url.includes(pdfBytes.toString('base64')))));
+  // A deliberate retry in the same session still carries original bytes.
+  await client.session.prompt({
+    throwOnError: true, path: { id: attachmentsSession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder',
+      parts: [{ type: 'text', text: 'Try reading those files again.' }] },
+  });
+  assert.ok(JSON.stringify(gatewayRequests.at(-1)).includes(imageBytes.toString('base64')));
+  assert.ok(JSON.stringify(gatewayRequests.at(-1)).includes(pdfBytes.toString('base64')));
+
+  stage = 'text-only context overflow recovery';
+  const textRecoverySession = (await client.session.create({ body: { title: 'Text recovery probe' }, throwOnError: true })).data;
+  await client.session.prompt({
+    throwOnError: true, path: { id: textRecoverySession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder',
+      parts: [{ type: 'text', text: 'PRIOR_TEXT_CONTEXT: We are revising a paper about birds.' }] },
+  });
+  const overflowTranslator = new OpenCodeEventTranslator();
+  overflowTranslator.bindSession(textRecoverySession.id);
+  const overflowSubscription = await client.event.subscribe({ signal: subscriptions.signal, sseMaxRetryAttempts: 1 });
+  const translatedOverflow: ReturnType<OpenCodeEventTranslator['translate']> = [];
+  const overflowConsumed = (async () => {
+    for await (const event of overflowSubscription.stream) {
+      translatedOverflow.push(...overflowTranslator.translate(event));
+      if (event.type === 'session.idle' && event.properties.sessionID === textRecoverySession.id) return;
+    }
+  })();
+  const firstOverflowCall = gatewayRequests.length;
+  contextRefusals = 1;
+  await client.session.prompt({
+    throwOnError: true, path: { id: textRecoverySession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder',
+      parts: [{ type: 'text', text: 'Continue after the context refusal.' }] },
+  });
+  await overflowConsumed;
+  assert.ok(!translatedOverflow.some(event => event.t === 'error'), 'recoverable overflow must not fail the panel turn');
+  assert.deepEqual(translatedOverflow.filter(event => event.t === 'turn-end'), [{ t: 'turn-end', isError: false }]);
+  const recoveryCalls = gatewayRequests.slice(firstOverflowCall);
+  assert.equal(recoveryCalls.length, 3, 'one refused request, one summary, one continuation');
+  assert.match(JSON.stringify(recoveryCalls[1]), /PRIOR_TEXT_CONTEXT/, 'the summary receives prior text');
+  assert.match(JSON.stringify(recoveryCalls[2]), /Continue after the context refusal/, 'continuation retains the current task');
+  const recoveredHistory = (await client.session.messages({ throwOnError: true, path: { id: textRecoverySession.id } })).data;
+  assert.ok(recoveredHistory.some(message => message.info.role === 'assistant' && message.info.summary && !message.info.error));
+  const recoveredAssistant = recoveredHistory.at(-1)?.info;
+  assert.equal(recoveredAssistant?.role === 'assistant' && recoveredAssistant.error, undefined);
+  assert.deepEqual(gatewayModels.slice(firstOverflowCall), Array(3).fill(gatewayModels[firstOverflowCall]));
+
+  stage = 'repeated context overflow stops safely';
+  const beforeRepeated = gatewayRequests.length;
+  contextRefusals = 2;
+  await client.session.prompt({
+    throwOnError: true, path: { id: textRecoverySession.id },
+    body: { model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' }, agent: 'stashbase-folder',
+      parts: [{ type: 'text', text: 'Exercise a refusal during compaction too.' }] },
+  });
+  assert.equal(gatewayRequests.length - beforeRepeated, 2, 'failed compaction must stop instead of replaying forever');
+  const failedHistory = (await client.session.messages({ throwOnError: true, path: { id: textRecoverySession.id } })).data;
+  assert.ok(failedHistory.some(message => message.info.role === 'assistant' && message.info.summary && message.info.error),
+    'failed compaction remains visible in native history');
 
   stage = 'project skill invocation';
   nextTool = { name: 'skill', arguments: JSON.stringify({ name: 'project-writing-0' }) };

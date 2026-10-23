@@ -3,7 +3,7 @@ import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError
 import { prepareAgentAttachments } from './agent-attachments.ts';
 import { agentClientEventSchema } from '../shared/protocols/websocket/agent-session.ts';
 import { randomUUID } from 'node:crypto';
-import type { EventMessagePartDelta, EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
+import type { ContextOverflowError, EventMessagePartDelta, EventPermissionAsked } from '@opencode-ai/sdk/v2/types';
 import type {
   Event,
   FileDiff,
@@ -58,6 +58,10 @@ import { crewCallHistory, recordCrewCall, forgetCrewCalls } from './agent-crew-h
 const log = logger('opencode-agent');
 const DATA_REQUEST = { throwOnError: true as const };
 
+// The pinned native binary emits this recovery event; the legacy SDK's Event
+// union omits it. Keep the extension at the native protocol boundary.
+type ContextOverflowEvent = { type: 'session.error'; properties: { sessionID?: string; error: ContextOverflowError } };
+
 /** Keep OpenCode's provider-specific tool vocabulary behind the adapter.
  * The renderer, history replay, and permission cards all consume the same
  * stable names already used by the Shared Agent Contract. */
@@ -95,7 +99,7 @@ function providerErrorDiagnostic(error: unknown): unknown {
     request_id: headers?.['x-request-id'] ?? headers?.['request-id'] ?? headers?.['x-amzn-requestid'] };
 }
 
-function nativeErrorMessage(error: Extract<Event, { type: 'session.error' }>['properties']['error']): string {
+function nativeErrorMessage(error: Extract<Event, { type: 'session.error' }>['properties']['error'] | ContextOverflowError): string {
   if (!error) return 'The agent turn failed.';
   if ('data' in error && error.data && typeof error.data === 'object') {
     const data = error.data as { message?: unknown; responseBody?: unknown };
@@ -130,6 +134,7 @@ export class OpenCodeEventTranslator {
   private readonly diffs = new Set<string>();
   private diffCounter = 0;
   private readonly errors = new Set<string>();
+  private pendingContextOverflow: string | undefined;
   private readonly retryNotices = new Set<string>();
   /** OpenCode streams the reader's own prompt as parts too; only its role,
    * announced on the message before its parts, tells them from the reply. */
@@ -143,6 +148,7 @@ export class OpenCodeEventTranslator {
     this.turnNumber++;
     this.nativeTurnStarted = false;
     this.lastFinishReason = undefined;
+    this.pendingContextOverflow = undefined;
     this.completion = {};
     this.diffs.clear();
     this.retryNotices.clear();
@@ -162,7 +168,7 @@ export class OpenCodeEventTranslator {
   requestInterrupt(): void { this.stopping = true; }
   endTurnAfterInterrupt(): AgentServerEvent[] { return this.finishTurn(false, true); }
 
-  translate(event: Event | EventPermissionAsked | EventMessagePartDelta): AgentServerEvent[] {
+  translate(event: Event | EventPermissionAsked | EventMessagePartDelta | ContextOverflowEvent): AgentServerEvent[] {
     switch (event.type) {
       case 'session.status': {
         if (!this.matches(event.properties.sessionID)) return [];
@@ -185,6 +191,14 @@ export class OpenCodeEventTranslator {
         if (event.properties.sessionID && !this.matches(event.properties.sessionID)) return [];
         if (this.stopping && event.properties.error?.name === 'MessageAbortedError') return [];
         const message = nativeErrorMessage(event.properties.error);
+        // OpenCode emits this before attempting compaction. It is terminal
+        // only if native idle arrives without a successful continuation, or a
+        // message records a final error (including a failed summary).
+        if (event.properties.error?.name === 'ContextOverflowError' && this.turnActive && this.nativeTurnStarted) {
+          const first = this.pendingContextOverflow === undefined;
+          this.pendingContextOverflow = message;
+          return first ? [{ t: 'notice', message: 'The model context limit was reached. The agent is trying to compact the conversation.' }] : [];
+        }
         const events: AgentServerEvent[] = [];
         if (!this.errors.has(message)) {
           this.errors.add(message);
@@ -209,6 +223,9 @@ export class OpenCodeEventTranslator {
         if (info.role === 'user') this.userMessages.add(info.id);
         if (info.role !== 'assistant' || !this.turnActive || this.messageTurns.get(info.id) !== this.turnNumber) return [];
         if (info.finish) this.recordCompletion(info.id, info.finish, info.tokens);
+        if (!info.summary && !info.error && info.finish && !['unknown', 'error'].includes(info.finish)) {
+          this.pendingContextOverflow = undefined;
+        }
         if (!info.error) return [];
         if (this.stopping && info.error.name === 'MessageAbortedError') return [];
         const message = nativeErrorMessage(info.error);
@@ -260,6 +277,11 @@ export class OpenCodeEventTranslator {
     // Its optimistic start is not evidence that the native runtime started it.
     if (!isError && !interrupted && !this.nativeTurnStarted) return [];
     const events: AgentServerEvent[] = [];
+    if (!interrupted && this.pendingContextOverflow && !this.errors.size) {
+      events.push(agentTurnErrorEvent(this.pendingContextOverflow));
+      isError = true;
+    }
+    this.pendingContextOverflow = undefined;
     if (!isError && !interrupted && this.lastFinishReason === 'unknown' && !this.errors.size) {
       events.push(agentTurnErrorEvent('The agent model stopped without a complete response. The task may be incomplete; completed file changes have been kept.'));
       isError = true;

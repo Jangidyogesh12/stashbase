@@ -21,12 +21,13 @@ import {
   type ReactNode,
 } from 'react';
 
-import { Collapse, useClippedHeight } from '@/components/internal/collapse';
+import { Collapse } from '@/components/internal/collapse';
 import { FileThumbnail } from '@/components/ui/file-thumbnail';
 import { Tooltip } from '@/components/ui/tooltip';
 import { focusRing } from '@/lib/focus-ring';
 import { useIcon } from '@/lib/icon-context';
 import { spring } from '@/lib/springs';
+import { useMeasuredSize } from '@/lib/use-measured-size';
 import { useMotionTier } from '@/lib/use-motion-tier';
 import { fileFingerprint } from '@/shared/utils/file-identity';
 
@@ -349,7 +350,9 @@ interface FilePreviewRowProps {
  *  a removing tile out of layout flow so its siblings can slide into the gap
  *  without fighting its exit animation. */
 export function FilePreviewRow({ files, previewSlot, tileSize }: FilePreviewRowProps) {
-  const region = useClippedHeight();
+  // Measure the content: the animated parent’s scrollHeight cannot shrink
+  // below its current height after a row or attachment is removed.
+  const region = useMeasuredSize<HTMLDivElement>();
 
   return (
     <Collapse

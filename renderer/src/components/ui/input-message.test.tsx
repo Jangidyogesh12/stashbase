@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
@@ -8,6 +8,60 @@ import { expectNoA11yViolations } from '@/test/axe';
 import { InputMessage, type InputMessageEditorContext } from './input-message';
 
 afterEach(cleanup);
+
+function previewContext(suggested: boolean) {
+  return (
+    <>
+      <span>Selected passage</span>
+      {suggested && <span>Suggested file</span>}
+    </>
+  );
+}
+
+it('shrinks the preview region after a wrapped file reference is removed', async () => {
+  const observers = new Map<Element, () => void>();
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(private callback: () => void) {}
+      observe(node: Element) {
+        observers.set(node, this.callback);
+      }
+      unobserve(node: Element) {
+        observers.delete(node);
+      }
+      disconnect() {}
+    },
+  );
+  try {
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    const view = render(fullComposer(seen, { previewSlot: previewContext(true) }));
+    // dom-contract: the measured content and its animated clipping parent;
+    // happy-dom has no layout, so reproduce Chromium's scrollHeight floor.
+    const row = screen.getByText('Selected passage').parentElement;
+    const clip = row?.parentElement;
+    if (!row || !clip) throw new Error('Missing preview region');
+    let contentHeight = 68;
+    Object.defineProperty(row, 'offsetHeight', { get: () => contentHeight });
+    Object.defineProperty(clip, 'scrollHeight', {
+      get: () => Math.max(contentHeight, Number.parseFloat(clip.style.height) || 0),
+    });
+    const resize = observers.get(row);
+    if (!resize) throw new Error('Preview content is not observed');
+    act(resize);
+    await waitFor(() => expect(clip.style.height).toBe('68px'));
+
+    view.rerender(fullComposer(seen, { previewSlot: previewContext(false) }));
+    contentHeight = 32;
+    act(resize);
+    await waitFor(() => expect(clip.style.height).toBe('32px'));
+    expect(screen.queryByText('Suggested file')).toBeNull();
+    expect(screen.getByText('Selected passage')).not.toBeNull();
+  } finally {
+    cleanup();
+    vi.unstubAllGlobals();
+  }
+});
 
 /** The consumer's field — the composer has none of its own — recording the
  *  last context the composer handed it and submitting on Enter, which is what

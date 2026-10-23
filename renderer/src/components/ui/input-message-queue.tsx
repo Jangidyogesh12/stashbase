@@ -4,7 +4,7 @@
 import { AnimatePresence, Reorder } from 'framer-motion';
 import { useCallback, useMemo, useRef } from 'react';
 
-import { Collapse, useClippedHeight } from '@/components/internal/collapse';
+import { Collapse } from '@/components/internal/collapse';
 import { Tooltip } from '@/components/ui/tooltip';
 import { FOCUS_RING } from '@/lib/focus-ring';
 import { fontWeights } from '@/lib/font-weight';
@@ -12,6 +12,7 @@ import { useIcon } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
 import { useSize } from '@/lib/size-context';
 import { spring } from '@/lib/springs';
+import { useMeasuredSize } from '@/lib/use-measured-size';
 import { useMotionTier } from '@/lib/use-motion-tier';
 import { useTouchPrimary } from '@/lib/use-touch-primary';
 import { cn } from '@/lib/utils';
@@ -249,7 +250,9 @@ interface QueueRegionProps {
  *  empties; the Reorder.Group handles drag-reorder (top = next to dispatch)
  *  and AnimatePresence handles per-row enter/exit. */
 export function QueueRegion({ queue, show }: QueueRegionProps) {
-  const region = useClippedHeight();
+  // Measure the content: the animated parent’s scrollHeight cannot shrink
+  // below its current height after a row or attachment is removed.
+  const region = useMeasuredSize<HTMLUListElement>();
   // Touch devices have no hover, so a hover-revealed affordance (a queued
   // row's × button) would never appear; those are shown persistently instead.
   const isTouch = useTouchPrimary();

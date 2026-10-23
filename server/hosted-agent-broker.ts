@@ -100,11 +100,13 @@ function writeJson(response: http.ServerResponse, status: number, value: unknown
 async function readBody(request: http.IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of request) {
+  // Keep the socket alive long enough to return a useful upload refusal.
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
     if (size > MAX_BODY_BYTES) {
-      throw Object.assign(new Error('Agent model request is too large.'), { status: 413 });
+      request.resume();
+      throw Object.assign(new Error('This request exceeds the upload size limit. Start a new chat with fewer or smaller attachments.'), { status: 422 });
     }
     chunks.push(buffer);
   }
@@ -134,6 +136,17 @@ async function readBody(request: http.IncomingMessage): Promise<Buffer> {
   }
   if (changed) return Buffer.from(JSON.stringify(parsed));
   return body;
+}
+
+/** The validated provider request, including history and tool results. */
+function hasMedia(body: Buffer): boolean {
+  const payload = JSON.parse(body.toString('utf8')) as { messages?: Array<{ content?: unknown }> };
+  return Array.isArray(payload.messages) && payload.messages.some(message =>
+    Array.isArray(message?.content) && message.content.some((part: unknown) => {
+      if (!part || typeof part !== 'object') return false;
+      const type = (part as { type?: unknown }).type;
+      return type === 'image_url' || type === 'file';
+    }));
 }
 
 /** The text of a streamed completion, read whole. A stream error or an empty
@@ -548,6 +561,16 @@ export class HostedAgentBroker {
         const upstreamMessage = nested?.message ?? payload?.message ?? `The agent gateway failed (HTTP ${upstream.status}).`;
         const upstreamCode = nested?.code ?? payload?.code;
         diagnostic?.fail({ message: upstreamMessage, code: upstreamCode, status: upstream.status });
+        // Native overflow compaction replaces image/PDF parts with filenames,
+        // including files the model has never seen. Fail before that replay,
+        // preserving the saved prompt and pausing the queue for user recovery.
+        if (upstream.status === 413 && hasMedia(body)) {
+          writeJson(response, 422, { error: {
+            message: 'The model could not process this request with its attachments. Start a new chat with the files and a shorter prompt. This turn has stopped; its saved history is unchanged.',
+            type: 'stashbase_hosted_error', code: 'agent_attachment_recovery_required',
+          } });
+          return;
+        }
         const modelRefusal = upstreamCode ? MODEL_REFUSALS[upstreamCode] : undefined;
         if (modelRefusal) {
           writeJson(response, 422, { error: { message: modelRefusal, type: 'stashbase_hosted_error', code: upstreamCode } });

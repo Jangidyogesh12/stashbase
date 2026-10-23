@@ -315,6 +315,39 @@ test('Default errors wait for native idle and late message errors cannot fail th
   assert.deepEqual(translator.translate(idle), [{ t: 'turn-end', isError: true }]);
 });
 
+test('context overflow waits for continuation, fails unfinished recovery, and respects cancellation', () => {
+  const translator = new OpenCodeEventTranslator();
+  translator.bindSession('session-1');
+  const busy: Event = { type: 'session.status', properties: { sessionID: 'session-1', status: { type: 'busy' } } };
+  const idle: Event = { type: 'session.idle', properties: { sessionID: 'session-1' } };
+  const error = { name: 'ContextOverflowError', data: { message: 'The Agent request exceeds the model context limit.' } } as const;
+  const overflow: Parameters<OpenCodeEventTranslator['translate']>[0] = { type: 'session.error', properties: { sessionID: 'session-1', error } };
+  const message = (id: string, summary = false, failed = false) => ({ type: 'message.updated', properties: { info: {
+    id, sessionID: 'session-1', role: 'assistant', summary, finish: failed ? 'error' : 'stop',
+    tokens: { input: 1, output: 1, reasoning: 0 }, ...(failed ? { error } : {}),
+  } } }) as Event;
+  translator.translate(busy);
+  assert.equal(translator.translate(overflow)[0]?.t, 'notice');
+  assert.deepEqual(translator.translate(overflow), []);
+  translator.translate(message('summary', true));
+  const unfinished = translator.translate(idle);
+  assert.ok(unfinished.some(event => event.t === 'error'), 'a summary alone is not a successful continuation');
+  assert.deepEqual(unfinished.at(-1), { t: 'turn-end', isError: true });
+
+  translator.translate(busy);
+  translator.translate(overflow);
+  translator.translate(message('failed-summary', true, true));
+  translator.translate(message('unrelated-later-output'));
+  assert.deepEqual(translator.translate(idle), [{ t: 'turn-end', isError: true }], 'a terminal message error remains a failure');
+
+  translator.translate(busy);
+  translator.translate(overflow);
+  assert.deepEqual(translator.endTurnAfterInterrupt(), [{ t: 'turn-end', isError: false }]);
+  translator.translate(busy);
+  translator.translate(message('fresh-answer'));
+  assert.deepEqual(translator.translate(idle), [{ t: 'turn-end', isError: false }], 'pending overflow cannot leak into a new turn');
+});
+
 test('repeated native retry status does not repeat the same provider error in one turn', () => {
   const translator = new OpenCodeEventTranslator();
   translator.bindSession('session-1');

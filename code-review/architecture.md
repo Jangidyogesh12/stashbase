@@ -540,6 +540,22 @@ stable status without download, retry, or a new durable demand latch.
   `image_url` data parts; it does not fetch URLs, store cloud files, or change
   accounting. Native history retains content for follow-ups, while replay hides
   synthetic extraction text and recovers the original attachment cards.
+- Hosted multimodal admission belongs to the adjacent stashbase-api repository's
+  estimator: text and framing are separate from media's financial fallback. Only
+  the text estimate drives local context refusal; provider media usage remains
+  authoritative. Admission never parses/decompresses PDFs or fetches remote media,
+  and forwarded bytes stay intact. Content-free refusals record both estimates,
+  the limit and attachment sizes. Transport and context have separate limits.
+  Under the account lock, uncertain media cost uses remaining user capacity
+  after text and a useful output budget; it cannot impose an unaffordable user
+  input floor. Provider-day admission retains the complete media estimate, while
+  confirmed user charges remain capped by the immutable user reservation.
+  `hosted-agent-broker.ts` turns a media-bearing HTTP 413 into a non-retryable
+  attachment recovery error before OpenCode can discard media during compaction.
+  Upload-size refusal is also terminal. Saved history retains original files and
+  the failed turn pauses the queue. Text-only overflow can compact:
+  `OpenCodeEventTranslator` keeps it pending until a successful non-summary
+  completion; failed summaries and idle without continuation still fail.
 - Attachment age cleanup excludes batches created by the active server process;
   drafts, queues, and retries may retain them until process exit. They remain
   temporary files, not durable historical attachments.

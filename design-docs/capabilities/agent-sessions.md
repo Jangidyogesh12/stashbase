@@ -275,6 +275,15 @@ Repeated identical native retry errors appear once per turn while retries contin
 a final short-term request limit or accounting-recovery refusal remains a rate-limit
 failure with manual recovery. Accounting recovery may require service-side
 reconciliation; its message must not imply exhausted credits or a guaranteed reset time.
+A text-only context overflow stays in progress while Default compacts the
+conversation. A successful continuation completes normally; a failed summary or
+idle without continuation remains a visible failure. Stop still cancels recovery,
+and a later turn must not inherit its pending failure. If the refused request
+contains images or PDFs, Default stops visibly before native overflow compaction:
+that replay could discard files the model has never read. Saved history and
+attachments remain intact; the queue pauses, and the reader can start a new chat
+with the files and a shorter prompt. Upload-size refusals also stop visibly and
+never trigger lossy context recovery.
 Hosted retry responses carry the service's suggested delay to the native runtime.
 When the service changes the configuration of a Default model a chat runs on,
 or withdraws it, the refused turn offers **Refresh models**. Refreshing

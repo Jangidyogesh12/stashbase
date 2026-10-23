@@ -31,7 +31,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function pin(element: Element, metric: 'offsetHeight' | 'scrollHeight', value: number): void {
+function pin(element: Element, metric: 'offsetHeight', value: number): void {
   Object.defineProperty(element, metric, { configurable: true, value });
 }
 
@@ -57,18 +57,6 @@ describe('useMeasuredSize', () => {
     pin(node, 'offsetHeight', 260);
     act(() => resized());
     expect(result.current.size).toBe(260);
-  });
-
-  it('reads the clipping parent when asked, so inner margins count', () => {
-    const { result } = renderHook(() => useMeasuredSize<HTMLDivElement>({ of: 'clipping-parent' }));
-    const { node, parent } = region();
-    // The parent's own height is mid-animation and the child alone would
-    // under-report; scrollHeight of the clipping parent is the honest value.
-    pin(node, 'offsetHeight', 40);
-    pin(parent, 'scrollHeight', 300);
-
-    act(() => result.current.ref(node));
-    expect(result.current.size).toBe(300);
   });
 
   it('refuses a zero measurement by default and keeps the last real one', () => {

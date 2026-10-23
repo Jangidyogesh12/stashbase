@@ -22,15 +22,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { collapseTween } from '@/lib/springs';
-import { useMeasuredSize } from '@/lib/use-measured-size';
 import { instant, useMotionTier } from '@/lib/use-motion-tier';
 import { cn } from '@/lib/utils';
-
-/** Content height for a Collapse whose content carries its own bottom margin
- *  — the composer's strips sit above the editor and space themselves. Reading
- *  the clipping parent (this box) rather than the content element is what
- *  makes those margins count; see `useMeasuredSize`. */
-export const useClippedHeight = () => useMeasuredSize<HTMLElement>({ of: 'clipping-parent' });
 
 interface CollapseProps {
   open: boolean;

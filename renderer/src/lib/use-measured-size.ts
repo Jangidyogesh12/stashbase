@@ -4,7 +4,7 @@
  *  than `height: "auto"` / `width: "auto"`: framer resolves an "auto" target
  *  from the element's *visual* (transformed) size, so under a scaled ancestor
  *  the region springs out to scale × its real size and snaps back when the
- *  final "auto" lands. `offsetHeight`, `scrollHeight`, `offsetWidth` and
+ *  final "auto" lands. `offsetHeight`, `offsetWidth` and
  *  ResizeObserver are all transform-immune, so what comes back here is the
  *  layout value whatever the ancestors do to it.
  *
@@ -18,19 +18,6 @@ import { useCallback, useRef, useState, type RefObject } from 'react';
 interface MeasuredSizeOptions {
   /** Which axis to read. @default "height" */
   axis?: 'height' | 'width';
-  /**
-   * What to measure.
-   *
-   * `'element'` reads the observed element's own `offsetHeight`. Ignored on
-   * the width axis, which is always the element's own `offsetWidth`.
-   * `'clipping-parent'` reads the parent's `scrollHeight` instead, so inner
-   * margins count (the clipping parent's `overflow: hidden` makes it a block
-   * formatting context, so they cannot collapse out) and the value stays
-   * correct while the parent's own height is mid-animation. Observing the
-   * child either way keeps the ResizeObserver out of a feedback loop with
-   * that animation.
-   */
-  of?: 'element' | 'clipping-parent';
   /**
    * Whether a measurement of 0 is real. Off by default: a collapsed region is
    * usually `display: none` at that moment, and adopting its 0 would throw
@@ -54,29 +41,18 @@ interface MeasuredSize<T extends HTMLElement> {
 /** Tracks one of an element's layout dimensions in pixels, live. */
 export function useMeasuredSize<T extends HTMLElement>({
   axis = 'height',
-  of = 'element',
   acceptZero = false,
 }: MeasuredSizeOptions = {}): MeasuredSize<T> {
   const element = useRef<T | null>(null);
   const observer = useRef<ResizeObserver | null>(null);
   const [size, setSize] = useState<number | null>(null);
 
-  const read = useCallback(
-    (node: T) => {
-      if (axis === 'width') return node.offsetWidth;
-      return of === 'clipping-parent'
-        ? (node.parentElement?.scrollHeight ?? node.offsetHeight)
-        : node.offsetHeight;
-    },
-    [axis, of],
-  );
-
   const measure = useCallback(() => {
     const node = element.current;
     if (!node) return;
-    const next = read(node);
+    const next = axis === 'width' ? node.offsetWidth : node.offsetHeight;
     if (next > 0 || acceptZero) setSize(next);
-  }, [acceptZero, read]);
+  }, [acceptZero, axis]);
 
   const ref = useCallback(
     (node: T | null) => {

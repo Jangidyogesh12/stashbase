@@ -779,3 +779,52 @@ for (const [reason, ending] of [
       (error: unknown) => (error as {code?: string}).code === 'agent_tool_incomplete');
   });
 }
+
+for (const media of [false, true]) {
+  test(`413 ${media ? 'with media stops before lossy compaction' : 'without media allows native recovery'}`, async (t) => {
+    let calls = 0;
+    const broker = new HostedAgentBroker({
+      accessToken: async () => 'fixture-token',
+      fetch: async () => {
+        calls++;
+        return Response.json({ code: 'agent_context_too_large', message: 'The Agent request exceeds the model context limit.' }, { status: 413 });
+      },
+      upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+    });
+    await broker.start();
+    t.after(() => broker.close());
+    const runtime = broker.runtime('overflow')!;
+    broker.beginTurn('overflow', '00000000-0000-4000-8000-000000000020');
+    const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+      method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+      body: JSON.stringify({ messages: [{ role: 'user', content: media
+        ? [{ type: 'image_url', image_url: { url: 'data:image/png;base64,aGVsbG8=' } }]
+        : 'hello' }], stream: true }),
+    });
+    assert.equal(response.status, media ? 422 : 413);
+    const payload = await response.json() as { error: { code: string; message: string } };
+    assert.equal(payload.error.code, media ? 'agent_attachment_recovery_required' : 'agent_context_too_large');
+    assert.equal(calls, 1);
+    if (media) assert.match(payload.error.message, /new chat/);
+  });
+}
+
+test('the broker upload ceiling stops before dispatch and cannot trigger context compaction', async (t) => {
+  let calls = 0;
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'fixture-token',
+    fetch: async () => { calls++; return new Response(); },
+    upstreamUrl: 'https://gateway.invalid', clientVersion: () => 'fixture',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const runtime = broker.runtime('upload-limit')!;
+  broker.beginTurn('upload-limit', '00000000-0000-4000-8000-000000000020');
+  const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
+    method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'x'.repeat(16 * 1024 * 1024) }] }),
+  });
+  assert.equal(response.status, 422);
+  assert.match(await response.text(), /upload size limit/);
+  assert.equal(calls, 0);
+});
