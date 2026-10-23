@@ -22,7 +22,7 @@ import { MAX_TEXT_READ_BYTES, readFileBytesBoundedAsync } from './active-file-op
 import { writeFileAtomic, writeFileAtomicAsync } from './atomic-write.ts';
 import { isDevelopmentRuntime } from './development-runtime.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { getCurrentFolder, onClose, onSwitch, registeredRootForAbsAsync } from './folder.ts';
+import { getCurrentFolder, onClose, onSwitch, registeredFolderRootsAsync } from './folder.ts';
 import { detectViewerFormat, isKnownBinaryFile } from './format.ts';
 import { decodeGenericText } from './generic-file-preview.ts';
 import { isSpreadsheetFile, spreadsheetFilePreview } from './spreadsheet-preview.ts';
@@ -135,13 +135,20 @@ export async function registerExternalFile(windowId: string, droppedPath: string
   if (projectPath) return { format, kind: 'project', path: projectPath };
   // A file of another registered project opens as that project's, read-only
   // here like any other project's source; its saves and index stay its own.
-  const owner = await registeredRootForAbsAsync(realPath);
-  if (owner) {
-    let ownerReal: string | null = null;
-    try { ownerReal = await fs.promises.realpath(owner); } catch { /* not that project's file then */ }
-    const ownerPath = ownerReal ? await filesystemPath.relativeAsync(ownerReal, realPath) : null;
-    if (ownerPath) return { folderPath: owner, format, kind: 'project', path: ownerPath };
+  // Compare real paths on both sides: registered roots may use a directory
+  // alias (including Windows 8.3 names), while the dropped file is canonical.
+  // Keep the registry spelling in the result and prefer the deepest owner.
+  let owner: { folderPath: string; path: string; depth: number } | undefined;
+  for (const root of await registeredFolderRootsAsync()) {
+    let rootReal: string;
+    try { rootReal = await fs.promises.realpath(root); } catch { continue; }
+    const relative = await filesystemPath.relativeAsync(rootReal, realPath);
+    const depth = filesystemPath.absolute(rootReal).split('/').length;
+    if (relative && (!owner || depth > owner.depth)) {
+      owner = { folderPath: root, path: relative, depth };
+    }
   }
+  if (owner) return { folderPath: owner.folderPath, format, kind: 'project', path: owner.path };
 
   if (!isExternalFileViewerFormat(format)) return refused(name, 'copy-required');
   if (format === 'generic' && !isSpreadsheetFile(realPath) && (isKnownBinaryFile(realPath) || !(await isTextFile(realPath, stat.size)))) {

@@ -683,6 +683,14 @@ symlink swapped into the path, the project-copy/grant/refusal decision per forma
 generic-text preview, reveal, revocation when the window leaves its project, and
 saves that keep BOM, line endings, and permissions, refuse a stale version or
 another window, and write a deleted file back only on an explicit overwrite.
+Directory-alias regressions resolve both registered roots and dropped files to
+real paths, keep the registry spelling, and select the deepest registered owner;
+this includes Windows short-name temporary paths. The native HTTP fixture also
+checks canonical reveal paths instead of assuming the input spelling survives.
+A built-host HTTP pass (2026-10-23) opened two projects, dropped a file through
+a registered directory alias, and confirmed project ownership with unchanged
+source bytes. All 905 host tests, host types, Electron tests and built Electron
+smoke passed locally; Windows behavior is checked by the source CI matrix.
 `electron/external-files/*.test.cjs` cover the preload sending only a path read
 off a real file and sender authorization;
 the built-renderer smoke confirms in real Electron that a `File` built in script

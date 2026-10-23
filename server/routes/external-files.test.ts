@@ -210,24 +210,30 @@ test('dropping decides between the project copy, a grant, and a refusal', async 
   });
 });
 
-test("a file of another registered project opens as that project's, not through a grant", async () => {
-  await withServer(async ({ outside, register }) => {
-    const other = path.join(outside, 'other-project');
-    fs.mkdirSync(path.join(other, 'notes'), { recursive: true });
-    fs.writeFileSync(path.join(other, 'notes', 'plan.md'), '# Plan');
-    await registerProjectFolderAsync(other);
-    try {
-      assert.deepEqual(await opened(await register('window-a', path.join(other, 'notes', 'plan.md'))), {
-        folderPath: other,
-        format: 'md',
-        kind: 'project',
-        path: 'notes/plan.md',
-      });
-    } finally {
-      await removeRecentAsync(other);
-    }
+for (const alias of [false, true]) {
+  test(`a file of another registered project opens through ${alias ? 'a directory alias' : 'its registered path'}`, async () => {
+    await withServer(async ({ outside, register }) => {
+      const other = path.join(outside, 'other-project');
+      const registered = alias ? path.join(outside, 'project-alias') : other;
+      fs.mkdirSync(path.join(other, 'notes'), { recursive: true });
+      fs.writeFileSync(path.join(other, 'notes', 'plan.md'), '# Plan');
+      if (alias) fs.symlinkSync(other, registered, 'junction');
+      await registerProjectFolderAsync(outside);
+      await registerProjectFolderAsync(registered);
+      try {
+        assert.deepEqual(await opened(await register('window-a', path.join(other, 'notes', 'plan.md'))), {
+          folderPath: filesystemPath.absolute(registered),
+          format: 'md',
+          kind: 'project',
+          path: 'notes/plan.md',
+        });
+      } finally {
+        await removeRecentAsync(registered);
+        await removeRecentAsync(outside);
+      }
+    });
   });
-});
+}
 
 test('generic text previews through its grant, and leaving the project revokes it', async () => {
   await withServer(async ({ base, outside, register, revealed }) => {
@@ -245,7 +251,7 @@ test('generic text previews through its grant, and leaving the project revokes i
 
     const shown = await fetch(`${base}/api/external-files/${result.token}/reveal`, { ...inWindow('window-a'), method: 'POST' });
     assert.equal(shown.status, 200);
-    assert.deepEqual(revealed, [file]);
+    assert.deepEqual(revealed, [await fs.promises.realpath(file)]);
 
     clearCurrentFolder('window-a');
     assert.equal((await fetch(`${base}/api/external-files/${result.token}/preview`, inWindow('window-a'))).status, 404);
