@@ -681,11 +681,16 @@ stable status without download, retry, or a new durable demand latch.
   documents and `write_file` for creation, including after a failed native attempt.
   Explicitly requested external writes use native tools under runtime permissions;
   project MCP scope, conversation ownership, and project turn review do not expand.
-  Claude exposes native Edit/MultiEdit/Write; OpenQuill asks for the native edit
-  permission shared by edit/write/patch and denies it in Plan. Native writes do
-  not receive the shared bounded MCP Edit-mode grant in
-  `server/agent-file-permissions.ts`. Project tool routing is guidance, not a
-  filesystem isolation guarantee. Turn review continues to detect all scanned
+  Claude exposes native Edit/MultiEdit/Write/NotebookEdit for external targets;
+  a PreToolUse hook in `server/agent-native-write-guard.ts` denies them when the
+  target's realpath (nearest existing ancestor, with links and directory aliases
+  followed) is inside the bound project. Hooks run before Claude's permission
+  modes and inside subagents, so Edit and Auto cannot approve that write first.
+  OpenQuill asks for the native edit permission shared by edit/write/patch and
+  denies it in Plan. Native writes do not receive the shared bounded MCP
+  Edit-mode grant in `server/agent-file-permissions.ts`. Shell writes and other
+  runtimes' native tools follow routing guidance, which is not a filesystem
+  isolation guarantee. Turn review continues to detect all scanned
   Markdown changes regardless of the writing tool. External MCP clients have no
   app-owned turn socket and do not receive Chat turn-review cards.
 - Codex modes use on-request approval with mode-specific sandbox/review policy;

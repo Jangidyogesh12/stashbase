@@ -1905,9 +1905,15 @@ the owner's X script, or a released desktop build.
 
 **Requested external writes (2026-10-22):** `agent-runtime-instructions.ts` routes
 requested external output through native tools without changing the chat's
-project. Claude no longer removes its native write tools; Default asks instead
-of denying native edit/write/patch, and Plan still denies changes. Adapter tests
-cover approval and mode handling. The pinned OpenCode smoke exercises real
+project. Claude keeps native write tools for external targets and denies
+in-project targets through a PreToolUse hook; Default asks instead of denying
+native edit/write/patch, and Plan still denies changes. For Default, adapter
+tests and the pinned smoke cover approval in every mode. For Claude,
+`agent.test.ts` covers only StashBase's `canUseTool` callback, not Claude's own
+Edit, Auto, or Plan decisions; `agent-native-write-guard.test.ts` covers the
+hook decision (inside, outside, relative, new files, links, aliases, case) and
+its installation on Claude sessions. Hook precedence over permission modes
+rests on the SDK contract, not a live CLI run. The pinned OpenCode smoke exercises real
 external file creation, editing, rejected overwrite, and Plan refusal with a
 controlled gateway. A driven source desktop pass (2026-10-23), using the built
 renderer/server, real bundled runtime, and a controlled model gateway, displayed
@@ -2831,8 +2837,9 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   `edit_file` for existing documents and `write_file` for new ones; `suggest_edits`
   and its approval exceptions are removed from HTTP/MCP and all built-in runtimes.
   Claude retains `alwaysLoad` for StashBase MCP. Native write tools remain
-  available for requested external output under runtime permissions; project
-  tool routing is an instruction, not a native-tool gate. Shell/subagent writes
+  available for requested external output under runtime permissions. Claude's
+  in-project native writes are denied by a PreToolUse hook; for other runtimes
+  and shell commands, project routing is an instruction, not a native-tool gate. Shell/subagent writes
   remain detectable by the common turn scan. `project-file-mutations.test.ts` covers edits of empty
   files, nonempty-match rejection and stale versions through real MCP.
 - **Driven runtime pass (2026-10-08):** the production renderer in a source

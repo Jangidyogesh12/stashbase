@@ -34,6 +34,7 @@ import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError
  *     { t: "exit", message? }                          // normal or fatal session end
  */
 import { isStashbaseWorkspaceEdit } from './agent-file-permissions.ts';
+import { projectNativeWriteGuard } from './agent-native-write-guard.ts';
 import { agentBootstrapCoordinator } from './agent-runtime-installer.ts';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -499,6 +500,9 @@ export class AgentSession implements AttributedAgentSession {
             STASHBASE_AGENT_SESSION_ID: this.attributionId,
           } as NodeJS.ProcessEnv,
           spawnClaudeCodeProcess,
+          // Runs before the permission mode, so Edit and Auto cannot approve
+          // a native write that bypasses StashBase's project file tools.
+          hooks: { PreToolUse: [projectNativeWriteGuard(cwd)] },
           canUseTool: (name, input, opts) => this.onPermission(name, input, opts),
           stderr: (d: string) => log.debug(d),
         },

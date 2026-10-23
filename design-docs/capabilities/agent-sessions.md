@@ -52,7 +52,9 @@ permissions, with current model and tool choices checked before use.
   modifies those files through native tools under the selected runtime's
   permissions, without requiring import or moving the conversation. Native
   writes remain available; Default asks for them in Ask, Edit, and Auto, while
-  Plan refuses changes. Project text edits use project file tools. External
+  Plan refuses changes. Project text edits use project file tools; Claude
+  refuses a native write whose target resolves inside the project, in every
+  mode, and directs the agent to those tools. External
   files do not become project search results or participate in project turn review.
 
 - Capture text, context, and choices on Send. Clear only the accepted snapshot.
