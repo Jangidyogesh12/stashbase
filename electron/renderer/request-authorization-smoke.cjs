@@ -51,7 +51,9 @@ async function probeWindow(window, origin) {
     };
     const socketPath = (path) => new Promise((resolve) => {
       const socket = new WebSocket(origin.replace('http:', 'ws:') + path);
-      const timer = setTimeout(() => { socket.close(); resolve('timeout'); }, 2000);
+      // This checks authorization, not a two-second loopback latency budget.
+      // Hosted Windows can delay Chromium delivery while starting its services.
+      const timer = setTimeout(() => { socket.close(); resolve('timeout'); }, 5000);
       socket.onerror = () => { clearTimeout(timer); resolve('blocked'); };
       socket.onmessage = (event) => { clearTimeout(timer); socket.close(); resolve(JSON.parse(event.data)); };
     });
