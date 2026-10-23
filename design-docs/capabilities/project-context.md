@@ -65,8 +65,10 @@ invalid identity, and failures never broaden project scope.
 
 Keep empty results distinct from failed or partial work. Withhold known-stale
 evidence, show remaining usable results, and recover the affected preparation,
-index, or provider state. Bounded reads identify their extent. Search by meaning
-requires representative quality evaluation, beyond transport correctness.
+index, or provider state. Bounded reads identify their extent. Transport
+correctness does not establish search-by-meaning relevance. Representative
+quality evaluation is deferred; [J05](../../code-review/journey-coverage.md#j05-search)
+records the evidence gap.
 
 ## Related Journeys
 

@@ -241,7 +241,8 @@ source URL and installed package version.
   and frozen launches cannot inherit a Windows ANSI code page.
 - Resource ceilings must stay finite and aligned across Node/Python. No-op reconcile
   spends no embeddings but still transfers text for MFS revision classification.
-  A rename is not a zero-reembedding guarantee. Ranking changes need J05 evaluation.
+  A rename is not a zero-reembedding guarantee. Ranking-quality evidence and
+  the deferred evaluation are tracked in [J05](journey-coverage.md#j05-search).
 
 ### Optional Local Components
 

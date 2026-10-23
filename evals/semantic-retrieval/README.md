@@ -1,7 +1,14 @@
 # Semantic Retrieval Evaluation
 
-This credentialed AI Eval measures J05 meaning-based ranking quality separately
-from deterministic retrieval correctness. Run it from the repository root:
+**Status: deferred.** The implementation remains available for future
+reassessment, but its dataset, relevance judgments, and thresholds have not been
+validated as a reliable measure of semantic retrieval quality. It is not a
+release gate or a required baseline-collection task. See
+[J05](../../code-review/journey-coverage.md#j05-search) for the evidence gap and
+deferral decision.
+
+The experimental command scores meaning-based retrieval separately from
+deterministic retrieval correctness. To inspect it, run from the repository root:
 
 ```bash
 pnpm eval:semantic-retrieval
@@ -16,7 +23,7 @@ fixtures through `MfsIndexer`, and searches through the production Retrieval
 Interface. Prepared PDF fixtures also publish completed text under isolated
 AppData so retrieval exercises the production source-availability checks.
 The temporary data is removed after the run. `--out` additionally
-writes the report to a file for release evidence; the report never contains a
+writes the report to a file for inspection; the report never contains a
 credential.
 
 ## Dataset and scoring
@@ -38,9 +45,8 @@ regressing.
 The corpus deliberately mixes short single-chunk notes with sources long enough
 to split across several chunks — `corpus/facilities-handbook.md`,
 `corpus/onboarding-handbook.md`, and the prepared `prepared/field-guide.md` —
-and judges queries against a specific section of each. Without those, the Eval
-would report nothing about chunking even though chunking changes are one of its
-documented triggers.
+and judges queries against a specific section of each. These fixtures let the
+command exercise chunking as well as retrieval over short documents.
 
 The report names the dataset schema/version, commit, provider, model, Recall@K,
 and mean reciprocal rank (MRR). Each query prints its acceptable source set,
@@ -66,12 +72,12 @@ do not lower a threshold merely to accept a regression.
 
 The command reports `CALIBRATION` and does not fail on quality thresholds until
 the dataset contains at least three retained baseline runs for each supported
-BYOK path, OpenAI and OpenRouter. This prevents unobserved target numbers from
-silently becoming a release gate. For calibration, select one provider in
-Settings, run the command three times, retain each complete report with the PR
-or release evidence, then add its provider, exact model, date, unique evidence
-reference, Recall@3, and MRR to `baselineRuns`. Repeat for the other provider.
-Review the collected distributions before activating or changing thresholds.
+BYOK path, OpenAI and OpenRouter. This describes the existing command's
+mechanics, not an approved quality gate. If reassessment retains this approach,
+calibration would require three retained reports per provider, with each run's
+provider, exact model, date, unique evidence reference, Recall@3, and MRR recorded
+in `baselineRuns`. The method and collected distributions would need review
+before adopting any thresholds.
 The dataset parser rejects duplicate run IDs, unknown providers, invalid
 metrics, malformed dates, and judgments that name more acceptable sources than
 K has slots. Baseline records must never contain credentials.
@@ -79,19 +85,16 @@ K has slots. Baseline records must never contain credentials.
 Baselines are keyed by provider **and exact model**, so configuring a model the
 dataset has no baseline for returns the run to `CALIBRATION` and the process
 exit status stops gating. That is deliberate — an unmeasured model has no
-baseline to be judged against — but it means the gate state is a fact the
-release checklist has to read off the report, not something a passing exit
-status can be trusted to imply.
+baseline to be judged against. Neither state nor a passing exit status establishes
+that this evaluation is a reliable quality measure.
 
 ## Execution placement
 
-This evaluation is a credentialed release check, not required source CI or
-scheduled CI. It makes paid external embedding requests and depends on a
-locally authorized BYOK provider, while required CI must remain credential-free
-and deterministic. Run it when retrieval ranking, chunking, embedding model, or
-provider behavior changes and record the complete report with the release or
-review evidence. While the report says `CALIBRATION`, retain it as baseline
-evidence but do not claim a passing semantic-quality gate.
+The command is optional experimental tooling, with no required source CI,
+scheduled CI, or release execution. It makes paid external embedding requests
+and depends on a locally authorized BYOK provider. Quality evaluation is deferred
+until its method is reassessed; collecting the existing six baseline runs alone
+would not establish reliability or activate a release requirement.
 
 `pnpm test:server` covers the metrics, manifest, and runner deterministically
 and parses the shipped `v1` manifest against its fixtures, so corpus drift is

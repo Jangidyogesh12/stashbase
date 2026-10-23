@@ -1056,13 +1056,17 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
   Nested ownership was repeated on 2026-09-14 against MFS `357fe252`, and setup
   provenance matched the pin after replacement and a no-op rerun. These use the
   development Python runtime, not packaged sidecars or real embedding providers.
-- **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned
-  [dataset](../evals/semantic-retrieval/README.md) through production interfaces,
-  reporting distinct-source Recall@3/MRR, misses, unexpected hits, and selected
-  keyword comparisons. Multi-chunk fixtures expose chunking changes. Activation
-  requires three retained runs for each supported BYOK provider.
-- **Release Check:** credentialed OpenAI/OpenRouter evaluations; paid and variable
-  provider requests are not source CI.
+- **AI Eval:** deferred (2026-10-23). The implementation from
+  [PR #187](https://github.com/liliu-z/stashbase/pull/187) remains available as
+  `pnpm eval:semantic-retrieval`, but its [dataset](../evals/semantic-retrieval/README.md),
+  judgments, and thresholds have not been validated as a reliable measure of
+  retrieval quality. There are no retained provider baselines.
+  [Issue #176](https://github.com/liliu-z/stashbase/issues/176) is closed as not
+  planned for now; future quality evaluation must reassess the approach before
+  treating its results as evidence or a gate.
+- **Release Check:** semantic-quality evaluation and baseline collection are
+  deferred, with no required provider reports or quality threshold gate.
+  Deterministic retrieval checks and packaged integration checks still apply.
 - **Background fixes (2026-09-16):** an unreadable-subtree regression verifies
   incomplete enumeration cannot remove existing projections. Real sync
   orchestration tests inject daemon retirement during upsert and deletion,
@@ -1070,8 +1074,8 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
   The redundant `folderReady` set is removed; successful daemon status establishes
   readiness directly. Runtime keyword availability during blocked embedding is
   covered by the J04 pass above.
-- **Gap:** no retained baseline, so thresholds remain in calibration; see
-  [issue #176](https://github.com/liliu-z/stashbase/issues/176).
+- **Gap:** representative semantic retrieval quality remains unproven. Deferring
+  evaluation does not establish ranking quality.
 
 ## J06: Agent
 

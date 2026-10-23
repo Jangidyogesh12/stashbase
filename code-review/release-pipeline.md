@@ -430,15 +430,12 @@ applicable platforms. That checklist covers native, packaged, credentialed,
 clipboard, real-media, and N→N+1 updater seams; it does not repeat automated
 journeys.
 
-When a release changes retrieval ranking, chunking, embedding models, or
-provider integration, run `pnpm eval:semantic-retrieval --out <path>` for every
-configured supported BYOK provider before publication. Retain each complete
-text report with the release evidence; it must identify the commit, dataset,
-provider, and model, and must not be marked as produced from a dirty working
-tree. A report marked `ACTIVE` must meet both thresholds. A
-report marked `CALIBRATION` contributes only baseline evidence and cannot be
-described as a passing semantic-quality gate. Required source CI remains
-credential-free and does not run this probabilistic check.
+Semantic retrieval quality evaluation is deferred as recorded in
+[J05](journey-coverage.md#j05-search). The existing experimental command is not
+a release requirement: neither provider baseline reports nor its `ACTIVE` or
+`CALIBRATION` state gate publication. Required deterministic retrieval checks
+and packaged integration checks remain in place; they do not establish ranking
+quality. Reassess the evaluation's reliability before adopting a future gate.
 
 ## Implementation Map
 
@@ -457,7 +454,7 @@ credential-free and does not run this probabilistic check.
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/after-pack-macos.cjs` |
 | Application icon | `scripts/icons/build.mjs` behind `pnpm build:icons`, rendering `build/icon.svg` in `scripts/icons/render.mjs` with the size table and containers in `scripts/icons/encode.mjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` (including the explicit OpenCode resource version probe) and platform release verifiers |
-| Focused evidence | `scripts/packaging/inputs.test.mjs`, `scripts/icons/encode.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
+| Focused evidence | `scripts/packaging/inputs.test.mjs`, `scripts/icons/encode.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, and the N→N+1 release check |
 
 ## Release Runbook
 
@@ -469,22 +466,18 @@ choice:
 2. Ask whether the `package.json` version bump is patch, minor, or major.
 3. Commit only the bump as `chore: bump to <version>`, as the final commit in
    the push. Do not create a release branch or push the same source first.
-4. If retrieval ranking, chunking, an embedding model, or provider integration
-   changed, collect the required J05 reports before pushing the release trigger.
-   `ACTIVE` threshold failures stop release; `CALIBRATION` reports are baseline
-   evidence only. The probabilistic gate remains maintainer-operated.
-5. Push `main` once. The `CI` workflow validates that exact final commit; on
+4. Push `main` once. The `CI` workflow validates that exact final commit; on
    success, the Release workflow creates its immutable tag, prepares the draft,
    publishes or reuses the independent component set, packages all platforms,
    verifies the update set, publishes the app, and updates Homebrew. Do not
    manually publish a draft. `HOMEBREW_TAP_TOKEN` needs tap push access.
-6. If CI fails without requiring source changes, rerun the failed jobs. If fixes
+5. If CI fails without requiring source changes, rerun the failed jobs. If fixes
    must follow the bump, wait for their exact `main` commit to pass CI, create
    the version tag at that successful commit, and manually dispatch `release.yml`.
    For a packaging/upload failure, delete the incomplete application draft and dispatch `release.yml` with the
    same tag. Delete an incomplete component draft as well if component publication
    failed; retain already public components. Never clobber versioned assets.
-7. After Actions finish, verify the public app assets, all three update metadata
+6. After Actions finish, verify the public app assets, all three update metadata
    files and generated sidecars, the separate four-platform component set pinned
    by the application, and the tap update. Perform residual packaged UI sanity,
    including N→N+1 updates before calling the update path verified.

@@ -23,12 +23,9 @@ Record one result per package/platform:
 - Evidence or issue links:
 - Notes and every not-applicable reason:
 
-For a release that changes retrieval ranking, chunking, an embedding model, or
-provider integration, also record one complete `pnpm eval:semantic-retrieval`
-report for each supported BYOK provider configured by the reviewer. Store the
-reports with the release evidence and link them above. Reports must contain no
-credentials. An `ACTIVE` failure blocks publication; a `CALIBRATION` report is
-retained to establish the provider baseline and is not a passing gate.
+Semantic-quality evaluation is deferred; provider baseline reports are not
+required for publication. See the
+[release policy](../code-review/release-pipeline.md#maintainer-handoff).
 
 Use a disposable folder and non-sensitive test documents. Do not paste tokens,
 credentials, personal documents, or private agent output into screenshots or
@@ -44,18 +41,6 @@ need telemetry disabled in their disposable configuration before first launch.
 Never use production PostHog as the test event sink.
 
 ## Residual checks
-
-- [ ] **J05** — When the retrieval-quality trigger above applies, select OpenAI
-  in Settings, run `pnpm eval:semantic-retrieval --out <path>`, retain the
-  complete report, then repeat with OpenRouter. While the dataset is in calibration, collect its
-  declared minimum of three runs per provider; after activation, one run per
-  provider is sufficient for an applicable release. Confirm each report names
-  the commit evidence, dataset, provider, model, gate state, Recall@3, and MRR.
-  Record a precise not-applicable reason only when the release did not cross a
-  retrieval-quality trigger. A `CALIBRATION` gate state is expected until the
-  baselines are complete and is not a failure; a report that names a dirty
-  working tree, or a provider/model pair the dataset has no baseline for, is
-  not usable evidence.
 
 - [ ] **J01** — Install or unpack the release asset and launch it through the platform's
   normal path. Confirm one window appears and quits cleanly. On macOS, confirm
@@ -129,7 +114,7 @@ Never use production PostHog as the test event sink.
   real agent to use that evidence and write an accepted result into the Canvas,
   approve the write, review and edit the file, then close and reopen it. Confirm
   keyword search can find the new durable content. This is a packaged integration
-  check, not the semantic-quality threshold owned by the J05 Eval.
+  check; it does not establish representative semantic retrieval quality.
 - **J11 is retired:** chat starts in an open project; no conversation migration.
 - [ ] **J06** — Paste one non-sensitive clipboard image into the agent composer. Confirm
   the attachment preview appears and accompanying text remains.
