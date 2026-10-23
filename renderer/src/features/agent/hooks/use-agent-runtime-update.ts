@@ -35,6 +35,9 @@ export interface AgentRuntimeUpdateView {
   /** What the runtime is called, for the action's label. */
   readonly label: string;
   readonly busy: boolean;
+  /** The service's latest sentence about the update while it runs, such as
+   *  the installer's own output, or null. */
+  readonly progress: string | null;
   /** Why the last update did not finish, or null. */
   readonly failure: string | null;
   /** The failed turn an update has already run for, so its block offers a
@@ -96,6 +99,7 @@ export function useAgentRuntimeUpdate(
   const requestSignal = useRequestSignals<'update'>();
   const agent = useStore(session.store, (state) => state.agent);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [completedBlockId, setCompletedBlockId] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
@@ -109,14 +113,20 @@ export function useAgentRuntimeUpdate(
       const label = agentLabel(agent);
       setBusy(true);
       setFailure(null);
+      setProgress(null);
       void (async () => {
         try {
-          await updateAgent(catalog, agent, signal);
+          await updateAgent(catalog, agent, signal, {
+            onStep: (step) => {
+              if (!signal.aborted) setProgress(step.note ?? null);
+            },
+          });
           signal.throwIfAborted();
           onRefresh();
           // The process behind this conversation still runs the old
           // executable: reconnect to spawn the updated one, then send the
           // refused request again on it.
+          setProgress(`Starting the updated ${label}…`);
           session.reconnect();
           const outcome = await reconnected(session, signal);
           if (outcome === 'cancelled') return;
@@ -132,7 +142,10 @@ export function useAgentRuntimeUpdate(
           if (!signal.aborted) setFailure(agentUpdateFailure(error));
         } finally {
           running.current = false;
-          if (!signal.aborted) setBusy(false);
+          if (!signal.aborted) {
+            setBusy(false);
+            setProgress(null);
+          }
         }
       })();
     },
@@ -140,7 +153,15 @@ export function useAgentRuntimeUpdate(
   );
 
   return useMemo(
-    () => ({ busy, completed, completedBlockId, failure, label: agentLabel(agent), update }),
-    [agent, busy, completed, completedBlockId, failure, update],
+    () => ({
+      busy,
+      completed,
+      completedBlockId,
+      failure,
+      label: agentLabel(agent),
+      progress,
+      update,
+    }),
+    [agent, busy, completed, completedBlockId, failure, progress, update],
   );
 }

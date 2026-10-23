@@ -17,6 +17,7 @@ function view(overrides: Partial<AgentRuntimeUpdateView> = {}): AgentRuntimeUpda
     completedBlockId: null,
     failure: null,
     label: 'Claude',
+    progress: null,
     update: vi.fn(),
     ...overrides,
   };

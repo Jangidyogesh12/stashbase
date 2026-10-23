@@ -11,6 +11,7 @@ function runtimeUpdate(overrides: Partial<AgentRuntimeUpdateView> = {}): AgentRu
     completedBlockId: null,
     failure: null,
     label: 'Claude',
+    progress: null,
     update: () => undefined,
     ...overrides,
   };
@@ -31,7 +32,14 @@ type Story = StoryObj<typeof AgentUpgradeOfferCard>;
 
 export const Offered: Story = {};
 
-export const Updating: Story = { args: { runtimeUpdate: runtimeUpdate({ busy: true }) } };
+export const Updating: Story = {
+  args: {
+    runtimeUpdate: runtimeUpdate({
+      busy: true,
+      progress: 'Downloading the official Claude installer…',
+    }),
+  },
+};
 
 export const Failed: Story = {
   args: {

@@ -20,6 +20,7 @@ import {
 } from '@/features/agent/domain/session';
 import type { AgentModelRefreshView } from '@/features/agent/hooks/use-agent-model-refresh';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
+import { RuntimeUpdateNotes } from '@/features/agent/ui/runtime-update-notes';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
@@ -82,14 +83,7 @@ export function TurnFailure({
           >
             {`Update ${runtimeUpdate.label}`}
           </Button>
-          {runtimeUpdate.failure && (
-            <p
-              className="mt-1 text-caption wrap-anywhere whitespace-pre-wrap text-muted-foreground"
-              role="alert"
-            >
-              {runtimeUpdate.failure}
-            </p>
-          )}
+          <RuntimeUpdateNotes progressClassName="mt-1" runtimeUpdate={runtimeUpdate} />
         </>
       )}
       {modelChanged && !refreshed && modelRefresh && (

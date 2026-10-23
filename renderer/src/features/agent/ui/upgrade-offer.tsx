@@ -24,6 +24,8 @@ import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-ru
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
+import { RuntimeUpdateNotes } from './runtime-update-notes';
+
 export function AgentUpgradeOfferCard({
   offer,
   runtimeUpdate,
@@ -45,14 +47,7 @@ export function AgentUpgradeOfferCard({
               ? `Updating ${runtimeUpdate.label}. This chat reconnects once it is done.`
               : `StashBase installs the latest ${runtimeUpdate.label} and reconnects this chat. Your chat and existing installations are kept.`}
           </p>
-          {runtimeUpdate.failure && (
-            <p
-              className="mt-1 text-caption wrap-anywhere whitespace-pre-wrap text-muted-foreground"
-              role="alert"
-            >
-              {runtimeUpdate.failure}
-            </p>
-          )}
+          <RuntimeUpdateNotes progressClassName="mt-0.5" runtimeUpdate={runtimeUpdate} />
         </div>
         <Button
           disabled={runtimeUpdate.busy}

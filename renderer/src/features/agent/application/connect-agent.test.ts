@@ -108,19 +108,25 @@ it('reports each step the service reaches until the runtime is ready', async () 
   expect(onStep.mock.calls.map(([step]) => step)).toEqual([installing, signingIn]);
 });
 
-it('follows the update acknowledgement until the runtime is ready again', async () => {
-  const preparing = { ...CLAUDE_AGENT, preparation: { step: 'install' as const }, ready: false };
+it('follows the update acknowledgement until the runtime is ready again, reporting each step', async () => {
+  const downloading = {
+    step: 'install' as const,
+    note: 'Downloading the official Claude installer…',
+  };
+  const preparing = { ...CLAUDE_AGENT, preparation: downloading, ready: false };
   const ready = { ...CLAUDE_AGENT, ready: true };
   const port = agentCatalogPort([ready], {
     prepareAgent: vi.fn(async () => ({ agents: [preparing] })),
   });
+  const onStep = vi.fn();
 
   await expect(
-    updateAgent(port, 'claude', new AbortController().signal, immediately),
+    updateAgent(port, 'claude', new AbortController().signal, { onStep, wait: immediately }),
   ).resolves.toBeUndefined();
 
   expect(port.prepareAgent).toHaveBeenCalledWith('claude', 'update', expect.anything());
   expect(port.listAgents).toHaveBeenCalledOnce();
+  expect(onStep.mock.calls.map(([step]) => step)).toEqual([downloading]);
 });
 
 it("reports the service's own sentence when the update does not end ready", async () => {
@@ -134,6 +140,6 @@ it("reports the service's own sentence when the update does not end ready", asyn
   });
 
   await expect(
-    updateAgent(port, 'claude', new AbortController().signal, immediately),
+    updateAgent(port, 'claude', new AbortController().signal, { wait: immediately }),
   ).rejects.toSatisfy((error) => agentUpdateFailure(error) === 'npm global folder is not writable');
 });

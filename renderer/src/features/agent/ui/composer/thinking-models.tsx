@@ -3,7 +3,7 @@
 import { RefreshCw } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import { DropdownContent, DropdownLabel, DropdownSeparator } from '@/components/ui/dropdown';
+import { DropdownContent, DropdownLabel } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
 import type { ModelChoice } from '@/features/agent/domain/model-choice';
 import type { AgentModel } from '@/features/agent/domain/runtime-catalog';
@@ -78,27 +78,31 @@ function ModelList({ choice, onModelChange, runtimeUpdate, state }: ModelListPro
           onSelect={() => onModelChange(model.id)}
         />
       ))}
-      {runtimeUpdate && (
-        <>
-          <DropdownSeparator />
-          {/* An action, not a choice: one line under its icon, so it does
-              not outweigh the models it sits beneath. */}
-          <MenuItem
-            closeOnClick={false}
-            disabled={runtimeUpdate.busy}
-            icon={RefreshCw}
-            label={
-              runtimeUpdate.busy
-                ? `Updating ${runtimeUpdate.label}…`
-                : `Update ${runtimeUpdate.label}`
-            }
-            onSelect={() => runtimeUpdate.update()}
-          />
-          {runtimeUpdate.failure && (
-            <DropdownLabel role="alert">{runtimeUpdate.failure}</DropdownLabel>
-          )}
-        </>
+    </>
+  );
+}
+
+/** The runtime's update, pinned under the list so a long list never scrolls
+ *  it out of view. An action, not a choice: one line under its icon, so it
+ *  does not outweigh the models it sits beneath. */
+function RuntimeUpdateRow({ runtimeUpdate }: { runtimeUpdate: AgentRuntimeUpdateView }) {
+  return (
+    <>
+      <MenuItem
+        closeOnClick={false}
+        disabled={runtimeUpdate.busy}
+        icon={RefreshCw}
+        label={
+          runtimeUpdate.busy ? `Updating ${runtimeUpdate.label}…` : `Update ${runtimeUpdate.label}`
+        }
+        onSelect={() => runtimeUpdate.update()}
+      />
+      {runtimeUpdate.busy && runtimeUpdate.progress && (
+        <DropdownLabel aria-live="polite" className="line-clamp-2 wrap-anywhere">
+          {runtimeUpdate.progress}
+        </DropdownLabel>
       )}
+      {runtimeUpdate.failure && <DropdownLabel role="alert">{runtimeUpdate.failure}</DropdownLabel>}
     </>
   );
 }
@@ -117,6 +121,9 @@ export function ModelMenu({
       selectionAppearance="none"
       side="top"
       {...(anchor ? { anchor, sideOffset: 6 } : {})}
+      {...(list.runtimeUpdate
+        ? { footer: <RuntimeUpdateRow runtimeUpdate={list.runtimeUpdate} /> }
+        : {})}
     >
       <ModelList {...list} />
     </DropdownContent>

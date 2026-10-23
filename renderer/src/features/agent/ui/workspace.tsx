@@ -299,7 +299,11 @@ function ChatWorkspace({
                       activeAgent={readyAgent}
                       onEffortChange={active.setEffort}
                       onModelChange={active.setModel}
-                      onRequestCatalog={active.start}
+                      // Opening the control rereads the runtime list for a newly found release.
+                      onRequestCatalog={() => {
+                        active.start();
+                        catalog.refresh();
+                      }}
                       runtimeUpdate={
                         offersRuntimeUpdate(readyAgent, runtimeUpdate) ? runtimeUpdate : undefined
                       }

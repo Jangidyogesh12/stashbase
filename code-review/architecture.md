@@ -769,6 +769,10 @@ stable status without download, retry, or a new durable demand latch.
   answer: discovery reads its last result for the installed `--version` and
   starts the next feed read when due (hourly, 15 minutes after a failure),
   never waiting on the network, and only while automatic update checks are on.
+  The first discovery after launch therefore answers before any reading, so the
+  chat's runtime catalog is read again whenever the model control opens; it
+  keeps its own query, separate from Settings', and the app does not refetch
+  on window focus.
   Each feed is the one the provider's installer reads (Claude's channel from
   its own user settings). Test runners never reach the feeds. This explicit action shares the failed-turn update owner, but has no request
   to resend. Reconnection reads models from the replacement native process;

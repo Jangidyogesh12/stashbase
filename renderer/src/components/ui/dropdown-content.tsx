@@ -14,15 +14,7 @@
 
 import { Menu } from '@base-ui/react/menu';
 import { motion } from 'framer-motion';
-import {
-  useRef,
-  useEffect,
-  useCallback,
-  useMemo,
-  forwardRef,
-  type ReactNode,
-  type ComponentProps,
-} from 'react';
+import { useRef, useEffect, useMemo, forwardRef, type ReactNode, type ComponentProps } from 'react';
 
 import { Elevated } from '@/components/ui/elevated';
 import { mergeRefs } from '@/lib/merge-refs';
@@ -57,6 +49,9 @@ interface DropdownContentProps {
   'aria-label'?: string;
   children: ReactNode;
   className?: string;
+  /** Rows pinned under the list: only the list scrolls when the popup runs
+   *  out of room, so an action below a long list stays in view. */
+  footer?: ReactNode;
   /** Keeps radio semantics while allowing a consumer-specific selection cue. */
   selectionAppearance?: 'fill' | 'none';
   side?: MenuPositionerProps['side'];
@@ -67,11 +62,133 @@ interface DropdownContentProps {
   anchor?: MenuPositionerProps['anchor'];
 }
 
+// Inside the popup, Base UI's Menu.Item / Menu.RadioItem own the role,
+// aria-checked, tabIndex, roving highlight, typeahead, and Enter/Space/
+// click activation (activation synthesizes a click, so the row div's
+// onClick also fires for keyboard). The render div carries the Fluid
+// Functionalism visuals and the proximity-hover registration.
+function renderMenuItem({
+  radio,
+  toggle,
+  value,
+  disabled,
+  closeOnClick,
+  label,
+  element,
+  children: itemChildren,
+}: MenuItemRenderOptions) {
+  return toggle ? (
+    <Menu.CheckboxItem
+      checked={toggle.on}
+      closeOnClick={closeOnClick}
+      disabled={disabled}
+      label={label}
+      render={element}
+    >
+      {itemChildren}
+    </Menu.CheckboxItem>
+  ) : radio ? (
+    <Menu.RadioItem
+      closeOnClick={closeOnClick}
+      disabled={disabled}
+      label={label}
+      render={element}
+      value={value}
+    >
+      {itemChildren}
+    </Menu.RadioItem>
+  ) : (
+    <Menu.Item closeOnClick={closeOnClick} disabled={disabled} label={label} render={element}>
+      {itemChildren}
+    </Menu.Item>
+  );
+}
+
+/** One measured run of rows: the element that holds them, and the overlays
+ *  and registration drawn inside it. The overlays sit in the rows' own
+ *  coordinates and scroll with them, so rows that scroll and rows that stay
+ *  put cannot share one: a pinned footer is a region of its own. */
+function useMenuRegion(selectionAppearance: 'fill' | 'none') {
+  const { open } = useDropdownMenuContext();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const surface = useMenuSurface(containerRef, { clearFocusRingOnPointerEnter: true });
+  const { activeIndex, measureItems, registerItem, sessionRef } = surface;
+  const itemRegistry = useDomOrderRegistry();
+  // The checked row marks itself (see MenuItem), so the popup derives the
+  // selected background and the radio-group value from the rows rather than
+  // from an index a caller had to keep in step with them.
+  const checkedIndex = useMarkedIndex(itemRegistry);
+
+  // Measure items once the popup has mounted.
+  useEffect(() => {
+    if (!open) return;
+    // Double rAF: first waits for React commit, second for layout
+    let inner: number;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        measureItems();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [open, measureItems]);
+
+  const { activeRect, checkedRect, focusRect } = overlayRects(surface, checkedIndex);
+  const contentCtx = useMemo(
+    () => ({ registerItem, activeIndex, itemRegistry, renderMenuItem }),
+    [registerItem, activeIndex, itemRegistry],
+  );
+
+  const rows = (children: ReactNode) => (
+    <>
+      <MenuSurfaceOverlays
+        activeRect={activeRect ?? null}
+        checkedRect={(selectionAppearance === 'fill' ? checkedRect : null) ?? null}
+        focusRect={focusRect ?? null}
+        hoverOrigin={checkedRect ?? null}
+        hoverSession={sessionRef.current}
+      />
+      <DropdownContext.Provider value={contentCtx}>
+        {/* display: contents keeps items direct flex children of the
+            region so proximity measurement and gap layout still work,
+            while the group provides the radio value context. */}
+        <Menu.RadioGroup value={checkedIndex ?? null} className="contents">
+          {children}
+        </Menu.RadioGroup>
+      </DropdownContext.Provider>
+    </>
+  );
+  return { containerRef, rows, surfaceProps: surface.surfaceProps };
+}
+
+/** The rows pinned under a scrolling list, with a rule between the two. */
+function DropdownFooter({
+  children,
+  selectionAppearance,
+}: {
+  children: ReactNode;
+  selectionAppearance: 'fill' | 'none';
+}) {
+  const region = useMenuRegion(selectionAppearance);
+  return (
+    <div
+      ref={region.containerRef}
+      {...region.surfaceProps}
+      className="relative flex shrink-0 flex-col gap-0.5 border-t border-border/60 p-1"
+    >
+      {region.rows(children)}
+    </div>
+  );
+}
+
 const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
   (
     {
       className,
       children,
+      footer,
       selectionAppearance = 'fill',
       side = 'bottom',
       align = 'start',
@@ -83,82 +200,11 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
   ) => {
     const { open, releaseOnExit } = useDropdownMenuContext();
     const shape = useShape();
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    const surface = useMenuSurface(containerRef, { clearFocusRingOnPointerEnter: true });
-    const { activeIndex, measureItems, registerItem, sessionRef } = surface;
+    const list = useMenuRegion(selectionAppearance);
     const popupMotion = usePopupMotion({ open, fromBottomEdge: side === 'top' });
-    const itemRegistry = useDomOrderRegistry();
-    // The checked row marks itself (see MenuItem), so the popup derives the
-    // selected background and the radio-group value from the rows rather than
-    // from an index a caller had to keep in step with them.
-    const checkedIndex = useMarkedIndex(itemRegistry);
-
-    // Measure items once the popup has mounted.
-    useEffect(() => {
-      if (!open) return;
-      // Double rAF: first waits for React commit, second for layout
-      let inner: number;
-      const outer = requestAnimationFrame(() => {
-        inner = requestAnimationFrame(() => {
-          measureItems();
-        });
-      });
-      return () => {
-        cancelAnimationFrame(outer);
-        cancelAnimationFrame(inner);
-      };
-    }, [open, measureItems]);
-
-    const { activeRect, checkedRect, focusRect } = overlayRects(surface, checkedIndex);
-    // Inside the popup, Base UI's Menu.Item / Menu.RadioItem own the role,
-    // aria-checked, tabIndex, roving highlight, typeahead, and Enter/Space/
-    // click activation (activation synthesizes a click, so the row div's
-    // onClick also fires for keyboard). The render div carries the Fluid
-    // Functionalism visuals and the proximity-hover registration.
-    const renderMenuItem = useCallback(
-      ({
-        radio,
-        toggle,
-        value,
-        disabled,
-        closeOnClick,
-        label,
-        element,
-        children: itemChildren,
-      }: MenuItemRenderOptions) =>
-        toggle ? (
-          <Menu.CheckboxItem
-            checked={toggle.on}
-            closeOnClick={closeOnClick}
-            disabled={disabled}
-            label={label}
-            render={element}
-          >
-            {itemChildren}
-          </Menu.CheckboxItem>
-        ) : radio ? (
-          <Menu.RadioItem
-            closeOnClick={closeOnClick}
-            disabled={disabled}
-            label={label}
-            render={element}
-            value={value}
-          >
-            {itemChildren}
-          </Menu.RadioItem>
-        ) : (
-          <Menu.Item closeOnClick={closeOnClick} disabled={disabled} label={label} render={element}>
-            {itemChildren}
-          </Menu.Item>
-        ),
-      [],
-    );
-
-    const contentCtx = useMemo(
-      () => ({ registerItem, activeIndex, itemRegistry, renderMenuItem }),
-      [registerItem, activeIndex, itemRegistry, renderMenuItem],
-    );
+    // min-w tracks the anchor, the trigger unless the caller names another,
+    // via the Positioner's --anchor-width var.
+    const popupClassName = `relative flex max-h-[min(480px,var(--available-height))] w-72 max-w-full min-w-[var(--anchor-width)] flex-col ${shape.container} outline-none select-none`;
 
     return (
       <Menu.Portal>
@@ -170,34 +216,33 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
           className="z-50 outline-none"
         >
           <motion.div {...popupMotion} onAnimationComplete={releaseOnExit}>
-            <DropdownContext.Provider value={contentCtx}>
+            {footer === undefined ? (
               <Menu.Popup
-                render={<Elevated offset={2} shadowLevel={3} ref={mergeRefs(containerRef, ref)} />}
-                {...surface.surfaceProps}
+                render={
+                  <Elevated offset={2} shadowLevel={3} ref={mergeRefs(list.containerRef, ref)} />
+                }
+                {...list.surfaceProps}
                 {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}
-                className={cn(
-                  // min-w tracks the anchor, the trigger unless the caller
-                  // names another, via the Positioner's --anchor-width var.
-                  `relative flex max-h-[min(480px,var(--available-height))] w-72 max-w-full min-w-[var(--anchor-width)] flex-col gap-0.5 overflow-y-auto ${shape.container} p-1 outline-none select-none`,
-                  className,
-                )}
+                className={cn(popupClassName, 'gap-0.5 overflow-y-auto p-1', className)}
               >
-                <MenuSurfaceOverlays
-                  activeRect={activeRect ?? null}
-                  checkedRect={(selectionAppearance === 'fill' ? checkedRect : null) ?? null}
-                  focusRect={focusRect ?? null}
-                  hoverOrigin={checkedRect ?? null}
-                  hoverSession={sessionRef.current}
-                />
-
-                {/* display: contents keeps items direct flex children of the
-                    popup so proximity measurement and gap layout still work,
-                    while the group provides the radio value context. */}
-                <Menu.RadioGroup value={checkedIndex ?? null} className="contents">
-                  {children}
-                </Menu.RadioGroup>
+                {list.rows(children)}
               </Menu.Popup>
-            </DropdownContext.Provider>
+            ) : (
+              <Menu.Popup
+                render={<Elevated offset={2} shadowLevel={3} ref={ref} />}
+                {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}
+                className={cn(popupClassName, 'overflow-hidden', className)}
+              >
+                <div
+                  ref={list.containerRef}
+                  {...list.surfaceProps}
+                  className="relative flex min-h-0 flex-col gap-0.5 overflow-y-auto p-1"
+                >
+                  {list.rows(children)}
+                </div>
+                <DropdownFooter selectionAppearance={selectionAppearance}>{footer}</DropdownFooter>
+              </Menu.Popup>
+            )}
           </motion.div>
         </Menu.Positioner>
       </Menu.Portal>

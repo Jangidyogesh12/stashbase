@@ -2338,6 +2338,21 @@ appears below the model choices. This is a
 source UI check with controlled ports, not an installed Codex update.
 Since 2026-10-18 the entry appears only with a known newer release: the
 workspace regression asserts no Update Codex row without `availableVersion`.
+On 2026-10-24 a dev build showed Claude 2.1.309 available in Settings while
+the model menu offered nothing: the chat had read the catalog only before the
+first release reading landed. Opening the model control now reads it again,
+and a workspace regression covers a release that appears after every earlier
+read. The entry is now a pinned `DropdownContent` footer: only the model list
+scrolls when the popup runs out of room. The `ModelPicker` Story was driven in
+Electron's Chromium with the popup capped at 150px: the list scrolled under a
+hairline while Update Codex stayed in view, and hovering it drew the highlight
+on that row. An update started from the chat once showed only "Updating
+Claude…" while Settings streamed the installer's lines; `updateAgent` now
+passes each preparation step to `use-agent-runtime-update.ts`, whose
+`progress` the menu, the offer card and the failed turn show. A workspace
+regression finds the installer line under the menu's update; in the Story
+the menu read "Updating Codex…" then "Starting the updated Codex…". A real
+installer's lines in the chat surfaces are unproven.
 `server/__tests__/agent-runtime-releases.test.ts` covers version ordering,
 feed parsing, background refresh, retry after failure, and the automatic-check
 choice with a fake feed. A one-off read of the three live feeds returned

@@ -28,6 +28,16 @@ function pause(signal: AbortSignal): Promise<void> {
 // Keep polling long enough to receive its actionable failure and release of ownership.
 const PREPARATION_LIMIT_MS = 20 * 60_000;
 
+const boundedPreparation = (signal: AbortSignal) =>
+  AbortSignal.any([signal, AbortSignal.timeout(PREPARATION_LIMIT_MS)]);
+
+/** How a caller follows a preparation: each step the service reports, and the
+ *  pause between reads. */
+interface PreparationFollow {
+  onStep?: (preparation: AgentPreparation) => void;
+  wait?: typeof pause;
+}
+
 /** The runtime's entry once the service has stopped preparing it: the
  *  acknowledgement a setup route answers with is followed until it settles,
  *  and each step it reaches on the way is reported. */
@@ -55,12 +65,9 @@ export async function connectAgent(
   agent: AgentId,
   known: Agent | undefined,
   signal: AbortSignal,
-  {
-    onStep,
-    wait = pause,
-  }: { onStep?: (preparation: AgentPreparation) => void; wait?: typeof pause } = {},
+  { onStep, wait = pause }: PreparationFollow = {},
 ): Promise<void> {
-  const bounded = AbortSignal.any([signal, AbortSignal.timeout(PREPARATION_LIMIT_MS)]);
+  const bounded = boundedPreparation(signal);
   const settled = (catalog: AgentCatalog) =>
     settledAgent(port, agent, catalog, bounded, wait, onStep);
   let current = known;
@@ -119,20 +126,22 @@ export class AgentUpdateRefused extends FeatureError {
 
 /** The native installer, run through the service. Done only when the
  *  updated runtime is ready to carry a turn again, so a resend that follows
- *  never races the update it depends on. */
+ *  never races the update it depends on. Each step the service reports on
+ *  the way is passed on, so the reader sees the installer working. */
 export async function updateAgent(
   port: AgentCatalogPort,
   agent: AgentId,
   signal: AbortSignal,
-  wait = pause,
+  { onStep, wait = pause }: PreparationFollow = {},
 ): Promise<void> {
-  const bounded = AbortSignal.any([signal, AbortSignal.timeout(PREPARATION_LIMIT_MS)]);
+  const bounded = boundedPreparation(signal);
   const entry = await settledAgent(
     port,
     agent,
     await port.prepareAgent(agent, 'update', bounded),
     bounded,
     wait,
+    onStep,
   );
   bounded.throwIfAborted();
   if (!entry?.ready) throw new AgentUpdateRefused(entry?.setupFailure?.message);

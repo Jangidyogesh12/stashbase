@@ -81,6 +81,7 @@ it('offers the runtime update instead of a retry on a turn the runtime was too o
         completedBlockId,
         failure: null,
         label: 'Claude',
+        progress: null,
         update,
       }}
     />
