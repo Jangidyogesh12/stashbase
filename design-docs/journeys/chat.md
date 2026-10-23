@@ -30,7 +30,9 @@ Chat, Documents assistance, and runtimes.
    Only successful file operations contribute to changed-file results. A
    write made through a shell command or a subagent names no file and shows
    no result; when such a turn settles, the project's files refresh so the
-   file appears in Documents. New output preserves reading position. Deciding
+   file appears in Documents. New output follows the end until the reader
+   scrolls toward the start, however little; it then preserves reading
+   position. Sending a message glides back to the end. Deciding
    an approval preserves that position too; keyboard focus can follow the
    decided tool into its activity group without scrolling to the group header.
 4. Continue, send a follow-up into the running turn or queue it for after,

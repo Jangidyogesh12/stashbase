@@ -162,7 +162,16 @@ function ChatWorkspace({
     [active],
   );
   const logRef = useRef<HTMLDivElement>(null);
-  const scroll = useStickToBottom(logRef, activeId);
+  const followLatest = useStickToBottom(logRef, activeId);
+  // Sending returns a reader who scrolled up to the end, where the message lands.
+  const send = (text: string, options?: { queuedId?: string }) => {
+    followLatest();
+    access.send(text, options);
+  };
+  const steer = (text: string) => {
+    followLatest();
+    active.steer(text);
+  };
   const focusBlockId = useAttentionFocus(runtime, activeId, logRef);
   const renaming = useRenameConversation(runtime);
 
@@ -222,18 +231,6 @@ function ChatWorkspace({
         </div>
       </div>
 
-      {!scroll.atBottom && !empty && (
-        <div className="relative z-10 h-0">
-          <Button
-            className="absolute bottom-2 left-1/2 -translate-x-1/2"
-            size="compact"
-            variant="secondary"
-            onClick={scroll.scrollToBottom}
-          >
-            Back to latest
-          </Button>
-        </div>
-      )}
       <AgentWorkStatus session={active} onOpenSettings={onOpenAgentSettings} />
       {notice && state.delivery !== 'unknown' && (
         <AgentConnectionNotice connection={state.connection} onReconnect={active.reconnect} />
@@ -260,8 +257,8 @@ function ChatWorkspace({
               onReprocess={onReprocess}
               onSkillChange={active.setSkill}
               onStop={active.interrupt}
-              onSend={access.send}
-              onSteer={selectedAgent.abilities.steering ? active.steer : undefined}
+              onSend={send}
+              onSteer={selectedAgent.abilities.steering ? steer : undefined}
               placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Message your agent…'}
               placeholderIsPrompt={promptPlaceholder !== null}
               queue={state.queuedPrompts.map(({ context, id, text }) => ({
