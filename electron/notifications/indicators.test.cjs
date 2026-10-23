@@ -47,7 +47,7 @@ for (const platform of ['darwin', 'win32', 'linux']) test(`${platform}: live ses
   assert.equal(menu.some((row) => row.label === 'Upcoming'), false);
   indicators.update({ unread: 0, working: 0, waiting: 0, sections: [] });
   assert.equal(menu.some((row) => row.label === 'Running'), false);
-  assert.equal(menu.some((row) => row.label === 'No running sessions'), true);
+  assert.equal(menu.some((row) => row.label === 'No running chats'), true);
   indicators.dispose(); assert.equal(tray.destroyed, true);
   indicators.update({ unread: 2, working: 0, waiting: 0, sections: [] });
   assert.equal(badges.at(-1) ?? 0, 0);

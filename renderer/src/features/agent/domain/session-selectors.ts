@@ -132,12 +132,12 @@ export function agentWorkStatus(state: AgentSessionState): string | null {
       ? 'Waiting for approval'
       : 'Working…';
   }
-  if (state.connection.kind === 'restoring') return 'Loading conversation…';
+  if (state.connection.kind === 'restoring') return 'Loading chat…';
   if (state.connection.kind === 'connecting' || state.connection.kind === 'reconnecting')
     return 'Connecting…';
   if (state.delivery === 'stopped') return 'Stopped';
-  if (state.delivery === 'failed') return 'Could not finish';
-  if (state.delivery === 'completed') return 'Completed';
+  if (state.delivery === 'failed') return 'Did not finish';
+  if (state.delivery === 'completed') return 'Finished';
   return null;
 }
 

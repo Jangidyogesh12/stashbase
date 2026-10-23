@@ -1,15 +1,15 @@
 /**
  * The two rows that hold a name being typed: the draft of an entry that does
  * not exist yet, and an existing row taking a new name. Both sit at the exact
- * inset and rails of the row they stand in for, so naming never moves the tree
- * under the pointer.
+ * inset of the row they stand in for, so naming never moves the tree under the
+ * pointer.
  */
 import { FileText, Folder } from 'lucide-react';
 
 import type { TreeRow, WorkspaceEntry } from '@/features/workspace/domain/tree';
 
 import { FileTreeNameRow } from './file-tree-name-row';
-import { nameSelection, Rails, rowIcon, rowInset } from './file-tree-rows';
+import { nameSelection, rowIcon, rowInset } from './file-tree-rows';
 
 interface NamingRowProps {
   onCancel(): void;
@@ -43,7 +43,6 @@ export function DraftNameRow({
       onCommit={onCommit}
       placeholder={entryKind === 'folder' ? 'Folder name' : 'File name'}
       problem={problem}
-      rails={<Rails depth={depth} />}
       style={rowInset(depth)}
     />
   );
@@ -75,7 +74,6 @@ export function RenameNameRow({
       onCancel={onCancel}
       onCommit={onCommit}
       problem={problem}
-      rails={<Rails depth={row.depth} />}
       selection={caretOffset === undefined ? nameSelection(row) : undefined}
       style={rowInset(row.depth)}
     />

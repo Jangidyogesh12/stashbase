@@ -58,6 +58,16 @@ Agent. Write **agent** in lowercase in prose and interface copy, such as "your
 agent", "agent credits", and **Ask agent**. Capitalize it only in names
 (**Default Agent**), at the start of a sentence, label, or list item, in
 title-case headings, and in third-party product names such as Claude Agent SDK.
+In sentences the bundled runtime is **the Default Agent**; the bare
+**Default** appears only where runtimes are listed, such as a picker.
+
+## Chat
+
+One conversation with an agent. Interface copy calls it a **chat**, never a
+conversation or a session. When the agent waits for the reader to allow an
+action or answer a question, the chat is **waiting for approval**, never for
+confirmation. A chat **finished** or **did not finish**; **task** is reserved
+for [scheduled tasks](#scheduled-task).
 
 ## Agent Panel
 

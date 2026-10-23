@@ -77,9 +77,9 @@ function operationFailure({ response, serverMessage }: TransportFailure): FilesE
             ? 'rejected'
             : 'unavailable',
     scopeLost
-      ? 'This folder is no longer available in this window.'
+      ? 'This project is no longer available in this window.'
       : unauthorized
-        ? 'This window can no longer access that folder.'
+        ? 'This window can no longer access that project.'
         : conflict
           ? 'Something with that name already exists.'
           : rejected

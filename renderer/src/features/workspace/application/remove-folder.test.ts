@@ -46,7 +46,7 @@ describe('remove project folder', () => {
       removeFolder(project, native, '/project/notes', new AbortController().signal),
     ).resolves.toEqual({
       status: 'failed',
-      message: 'A window could not release this folder. Resolve its save error and try again.',
+      message: 'A window could not release this project. Resolve its save error and try again.',
     });
     expect(project.removeFolder).not.toHaveBeenCalled();
   });
@@ -74,7 +74,7 @@ describe('remove project folder', () => {
     ).resolves.toEqual({
       status: 'removed',
       snapshot: removed,
-      warning: 'The folder was removed. Another window may take a moment to refresh.',
+      warning: 'The project was removed. Another window may take a moment to refresh.',
     });
   });
 });

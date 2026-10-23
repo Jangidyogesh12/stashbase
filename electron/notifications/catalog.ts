@@ -6,16 +6,16 @@ import type { NotificationContent, PreparedNotification } from './center.ts';
 function describe(event: NotificationEvent, count: number): NotificationContent {
   switch (event.kind) {
     case 'agent-confirmation': return {
-      title: 'Needs confirmation',
-      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} requests waiting` : ''}`,
+      title: 'Waiting for approval',
+      body: `${event.project} · ${event.conversation}${count > 1 ? ` · ${count} requests waiting` : ''}`,
     };
     case 'agent-completed': return {
-      title: 'Task completed',
-      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} tasks completed` : ''}`,
+      title: 'Chat finished',
+      body: `${event.project} · ${event.conversation}${count > 1 ? ` · ${count} chats finished` : ''}`,
     };
     case 'agent-failed': return {
-      title: 'Task failed',
-      body: `${event.project} · ${event.conversation}${count > 1 ? ` — ${count} tasks need attention` : ''}`,
+      title: 'Chat did not finish',
+      body: `${event.project} · ${event.conversation}${count > 1 ? ` · ${count} chats did not finish` : ''}`,
     };
   }
 }

@@ -22,8 +22,8 @@ const FILES_MESSAGES: Readonly<Record<FilesFailureKind, string>> = {
   conflict: 'Something with that name already exists.',
   'invalid-response': 'StashBase returned an unexpected response.',
   rejected: 'That name cannot be used.',
-  'scope-lost': 'This folder is no longer available in this window.',
-  unauthorized: 'This window can no longer access that folder.',
+  'scope-lost': 'This project is no longer available in this window.',
+  unauthorized: 'This window can no longer access that project.',
   unavailable: 'StashBase is unavailable.',
 };
 
@@ -57,11 +57,11 @@ export const SESSION_MESSAGES: Readonly<Record<'load' | 'save', string>> = {
   save: "StashBase could not save this window's session.",
 };
 
-/** A window still holding the folder open, and the delay another window may
+/** A window still holding the project open, and the delay another window may
  *  take to notice one that was removed. */
 export const REMOVAL_MESSAGES = {
-  blocked: 'A window could not release this folder. Resolve its save error and try again.',
-  delayed: 'The folder was removed. Another window may take a moment to refresh.',
+  blocked: 'A window could not release this project. Resolve its save error and try again.',
+  delayed: 'The project was removed. Another window may take a moment to refresh.',
 } as const;
 
 /** The project picker reports one outcome the transport ladder cannot: the
@@ -76,10 +76,10 @@ export function projectFailureMessage(
   verb: 'opened' | 'removed',
 ): string {
   const messages: Readonly<Record<ProjectCommandFailureKind, string>> = {
-    fatal: `StashBase could not ask for a folder, so none was ${verb}.`,
-    'invalid-response': `StashBase returned an unexpected response, so the folder was not ${verb}.`,
-    'scope-lost': `That folder is no longer in your registered projects, so it could not be ${verb}.`,
-    unauthorized: `This window can no longer change your project, so the folder was not ${verb}.`,
+    fatal: `StashBase could not ask for a folder, so no project was ${verb}.`,
+    'invalid-response': `StashBase returned an unexpected response, so the project was not ${verb}.`,
+    'scope-lost': `That project is no longer in your recent projects, so it could not be ${verb}.`,
+    unauthorized: `This window can no longer change your project, so the project was not ${verb}.`,
     unavailable: `The project could not be ${verb}. Check that its folder is available and accessible, then try again.`,
   };
   return messages[kind ?? 'unavailable'];

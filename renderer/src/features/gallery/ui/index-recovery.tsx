@@ -13,7 +13,7 @@ export function GalleryIndexRecovery({ recovery }: { recovery: GalleryRecovery |
       <FailureLine className="m-0" tone="capability">
         The latest Gallery is unavailable. You can still browse the saved projects.
       </FailureLine>
-      <Button disabled={recovery.pending} onClick={recovery.retry} size="compact" variant="ghost">
+      <Button loading={recovery.pending} onClick={recovery.retry} size="compact" variant="tertiary">
         Retry
       </Button>
     </div>

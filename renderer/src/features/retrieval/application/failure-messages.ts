@@ -21,7 +21,7 @@ export type RetrievalFailureKind = FeatureFailureKind<SemanticFailureExtra>;
 const MESSAGES: Readonly<Record<RetrievalFailureKind, string>> = {
   'invalid-response': 'StashBase answered unexpectedly.',
   'not-set-up': 'To search by meaning, set it up in StashBase Settings.',
-  'scope-lost': 'That folder is no longer available in this window.',
+  'scope-lost': 'That project is no longer available in this window.',
   unauthorized: 'This window can no longer run that request.',
   unavailable: 'StashBase is unavailable.',
 };

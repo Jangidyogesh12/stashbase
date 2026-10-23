@@ -27,7 +27,7 @@ export function ReviewForm({ runtime, session }: ReviewFormProps) {
   return (
     <>
       <header className="flex flex-col gap-1">
-        <h1 className="text-title font-semibold">Report a Bug</h1>
+        <h1 className="text-title font-semibold">Report a bug</h1>
         <p className="text-body text-muted-foreground">
           Nothing is sent automatically. Review what to include, then share it yourself.
         </p>
@@ -71,12 +71,12 @@ export function ReviewForm({ runtime, session }: ReviewFormProps) {
           disabled={!editable}
           onClick={() => void runtime.close()}
           type="button"
-          variant="secondary"
+          variant="ghost"
         >
           Cancel
         </Button>
-        <Button disabled={!editable} onClick={() => void runtime.prepare()} type="button">
-          {editable ? 'Prepare Report' : 'Preparing…'}
+        <Button loading={!editable} onClick={() => void runtime.prepare()} type="button">
+          Prepare report
         </Button>
       </footer>
     </>

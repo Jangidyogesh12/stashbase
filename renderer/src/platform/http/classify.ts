@@ -87,7 +87,7 @@ export function requestOptions<Extra extends string = never>(
 /** Diagnostic sentences for reports and logs; surfaces read the kind. */
 const FALLBACK_MESSAGES: Record<TransportFailureKind, string> = {
   'invalid-response': 'StashBase returned an unexpected response.',
-  'scope-lost': 'That folder is no longer available in this window.',
+  'scope-lost': 'That project is no longer available in this window.',
   unauthorized: 'This window can no longer perform that action.',
   unavailable: 'StashBase is unavailable.',
 };

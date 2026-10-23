@@ -1,3 +1,8 @@
+/**
+ * A save that met newer text on disk, shown as both versions side by side.
+ * The reader picks the disk version, keeps their own, or merges; merging is
+ * the one solid action and comes last, the order the explanation reads in.
+ */
 import { AlertTriangle } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -53,17 +58,9 @@ export function DocumentConflict({ conflict, name, resolve }: DocumentConflictPr
             loading={resolving === 'reload'}
             onClick={() => void resolve('reload')}
             size="compact"
-            variant="secondary"
+            variant="tertiary"
           >
             Use disk version
-          </Button>
-          <Button
-            disabled={resolving !== null}
-            loading={resolving === 'merge'}
-            onClick={() => void resolve('merge')}
-            size="compact"
-          >
-            Merge
           </Button>
           <Button
             className="text-destructive"
@@ -74,6 +71,16 @@ export function DocumentConflict({ conflict, name, resolve }: DocumentConflictPr
             variant="tertiary"
           >
             Keep my version
+          </Button>
+          {/* Merge is the answer that loses nothing, so it is the one solid
+              action and comes last, in the order the sentence above names. */}
+          <Button
+            disabled={resolving !== null}
+            loading={resolving === 'merge'}
+            onClick={() => void resolve('merge')}
+            size="compact"
+          >
+            Merge
           </Button>
         </div>
       </div>

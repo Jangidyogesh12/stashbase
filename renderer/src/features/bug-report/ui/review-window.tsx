@@ -32,11 +32,11 @@ export function BugReportReview({ runtime }: BugReportReviewProps) {
       {session.kind === 'unavailable' && (
         <>
           <header className="flex flex-col gap-1">
-            <h1 className="text-title font-semibold">Report a Bug</h1>
+            <h1 className="text-title font-semibold">Report a bug</h1>
             <p className="text-body text-muted-foreground">This report cannot be reviewed.</p>
           </header>
           <footer className="flex justify-end">
-            <Button onClick={() => void runtime.close()} type="button" variant="secondary">
+            <Button onClick={() => void runtime.close()} type="button" variant="ghost">
               Close
             </Button>
           </footer>

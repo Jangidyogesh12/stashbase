@@ -14,12 +14,21 @@ const ACTION_LABELS: Record<SemanticReadinessAction, string> = {
   'retry-index': 'Retry',
 };
 
-const PENDING_LABELS: Record<IndexDecisionAction, string> = {
-  'dismiss-warning': 'Dismissing…',
-  'retry-index': 'Retrying…',
+/** A recovery is outlined; a dismissal is the quiet text button, said last. */
+const ACTION_VARIANTS: Record<SemanticReadinessAction, 'ghost' | 'tertiary'> = {
+  'dismiss-warning': 'ghost',
+  'retry-index': 'tertiary',
 };
 
-const PRIMARY_ACTIONS = new Set<SemanticReadinessAction>(['retry-index']);
+/** The sentence's colour and its live region move together: a notice that
+ *  needs the reader is an alert in the error colour, anything else a status
+ *  in ink. */
+function readinessVoice(attention: boolean) {
+  return {
+    role: attention ? 'alert' : 'status',
+    title: attention ? 'text-destructive' : 'text-foreground',
+  } as const;
+}
 
 export interface SemanticReadinessNoticeProps {
   error: string | null;
@@ -37,24 +46,19 @@ export function SemanticReadinessNotice({
   pendingAction,
 }: SemanticReadinessNoticeProps) {
   const shape = useShape();
-  const attention = notice.tone === 'attention';
+  const voice = readinessVoice(notice.tone === 'attention');
   return (
     <div
       className={cn(
         'mx-2 mb-2 border px-3 py-2',
         shape.item,
-        notice.prominent ? 'border-border bg-surface-2' : 'border-transparent',
+        // Paper: a prominent notice shows the page through a hairline and
+        // has no fill of its own.
+        notice.prominent ? 'border-border/50' : 'border-transparent',
       )}
-      role={attention ? 'alert' : 'status'}
+      role={voice.role}
     >
-      <p
-        className={cn(
-          'text-caption font-medium',
-          attention ? 'text-destructive' : 'text-foreground',
-        )}
-      >
-        {notice.title}
-      </p>
+      <p className={cn('text-caption font-medium', voice.title)}>{notice.title}</p>
       {notice.detail && (
         <p className="text-caption leading-relaxed text-muted-foreground">{notice.detail}</p>
       )}
@@ -65,23 +69,19 @@ export function SemanticReadinessNotice({
       )}
       {notice.actions.length > 0 && (
         <div className="flex flex-wrap gap-1 pt-1.5">
-          {notice.actions.map((action) => {
-            const pending =
-              pendingAction !== null && pendingAction === action
-                ? PENDING_LABELS[pendingAction]
-                : null;
-            return (
-              <Button
-                disabled={pendingAction !== null}
-                key={action}
-                onClick={() => onDecision(action)}
-                size="compact"
-                variant={PRIMARY_ACTIONS.has(action) ? 'secondary' : 'tertiary'}
-              >
-                {pending ?? ACTION_LABELS[action]}
-              </Button>
-            );
-          })}
+          {notice.actions.map((action) => (
+            // A working button keeps its name and shows a spinner.
+            <Button
+              disabled={pendingAction !== null}
+              key={action}
+              loading={pendingAction === action}
+              onClick={() => onDecision(action)}
+              size="compact"
+              variant={ACTION_VARIANTS[action]}
+            >
+              {ACTION_LABELS[action]}
+            </Button>
+          ))}
         </div>
       )}
     </div>
@@ -92,10 +92,14 @@ export interface PreparationReadinessNoticeProps {
   line: PreparationReadinessLine;
 }
 
+/** What preparation still owes search. Files that could not be prepared need
+ *  the reader as a failed index does, so they are said the same way; work
+ *  still under way is a status. */
 export function PreparationReadinessNotice({ line }: PreparationReadinessNoticeProps) {
+  const voice = readinessVoice(line.tone === 'attention');
   return (
-    <div className="mx-2 mb-2 px-3 py-1" role="status">
-      <p className="text-caption font-medium text-foreground">{line.title}</p>
+    <div className="mx-2 mb-2 px-3 py-1" role={voice.role}>
+      <p className={cn('text-caption font-medium', voice.title)}>{line.title}</p>
       <p className="text-caption leading-relaxed text-muted-foreground">{line.detail}</p>
     </div>
   );

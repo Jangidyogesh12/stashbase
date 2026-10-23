@@ -52,7 +52,7 @@ it('keeps a terminal turn failure visible while tool failures are omitted', () =
     false,
   );
   expect(screen.getByRole('heading', { name: 'The agent could not finish' })).not.toBeNull();
-  expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull();
+  expect(screen.getByRole('button', { name: 'Retry' })).not.toBeNull();
   expect(screen.queryByRole('button', { name: /Ran.*ls.*Failed/u })).toBeNull();
 });
 
@@ -87,13 +87,13 @@ it('offers the runtime update instead of a retry on a turn the runtime was too o
   );
   const rendered = render(view(null));
 
-  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   await userEvent.setup().click(screen.getByRole('button', { name: 'Update Claude' }));
   expect(update).toHaveBeenCalledWith('too-old');
 
   rendered.rerender(view('too-old'));
   expect(screen.queryByRole('button', { name: 'Update Claude' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull();
+  expect(screen.getByRole('button', { name: 'Retry' })).not.toBeNull();
 });
 
 it('offers a model refresh, and a manual retry only after it, when the hosted model changed', async () => {
@@ -121,7 +121,7 @@ it('offers a model refresh, and a manual retry only after it, when the hosted mo
   );
   const rendered = render(view(null));
 
-  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh models' }));
   expect(refresh).toHaveBeenCalledWith('changed');
   // Refreshing never sends anything by itself.
@@ -129,7 +129,7 @@ it('offers a model refresh, and a manual retry only after it, when the hosted mo
 
   rendered.rerender(view('changed'));
   expect(screen.queryByRole('button', { name: 'Refresh models' })).toBeNull();
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
   expect(onRetry).toHaveBeenCalledWith('changed');
 });
 

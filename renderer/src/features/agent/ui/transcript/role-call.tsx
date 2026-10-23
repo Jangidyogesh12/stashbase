@@ -44,12 +44,9 @@ export function AgentRoleCall({ status, view }: { status: ToolStatus; view: Agen
   const label = view.model ? `${view.label} on ${view.model}` : view.label;
   const state = statusText(status);
   return (
+    // Paper like every card set in the transcript: a hairline and no fill.
     <div
-      className={cn(
-        'border border-border/50 bg-background',
-        shape.container,
-        status === 'cancelled' && 'opacity-65',
-      )}
+      className={cn('border border-border/50', shape.panel, status === 'cancelled' && 'opacity-65')}
     >
       <button
         aria-controls={panelId}
@@ -57,7 +54,11 @@ export function AgentRoleCall({ status, view }: { status: ToolStatus; view: Agen
         aria-label={state ? `${label}: ${state}` : label}
         className={cn(
           'flex min-h-10 w-full items-center gap-2 px-3 text-left text-ui-13 outline-none',
-          shape.item,
+          // The row fills the card's top, so its hover takes the card's
+          // corners; with the error or the brief under it, its lower edge
+          // meets them square.
+          shape.panel,
+          (open || view.error) && 'rounded-b-none',
           focusRing('hover:bg-hover'),
         )}
         onClick={() => setOpen((value) => !value)}

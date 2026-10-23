@@ -9,6 +9,7 @@ import { useStore } from 'zustand';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import type { DocumentAsset } from '@/features/documents/application/ports';
 import { resolveDocumentLink } from '@/features/documents/domain/link-target';
+import { LinkFailureNotice } from '@/features/documents/ui/link-failure-notice';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
@@ -194,14 +195,7 @@ export function SandboxedHtmlFrame({
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden bg-surface-2 p-2">
-      {linkFailed && (
-        <p
-          className="absolute top-5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface-4 px-3 py-1.5 text-caption text-foreground shadow-surface-4"
-          role="alert"
-        >
-          Could not open the link
-        </p>
-      )}
+      <LinkFailureNotice failed={linkFailed} onDismiss={() => setLinkFailed(false)} />
       <div
         className={cn(
           'size-full overflow-hidden border border-border bg-surface-3 shadow-surface-2',

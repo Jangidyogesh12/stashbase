@@ -116,7 +116,7 @@ describe('agent transport', () => {
 
     expect(test.state().connection).toEqual({
       kind: 'failed',
-      message: 'Agent connection was interrupted. Reconnect to continue this conversation.',
+      message: 'Agent connection was interrupted. Reconnect to continue this chat.',
     });
   });
 

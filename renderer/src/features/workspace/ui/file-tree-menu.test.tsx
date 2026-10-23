@@ -68,6 +68,11 @@ function treeApi(): FilesPort {
   return filesApi({ load: vi.fn(async () => RESEARCH_LISTING) });
 }
 
+/** The open menu's rows, by the names they announce. */
+async function names(): Promise<(string | null)[]> {
+  return (await screen.findAllByRole('menuitem')).map((item) => item.getAttribute('aria-label'));
+}
+
 afterEach(() => {
   cleanup();
   for (const runtime of runtimes.splice(0)) runtime.dispose();
@@ -136,6 +141,8 @@ describe('file tree menu', () => {
 
     fireEvent.contextMenu(screen.getByTestId('frame'), { clientX: 30, clientY: 400 });
     expect(await screen.findByRole('menuitem', { name: 'New file' })).not.toBeNull();
+    // Opened by a right click, the menu has no trigger to be named by.
+    expect(screen.getByRole('menu', { name: 'Files actions' })).not.toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Rename' })).toBeNull();
     await userEvent.setup().keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull());
@@ -188,6 +195,7 @@ describe('file tree menu', () => {
     });
     fireEvent.contextMenu(archive, { clientX: 12, clientY: 12 });
     expect(await screen.findByRole('menuitem', { name: 'Rename' })).not.toBeNull();
+    expect(screen.getByRole('menu', { name: 'archive.zip actions' })).not.toBeNull();
     await user.click(screen.getByRole('menuitem', { name: 'Show in file manager' }));
     await waitFor(() =>
       expect(api.reveal).toHaveBeenCalledWith(
@@ -235,6 +243,44 @@ describe('file tree menu', () => {
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe('archive.zip'));
   });
 
+  it('opens the same row menu from the row\u2019s \u2026 button and its menu key', async () => {
+    renderTree(treeApi());
+    const user = userEvent.setup();
+    const archive = await screen.findByRole('treeitem', {
+      name: 'archive.zip, excluded from Search and automatic Chat context',
+    });
+
+    fireEvent.contextMenu(archive, { clientX: 12, clientY: 12 });
+    const fromRightClick = await names();
+    // Delete ends the menu, on its own after a rule.
+    expect(fromRightClick.at(-1)).toBe('Delete');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    // The button stays out of the tree's accessibility tree, where only rows
+    // belong; a pointer finds it beside the row whose path it carries.
+    const more = screen
+      .getAllByRole('button', { hidden: true })
+      .find((button) => button.dataset.path === 'archive.zip');
+    await user.click(more as HTMLElement);
+    expect(await names()).toEqual(fromRightClick);
+    // A second press on the same "…" closes the menu, as the chat rows' does.
+    await user.click(more as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    await user.click(more as HTMLElement);
+    await screen.findByRole('menu');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(archive));
+
+    await user.keyboard('{Shift>}{F10}{/Shift}');
+    expect(await names()).toEqual(fromRightClick);
+    await user.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    // The closing menu hands focus back to the row only if nothing took it.
+    const field = await screen.findByRole('textbox');
+    await waitFor(() => expect(document.activeElement).toBe(field));
+  });
+
   it('offers restricted entries only reveal and copying the path', async () => {
     renderTree(treeApi());
     const user = userEvent.setup();
@@ -243,11 +289,9 @@ describe('file tree menu', () => {
       name: 'vendor, restricted, Show in file manager',
     });
     fireEvent.contextMenu(vendor, { clientX: 12, clientY: 12 });
-    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([
-      'Show in file manager',
-      'Copy path',
-      'Copy relative path',
-    ]);
+    expect(
+      (await screen.findAllByRole('menuitem')).map((item) => item.getAttribute('aria-label')),
+    ).toEqual(['Show in file manager', 'Copy path', 'Copy relative path']);
     await user.keyboard('{Escape}');
     fireEvent.doubleClick(vendor);
     expect(screen.queryByRole('textbox')).toBeNull();

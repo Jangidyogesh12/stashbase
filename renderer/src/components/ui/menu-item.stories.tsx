@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Copy, Lock, Pencil, Trash2 } from 'lucide-re
 import { useState, type ReactNode } from 'react';
 
 import { Button } from './button';
-import { DropdownContent, DropdownMenu, DropdownTrigger } from './dropdown';
+import { DropdownContent, DropdownMenu, DropdownSeparator, DropdownTrigger } from './dropdown';
 import { MenuItem } from './menu-item';
 
 const meta = {
@@ -26,13 +26,15 @@ function OpenMenu({ children, label }: { children: ReactNode; label: string }) {
   );
 }
 
-/** Plain action rows. A row without `checked` announces as `menuitem`. */
+/** Plain action rows. A row without `checked` announces as `menuitem`; a
+ *  destructive one wears the error colour and comes last, after a rule. */
 export const Actions: Story = {
   render: () => (
     <OpenMenu label="Document actions">
       <MenuItem icon={Pencil} label="Rename" />
-      <MenuItem icon={Copy} label="Duplicate" />
-      <MenuItem disabled icon={Trash2} label="Delete" />
+      <MenuItem disabled icon={Copy} label="Duplicate" />
+      <DropdownSeparator />
+      <MenuItem destructive icon={Trash2} label="Delete" />
     </OpenMenu>
   ),
 };

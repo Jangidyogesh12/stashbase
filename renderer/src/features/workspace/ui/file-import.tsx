@@ -4,13 +4,16 @@ import { Button } from '@/components/ui/button';
 import type { UploadPort } from '@/features/workspace/application/ports';
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
 import { useFileImport } from '@/features/workspace/hooks/use-file-import';
-import { FailureNotice } from '@/shared/ui/failure-notice';
+import { FailureLine, FailureNotice } from '@/shared/ui/failure-notice';
 
-/** What the import offers the tree: the file picker, and a drop of desktop
- *  files into one of the project's folders. */
+/** What the import offers the tree: the file picker, a drop of desktop files
+ *  into one of the project's folders, and what the last of them refused. */
 export interface FileImportAction {
   disabled: boolean;
   drop(dataTransfer: DataTransfer, parentPath: string): void;
+  /** Said by the tree beside its own refusals, so every failure in Files
+   *  reads in one place; nothing when the last import refused nothing. */
+  refusals?: ReactNode;
   run(): void;
 }
 
@@ -35,6 +38,34 @@ export function FileImport({
     setFolderDropped(hasFolder);
     if (!hasFolder) void state.importFiles(Array.from(dataTransfer.files), parentPath);
   };
+  // A refusal of what the reader dropped or chose is said as one, in the
+  // input tone, rather than as a caption under the import's progress.
+  const refusals = (folderDropped || state.failure || state.refused.length > 0) && (
+    <>
+      {folderDropped && (
+        <FailureLine className="px-2 pt-2" tone="input">
+          Choose files to import. To use a whole folder, open it as a project.
+        </FailureLine>
+      )}
+      {state.failure && <FailureNotice className="px-2 pt-2" failure={state.failure} />}
+      {state.refused.length > 0 && (
+        <>
+          <FailureLine className="px-2 pt-2" tone="input">
+            Could not import: {state.refused.map((file) => file.name).join(', ')}
+          </FailureLine>
+          <Button
+            className="mt-2 ml-2"
+            disabled={state.pending}
+            onClick={() => void state.retryRefused()}
+            size="compact"
+            variant="tertiary"
+          >
+            Retry
+          </Button>
+        </>
+      )}
+    </>
+  );
   return (
     <div role="group" aria-label="Import project files">
       <div className="px-2">
@@ -51,12 +82,6 @@ export function FileImport({
           ref={input}
           type="file"
         />
-        {folderDropped && (
-          <p className="text-caption text-muted-foreground">
-            Choose files to import. To use a whole folder, open it as a project.
-          </p>
-        )}
-        {state.failure && <FailureNotice failure={state.failure} />}
         <div aria-live="polite" className="text-caption text-muted-foreground">
           {state.pending && <p>Importing…</p>}
           {state.imported > 0 && (
@@ -64,22 +89,14 @@ export function FileImport({
               {state.imported} {state.imported === 1 ? 'file' : 'files'} imported.
             </p>
           )}
-          {state.refused.length > 0 && (
-            <>
-              <p>Could not import: {state.refused.map((file) => file.name).join(', ')}</p>
-              <Button
-                disabled={state.pending}
-                onClick={() => void state.retryRefused()}
-                size="compact"
-                variant="ghost"
-              >
-                Retry these files
-              </Button>
-            </>
-          )}
         </div>
       </div>
-      {children({ disabled: state.pending, drop, run: () => input.current?.click() })}
+      {children({
+        disabled: state.pending,
+        drop,
+        refusals,
+        run: () => input.current?.click(),
+      })}
     </div>
   );
 }

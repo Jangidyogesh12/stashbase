@@ -58,7 +58,7 @@ export const Installing: Story = {
 export const CouldNotFinish: Story = {
   args: {
     notice: offered({
-      actionLabel: 'Try again',
+      actionLabel: 'Retry',
       message: 'StashBase could not finish the update.',
     }),
   },

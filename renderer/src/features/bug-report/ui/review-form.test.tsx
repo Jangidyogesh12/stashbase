@@ -27,10 +27,10 @@ describe('bug report review form', () => {
     mount();
     const problem = await problemField();
     expect(document.activeElement).toBe(problem);
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Report a Bug');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Report a bug');
     expect(screen.getByText(/Nothing is sent automatically/u)).not.toBeNull();
     expect(screen.getAllByRole('switch')).toHaveLength(3);
-    expect(screen.getByRole('button', { name: 'Prepare Report' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Prepare report' })).not.toBeNull();
   });
 
   it('commits a description on blur and reports it', async () => {
@@ -120,9 +120,10 @@ describe('bug report review form', () => {
       },
     );
     await problemField();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Prepare Report' }));
-    const preparing = await screen.findByRole('button', { name: 'Preparing…' });
-    expect(preparing.hasAttribute('disabled')).toBe(true);
+    // The button keeps its name while it works; the status line says what for.
+    const prepare = screen.getByRole('button', { name: 'Prepare report' });
+    await userEvent.setup().click(prepare);
+    await waitFor(() => expect(prepare.hasAttribute('disabled')).toBe(true));
     expect(screen.getByRole('textbox', { name: 'What went wrong?' }).hasAttribute('disabled')).toBe(
       true,
     );
@@ -135,12 +136,12 @@ describe('bug report review form', () => {
   it('reports a refused preparation and keeps the form', async () => {
     mount({ refuse: { prepare: 'privacy' } });
     await problemField();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Prepare Report' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Prepare report' }));
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
       failureMessage('privacy'),
     );
-    expect(screen.getByRole('button', { name: 'Prepare Report' }).hasAttribute('disabled')).toBe(
+    expect(screen.getByRole('button', { name: 'Prepare report' }).hasAttribute('disabled')).toBe(
       false,
     );
   });
@@ -180,7 +181,7 @@ it('keeps edits made during blur-save and locks the final approval save', async 
   const user = userEvent.setup();
   const problem = await problemField();
   await user.type(problem, 'Original');
-  await user.click(screen.getByRole('button', { name: 'Prepare Report' }));
+  await user.click(screen.getByRole('button', { name: 'Prepare report' }));
   await waitFor(() => expect(replies).toHaveLength(1));
   // The blur save preceded Prepare on the command queue; further edits must
   // survive that old response and join the final save before approval.

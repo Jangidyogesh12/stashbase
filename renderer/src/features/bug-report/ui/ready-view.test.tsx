@@ -32,7 +32,7 @@ describe('bug report ready view', () => {
     await user.click(screen.getByRole('button', { name: 'Open GitHub' }));
     await waitFor(() => expect(port.calls).toContain('openGitHub'));
     expect(screen.getByRole('status').textContent).toBe(
-      'Files are in your Downloads folder — attach them to the GitHub issue.',
+      'Files are in your Downloads folder. Attach them to the GitHub issue.',
     );
 
     await user.click(screen.getByRole('button', { name: 'Download' }));
@@ -55,7 +55,7 @@ describe('bug report ready view', () => {
     const problem = await screen.findByRole('textbox', { name: 'What went wrong?' });
     expect(document.activeElement).toBe(problem);
     expect(port.calls).toContain('reopen');
-    expect(screen.getByRole('button', { name: 'Prepare Report' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Prepare report' })).not.toBeNull();
   });
 
   it('closes without discarding once the report is approved', async () => {
@@ -65,7 +65,7 @@ describe('bug report ready view', () => {
     expect(port.calls).not.toContain('discard');
   });
 
-  it('holds the handoffs behind Try Again until the files are prepared', async () => {
+  it('holds the handoffs behind Retry until the files are prepared', async () => {
     const report = approvedReport();
     let attempts = 0;
     await mountReady(
@@ -83,8 +83,8 @@ describe('bug report ready view', () => {
     expect(screen.getByRole('button', { name: 'Open GitHub' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Download' }).hasAttribute('disabled')).toBe(true);
 
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Try Again' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull());
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
     expect(screen.getByRole('button', { name: 'Open GitHub' }).hasAttribute('disabled')).toBe(
       false,
     );
@@ -96,6 +96,6 @@ describe('bug report ready view', () => {
     render(<BugReportReview runtime={runtime} />);
     await screen.findByRole('heading', { level: 1, name: 'Report ready' });
     expect(screen.getByText(UNPREPARED_TEXT)).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Try Again' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Retry' })).not.toBeNull();
   });
 });

@@ -110,9 +110,6 @@ describe('file tree', () => {
     expect(plan.style.getPropertyValue('--hover')).toBe('transparent');
     expect(docs.style.getPropertyValue('--hover')).toBe('');
     expect(plan.style.paddingLeft).toBe('34px');
-    // `data-tree-rail` marks purely decorative aria-hidden guides with no role or label of their
-    // own, so the depth-based rail count can only be read back from the row wrapper's DOM shape.
-    expect(plan.parentElement?.querySelectorAll('[data-tree-rail]')).toHaveLength(1); // dom-contract: see comment above
     expect(tree.contains(plan)).toBe(true);
   });
 

@@ -24,6 +24,6 @@
  * did.
  */
 
-export { DropdownContent } from './dropdown-content';
+export { DropdownContent, pointAnchor, type DropdownAnchor } from './dropdown-content';
 export { DropdownMenu, DropdownTrigger } from './dropdown-menu';
 export { MenuLabel as DropdownLabel, MenuSeparator as DropdownSeparator } from './dropdown-parts';

@@ -95,7 +95,7 @@ export function GalleryPersonaPage({
 
       <div className="mt-4 flex shrink-0 items-center justify-between gap-4 border-t border-border pt-4">
         <Button
-          className="-ml-3 shrink-0"
+          className="shrink-0 px-1.5"
           leadingIcon={ArrowLeft}
           onClick={onBack}
           size="compact"

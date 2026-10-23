@@ -19,9 +19,9 @@ import {
 } from '@/features/documents/domain/document';
 import type { DocumentRevision } from '@/features/documents/domain/revision';
 import { useDocumentSource } from '@/features/documents/hooks/use-document-source';
-import { DocumentBanner } from '@/features/documents/ui/banner';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import { NoticeStrip } from '@/shared/ui/notice';
 
 import { DocumentPending } from './status';
 import type { DocumentViewerStatus } from './viewer';
@@ -75,7 +75,7 @@ function SaveFeedback({
   return (
     <div
       className={cn(
-        'absolute right-4 bottom-3 flex max-w-[min(32rem,calc(100%-2rem))] items-center gap-2 border border-border bg-surface-2/95 px-2.5 py-1.5 text-caption shadow-sm',
+        'absolute right-4 bottom-3 flex max-w-[min(32rem,calc(100%-2rem))] items-center gap-2 border border-border/50 bg-background px-2.5 py-1.5 text-caption shadow-sm',
         shape.item,
       )}
       data-save-state={save.kind}
@@ -152,10 +152,10 @@ export function TextSurface({
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-document-access={access}>
       {access === 'read-only' && (
-        <DocumentBanner className="flex shrink-0 items-center gap-2 text-muted-foreground">
-          <LockKeyhole aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
+        <NoticeStrip className="text-muted-foreground">
+          <LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={1.5} />
           Read-only source from another project folder
-        </DocumentBanner>
+        </NoticeStrip>
       )}
       {source.isFetching && (
         <span className="sr-only" role="status">
@@ -163,38 +163,30 @@ export function TextSurface({
         </span>
       )}
       {source.isError && (
-        <DocumentBanner className="flex shrink-0 items-center justify-between gap-3">
-          <span className="text-destructive" role="status">
-            {source.error instanceof Error &&
-            'kind' in source.error &&
-            source.error.kind === 'missing'
-              ? DOCUMENT_SOURCE_MESSAGES.missing
-              : 'Refresh failed. Showing the last loaded source.'}
-          </span>
-          <Button onClick={() => void source.refetch()} size="compact" variant="tertiary">
-            Retry
-          </Button>
-        </DocumentBanner>
+        <NoticeStrip action={{ label: 'Retry', onAct: () => void source.refetch() }} role="status">
+          {source.error instanceof Error &&
+          'kind' in source.error &&
+          source.error.kind === 'missing'
+            ? DOCUMENT_SOURCE_MESSAGES.missing
+            : 'Refresh failed. Showing the last loaded source.'}
+        </NoticeStrip>
       )}
       {mutationPending && (
-        <DocumentBanner role="status">
+        <NoticeStrip role="status">
           Waiting for the file operation to finish. If it failed, retry it in Files.
-        </DocumentBanner>
+        </NoticeStrip>
       )}
       {editor?.save.kind === 'merging' && (
-        <DocumentBanner className="flex shrink-0 items-center justify-between gap-3">
-          <span role="status">
-            {editor.save.message ?? 'Merge in progress. Autosave is paused until you finish.'}
-          </span>
-          <Button
-            disabled={editor.save.finishing}
-            loading={editor.save.finishing}
-            onClick={() => void finishMerge()}
-            size="compact"
-          >
-            Finish merge
-          </Button>
-        </DocumentBanner>
+        <NoticeStrip
+          action={{
+            busy: editor.save.finishing,
+            label: 'Finish merge',
+            onAct: () => void finishMerge(),
+          }}
+          role="status"
+        >
+          {editor.save.message ?? 'Merge in progress. Autosave is paused until you finish.'}
+        </NoticeStrip>
       )}
       <div className="relative min-h-0 flex-1">
         <Suspense fallback={<DocumentPending label={`Loading ${editorLabel}`} />}>

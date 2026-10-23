@@ -237,11 +237,12 @@ export function AgentFileChangeView({ change }: { change: AgentFileChange }) {
   );
   const label = `${FILE_CHANGE_ACTION_LABEL[change.action]} ${name}`;
   return (
+    // Paper like every card set in the transcript: a hairline and no fill.
     <section
       aria-label={label}
-      className={cn('overflow-hidden border border-border bg-surface-2', shape.panel)}
+      className={cn('overflow-hidden border border-border/50', shape.panel)}
     >
-      <header className="flex h-7 items-center gap-1.5 border-b border-border px-2.5 text-ui-12">
+      <header className="flex h-7 items-center gap-1.5 border-b border-border/50 px-2.5 text-ui-12">
         <ChangedFileLabel iconSize={12} path={change.path} />
         <span className="shrink-0 text-muted-foreground">
           {FILE_CHANGE_ACTION_LABEL[change.action]}
@@ -266,7 +267,9 @@ export function AgentFileChangeView({ change }: { change: AgentFileChange }) {
 }
 
 /** What a settled activity group left behind: each changed file once, with
- *  an Open that routes through the workspace and never steals focus. */
+ *  an Open that routes through the workspace and never steals focus. Open
+ *  repeats down the list, so it is the quiet outlined row action, inside the
+ *  row's own height. */
 export function AgentChangedFiles({
   changes,
   onOpenSource,
@@ -295,10 +298,9 @@ export function AgentChangedFiles({
             {source && (
               <Button
                 aria-label={`Open ${name}`}
-                className="-my-1"
                 onClick={() => onOpenSource?.(source, null)}
                 size="compact"
-                variant="ghost"
+                variant="tertiary"
               >
                 Open
               </Button>

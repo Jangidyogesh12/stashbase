@@ -39,7 +39,7 @@ export function DeleteConversationDialog({
       onConfirm={() => void remove()}
       open={entry !== null}
       pending={pending}
-      title="Delete conversation?"
+      title="Delete chat?"
     />
   );
 }

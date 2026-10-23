@@ -114,7 +114,7 @@ describe('search surface registry', () => {
     await user.type(queryField(), 'answer');
 
     const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toBe('That folder is no longer available in this window.');
+    expect(alert.textContent).toBe('That project is no longer available in this window.');
     await user.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByRole('option', { name: 'recovered' })).not.toBeNull();
   });
@@ -133,7 +133,7 @@ describe('search surface registry', () => {
   it('sends nothing for a backend its readiness gate refuses', async () => {
     const fetch = vi.fn(async () => rowsOf(['unreachable']));
     const gated = fakeBackend('notes', {
-      indexGate: { ready: () => false, unavailableTitle: 'Match notes — needs setup' },
+      indexGate: { ready: () => false, unavailableTitle: 'Match notes · needs setup' },
       lane: () => ({ fetch, key: ['test', 'notes'] }),
     });
     renderSurface([gated]);

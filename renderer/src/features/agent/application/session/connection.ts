@@ -20,7 +20,7 @@ import type { AgentSessionCommand } from '@/features/agent/domain/session-comman
 
 const RECONNECT_DELAYS_MS = [250, 1_000, 3_000] as const;
 
-const INTERRUPTED = 'Agent connection was interrupted. Reconnect to continue this conversation.';
+const INTERRUPTED = 'Agent connection was interrupted. Reconnect to continue this chat.';
 
 /** The real clock: jittered waits that a runtime disposal cancels. A test
  *  substitutes its own so the ladder runs without wall time. */

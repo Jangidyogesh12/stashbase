@@ -68,7 +68,9 @@ export interface WorkspaceSidebarProps {
   onBrowseGallery(): void;
   /** The window's entry operation, which the folder header's switcher starts. */
   projectEntry: ProjectEntry;
-  updateNotice?: ReactNode;
+  /** The corner: cards for work the reader was not watching, such as an
+   *  update or preparation that was refused, above the footer's rows. */
+  notices?: ReactNode;
   onReprocess(source: SourceReference): void;
   settings: SettingsCommand;
   sources: DocumentSources;
@@ -81,8 +83,8 @@ export function WorkspaceSidebar({
   documents,
   folder,
   navigator: sidebar,
+  notices,
   onBrowseGallery,
-  updateNotice,
   onReprocess,
   projectEntry,
   settings,
@@ -263,7 +265,7 @@ export function WorkspaceSidebar({
         {/* pt-0: the list above fades out to the region's edge, and the first
          *  rule's own 4px margin is all the room it wants before the rule. */}
         <SidebarFooter className="pt-0">
-          {updateNotice}
+          {notices}
           <SidebarMenu>
             {/* Rules bracket the foot: one sets the Gallery shelf off from the
              *  panel above, one sets the person off from the shelf. Settings

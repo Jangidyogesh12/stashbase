@@ -32,7 +32,7 @@ export function useAccountOffers(): readonly WorkspaceNotice[] {
       // allowance's terms, which Settings → Agents shows.
       message: 'Sign in for free agent credits every month.',
       // The offer itself is drawn as a banner; the waiting line is a row.
-      offer: true,
+      offer: 'invitation',
       onDismiss: () => account.markOfferSeen('sign-in'),
       tone: 'capability',
     },

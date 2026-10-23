@@ -95,7 +95,7 @@ const busy: ProjectSchedule = {
       runs: [
         run({
           agent: null,
-          reason: 'Sign in to use Default, then run this task again.',
+          reason: 'Sign in to use the Default Agent, then run this task again.',
           runId: 'run-3',
           startedAt: Date.now() - 2 * HOUR,
           status: 'failed',
@@ -184,7 +184,7 @@ describe('ScheduledTasksView', () => {
     expect(within(weekly).getByText('Off. Switch it on to run every day.')).not.toBeNull();
     expect(within(weekly).getByText('Did not run')).not.toBeNull();
     expect(
-      within(weekly).getByText('Sign in to use Default, then run this task again.'),
+      within(weekly).getByText('Sign in to use the Default Agent, then run this task again.'),
     ).not.toBeNull();
     expect(within(broken).getByText('Set a time like 08:00.')).not.toBeNull();
     expect(within(broken).getByRole('button', { name: 'Run now' })).toHaveProperty(

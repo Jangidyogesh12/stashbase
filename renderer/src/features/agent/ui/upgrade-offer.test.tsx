@@ -37,7 +37,7 @@ it('names the model and runs the update with nothing to resend', async () => {
 it('stops offering once the reader dismisses it', async () => {
   render(<AgentUpgradeOfferCard offer={OFFER} runtimeUpdate={view()} />);
 
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Dismiss' }));
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Not now' }));
 
   expect(screen.queryByRole('button', { name: 'Update Claude' })).toBeNull();
 });

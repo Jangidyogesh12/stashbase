@@ -38,7 +38,12 @@ export function SourcePreparationStatus({
       onCancel={actions.cancel}
       onReprocess={() => void actions.reprocess()}
       pending={actions.pending}
-      readiness={sourceReadiness(status, source.path)}
+      // The status names paths in its own folder only; a source from another
+      // folder must not borrow the state of a same-named file here.
+      readiness={sourceReadiness(
+        status?.folderPath === source.folderPath ? status : null,
+        source.path,
+      )}
     />
   );
 }

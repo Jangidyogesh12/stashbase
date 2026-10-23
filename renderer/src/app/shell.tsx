@@ -23,12 +23,7 @@ import {
 } from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
 import { AccountProvider, useSearchKeyConfigured } from '@/features/settings/public';
-import {
-  UpdateNotice,
-  UpdatePreview,
-  useUpdateNotice,
-  useUpdatePreview,
-} from '@/features/updates/public';
+import { UpdatePreview, useUpdateNotice, useUpdatePreview } from '@/features/updates/public';
 import {
   ProjectWelcome,
   useProjectEntry,
@@ -55,7 +50,7 @@ import { useTurnReview } from './composition/folder/use-turn-review';
 import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
 import { WorkspaceLayout } from './composition/layout/workspace-layout';
-import { WorkspaceNoticeStrip } from './composition/layout/workspace-notice-strip';
+import { workspaceNoticeSlots } from './composition/layout/workspace-notice-slots';
 import { WorkspacePanes } from './composition/layout/workspace-panes';
 import { WorkspaceSidebar } from './composition/layout/workspace-sidebar';
 import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
@@ -149,7 +144,7 @@ function WorkspaceWindow() {
     subscribeFolderRemoved: workspaceDeps.adapters.lifecycle.onFolderRemoved,
   });
 
-  // Requested turn reviews open in Documents; refusals stay on the notice strip.
+  // Requested turn reviews open in Documents; one that does not open floats a notice.
   const revisions = useTurnReview({
     documents,
     sourceApi: docs.adapters.source,
@@ -249,6 +244,11 @@ function WorkspaceWindow() {
   );
   const updateNotice = useUpdateNotice(dependencies.updates);
   const updatePreview = useUpdatePreview(import.meta.env.DEV);
+  const notices = workspaceNoticeSlots({
+    notices: chrome.notices,
+    preview: updatePreview.notice !== null,
+    update: updatePreview.notice ?? updateNotice,
+  });
   const revisionPreview = useRevisionPreview(import.meta.env.DEV, documents);
   // A new draft is the tree's to make, beside its selection, and its name is
   // typed in the tree, so the request brings the Files panel on screen
@@ -308,7 +308,8 @@ function WorkspaceWindow() {
           </>
         }
         hasActiveFolder={activeFolder !== null}
-        notices={<WorkspaceNoticeStrip notices={chrome.notices} />}
+        floatingNotices={notices.floating}
+        notices={notices.strip}
         panes={
           <WorkspacePanes
             chatPaneOpen={chatPaneOpen}
@@ -346,12 +347,7 @@ function WorkspaceWindow() {
                 : null,
             }}
             navigator={chrome.navigator}
-            updateNotice={
-              <UpdateNotice
-                notice={updatePreview.notice ?? updateNotice}
-                preview={updatePreview.notice !== null}
-              />
-            }
+            notices={notices.corner}
             onBrowseGallery={gallery.browse}
             onReprocess={refresh.reprocess}
             projectEntry={entry}
@@ -367,6 +363,7 @@ function WorkspaceWindow() {
             chatPaneOpen={chatPaneOpen}
             newTab={newTab}
             onToggleChatPane={() => setChatPaneOpen((open) => !open)}
+            sidebarNotices={notices.cornerShown}
             documents={documents}
             hasActiveFolder={activeFolder !== null}
             mode={chrome.navigator.mode}

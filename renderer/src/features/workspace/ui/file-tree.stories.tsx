@@ -77,14 +77,15 @@ function TreePreview({ renaming, selectedPath = 'lessons/week-1.md' }: TreePrevi
                 index={index}
                 key={row.node.path}
                 marker={row.node.type === 'file' ? MARKERS[row.node.path] : undefined}
+                menuOpen={false}
                 onActivate={() => undefined}
                 onDragEnd={() => undefined}
                 onDragStart={() => undefined}
                 onFocus={() => undefined}
                 onKeep={() => undefined}
                 onKeyDown={() => undefined}
+                onOpenMenu={() => undefined}
                 onRename={() => undefined}
-                proximityActive={false}
                 registerRow={() => undefined}
                 revealLabel={REVEAL_LABEL}
                 row={row}
@@ -116,7 +117,7 @@ type Story = StoryObj<typeof meta>;
 export const FolderOpen: Story = {};
 
 /** The same tree with one row handed over to the name field: the row keeps its
- *  inset and rails, so nothing under the pointer moves while a name is typed. */
+ *  inset, so nothing under the pointer moves while a name is typed. */
 export const RenameInProgress: Story = {
   args: { renaming: 'lessons/week-1.md', selectedPath: 'lessons/week-1.md' },
 };

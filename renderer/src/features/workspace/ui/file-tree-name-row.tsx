@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type CSSProperties } from 'react';
 
 import { InlineInput } from '@/components/ui/inline-input';
 import { useSize } from '@/lib/size-context';
@@ -24,7 +24,6 @@ export function FileTreeNameRow({
   onCommit,
   placeholder,
   problem,
-  rails,
   selection,
   style,
 }: {
@@ -37,7 +36,6 @@ export function FileTreeNameRow({
   onCommit(name: string): void;
   placeholder?: string | undefined;
   problem: string | null;
-  rails?: ReactNode;
   selection?: { end: number; start: number } | undefined;
   style: CSSProperties;
 }) {
@@ -47,7 +45,6 @@ export function FileTreeNameRow({
 
   return (
     <div className="relative z-10" role="none">
-      {rails}
       <div
         aria-label={label}
         aria-level={level}

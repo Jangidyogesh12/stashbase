@@ -26,6 +26,7 @@ import { resolveDocumentLink } from '@/features/documents/domain/link-target';
 import { splitLeadingYamlFrontmatter } from '@/features/documents/domain/markdown';
 import type { DocumentHeading } from '@/features/documents/domain/outline';
 import type { DocumentSelection } from '@/features/documents/domain/selection';
+import { LinkFailureNotice } from '@/features/documents/ui/link-failure-notice';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { prefersReducedMotion } from '@/shared/runtime/appearance-surface';
@@ -383,11 +384,7 @@ export function MarkdownDocument({
         <MarkdownOpenFailure onRetry={() => setAttempt((current) => current + 1)} />
       )}
       {reviewBar ?? <div className="markdown-reading-control">{readingControl}</div>}
-      {linkFailure && (
-        <div className="markdown-link-failure" role="alert">
-          Could not open this link in your browser.
-        </div>
-      )}
+      <LinkFailureNotice failed={linkFailure} onDismiss={() => setLinkFailure(false)} />
       <div
         className={cn('markdown-crepe', readOnly && 'markdown-crepe-readonly')}
         data-review-reversed={reviewReversed || undefined}

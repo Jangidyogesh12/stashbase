@@ -87,7 +87,7 @@ export function similarSearchBackend(api: SemanticSearchPort): SearchBackend {
     id: 'similar',
     indexGate: {
       ready: canSemanticSearch,
-      unavailableTitle: 'Find matches even when the wording differs — needs setup',
+      unavailableTitle: 'Find matches even when the wording differs · needs setup',
     },
     label: 'By meaning',
     lane: ({ folderPath, query }) => {

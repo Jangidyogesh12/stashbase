@@ -1,6 +1,7 @@
 /**
- * One line of the file tree: its icon vocabulary, its indentation and rails,
- * and the button that carries the row's semantics.
+ * One line of the file tree: its icon vocabulary, its indentation, and the
+ * button that carries the row's semantics. Nesting reads from indentation
+ * alone; the tree draws no guides, which are a code editor's idiom.
  *
  * The row owns no tree state. Everything it needs to draw itself arrives as a
  * value and everything it can do leaves as a callback, so the tree component
@@ -19,13 +20,15 @@ import {
   FileText,
   FileType2,
   Folder,
-  TriangleAlert,
   type LucideIcon,
+  MoreHorizontal,
+  TriangleAlert,
 } from 'lucide-react';
-import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
+import { useRef, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { caretOffsetAtPoint } from '@/components/ui/inline-input';
+import { SidebarMenuAction } from '@/components/ui/sidebar-menu-action';
 import type { ViewerFormat } from '@/features/workspace/domain/tree';
 import {
   fileIsRestricted,
@@ -43,7 +46,6 @@ import { writeTreeDrag } from './file-tree-drop';
 // level indents by the glyph plus 12px.
 const TREE_ROOT_INSET = 8;
 const TREE_LEVEL_INDENT = 26;
-const TREE_ICON_RADIUS = 7;
 
 const FILE_ICONS: Record<ViewerFormat, LucideIcon> = {
   audio: FileAudio,
@@ -75,25 +77,6 @@ export function rowInset(depth: number): CSSProperties {
   return {
     paddingLeft: `${TREE_ROOT_INSET + (depth - 1) * TREE_LEVEL_INDENT}px`,
   };
-}
-
-/** The vertical guides that connect a nested row to its ancestors. */
-export function Rails({ depth }: { depth: number }) {
-  return (
-    <>
-      {Array.from({ length: Math.max(0, depth - 1) }, (_, level) => (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 z-10 w-px bg-border/60"
-          data-tree-rail=""
-          key={level}
-          style={{
-            left: `${TREE_ROOT_INSET + level * TREE_LEVEL_INDENT + TREE_ICON_RADIUS}px`,
-          }}
-        />
-      ))}
-    </>
-  );
 }
 
 export function entryOf(row: TreeRow): WorkspaceEntry {
@@ -161,8 +144,11 @@ export interface FileTreeRowProps {
    *  open rather than be the preview the next click replaces. */
   onKeep(row: TreeRow): void;
   onKeyDown(event: KeyboardEvent<HTMLButtonElement>, row: TreeRow, editable: boolean): void;
+  /** Opens the tree's menu on this row, under the control that asked for it. */
+  onOpenMenu(row: TreeRow, anchor: HTMLElement): void;
   onRename(row: TreeRow, caretOffset?: number): void;
-  proximityActive: boolean;
+  /** This row's menu is open, so its "…" stays showing. */
+  menuOpen: boolean;
   registerRow(path: string, element: HTMLButtonElement | null): void;
   revealLabel: string;
   row: TreeRow;
@@ -181,8 +167,9 @@ export function FileTreeRow({
   onFocus,
   onKeep,
   onKeyDown,
+  onOpenMenu,
   onRename,
-  proximityActive,
+  menuOpen,
   registerRow,
   revealLabel,
   row,
@@ -196,6 +183,11 @@ export function FileTreeRow({
   // Chat can read also carries its source identity for the composer.
   const draggable = !restricted;
   const trailingIcon = restricted ? ExternalLink : marker ? MARKER_ICONS[marker.kind] : undefined;
+  const element = useRef<HTMLButtonElement | null>(null);
+  const menuButton = useRef<HTMLButtonElement | null>(null);
+  // Pressing the "…" closes an open menu as a press outside it before the
+  // click lands, so the click needs to know the menu was this row's.
+  const menuWasOpen = useRef(false);
 
   // A click acts at once: a folder toggle is the tree's most frequent gesture
   // and must not wait out a double-click window. Only the first click of a
@@ -220,8 +212,7 @@ export function FileTreeRow({
   };
 
   return (
-    <div className="relative z-10" role="none">
-      <Rails depth={row.depth} />
+    <div className="group/tree-row relative z-10" role="none">
       <Button
         active={selected}
         aria-expanded={row.node.type === 'folder' && !restricted ? expanded : undefined}
@@ -247,14 +238,25 @@ export function FileTreeRow({
           // edge (a 24px action box at right-1.5): 11px of padding centres the
           // 14px glyph there, where the compact button's 12px would not.
           trailingIcon !== undefined && 'pr-[11px]',
-          // The reveal glyph on a restricted row is a trailing control, and
-          // trailing controls in this column show under the pointer or focus,
-          // not at rest: the row already says what it is by carrying a folder
-          // glyph where a browsable folder carries its chevron. A preparation
-          // marker is a status and stays.
-          restricted &&
-            '[&_svg:last-of-type]:transition-opacity [&_svg:last-of-type]:duration-fast focus-visible:[&_svg:last-of-type]:opacity-100',
-          restricted && !(proximityActive || selected) && '[&_svg:last-of-type]:opacity-0',
+          // The row's "…" shows on that same axis under the pointer, on
+          // keyboard focus, and while its menu is open. A row with no trailing
+          // glyph widens its gutter to clear it, the reservation a sidebar
+          // row makes for its revealed action; a trailing glyph gives up its
+          // place instead, so the label never moves.
+          trailingIcon === undefined
+            ? cn(
+                'transition-[padding] duration-fast group-hover/tree-row:pr-[34px] group-has-[:focus-visible]/tree-row:pr-[34px]',
+                menuOpen && 'pr-[34px]',
+              )
+            : cn(
+                '[&_svg:last-of-type]:transition-opacity [&_svg:last-of-type]:duration-fast group-hover/tree-row:[&_svg:last-of-type]:opacity-0 group-has-[:focus-visible]/tree-row:[&_svg:last-of-type]:opacity-0',
+                menuOpen && '[&_svg:last-of-type]:opacity-0',
+              ),
+          // The reveal glyph on a restricted row is a trailing control, not a
+          // status: the row already says what it is by carrying a folder glyph
+          // where a browsable folder carries its chevron, so it stands only on
+          // the selected row. A preparation marker is a status and stays.
+          restricted && !selected && '[&_svg:last-of-type]:opacity-0',
         )}
         data-path={row.node.path}
         data-proximity-index={index}
@@ -276,8 +278,20 @@ export function FileTreeRow({
           onDragStart(row);
         }}
         onFocus={() => onFocus(row.node.path)}
-        onKeyDown={(event) => onKeyDown(event, row, editable)}
-        ref={(element) => registerRow(row.node.path, element)}
+        onKeyDown={(event) => {
+          // The keys a context menu is asked for with, answered here on every
+          // platform rather than only where the browser maps them to one.
+          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+            event.preventDefault();
+            onOpenMenu(row, menuButton.current ?? event.currentTarget);
+            return;
+          }
+          onKeyDown(event, row, editable);
+        }}
+        ref={(button) => {
+          element.current = button;
+          registerRow(row.node.path, button);
+        }}
         role="treeitem"
         size="compact"
         style={
@@ -293,6 +307,33 @@ export function FileTreeRow({
       >
         {row.node.name}
       </Button>
+      {/* The row's "…" opens the same menu a right click does. A tree owns
+       *  only its rows, so the button stays out of the accessibility tree
+       *  and the tab order; the row's menu key is its keyboard way in. It
+       *  carries the row's path, so a right click on it opens that row's menu
+       *  too. */}
+      <SidebarMenuAction
+        aria-hidden="true"
+        className={cn(
+          'opacity-0 group-hover/tree-row:opacity-100 group-has-[:focus-visible]/tree-row:opacity-100',
+          menuOpen && 'opacity-100',
+        )}
+        data-path={row.node.path}
+        onClick={(event) => {
+          if (menuWasOpen.current) return;
+          // Focus goes to the row first, so closing the menu returns it there.
+          element.current?.focus();
+          onOpenMenu(row, event.currentTarget);
+        }}
+        onMouseDown={(event) => event.preventDefault()}
+        onPointerDown={() => {
+          menuWasOpen.current = menuOpen;
+        }}
+        ref={menuButton}
+        tabIndex={-1}
+      >
+        <MoreHorizontal aria-hidden="true" />
+      </SidebarMenuAction>
     </div>
   );
 }

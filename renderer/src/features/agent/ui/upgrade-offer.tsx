@@ -7,12 +7,15 @@
  * chosen. The sentence is the runtime's own, so the card never claims a
  * version requirement StashBase worked out for itself.
  *
- * It offers the update and nothing else. Dismissal lasts as long as the
- * window, because this is news rather than a setting: a reader who says not
- * now is not asked again this session, and a reader who updates sees the
- * offer withdrawn the moment the catalog is read again.
+ * It offers the update and nothing else, so the update is its one solid
+ * action, and the dismissal is a quiet "Not now" after it, last like every
+ * notice's.
+ * While the update runs the button keeps its name under the spinner, and the
+ * line under the note says what is being waited for. Dismissal lasts as long
+ * as the window, because this is news rather than a setting: a reader who
+ * says not now is not asked again this session, and a reader who updates
+ * sees the offer withdrawn the moment the catalog is read again.
  */
-import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -33,14 +36,14 @@ export function AgentUpgradeOfferCard({
   if (dismissed || runtimeUpdate.completed) return null;
   return (
     <div className="mx-auto w-full max-w-[46rem] shrink-0 px-5 pb-2 max-sm:px-4">
-      <section
-        className={cn('flex items-center gap-3 border border-border bg-surface-2 p-3', shape.panel)}
-      >
+      {/* Paper like every card set in the chat: a hairline and no fill. */}
+      <section className={cn('flex items-center gap-3 border border-border/50 p-3', shape.panel)}>
         <div className="min-w-0 flex-1">
           <p className="text-caption text-foreground">{offer.note}</p>
           <p className="mt-0.5 text-caption text-muted-foreground">
-            StashBase installs the latest {runtimeUpdate.label} and reconnects this chat. Your
-            conversation and existing installations are kept.
+            {runtimeUpdate.busy
+              ? `Updating ${runtimeUpdate.label}. This chat reconnects once it is done.`
+              : `StashBase installs the latest ${runtimeUpdate.label} and reconnects this chat. Your chat and existing installations are kept.`}
           </p>
           {runtimeUpdate.failure && (
             <p
@@ -56,20 +59,17 @@ export function AgentUpgradeOfferCard({
           loading={runtimeUpdate.busy}
           onClick={() => runtimeUpdate.update()}
           size="compact"
-          variant="secondary"
+          variant="primary"
         >
-          {runtimeUpdate.busy
-            ? `Updating ${runtimeUpdate.label}…`
-            : `Update ${runtimeUpdate.label}`}
+          {`Update ${runtimeUpdate.label}`}
         </Button>
         <Button
-          aria-label="Dismiss"
           disabled={runtimeUpdate.busy}
           onClick={() => setDismissed(true)}
-          size="icon-compact"
+          size="compact"
           variant="ghost"
         >
-          <X aria-hidden="true" />
+          Not now
         </Button>
       </section>
     </div>

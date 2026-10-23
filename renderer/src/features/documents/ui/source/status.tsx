@@ -1,4 +1,4 @@
-import { LoaderCircle, RefreshCw, TriangleAlert } from 'lucide-react';
+import { LoaderCircle, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -47,13 +47,7 @@ function DocumentFailure({
           {message}
         </p>
         {retry && (
-          <Button
-            className="mt-4"
-            leadingIcon={RefreshCw}
-            onClick={retry}
-            size="compact"
-            variant="tertiary"
-          >
+          <Button className="mt-4" onClick={retry} size="compact" variant="tertiary">
             Retry
           </Button>
         )}
@@ -89,13 +83,7 @@ export function AssetStatus({
             <p className="mt-1 text-caption text-muted-foreground" role="alert">
               {detail}
             </p>
-            <Button
-              className="mt-4"
-              leadingIcon={RefreshCw}
-              onClick={retry}
-              size="compact"
-              variant="tertiary"
-            >
+            <Button className="mt-4" onClick={retry} size="compact" variant="tertiary">
               Retry
             </Button>
           </>

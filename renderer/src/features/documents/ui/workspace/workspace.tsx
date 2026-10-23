@@ -2,7 +2,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
-import { Button } from '@/components/ui/button';
 import type { DocumentUsageEvent } from '@/features/documents/application/document-runtime-contract';
 import { SEARCH_NOTICES } from '@/features/documents/application/navigation-runtime';
 import type {
@@ -20,7 +19,6 @@ import {
 import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
 import type { DocumentSelection } from '@/features/documents/domain/selection';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
-import { DocumentBanner } from '@/features/documents/ui/banner';
 import { DocumentSource } from '@/features/documents/ui/source/document';
 import { documentViewerEntry } from '@/features/documents/ui/source/registry';
 import type {
@@ -30,6 +28,7 @@ import type {
   PreparedOnOpenFormat,
 } from '@/features/documents/ui/source/viewer';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { FloatingNotice, FloatingNotices, NoticeStrip } from '@/shared/ui/notice';
 
 import { DiscardDraftDialog } from './discard-draft-dialog';
 import { DocumentFind } from './find';
@@ -177,32 +176,22 @@ export function DocumentWorkspace({
         onConfirm={() => void runtime.closeWithoutSaving()}
         source={closeDecision?.source ?? null}
       />
+      {/* Nothing opened to carry it, so it floats over the pane. */}
       {openFailure && (
-        <DocumentBanner className="flex items-center gap-3">
-          <span role="alert">
+        <FloatingNotices>
+          <FloatingNotice
+            actions={[{ label: 'Retry', onAct: () => void runtime.retryOpen() }]}
+            onDismiss={runtime.dismissOpenFailure}
+            role="alert"
+          >
             Could not open {openFailure.source.path}. {openFailure.message}
-          </span>
-          <Button size="compact" onClick={() => void runtime.retryOpen()}>
-            Retry
-          </Button>
-          <Button size="compact" variant="tertiary" onClick={runtime.dismissOpenFailure}>
-            Dismiss
-          </Button>
-        </DocumentBanner>
+          </FloatingNotice>
+        </FloatingNotices>
       )}
       {searchNotice && (
-        <DocumentBanner className="flex items-center justify-between gap-3">
-          <span role="status">
-            {activeFindable ? searchNotice : SEARCH_NOTICES[searchPurpose].unavailable}
-          </span>
-          <Button
-            size="compact"
-            variant="tertiary"
-            onClick={runtime.navigation.dismissSearchNotice}
-          >
-            Dismiss
-          </Button>
-        </DocumentBanner>
+        <NoticeStrip onDismiss={runtime.navigation.dismissSearchNotice} role="status">
+          {activeFindable ? searchNotice : SEARCH_NOTICES[searchPurpose].unavailable}
+        </NoticeStrip>
       )}
       {retainedMarkdownIds.map((tabId) => renderDocument(tabId, tabId !== activeTabId))}
       {activeTab &&

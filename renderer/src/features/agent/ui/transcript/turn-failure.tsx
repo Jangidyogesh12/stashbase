@@ -1,12 +1,18 @@
 /** A turn the Agent could not finish, with the one recovery that applies.
  *  A transient failure offers a plain retry. A runtime too old for its model
  *  is repaired here rather than in Settings: the update runs in place, the
- *  conversation reconnects on the newer runtime, and the same request is sent
- *  again; a plain retry appears only once that update ran, since before it
- *  the retry would fail the same way. A hosted model whose configuration
- *  changed is handled the same way, without an update: the conversation
- *  reconnects to read the models again, and nothing is sent until the reader
- *  has reviewed the model and chooses to retry. */
+ *  chat reconnects on the newer runtime, and the same request is sent again;
+ *  a plain retry appears only once that update ran, since before it the
+ *  retry would fail the same way. A hosted model whose configuration changed
+ *  is handled the same way, without an update: the chat reconnects to read
+ *  the models again, and nothing is sent until the reader has reviewed the
+ *  model and chooses to retry.
+ *
+ *  The card is paper like the others in the transcript; the failure's red is
+ *  the mark beside the heading, never a fill. While a recovery runs, its
+ *  button keeps its name and the line above says what is being waited for. */
+import { CircleX } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import {
   agentTurnFailureIsRetryable,
@@ -39,18 +45,29 @@ export function TurnFailure({
     (!outdated || updated) &&
     (!modelChanged || refreshed);
   return (
-    <section className={cn('border border-destructive/30 bg-destructive-light p-3', shape.panel)}>
-      <h3 className="text-caption font-medium text-foreground">The agent could not finish</h3>
+    <section className={cn('border border-border/50 p-3', shape.panel)}>
+      <div className="flex items-start gap-2">
+        <CircleX
+          aria-hidden
+          className="mt-0.5 size-3.5 shrink-0 text-destructive"
+          strokeWidth={1.75}
+        />
+        <h3 className="text-caption font-medium text-foreground">The agent could not finish</h3>
+      </div>
       <p className="mt-1 text-caption text-muted-foreground">{block.text}</p>
       <p className="mt-1 text-caption text-muted-foreground">
         {modelChanged
           ? refreshed
-            ? 'The models are refreshed. Check the model below, then send again. Your conversation, draft, and queued messages are kept.'
-            : 'Refresh the models, check your choice, then send again. Your conversation, draft, and queued messages are kept.'
+            ? 'The models are refreshed. Check the model below, then send again. Your chat, draft, and queued messages are kept.'
+            : modelRefresh?.busy
+              ? 'Refreshing the models. Your chat, draft, and queued messages are kept.'
+              : 'Refresh the models, check your choice, then send again. Your chat, draft, and queued messages are kept.'
           : outdated && !updated
             ? runtimeUpdate
-              ? `Update ${runtimeUpdate.label} here and the same request is sent again. Partial output and completed file changes are kept.`
-              : 'This installation cannot be updated here. Update it externally or remove the executable override, then reconnect. Your conversation is kept.'
+              ? runtimeUpdate.busy
+                ? `Updating ${runtimeUpdate.label}. The same request is sent again once it is done.`
+                : `Update ${runtimeUpdate.label} here and the same request is sent again. Partial output and completed file changes are kept.`
+              : 'This installation cannot be updated here. Update it externally or remove the executable override, then reconnect. Your chat is kept.'
             : 'Partial output and completed file changes are kept. Retrying may repeat work.'}
       </p>
       {outdated && !updated && runtimeUpdate && (
@@ -63,9 +80,7 @@ export function TurnFailure({
             size="compact"
             variant="tertiary"
           >
-            {runtimeUpdate.busy
-              ? `Updating ${runtimeUpdate.label}…`
-              : `Update ${runtimeUpdate.label}`}
+            {`Update ${runtimeUpdate.label}`}
           </Button>
           {runtimeUpdate.failure && (
             <p
@@ -87,7 +102,7 @@ export function TurnFailure({
             size="compact"
             variant="tertiary"
           >
-            {modelRefresh.busy ? 'Refreshing models…' : 'Refresh models'}
+            Refresh models
           </Button>
           {modelRefresh.failure && (
             <p
@@ -106,7 +121,7 @@ export function TurnFailure({
           size="compact"
           variant="tertiary"
         >
-          Try again
+          Retry
         </Button>
       )}
     </section>

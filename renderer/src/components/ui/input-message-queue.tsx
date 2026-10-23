@@ -182,8 +182,9 @@ function QueuedRow({ item, index, total, isTouch, onEdit, onRemove, onMove }: Qu
       }}
       className={cn(
         // Fixed height (was py-1.5 around a 19.5px line box ≈ 31.5px) so the
-        // text-box trim on the label doesn't shrink the row.
-        `group/qrow flex items-center gap-2 ${shape.item} bg-muted`,
+        // text-box trim on the label doesn't shrink the row. Paper, like every
+        // row the composer stacks: a light hairline and no grey fill.
+        `group/qrow flex items-center gap-2 ${shape.item} border border-border/50`,
         compactStep ? 'h-7 px-2 text-ui-12' : 'h-8 px-2.5 text-ui-13',
         'text-foreground/85 outline-none select-none',
         'cursor-grab active:cursor-grabbing',

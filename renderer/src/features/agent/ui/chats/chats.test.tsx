@@ -93,7 +93,7 @@ describe('AgentChats', () => {
 
     expect(await screen.findByRole('button', { name: 'Research thread' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Plans thread' })).toBeNull();
-    expect(screen.getByLabelText('Chats in Research')).not.toBeNull();
+    expect(screen.getByLabelText('Chat history in Research')).not.toBeNull();
   });
 
   it('filters behind the section name and leaves no query standing when closed', async () => {
@@ -234,7 +234,7 @@ describe('AgentChats', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Edited title' }));
     expect(screen.queryByText('Rename or delete')).toBeNull();
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
-    expect(screen.getByRole('heading', { name: 'Delete conversation?' })).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'Delete chat?' })).not.toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(remove).toHaveBeenCalledOnce());
   });
@@ -313,7 +313,7 @@ describe('AgentChats', () => {
     expect(screen.queryByText('History', { exact: true })).toBeNull();
     expect(screen.queryByRole('button', { name: /^New Chat$/u })).toBeNull();
 
-    const tree = screen.getByLabelText('Conversation tree in Research');
+    const tree = screen.getByLabelText('Chat history in Research');
     // The group headers are enumerated by the app-published `data-tree-branch` attribute in DOM
     // order; no role/label query returns them in sequence without also matching chat rows.
     const branches = tree.querySelectorAll('[data-tree-branch]'); // dom-contract: see comment above

@@ -84,7 +84,7 @@ const UPDATE_OFFERS: { readonly [Phase in UpdatePhaseName]: UpdateOfferFor<Phase
   // failed and for an install that failed, and the snapshot carries no
   // installer sentence, so anything more specific would be a guess.
   error: {
-    action: { kind: 'check', label: 'Try again' },
+    action: { kind: 'check', label: 'Retry' },
     announce: true,
     sentence: () => 'StashBase could not finish the update.',
   },

@@ -111,7 +111,7 @@ export function ChatHistoryPopover({
         {history.historyFailure && (
           <div className="px-4 py-3 text-caption">
             <p>{history.historyFailure}</p>
-            <Button size="compact" variant="ghost" onClick={() => void history.retry()}>
+            <Button size="compact" variant="tertiary" onClick={() => void history.retry()}>
               Retry
             </Button>
           </div>

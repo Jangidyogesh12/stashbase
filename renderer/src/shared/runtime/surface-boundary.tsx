@@ -108,7 +108,7 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, { failed: b
                 key={action.label}
                 onClick={() => this.recover(action)}
                 size="compact"
-                variant={index === 0 ? 'secondary' : 'ghost'}
+                variant={index === 0 ? 'tertiary' : 'ghost'}
               >
                 {action.label}
               </Button>

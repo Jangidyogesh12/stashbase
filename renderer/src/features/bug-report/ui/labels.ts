@@ -62,7 +62,7 @@ export function noticeText(notice: Notice): string {
       return `${artifactTitle(notice.artifact)} ${notice.included ? 'included' : 'excluded'}.`;
     case 'handoff-complete':
       return notice.via === 'github'
-        ? 'Files are in your Downloads folder — attach them to the GitHub issue.'
+        ? 'Files are in your Downloads folder. Attach them to the GitHub issue.'
         : 'Files are in your Downloads folder.';
     case 'failed':
       return failureMessage(notice.failure.kind);
@@ -87,5 +87,4 @@ export function readyPendingText(pending: ReadyPending): string | null {
 
 export const PREPARING_TEXT = 'Checking and preparing the report…';
 export const LOADING_TEXT = 'Loading the report…';
-export const UNPREPARED_TEXT =
-  'The report is approved. Select Try Again to prepare its attachments.';
+export const UNPREPARED_TEXT = 'The report is approved. Select Retry to prepare its attachments.';

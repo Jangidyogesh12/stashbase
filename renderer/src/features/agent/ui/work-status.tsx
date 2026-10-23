@@ -32,21 +32,19 @@ export function AgentWorkStatus({
         <>
           <span role="status">Outcome unknown</span>
           <span>{interruption || 'The connection was interrupted.'}</span>
-          <span>
-            Review the conversation before sending again; file changes may already have happened.
-          </span>
-          <Button size="compact" variant="ghost" onClick={session.reconnect}>
+          <span>Review the chat before sending again; file changes may already have happened.</span>
+          <Button size="compact" variant="tertiary" onClick={session.reconnect}>
             Reconnect and review
           </Button>
           {state.connection.kind === 'live' && !agentSessionIsBusy(state) && (
-            <Button size="compact" variant="secondary" onClick={session.confirmOutcome}>
-              I’ve reviewed it — continue
+            <Button size="compact" variant="tertiary" onClick={session.confirmOutcome}>
+              Reviewed, continue
             </Button>
           )}
         </>
       )}
       {repair && (
-        <Button size="compact" variant="ghost" onClick={onOpenSettings}>
+        <Button size="compact" variant="tertiary" onClick={onOpenSettings}>
           Open agent settings
         </Button>
       )}

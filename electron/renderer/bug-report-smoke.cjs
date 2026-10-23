@@ -84,7 +84,7 @@ async function run() {
     };
     setText('password="synthetic-secret');
     await wait(() => field.value === 'password="synthetic-secret');
-    button('Prepare Report').click();
+    button('Prepare report').click();
     await wait(() => document.querySelector('[role="alert"]')?.textContent.includes('privacy'));
     if (field.disabled || field.value !== 'password="synthetic-secret') {
       throw new Error('A refused save lost the editable description');
@@ -100,7 +100,7 @@ async function run() {
       (el) => document.getElementById(el.getAttribute('aria-labelledby'))?.textContent === 'Include Screenshot in the report');
     if (screenshot && !screenshot.disabled) screenshot.click();
     await wait(() => !screenshot || screenshot.disabled || screenshot.getAttribute('aria-checked') === 'false');
-    button('Prepare Report').click();
+    button('Prepare report').click();
     await wait(() => document.querySelector('h1')?.textContent === 'Report ready');
     button('Download').click();
     await wait(() => document.querySelector('[role="status"]')?.textContent.includes('Downloads'));

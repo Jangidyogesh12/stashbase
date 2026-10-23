@@ -17,6 +17,9 @@ import type { FailureView } from '@/shared/domain/feature-error';
 export interface UpdateNoticeOffer {
   readonly actionLabel: string | null;
   readonly message: string;
+  /** True when the action repeats a check that failed: a recovery, drawn
+   *  outlined, rather than the offer's one solid answer. */
+  readonly recovers?: boolean;
 }
 
 export interface UpdateNoticeViewModel {
@@ -55,6 +58,7 @@ export function useUpdateNotice(port: UpdatesPort | null): UpdateNoticeViewModel
         ? {
             actionLabel: action?.label ?? null,
             message: offer.sentence,
+            recovers: action?.kind === 'check',
           }
         : null,
   };

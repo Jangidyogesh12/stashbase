@@ -12,7 +12,14 @@ export interface WorkspaceNotice {
   readonly dismissLabel: string;
   readonly message: string;
   readonly onDismiss: (() => void) | null;
-  /** Something offered rather than reported, drawn as a banner. */
-  readonly offer?: boolean;
+  /** Something offered rather than reported (`invitation`), or the wait
+   *  after taking it up (`wait`), drawn as a centred banner. Only the
+   *  invitation carries the offer's mark. */
+  readonly offer?: 'invitation' | 'wait';
   readonly tone: FailureView['tone'];
 }
+
+/** A notice drawn as a card rather than in the strip. A card the reader cannot
+ *  clear would cover work, or stand in the corner, indefinitely, so every
+ *  card carries its dismissal. */
+export type DismissibleNotice = WorkspaceNotice & { readonly onDismiss: () => void };

@@ -53,7 +53,7 @@ export function createDesktopIndicators(deps: Dependencies): DesktopIndicators {
     if (disposed) return;
     snapshot = next;
     const running = next.working + next.waiting;
-    const summary = [running ? `${running} running` : '', next.waiting ? `${next.waiting} waiting for confirmation` : '', next.unread ? `${next.unread} to review` : ''].filter(Boolean).join(' · ') || 'No running sessions';
+    const summary = [running ? `${running} running` : '', next.waiting ? `${next.waiting} waiting for approval` : '', next.unread ? `${next.unread} to review` : ''].filter(Boolean).join(' · ') || 'no running chats';
     attempt(() => {
       if (deps.platform === 'win32') {
         for (const win of deps.windows()) if (!win.isDestroyed()) win.setOverlayIcon(next.unread ? badge : null, next.unread ? 'Notifications to review' : '');
@@ -74,11 +74,11 @@ export function createDesktopIndicators(deps: Dependencies): DesktopIndicators {
     ]);
     attempt(() => {
       tray!.setImage(images.get(next.waiting || next.unread ? 'attention' : next.working ? 'working' : 'idle')!);
-      tray!.setToolTip(`StashBase — ${summary}`);
+      tray!.setToolTip(`StashBase · ${summary}`);
       tray!.setContextMenu(deps.Menu.buildFromTemplate([
         { label: 'Open StashBase', click: deps.openApp },
         ...sections,
-        ...(!sections.length ? [{ type: 'separator' as const }, { label: 'No running sessions', enabled: false }] : []),
+        ...(!sections.length ? [{ type: 'separator' as const }, { label: 'No running chats', enabled: false }] : []),
         { type: 'separator' },
         { label: 'Quit StashBase', click: () => deps.app.quit() },
       ]));

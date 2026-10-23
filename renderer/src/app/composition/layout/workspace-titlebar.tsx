@@ -55,6 +55,7 @@ export function WorkspaceTitlebar({
   mode,
   newTab,
   onToggleChatPane,
+  sidebarNotices,
 }: {
   agent: AgentWorkspaceRuntime;
   chatPaneOpen: boolean;
@@ -66,6 +67,9 @@ export function WorkspaceTitlebar({
   /** The New tab the strip's plus opens. */
   newTab: NewTab;
   onToggleChatPane(): void;
+  /** True while the sidebar's foot holds a notice, which a collapsed sidebar
+   *  takes off screen with it. */
+  sidebarNotices: boolean;
 }) {
   const PanelRight = useIcon('panel-right');
   // The compact square, the one the sidebar's band draws its toggle and
@@ -105,7 +109,23 @@ export function WorkspaceTitlebar({
           {showsTrigger && (
             <motion.div {...FADE} className="flex items-center" key="sidebar-controls">
               <SizeProvider size="compact">
-                <SidebarTrigger aria-label="Show files sidebar" />
+                {/* A notice in the collapsed sidebar's foot leaves a dot on
+                 *  the control that brings it back. A card floated in the
+                 *  window's lower left instead would cover the composer,
+                 *  which spans that corner in narrow windows. */}
+                <span className="relative flex">
+                  <SidebarTrigger
+                    aria-description={sidebarNotices ? 'Has notices' : undefined}
+                    aria-label="Show files sidebar"
+                  />
+                  {sidebarNotices && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-foreground ring-2 ring-background"
+                      data-testid="sidebar-notice-dot"
+                    />
+                  )}
+                </span>
                 {hasActiveFolder &&
                   (mode === 'chats' ? (
                     <ChatNavButtons runtime={agent} />

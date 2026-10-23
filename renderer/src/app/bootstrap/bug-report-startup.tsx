@@ -27,7 +27,7 @@ export function mountBugReportReview(rootElement: HTMLElement): Root {
     );
   } catch (cause) {
     console.error('StashBase bug report startup failed.', cause);
-    document.title = 'Report a Bug — Startup error';
+    document.title = 'Report a Bug · Startup error';
     root.render(<StartupFailure />);
   }
   document.body.dataset.bootSettled = '1';

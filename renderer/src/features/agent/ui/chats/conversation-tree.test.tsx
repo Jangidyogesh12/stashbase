@@ -53,6 +53,11 @@ function renderTree(groups: AgentConversationGroup[], spies = {}, scheduled?: Re
   return { ...handlers, view };
 }
 
+/** The open menu's rows, by the names they announce. */
+async function names(): Promise<(string | null)[]> {
+  return (await screen.findAllByRole('menuitem')).map((item) => item.getAttribute('aria-label'));
+}
+
 describe('conversation tree', () => {
   it('marks a chat a scheduled task started, unless its live status says more', () => {
     const brief = {
@@ -177,6 +182,29 @@ describe('conversation tree', () => {
     expect(screen.getAllByRole('button', { name: /^Actions for/u })).toHaveLength(2);
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Reading list' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'native-1' }));
+  });
+
+  it('opens the same row menu from a right click and the menu key as from its \u2026', async () => {
+    const { onDelete } = renderTree([group()]);
+    const user = userEvent.setup();
+    const row = screen.getByRole('button', { name: 'Reading list' });
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Reading list' }));
+    const fromButton = await names();
+    // Delete ends the menu, on its own after a rule.
+    expect(fromButton).toEqual(['Rename', 'Delete']);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    fireEvent.contextMenu(row, { clientX: 20, clientY: 20 });
+    expect(await names()).toEqual(fromButton);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    row.focus();
+    await user.keyboard('{Shift>}{F10}{/Shift}');
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
     expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'native-1' }));
   });
 

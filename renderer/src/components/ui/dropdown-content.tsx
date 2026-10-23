@@ -41,7 +41,20 @@ import { DropdownContext, type MenuItemRenderOptions } from './menu-item';
 
 type MenuPositionerProps = ComponentProps<typeof Menu.Positioner>;
 
+/** What the popup hangs from: its trigger when none is named, another
+ *  element, or a point. */
+export type DropdownAnchor = NonNullable<MenuPositionerProps['anchor']>;
+
+/** A point the popup hangs from, for the menu a right click opens where the
+ *  pointer is rather than under a trigger. */
+export function pointAnchor(x: number, y: number): DropdownAnchor {
+  return { getBoundingClientRect: () => new DOMRect(x, y, 0, 0) };
+}
+
 interface DropdownContentProps {
+  /** Names a menu that has no trigger to be named by, such as one a right
+   *  click opens; Base UI otherwise names the popup from its trigger. */
+  'aria-label'?: string;
   children: ReactNode;
   className?: string;
   /** Keeps radio semantics while allowing a consumer-specific selection cue. */
@@ -64,6 +77,7 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
       align = 'start',
       sideOffset = 6,
       anchor,
+      'aria-label': ariaLabel,
     },
     ref,
   ) => {
@@ -160,6 +174,7 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
               <Menu.Popup
                 render={<Elevated offset={2} shadowLevel={3} ref={mergeRefs(containerRef, ref)} />}
                 {...surface.surfaceProps}
+                {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}
                 className={cn(
                   // min-w tracks the anchor, the trigger unless the caller
                   // names another, via the Positioner's --anchor-width var.

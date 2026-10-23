@@ -1,4 +1,4 @@
-import { LoaderCircle, RefreshCw } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { filesFailure } from '@/features/workspace/application/failure-messages';
@@ -29,13 +29,7 @@ export function FileTreeUnavailable({ error, onRetry }: FileTreeUnavailableProps
   return (
     <div className="px-4 py-4">
       <FailureNotice failure={filesFailure(error)} />
-      <Button
-        className="mt-2"
-        leadingIcon={RefreshCw}
-        onClick={onRetry}
-        size="compact"
-        variant="tertiary"
-      >
+      <Button className="mt-2" onClick={onRetry} size="compact" variant="tertiary">
         Retry
       </Button>
     </div>

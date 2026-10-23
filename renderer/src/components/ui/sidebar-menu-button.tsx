@@ -51,11 +51,6 @@ interface SidebarMenuButtonProps
    *  colour and stroke weight. The icon slot takes exactly one glyph and
    *  nothing more. */
   icon?: IconComponent;
-  /** Semantic thread state for status-dot navigation. It is the only source
-   *  of the dot in the icon column (`active`/`unread` → filled, `idle` →
-   *  ring), stamps `data-status` on the button, appends visually-hidden
-   *  "unread" text for screen readers, and `"active"` implies `isActive`. */
-  status?: 'active' | 'unread' | 'idle';
   /** The row's title. It gets the weight-animated treatment, so name it here
    *  rather than passing it as a child: `children` is for what rides BESIDE
    *  the title (a badge, a trailing control), which must stay outside the
@@ -74,20 +69,17 @@ interface SidebarMenuButtonProps
  */
 const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
   (
-    { isActive = false, variant, icon: Icon, label, status, render, className, children, ...props },
+    { isActive = false, variant, icon: Icon, label, render, className, children, ...props },
     ref,
   ) => {
     const scope = useContext(MenuScopeContext);
     const buttonRef = useRef<HTMLButtonElement | null>(null);
 
-    // status="active" implies the row-active treatment.
-    const effectiveActive = isActive || status === 'active';
-    const { item, lit, itemShape, compact, iconSize, textClass, gutterVars } = useRowButton(
+    const { item, itemShape, compact, iconSize, textClass, gutterVars } = useRowButton(
       buttonRef,
-      effectiveActive,
+      isActive,
     );
 
-    const resolvedDot = status && (status === 'idle' ? 'ring' : 'filled');
     // A row's height is the ambient density, not a per-row choice: the three
     // named sizes this used to take had no caller and could contradict the
     // compact ladder the rest of the row already reads.
@@ -96,7 +88,7 @@ const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
     // Roving tabindex: the active rows' buttons are the menu's tab stops; with
     // no active row, the menu's first row keeps it keyboard-reachable.
     const row = item?.rowRef.current ?? null;
-    const tabIdx = effectiveActive
+    const tabIdx = isActive
       ? 0
       : scope?.hasActive
         ? -1
@@ -109,27 +101,7 @@ const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
     const inner = (
       <>
         {Icon && <RowIcon icon={Icon} size={iconSize} />}
-        {!Icon && resolvedDot && (
-          <span
-            className="flex shrink-0 items-center justify-center"
-            style={{ width: iconSize, height: iconSize }}
-          >
-            <span
-              className={cn(
-                'size-2 rounded-full transition-colors duration-fast',
-                resolvedDot === 'filled'
-                  ? lit
-                    ? 'bg-foreground/60'
-                    : 'bg-muted-foreground/50'
-                  : lit
-                    ? 'border border-foreground/60'
-                    : 'border border-muted-foreground/50',
-              )}
-            />
-          </span>
-        )}
         <MenuRowLabel extras={content} label={label} textClass={textClass} />
-        {status === 'unread' && <span className="sr-only">, unread</span>}
       </>
     );
 
@@ -140,9 +112,8 @@ const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
         ref: mergeRefs(buttonRef, ref),
         type: template ? undefined : 'button',
         'data-sidebar': 'menu-button',
-        'data-active': effectiveActive ? 'true' : undefined,
-        'data-status': status,
-        'aria-current': effectiveActive ? 'page' : undefined,
+        'data-active': isActive ? 'true' : undefined,
+        'aria-current': isActive ? 'page' : undefined,
         tabIndex: tabIdx,
         className: cn(sidebarMenuButtonVariants({ variant }), heightClass, itemShape, className),
         ...props,

@@ -38,8 +38,8 @@ export function runStatus(run: ScheduledTaskRun, live: string | null): RunStatus
     case 'sent':
       if (live === 'Waiting for approval')
         return { label: 'Waiting for your approval', tone: 'waiting' };
-      if (live === 'Completed') return { label: 'Finished', tone: 'done' };
-      if (live === 'Could not finish') return { label: 'Did not finish', tone: 'failed' };
+      if (live === 'Finished') return { label: 'Finished', tone: 'done' };
+      if (live === 'Did not finish') return { label: 'Did not finish', tone: 'failed' };
       if (live === 'Stopped') return { label: 'Stopped', tone: 'quiet' };
       if (live) return { label: 'Working', tone: 'progress' };
       // No window here followed the turn to its end, such as after a restart.

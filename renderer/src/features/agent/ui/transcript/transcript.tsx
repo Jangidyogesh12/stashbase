@@ -160,9 +160,12 @@ const TranscriptBlock = memo(function TranscriptBlock({
               segment.kind === 'text' ? (
                 segment.text
               ) : (
+                // The same token the mention wore in the draft: paper, with an
+                // inset hairline that adds nothing to the line's height, and the
+                // muted file glyph the @ list drew.
                 <span
                   className={cn(
-                    'mx-px inline-flex max-w-full items-center gap-1 bg-foreground/8 px-1.5 py-px align-baseline font-medium',
+                    'mx-px inline-flex max-w-full items-center gap-1 px-1.5 py-px align-baseline font-medium ring-1 ring-border/50 ring-inset',
                     shape.chip,
                   )}
                   key={`${segment.start}:${segment.path}`}
@@ -170,7 +173,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
                 >
                   <FileTypeIcon
                     aria-hidden="true"
-                    className="shrink-0"
+                    className="shrink-0 text-muted-foreground"
                     path={segment.path}
                     size={12}
                   />

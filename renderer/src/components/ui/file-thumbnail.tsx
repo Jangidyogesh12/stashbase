@@ -1,6 +1,6 @@
 /** Renders a preview tile for one `File`: an image is drawn directly, a PDF
  *  has its first page rasterised through pdf.js, and anything else falls back
- *  to a typed file icon. The pdf.js worker URL is imported so the bundler owns
+ *  to the shared file-type glyph. The pdf.js worker URL is imported so the bundler owns
  *  it; object URLs created for previews are revoked when the tile unmounts. */
 
 'use client';
@@ -8,6 +8,7 @@
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useEffect, useState } from 'react';
 
+import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
@@ -48,9 +49,10 @@ async function renderPdfFirstPage(file: File, targetWidth: number): Promise<stri
 // ─── File thumbnail ───────────────────────────────────────────────────────
 // Read-only square preview of a File. Images use object-cover via
 // `URL.createObjectURL`; PDFs render the first page via pdfjs; while either is
-// resolving a spinner is shown. Self-contained (border + surface + sizing) so
-// it can be reused both inside the composer's preview row and to render
-// already-sent attachments in a chat transcript.
+// resolving a spinner is shown. Self-contained (frame + sizing) so it can be
+// reused both inside the composer's preview row and to render already-sent
+// attachments in a chat transcript. The frame is paper, a light hairline with
+// no fill of its own, so a tile reads as the surface it sits on.
 interface FileThumbnailProps {
   file: File;
   /** Side length of the square thumbnail in pixels. */
@@ -69,9 +71,9 @@ function FileThumbnail({ file, size, className }: FileThumbnailProps) {
   // useMemo doesn't re-run on the simulated re-mount (no re-render happens),
   // leaving the DOM with a stale, revoked `blob:` URL — broken image.
   // Putting both in the same effect means the simulated re-mount creates a
-  // fresh URL and updates state. The one-frame "before URL" state is
-  // covered by the bg-accent (no fallback icon shown for images), so the
-  // transition is visually clean.
+  // fresh URL and updates state. The one-frame "before URL" state shows the
+  // pending spinner rather than a fallback icon, so the transition is
+  // visually clean.
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!isImage) {
@@ -117,7 +119,7 @@ function FileThumbnail({ file, size, className }: FileThumbnailProps) {
   return (
     <div
       className={cn(
-        'relative shrink-0 overflow-hidden border border-border bg-accent',
+        'relative shrink-0 overflow-hidden border border-border/50',
         shape.bg,
         className,
       )}
@@ -143,28 +145,15 @@ function FileThumbnail({ file, size, className }: FileThumbnailProps) {
           />
         </div>
       ) : (
-        // Generic document glyph for files with no renderable preview.
-        // Inline SVG (not the icon system) so the thumbnail stays
-        // self-contained for registry consumers.
+        // The file-type glyph for files with no renderable preview: the same
+        // mark a sent upload falls back to once its File is gone, so the tile
+        // looks the same before and after the turn is replayed.
         <div
           className="absolute inset-0 flex items-center justify-center text-muted-foreground"
           role="img"
           aria-label={file.name}
         >
-          <svg
-            width={Math.max(16, size * 0.35)}
-            height={Math.max(16, size * 0.35)}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-            <path d="M14 3v5h5" />
-          </svg>
+          <FileTypeIcon aria-hidden="true" path={file.name} size={Math.max(16, size * 0.35)} />
         </div>
       )}
     </div>

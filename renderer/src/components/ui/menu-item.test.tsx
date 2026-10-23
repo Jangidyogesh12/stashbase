@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChevronRight } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -114,6 +114,27 @@ describe('MenuItem row numbering', () => {
     // derived indices the rows above are numbered by.
     expect(rows.map((row) => row.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
     expect(indices()).toEqual(['0', '1', '2']);
+  });
+});
+
+describe('MenuItem destructive rows', () => {
+  it('keeps the error colour on the label and glyph, at rest and highlighted', () => {
+    render(openMenu(<MenuItem destructive icon={ChevronRight} label="Delete" />));
+
+    const row = screen.getByRole('menuitem', { name: 'Delete' });
+    // The label's own tone class, and the drawn glyph rather than the
+    // invisible one that reserves its stroke width.
+    const label = row.querySelector('[data-menu-item-label]');
+    const glyph = row.querySelector('.inline-grid > svg');
+    expect(label?.className).toContain('text-destructive');
+    expect(glyph?.getAttribute('class')).toContain('text-destructive');
+
+    // Focus highlights the row, which lights an ordinary label to full ink.
+    act(() => row.focus());
+    expect(label?.className).toContain('text-destructive');
+    expect(label?.className).not.toContain('text-foreground');
+    expect(glyph?.getAttribute('class')).toContain('text-destructive');
+    expect(glyph?.getAttribute('class')).not.toContain('text-foreground');
   });
 });
 

@@ -33,7 +33,7 @@ export type FailureMessages<Extra extends string = never> = Readonly<
 export const DOCUMENT_SOURCE_MESSAGES: Readonly<Record<DocumentSourceFailureKind, string>> = {
   missing: 'The source file is missing. Open work is still available; restore the file and retry.',
   'invalid-response': 'The document could not be loaded. Your source file has not been changed.',
-  'scope-lost': 'That folder is no longer available in this window.',
+  'scope-lost': 'That project is no longer available in this window.',
   unauthorized: 'This window can no longer open that document.',
   unavailable: 'The document could not be loaded. Your source file has not been changed.',
   'unsupported-encoding':
@@ -48,7 +48,8 @@ export const DOCUMENT_SAVE_MESSAGES: Readonly<Record<DocumentSaveFailureKind, st
   conflict:
     'The file changed on disk, but its newer version could not be loaded. Retry to compare both versions.',
   'invalid-response': 'The document could not be saved. Your changes are still available.',
-  'scope-lost': 'That folder is no longer available in this window, so the document was not saved.',
+  'scope-lost':
+    'That project is no longer available in this window, so the document was not saved.',
   unauthorized: 'This window can no longer save documents. Your changes are still available.',
   unavailable: 'The document could not be saved. Your changes are still available.',
 };
@@ -66,7 +67,7 @@ export const DOCUMENT_OVERWRITE_MESSAGES: Readonly<Record<DocumentSaveFailureKin
 export const DOCUMENT_ASSET_MESSAGES: Readonly<Record<DocumentAssetFailureKind, string>> = {
   missing: 'The source file is missing. Open work is still available; restore the file and retry.',
   'invalid-response': 'The file may have moved, changed, or become unavailable.',
-  'scope-lost': 'That folder is no longer available in this window.',
+  'scope-lost': 'That project is no longer available in this window.',
   unauthorized: 'This window can no longer open that file.',
   unavailable: 'The file may have moved, changed, or become unavailable.',
 };
@@ -83,7 +84,7 @@ export const GENERIC_PREVIEW_MESSAGES: Readonly<Record<GenericFilePreviewFailure
   missing: 'The source file is missing. Open work is still available; restore the file and retry.',
   'invalid-response': 'The file could not be inspected. It has not been changed.',
   'not-generic': 'This document viewer is not available yet.',
-  'scope-lost': 'That folder is no longer available in this window.',
+  'scope-lost': 'That project is no longer available in this window.',
   unauthorized: 'This window can no longer inspect that file.',
   unavailable: 'The file could not be inspected. It has not been changed.',
 };

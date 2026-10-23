@@ -9,6 +9,7 @@
 import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import { useState, type ReactNode } from 'react';
 
+import { DROP_TARGET } from '@/lib/local/drop-target';
 import { collapseTween, spring, tween } from '@/lib/springs';
 import { cn } from '@/lib/utils';
 
@@ -106,8 +107,8 @@ function TreeHighlight({ className, kind, rect, reduceMotion }: TreeHighlightPro
       animate={{ ...rect, opacity: 1 }}
       aria-hidden="true"
       className={cn(
-        'pointer-events-none absolute bg-hover',
-        kind === 'drop' && 'ring-1 ring-border ring-inset',
+        'pointer-events-none absolute',
+        kind === 'drop' ? DROP_TARGET : 'bg-hover',
         className,
       )}
       {...(kind === 'drop' ? { 'data-tree-drop-target': '' } : { 'data-tree-proximity': '' })}

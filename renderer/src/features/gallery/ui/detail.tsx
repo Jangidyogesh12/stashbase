@@ -114,7 +114,7 @@ export function GalleryEntryPage({
       <div className="mt-4 flex shrink-0 items-center justify-between gap-4 border-t border-border pt-4">
         <div className="flex min-w-0 items-center gap-3">
           <Button
-            className="-ml-3 shrink-0"
+            className="shrink-0 px-1.5"
             leadingIcon={ArrowLeft}
             onClick={onBack}
             size="compact"

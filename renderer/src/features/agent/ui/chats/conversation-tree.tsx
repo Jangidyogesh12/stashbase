@@ -1,12 +1,20 @@
 /** The chat list in the sidebar: recency groups, each conversation as a row
  *  that opens on a click and renames in place on a slow second click or F2,
- *  and a per-row menu for deletion. Grouping and ordering are decided in the
- *  domain; this module owns the interaction and the editing affordance. */
+ *  and a per-row menu, from its "…" button or a right click, for renaming and
+ *  deletion. Grouping and ordering are decided in the domain; this module owns
+ *  the interaction and the editing affordance. */
 import { CalendarClock, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
+import {
+  DropdownContent,
+  DropdownMenu,
+  DropdownSeparator,
+  DropdownTrigger,
+  pointAnchor,
+  type DropdownAnchor,
+} from '@/components/ui/dropdown';
 import { caretOffsetAtPoint, InlineInput } from '@/components/ui/inline-input';
 import { MenuItem } from '@/components/ui/menu-item';
 import {
@@ -26,35 +34,53 @@ import { AGENT_ICONS } from '@/shared/brand/agent-icons';
 
 const CONVERSATION_PAGE_SIZE = 100;
 
+/** The row's one menu. Its "…" button opens it beneath itself; a right click
+ *  on the row opens the same menu at the pointer. */
+interface RowMenu {
+  /** A point for a right click; absent, the menu hangs from its "…". */
+  anchor: DropdownAnchor | undefined;
+  open: boolean;
+}
+
 function HistoryActions({
   entry,
+  menu,
   title,
   onDelete,
+  onMenuChange,
   onRename,
 }: {
   entry: AgentHistoryEntry | undefined;
+  menu: RowMenu;
   title: string;
   onDelete(entry: AgentHistoryEntry): void;
+  onMenuChange(menu: RowMenu): void;
   onRename(): void;
 }) {
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      // The "…" opens the menu beneath itself, whatever a right click left.
+      onOpenChange={(open) => onMenuChange({ anchor: open ? undefined : menu.anchor, open })}
+      open={menu.open}
+    >
       <DropdownTrigger
         render={
-          <SidebarMenuAction aria-label={`Actions for ${title || 'conversation'}`} showOnHover>
+          <SidebarMenuAction aria-label={`Actions for ${title || 'chat'}`} showOnHover>
             <MoreHorizontal aria-hidden="true" />
           </SidebarMenuAction>
         }
       />
-      <DropdownContent align="end" className="w-40">
+      <DropdownContent
+        align={menu.anchor ? 'start' : 'end'}
+        {...(menu.anchor ? { anchor: menu.anchor } : {})}
+        className="w-40"
+      >
         <MenuItem icon={Pencil} label="Rename" onSelect={onRename} />
         {entry && (
-          <MenuItem
-            className="text-destructive"
-            icon={Trash2}
-            label="Delete"
-            onSelect={() => onDelete(entry)}
-          />
+          <>
+            <DropdownSeparator />
+            <MenuItem destructive icon={Trash2} label="Delete" onSelect={() => onDelete(entry)} />
+          </>
         )}
       </DropdownContent>
     </DropdownMenu>
@@ -80,6 +106,7 @@ function ConversationRow({
   const [editing, setEditing] = useState(false);
   const [caretOffset, setCaretOffset] = useState<number | undefined>();
   const [title, setTitle] = useState(conversation.title);
+  const [menu, setMenu] = useState<RowMenu>({ anchor: undefined, open: false });
   const AgentIcon = AGENT_ICONS[conversation.agent];
 
   const activate = () => {
@@ -142,10 +169,20 @@ function ConversationRow({
             const target = event.target instanceof HTMLElement ? event.target : event.currentTarget;
             beginEdit(caretOffsetAtPoint(target, event.clientX, event.clientY));
           }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setMenu({ anchor: pointAnchor(event.clientX, event.clientY), open: true });
+          }}
           onKeyDown={(event) => {
             if (event.key === 'F2') {
               event.preventDefault();
               beginEdit();
+            }
+            // The keys a context menu is asked for with open the row's menu
+            // beneath its "…", on every platform.
+            if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+              event.preventDefault();
+              setMenu({ anchor: undefined, open: true });
             }
           }}
           label={conversation.title}
@@ -153,8 +190,10 @@ function ConversationRow({
           title={conversation.title}
         >
           {conversation.status === 'Working…' || conversation.status === 'Waiting for approval' ? (
+            // The row's short form of the chat's state; its name carries the
+            // whole of it.
             <span className="text-caption text-muted-foreground">
-              {conversation.status === 'Working…' ? 'Working' : 'Approval'}
+              {conversation.status === 'Working…' ? 'Working' : 'Waiting'}
             </span>
           ) : conversation.draft ? (
             <span className="text-caption text-muted-foreground">Draft</span>
@@ -171,8 +210,10 @@ function ConversationRow({
       {!editing && (
         <HistoryActions
           entry={conversation.entry}
+          menu={menu}
           title={conversation.title}
           onDelete={onDelete}
+          onMenuChange={setMenu}
           onRename={() => beginEdit()}
         />
       )}

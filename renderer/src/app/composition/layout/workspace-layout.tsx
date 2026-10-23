@@ -18,9 +18,10 @@ import '@/app/shell.css';
 export interface WorkspaceComposition {
   /** Quick open and Settings. */
   dialogs: ReactNode;
+  /** Outcomes of the reader's requests that float over the workspace. */
+  floatingNotices: ReactNode;
   /** True while the project has a folder open to show. */
   hasActiveFolder: boolean;
-  /** Refusals raised by work the reader did not ask about directly. */
   /** The notice strip, composed by the shell inside the account provider. */
   notices: ReactNode;
   /** The Agent beside the open document. */
@@ -36,6 +37,7 @@ export interface WorkspaceComposition {
 
 export function WorkspaceLayout({
   dialogs,
+  floatingNotices,
   hasActiveFolder,
   notices,
   panes,
@@ -64,7 +66,11 @@ export function WorkspaceLayout({
         {titlebar}
         {notices}
 
-        <section aria-label="Agent workspace" className="min-h-0 flex-1" {...agentSurfaceProps}>
+        <section
+          aria-label="Agent workspace"
+          className="relative min-h-0 flex-1"
+          {...agentSurfaceProps}
+        >
           {started ? (
             <div className="h-full min-h-0">
               <div
@@ -78,6 +84,7 @@ export function WorkspaceLayout({
           ) : (
             welcome
           )}
+          {floatingNotices}
         </section>
       </SidebarInset>
     </SidebarProvider>

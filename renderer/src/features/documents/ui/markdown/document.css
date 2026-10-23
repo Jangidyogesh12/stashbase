@@ -95,22 +95,6 @@
   white-space: nowrap;
 }
 
-.markdown-link-failure {
-  position: absolute;
-  z-index: 3;
-  bottom: 16px;
-  left: 50%;
-  max-width: calc(100% - 32px);
-  padding: 6px 10px;
-  color: var(--destructive);
-  font-size: var(--fs-caption, 12px);
-  background: color-mix(in oklab, var(--surface-3) 94%, transparent);
-  border: 1px solid var(--border);
-  border-radius: var(--shape-input-radius, 8px);
-  box-shadow: var(--shadow-4);
-  transform: translateX(-50%);
-}
-
 ::highlight(stashbase-document-find) {
   color: inherit;
   background: color-mix(in oklab, var(--accent) 72%, transparent);
@@ -400,8 +384,8 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
 
 /* Crepe also uses its outline token for menu glyphs. Borders should remain
    subtle, but controls need the app's normal foreground state ladder. The
-   toolbar's glyphs are Lucide's stroked ones (see selection-toolbar.ts), which
-   carry their own stroke; the slash menu keeps Crepe's filled set. */
+   toolbar's glyphs are Lucide's stroked ones (see selection-toolbar.ts); the
+   slash menu keeps Crepe's filled set. */
 .markdown-crepe .milkdown :is(.milkdown-toolbar .toolbar-item, .milkdown-slash-menu li) svg {
   color: var(--markdown-menu-rest);
 }
@@ -410,9 +394,13 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
   fill: currentColor;
 }
 
+/* Crepe fills its toolbar glyphs, in its primary colour when active. That CSS
+   fill outranks the stroked glyphs' fill="none" and floods closed outlines,
+   so an active Bold drew a solid blob. */
 .markdown-crepe .milkdown .milkdown-toolbar .toolbar-item svg {
   width: 16px;
   height: 16px;
+  fill: none;
 }
 
 .markdown-crepe

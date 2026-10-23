@@ -12,9 +12,12 @@ type PreparationLane = `${'prepare' | 'reprocess' | 'sync'}:${string}`;
 export interface PreparationCommands {
   /** Clears the notice once the reader has seen it. */
   dismissFailure(): void;
-  /** The last refusal, as the sentence and the tone the notice strip says it
-   *  in, or null while nothing has refused. */
+  /** The last refusal, as the sentence and the tone its notice says it in,
+   *  or null while nothing has refused. */
   failure: FailureView | null;
+  /** Whether that refusal answers a reprocess the reader asked for, rather
+   *  than preparation run on their behalf; the two are placed differently. */
+  failureRequested: boolean;
   /** Best-effort queueing for a document that was just opened. */
   prepare(source: SourceReference): void;
   /** Restarts preparation for one source. Never rejects; resolves once the
@@ -38,10 +41,10 @@ export interface PreparationCommands {
  */
 export function usePreparationCommands(controlApi: PreparationControlPort): PreparationCommands {
   const openSignal = useRequestSignals<PreparationLane>();
-  const [failure, setFailure] = useState<FailureView | null>(null);
+  const [failure, setFailure] = useState<{ requested: boolean; view: FailureView } | null>(null);
 
-  const report = useCallback((signal: AbortSignal, error: unknown) => {
-    if (!signal.aborted) setFailure(preparationFailure(error));
+  const report = useCallback((signal: AbortSignal, error: unknown, requested = false) => {
+    if (!signal.aborted) setFailure({ requested, view: preparationFailure(error) });
   }, []);
 
   const prepare = useCallback(
@@ -58,7 +61,7 @@ export function usePreparationCommands(controlApi: PreparationControlPort): Prep
       try {
         await controlApi.reprocess(source, signal);
       } catch (error: unknown) {
-        report(signal, error);
+        report(signal, error, true);
       }
     },
     [controlApi, openSignal, report],
@@ -79,7 +82,14 @@ export function usePreparationCommands(controlApi: PreparationControlPort): Prep
 
   const dismissFailure = useCallback(() => setFailure(null), []);
 
-  return { dismissFailure, failure, prepare, reprocess, sync };
+  return {
+    dismissFailure,
+    failure: failure?.view ?? null,
+    failureRequested: failure?.requested === true,
+    prepare,
+    reprocess,
+    sync,
+  };
 }
 
 /** Two sources in different folders can share a path, so a lane needs both. */

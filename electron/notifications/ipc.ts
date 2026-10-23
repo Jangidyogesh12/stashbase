@@ -44,7 +44,7 @@ export function registerNotifications(deps: Dependencies) {
           id: JSON.stringify([win.id, session.id]),
           // Keep ordinary rows as quiet as the chat title. Disambiguate peers.
           label: sessions.filter((entry) => entry.session.conversation === session.conversation).length > 1
-            ? `${session.conversation} — ${session.project}` : session.conversation,
+            ? `${session.project} · ${session.conversation}` : session.conversation,
           open() {
             if (win.isDestroyed() || !deps.isLiveWindow(win) || !deps.hasCapability(win, NOTIFICATIONS_CAPABILITY) || !activities.get(win)?.includes(session)) return;
             if (win.isMinimized()) win.restore();

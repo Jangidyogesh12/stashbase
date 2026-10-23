@@ -94,7 +94,7 @@ describe('files API', () => {
 
     await expect(api.load('/project/notes', new AbortController().signal)).rejects.toMatchObject({
       kind: 'scope-lost',
-      message: 'This folder is no longer available in this window.',
+      message: 'This project is no longer available in this window.',
     });
   });
 

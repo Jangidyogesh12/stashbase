@@ -5,7 +5,7 @@
  * column under the band reads; the header's history popover is the quick
  * way in, this is the manager.
  */
-import { CalendarClock, MessageCirclePlus, RefreshCw, Search, X } from 'lucide-react';
+import { CalendarClock, MessageCirclePlus, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 
@@ -142,7 +142,7 @@ export default function AgentChats({
 
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
-          aria-label={`Conversation tree in ${workspaceName}`}
+          aria-label={`Chat history in ${workspaceName}`}
           className="min-h-0 flex-1 overflow-y-auto px-2 pt-1 pb-2"
         >
           {/* The list is one section under a Chats label that folds it, the
@@ -270,10 +270,9 @@ export default function AgentChats({
                 <FailureLine tone="input">{history.historyFailure}</FailureLine>
                 <Button
                   className="mt-2"
-                  leadingIcon={RefreshCw}
                   onClick={() => void history.retry()}
                   size="compact"
-                  variant="ghost"
+                  variant="tertiary"
                 >
                   Retry
                 </Button>

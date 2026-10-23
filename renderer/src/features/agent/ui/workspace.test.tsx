@@ -74,7 +74,7 @@ describe('Agent workspace', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reconnect and review' }));
     await act(async () => listeners[1]?.onEvent({ kind: 'ready' }));
     expect(screen.getByText('Outcome unknown')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'I’ve reviewed it — continue' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Reviewed, continue' })).not.toBeNull();
     expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
   });
 

@@ -84,8 +84,6 @@ function rowGutterVars(item: MenuItemContextValue | null): CSSProperties {
 interface RowButtonSurroundings {
   /** The row this button belongs to, or null outside a menu row. */
   item: MenuItemContextValue | null;
-  /** True when the row reads as foreground: it is active, or it is hovered. */
-  lit: boolean;
   /** The shape system's radius class for a row-sized box. */
   itemShape: string;
   /** True on the compact step of the size ladder, which shortens every row. */
@@ -128,7 +126,6 @@ export function useRowButton<T extends HTMLElement>(
 
   return {
     item,
-    lit: active || (item?.isHovered ?? false),
     itemShape: shape.item,
     compact: sizeClasses.variant === 'compact',
     iconSize: sizeClasses.icon,

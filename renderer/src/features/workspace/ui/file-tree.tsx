@@ -12,14 +12,13 @@ import {
   useMemo,
   useRef,
   useState,
-  type MouseEvent,
   type ReactNode,
 } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { FilesError, type FilesPort } from '@/features/workspace/application/ports';
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
-import type { WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';
+import type { TreeRow, WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';
 import type { WorkspaceScope } from '@/features/workspace/domain/workspace';
 import {
   useFileOperations,
@@ -42,7 +41,7 @@ import { dropRegion, useTreeDrop } from './file-tree-drop';
 import { tabStopPath, useTreeRowFocus } from './file-tree-focus';
 import { treeGestures } from './file-tree-gestures';
 import { TreeGroup, TreeHighlights } from './file-tree-group';
-import { FileTreeMenu, type FileTreeMenuTarget } from './file-tree-menu';
+import { FileTreeMenu, fileTreeMenuTarget, useFileTreeMenu } from './file-tree-menu';
 import {
   hoverRect,
   itemKey,
@@ -54,7 +53,7 @@ import {
   type TreeItem,
 } from './file-tree-model';
 import { DraftNameRow, RenameNameRow } from './file-tree-naming';
-import { entryOf, FileTreeRow, rowIsRestricted, type FileTreeRowMarker } from './file-tree-rows';
+import { FileTreeRow, type FileTreeRowMarker } from './file-tree-rows';
 import { useTreeSpaceContextMenu } from './file-tree-space-menu';
 import { FileTreeLoading, FileTreeUnavailable } from './file-tree-status';
 
@@ -162,6 +161,7 @@ export function FileTree({
   }, [layoutRevision, naming, registerItem, renderedPathKey]);
 
   useTreeSpaceContextMenu(sectionElement, files.status);
+  const menu = useFileTreeMenu();
 
   const drop = useTreeDrop({
     importDrop: importFiles,
@@ -211,14 +211,10 @@ export function FileTree({
     tree,
   });
 
-  const resolveMenuTarget = (event: MouseEvent<HTMLElement>): FileTreeMenuTarget => {
-    const row = rowAtTarget(renderedRows, event.target);
-    if (!row) return { kind: 'space' };
-    const marker = row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined;
-    const restricted = rowIsRestricted(row);
-    const reprocessable = Boolean(marker && onReprocess && !restricted);
-    return { entry: entryOf(row), kind: 'entry', reprocessable, restricted };
-  };
+  const markerOf = (row: TreeRow) =>
+    row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined;
+  const menuTarget = (row: TreeRow | undefined) =>
+    fileTreeMenuTarget(row, row && markerOf(row), Boolean(onReprocess));
 
   if (files.isPending) return <FileTreeLoading />;
   if (files.isError && !files.data) {
@@ -267,15 +263,16 @@ export function FileTree({
         expanded={expanded}
         folderPath={runtime.scope.folder.path}
         index={index}
-        marker={row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined}
+        marker={markerOf(row)}
+        menuOpen={menu.openPath === row.node.path}
         onActivate={activate}
         onDragEnd={drop.endDrag}
         onDragStart={drop.startDrag}
         onFocus={setRovingPath}
         onKeep={keep}
         onKeyDown={onKeyDown}
+        onOpenMenu={(menuRow, anchor) => menu.openRow(menuTarget(menuRow), anchor)}
         onRename={beginRename}
-        proximityActive={activeIndex === index}
         registerRow={registerRow}
         revealLabel={revealLabel}
         row={row}
@@ -323,13 +320,14 @@ export function FileTree({
           onReprocess?.({ folderPath: runtime.scope.folder.path, path: entry.path }),
         onReveal: (entry) => void reveal.reveal(entry.path),
       }}
+      menu={menu}
       render={
         // pt-0: the navigator's group already sets the 8px the strip floats
         // on, the same gap the Document outline's first row keeps, so the tree
         // adds none of its own and both panels start on one line.
         <section aria-label="Files" className="min-w-0 px-2 pb-2" ref={sectionElement} />
       }
-      resolveTarget={resolveMenuTarget}
+      resolveTarget={(event) => menuTarget(rowAtTarget(renderedRows, event.target))}
       revealLabel={revealLabel}
     >
       {files.isError && (
@@ -385,6 +383,7 @@ export function FileTree({
         </FailureLine>
       )}
       {clipboard.refused && <ClipboardFailure />}
+      {importFiles?.refusals}
 
       <DeleteEntryDialog
         entry={operations.deleting}

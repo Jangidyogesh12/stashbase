@@ -95,6 +95,11 @@ interface MenuItemProps extends HTMLAttributes<HTMLDivElement> {
    *  (closing) is right for a choice and an action; a row that swaps the
    *  surface's own content for a deeper list passes false. */
   closeOnClick?: boolean;
+  /** An action that destroys something, such as Delete. Its label and glyph
+   *  wear the error colour at rest and highlighted alike; the row's own tone
+   *  would otherwise paint over a colour a caller passed in. The caller sets
+   *  it last, after a separator. */
+  destructive?: boolean;
 }
 
 const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
@@ -113,6 +118,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       switched,
       descriptionAction,
       closeOnClick,
+      destructive = false,
       className,
       onClick,
       onKeyDown,
@@ -179,7 +185,10 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
 
     const labelText = (
       <WeightedLabel
-        className={cn('min-w-0 flex-1', menuRowTone(isActive || checked === true))}
+        className={cn(
+          'min-w-0 flex-1',
+          destructive ? 'text-destructive' : menuRowTone(isActive || checked === true),
+        )}
         data-menu-item-label
         emphasized={false}
         overflow={wrapsLabel ? 'wrap' : 'truncate'}
@@ -200,7 +209,11 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
               strokeWidth={isActive || checked ? 2 : 1.5}
               className={cn(
                 'col-start-1 row-start-1 transition-[color,stroke-width] duration-fast',
-                isActive || checked ? 'text-foreground' : 'text-muted-foreground',
+                destructive
+                  ? 'text-destructive'
+                  : isActive || checked
+                    ? 'text-foreground'
+                    : 'text-muted-foreground',
               )}
             />
           </span>

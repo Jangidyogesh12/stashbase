@@ -1,27 +1,41 @@
-/** The Workbench tree's context menu: what a right click offers on a row and
- *  on the tree's own space. Every entry can be shown in the system file
- *  manager and have its path copied, and those are the only actions a
- *  restricted entry keeps. */
-import { ContextMenu } from '@base-ui/react/context-menu';
+/** The Workbench tree's menu: what a right click or a row's "…" button
+ *  offers on a row, and what a right click offers on the tree's own space.
+ *  Every entry can be shown in the system file manager and have its path
+ *  copied, and those are the only actions a restricted entry keeps. It is
+ *  drawn by the shared menu surface, so it reads as the chat rows' menu and
+ *  the project switcher do. */
 import {
   Copy,
   Eye,
-  EyeOff,
   ExternalLink,
   FilePlus,
   FolderPlus,
-  PencilLine,
+  Pencil,
   RefreshCw,
   Trash2,
   Upload,
   type LucideIcon,
 } from 'lucide-react';
-import { useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
+import {
+  cloneElement,
+  useState,
+  type HTMLAttributes,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 
-import type { WorkspaceEntry } from '@/features/workspace/domain/tree';
-import { focusRing } from '@/lib/focus-ring';
-import { useShape } from '@/lib/shape-context';
-import { cn } from '@/lib/utils';
+import {
+  DropdownContent,
+  DropdownMenu,
+  DropdownSeparator,
+  pointAnchor,
+  type DropdownAnchor,
+} from '@/components/ui/dropdown';
+import { MenuItem } from '@/components/ui/menu-item';
+import type { TreeRow, WorkspaceEntry } from '@/features/workspace/domain/tree';
+
+import { entryOf, rowIsRestricted, type FileTreeRowMarker } from './file-tree-rows';
 
 /** Where a right click landed: the tree's own space, or one of its rows. */
 export type FileTreeMenuTarget =
@@ -33,6 +47,19 @@ export type FileTreeMenuTarget =
       restricted: boolean;
       reprocessable: boolean;
     };
+
+/** The target a row, or the space below the rows, gives the menu. Only a
+ *  marked file outside the restricted set can be prepared again. */
+export function fileTreeMenuTarget(
+  row: TreeRow | undefined,
+  marker: FileTreeRowMarker | undefined,
+  canReprocess: boolean,
+): FileTreeMenuTarget {
+  if (!row) return { kind: 'space' };
+  const restricted = rowIsRestricted(row);
+  const reprocessable = Boolean(marker && canReprocess && !restricted);
+  return { entry: entryOf(row), kind: 'entry', reprocessable, restricted };
+}
 
 export interface FileTreeMenuActions {
   importFiles?: { disabled: boolean; run(): void } | undefined;
@@ -50,15 +77,15 @@ export interface FileTreeMenuActions {
 }
 
 interface MenuAction {
-  /** Present on a row that carries state rather than only an effect. The row
-   *  then announces itself as a checkbox and the icon shows which way it is. */
-  checked?: boolean;
   destructive?: boolean;
   disabled?: boolean;
   icon: LucideIcon;
   label: string;
   run(): void;
-  title?: string;
+  /** Present on a row that carries state rather than only an effect. The row
+   *  then announces itself as a checkbox and draws a switch showing which way
+   *  it is. */
+  switched?: boolean;
 }
 
 type MenuRow = MenuAction | 'separator';
@@ -81,12 +108,11 @@ function actionsFor(
     if (actions.hiddenFiles) {
       const { disabled, shown, toggle } = actions.hiddenFiles;
       rows.push('separator', {
-        checked: shown,
         disabled,
-        icon: shown ? Eye : EyeOff,
+        icon: Eye,
         label: 'Show hidden files',
         run: toggle,
-        title: 'Show additional hidden folders; project configuration is always visible',
+        switched: shown,
       });
     }
     return rows;
@@ -104,8 +130,11 @@ function actionsFor(
     },
   ];
   if (target.restricted) return location;
+  // Delete stands last, on its own after a rule, as the item that destroys
+  // something does in every menu.
   const own: MenuRow[] = [
-    { icon: PencilLine, label: 'Rename', run: () => actions.onRename(entry) },
+    { icon: Pencil, label: 'Rename', run: () => actions.onRename(entry) },
+    'separator',
     { destructive: true, icon: Trash2, label: 'Delete', run: () => actions.onDelete(entry) },
   ];
   if (entry.kind === 'folder') {
@@ -115,7 +144,6 @@ function actionsFor(
     icon: RefreshCw,
     label: 'Reprocess',
     run: () => actions.onReprocess(entry),
-    title: 'Rebuild the searchable version of this file',
   };
   return [
     ...(target.reprocessable ? [reprocess, 'separator' as const] : []),
@@ -125,78 +153,113 @@ function actionsFor(
   ];
 }
 
+/** Where the menu is showing, and on what. A right click anchors it at the
+ *  pointer; a row's "…" button, or the row's menu key, under that button. */
+interface ShownMenu {
+  align: 'end' | 'start';
+  anchor: DropdownAnchor | null;
+  target: FileTreeMenuTarget;
+}
+
+/** The tree's one menu, held where the rows can reach it. */
+export interface FileTreeMenuState {
+  readonly open: boolean;
+  /** The entry whose menu is open, so its row keeps its "…" showing. */
+  readonly openPath: string | null;
+  /** Kept through the close, so the rows do not change under the exit. */
+  readonly shown: ShownMenu;
+  /** Opens the menu on a row, under the control that asked for it. */
+  openRow(target: FileTreeMenuTarget, anchor: HTMLElement): void;
+  setOpen(open: boolean): void;
+  show(shown: ShownMenu): void;
+}
+
+export function useFileTreeMenu(): FileTreeMenuState {
+  const [open, setOpen] = useState(false);
+  const [shown, setShown] = useState<ShownMenu>({
+    align: 'start',
+    anchor: null,
+    target: { kind: 'space' },
+  });
+  const show = (next: ShownMenu) => {
+    setShown(next);
+    setOpen(true);
+  };
+  return {
+    open,
+    openPath: open && shown.target.kind === 'entry' ? shown.target.entry.path : null,
+    openRow: (target, anchor) => show({ align: 'end', anchor, target }),
+    setOpen,
+    show,
+    shown,
+  };
+}
+
 /**
- * One context menu for the whole tree. The trigger is the tree's section;
- * the row under the pointer is read in the capture phase, before the
- * primitive opens, so a single popup serves every row and the space
- * between them without a menu root per row.
+ * One menu for the whole tree. A right click on the section reads the row
+ * under the pointer, and a row's "…" button names its own row, so a single
+ * popup serves every row and the space between them without a menu root per
+ * row.
  */
 export function FileTreeMenu({
   actions,
   children,
+  menu,
   render,
   resolveTarget,
   revealLabel,
 }: {
   actions: FileTreeMenuActions;
   children: ReactNode;
-  /** The element that becomes the trigger. */
-  render: ReactElement;
+  menu: FileTreeMenuState;
+  /** The element a right click inside opens the menu from. */
+  render: ReactElement<HTMLAttributes<HTMLElement>>;
   resolveTarget(event: MouseEvent<HTMLElement>): FileTreeMenuTarget;
   revealLabel: string;
 }) {
-  const shape = useShape();
-  const [target, setTarget] = useState<FileTreeMenuTarget>({ kind: 'space' });
-  const rows = actionsFor(target, actions, revealLabel);
+  const rows = actionsFor(menu.shown.target, actions, revealLabel);
+  const onContextMenu = (event: MouseEvent<HTMLElement>) => {
+    // A right click in a dialog the tree opened reaches here through React's
+    // tree rather than the page's; it is not the tree's to answer.
+    if (event.defaultPrevented) return;
+    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+    event.preventDefault();
+    menu.show({
+      align: 'start',
+      anchor: pointAnchor(event.clientX, event.clientY),
+      target: resolveTarget(event),
+    });
+  };
 
   return (
-    <ContextMenu.Root>
-      <ContextMenu.Trigger
-        onContextMenuCapture={(event) => setTarget(resolveTarget(event))}
-        render={render}
+    <DropdownMenu onOpenChange={menu.setOpen} open={menu.open}>
+      {cloneElement(render, { onContextMenu }, children)}
+      <DropdownContent
+        align={menu.shown.align}
+        anchor={menu.shown.anchor}
+        aria-label={
+          menu.shown.target.kind === 'space'
+            ? 'Files actions'
+            : `${menu.shown.target.entry.path} actions`
+        }
+        className="w-56"
       >
-        {children}
-      </ContextMenu.Trigger>
-      <ContextMenu.Portal>
-        <ContextMenu.Positioner className="z-50 outline-none">
-          <ContextMenu.Popup
-            aria-label={target.kind === 'space' ? 'Files actions' : `${target.entry.path} actions`}
-            className={cn(
-              'min-w-44 border border-border bg-surface-3 p-1 text-foreground shadow-surface-5 outline-none select-none',
-              shape.container,
-            )}
-          >
-            {rows.map((row, index) =>
-              row === 'separator' ? (
-                <ContextMenu.Separator
-                  className="my-1 h-px bg-border"
-                  key={`after-${(rows[index - 1] as MenuAction).label}`}
-                />
-              ) : (
-                <ContextMenu.Item
-                  {...(row.checked === undefined
-                    ? {}
-                    : { 'aria-checked': row.checked, role: 'menuitemcheckbox' })}
-                  className={cn(
-                    'flex h-7 cursor-pointer items-center gap-2 px-2 text-ui-12 outline-none',
-                    focusRing('data-[highlighted]:bg-hover'),
-                    row.destructive && 'text-destructive',
-                    row.disabled && 'pointer-events-none opacity-50',
-                    shape.bg,
-                  )}
-                  disabled={row.disabled ?? false}
-                  key={row.label}
-                  onClick={row.run}
-                  title={row.title}
-                >
-                  <row.icon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={1.5} />
-                  {row.label}
-                </ContextMenu.Item>
-              ),
-            )}
-          </ContextMenu.Popup>
-        </ContextMenu.Positioner>
-      </ContextMenu.Portal>
-    </ContextMenu.Root>
+        {rows.map((row, index) =>
+          row === 'separator' ? (
+            <DropdownSeparator key={`after-${(rows[index - 1] as MenuAction).label}`} />
+          ) : (
+            <MenuItem
+              destructive={row.destructive ?? false}
+              disabled={row.disabled ?? false}
+              icon={row.icon}
+              key={row.label}
+              label={row.label}
+              onSelect={row.run}
+              {...(row.switched === undefined ? {} : { switched: row.switched })}
+            />
+          ),
+        )}
+      </DropdownContent>
+    </DropdownMenu>
   );
 }

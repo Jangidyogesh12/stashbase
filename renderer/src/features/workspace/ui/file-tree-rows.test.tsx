@@ -16,7 +16,6 @@ import {
   entryOf,
   FileTreeRow,
   nameSelection,
-  Rails,
   rowIcon,
   rowInset,
   rowIsRestricted,
@@ -52,7 +51,7 @@ interface RowOverrides {
   expanded?: boolean;
   index?: number;
   marker?: FileTreeRowProps['marker'];
-  proximityActive?: boolean;
+  menuOpen?: boolean;
   selected?: boolean;
   tabStop?: boolean;
 }
@@ -65,6 +64,7 @@ function renderRow(row: TreeRow, overrides: RowOverrides = {}) {
     onFocus: vi.fn<FileTreeRowProps['onFocus']>(),
     onKeep: vi.fn<FileTreeRowProps['onKeep']>(),
     onKeyDown: vi.fn<FileTreeRowProps['onKeyDown']>(),
+    onOpenMenu: vi.fn<FileTreeRowProps['onOpenMenu']>(),
     onRename: vi.fn<FileTreeRowProps['onRename']>(),
     registerRow: vi.fn<FileTreeRowProps['registerRow']>(),
   };
@@ -75,7 +75,7 @@ function renderRow(row: TreeRow, overrides: RowOverrides = {}) {
       folderPath={RESEARCH_FOLDER.path}
       index={overrides.index ?? 0}
       marker={overrides.marker}
-      proximityActive={overrides.proximityActive ?? false}
+      menuOpen={overrides.menuOpen ?? false}
       revealLabel="Show in file manager"
       row={row}
       selected={overrides.selected ?? false}
@@ -97,17 +97,6 @@ describe('file tree row geometry', () => {
     expect(rowInset(1)).toEqual({ paddingLeft: '8px' });
     expect(rowInset(2)).toEqual({ paddingLeft: '34px' });
     expect(rowInset(3)).toEqual({ paddingLeft: '60px' });
-  });
-
-  it('draws one decorative rail per ancestor and none at the root', () => {
-    const { container } = render(<Rails depth={3} />);
-    // Rails are aria-hidden guides with no role or label, so the count is only
-    // readable from the marker the component publishes for them.
-    expect(container.querySelectorAll('[data-tree-rail]')).toHaveLength(2); // dom-contract: see comment above
-
-    cleanup();
-    const root = render(<Rails depth={1} />);
-    expect(root.container.querySelectorAll('[data-tree-rail]')).toHaveLength(0); // dom-contract: see comment above
   });
 });
 

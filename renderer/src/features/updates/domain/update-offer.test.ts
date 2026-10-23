@@ -67,7 +67,7 @@ describe('updateOffer', () => {
     });
     // A failed check and a failed install reach the same phase, and asking
     // again is the one recovery that fits both.
-    expect(updateOffer(STATUS.error).action).toEqual({ kind: 'check', label: 'Try again' });
+    expect(updateOffer(STATUS.error).action).toEqual({ kind: 'check', label: 'Retry' });
     expect(phasesWhere((status) => updateOffer(status).action !== null)).toEqual([
       'error',
       'ready',

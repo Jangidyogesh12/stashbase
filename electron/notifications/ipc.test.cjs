@@ -172,8 +172,8 @@ test('category changes are isolated, persisted, shared, and revoke only their na
   h.invoke('sync', { kind: completed.kind, events: [completed] });
   h.invoke('sync', { kind: failed.kind, events: [failed] });
   h.tick();
-  assert.match(h.notices[0].options.title, /completed/);
-  assert.match(h.notices[1].options.title, /failed/);
+  assert.match(h.notices[0].options.title, /finished/);
+  assert.match(h.notices[1].options.title, /did not finish/);
   h.invoke('set-enabled', { kind: 'agent-completed', enabled: false });
   assert.equal(h.notices[0].closed, true);
   assert.equal(h.notices[1].closed, false);
@@ -197,7 +197,7 @@ test('foreground and disabled outcomes are consumed, while pending approvals can
   // Background before the coalescing timer still cannot replay a foreground result.
   h.foreground(false); h.win.emit('blur'); h.tick();
   assert.equal(h.notices.length, 1);
-  assert.match(h.notices[0].options.title, /confirmation/);
+  assert.match(h.notices[0].options.title, /approval/);
   h.invoke('set-enabled', { kind: 'agent-failed', enabled: false });
   sync('agent-failed', 'disabled'); h.tick();
   h.invoke('set-enabled', { kind: 'agent-failed', enabled: true }); h.tick();

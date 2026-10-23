@@ -2,7 +2,7 @@
  *  under the turn: each file once, with its line counts and the one thing
  *  the reader can do with it. Nothing opens on its own; Review is the reader
  *  choosing to see the turn's changes inside the document. */
-import { ChevronDown, ChevronUp, FileDiff } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,9 @@ const CHANGE_LABEL: Record<AgentTurnChangedFile['change'], string> = {
 
 const COLLAPSED_FILE_COUNT = 3;
 
+/** One file's action, repeated down the list, so it is the quiet outlined
+ *  button every row action is: no icon, the button's own type, and its box
+ *  inside the row rather than reaching past it. */
 function FileAction({
   file,
   name,
@@ -49,10 +52,9 @@ function FileAction({
     return onOpenSource ? (
       <Button
         aria-label={`Open ${name}`}
-        className="-mr-2.5 text-ui-12"
         onClick={() => onOpenSource(source, null)}
         size="compact"
-        variant="ghost"
+        variant="tertiary"
       >
         Open
       </Button>
@@ -61,10 +63,9 @@ function FileAction({
   return onReview ? (
     <Button
       aria-label={`Review changes to ${name}`}
-      className="-mr-2.5 text-ui-12"
       onClick={() => onReview(source)}
       size="compact"
-      variant="ghost"
+      variant="tertiary"
     >
       Review
     </Button>
@@ -96,26 +97,15 @@ export function AgentTurnChangesCard({
     ? (source: SourceReference) => onReviewTurnChange({ source, turnId })
     : undefined;
   return (
-    <section
-      aria-labelledby={headingId}
-      className={cn('border border-border bg-surface-2', shape.panel)}
-    >
-      <div className="flex items-center gap-3 border-b border-border px-3 py-3">
-        <span
-          className={cn(
-            'flex size-9 shrink-0 items-center justify-center bg-surface-3',
-            shape.mark,
-          )}
-        >
-          <FileDiff aria-hidden className="size-5 text-muted-foreground" strokeWidth={1.5} />
-        </span>
-        <div className="flex flex-col items-start gap-1">
-          <h3 className="text-ui-13 font-medium text-foreground" id={headingId}>
-            Changed {files.length} {files.length === 1 ? 'file' : 'files'}
-          </h3>
-          <div className="flex">
-            <Counts additions={additions} deletions={deletions} />
-          </div>
+    // A card set in the transcript is paper: no fill of its own, only a
+    // hairline, so the chat shows through it.
+    <section aria-labelledby={headingId} className={cn('border border-border/50', shape.panel)}>
+      <div className="flex flex-col items-start gap-1 border-b border-border/50 px-3 py-3">
+        <h3 className="text-ui-13 font-medium text-foreground" id={headingId}>
+          Changed {files.length} {files.length === 1 ? 'file' : 'files'}
+        </h3>
+        <div className="flex">
+          <Counts additions={additions} deletions={deletions} />
         </div>
       </div>
       <ul className="m-0 flex list-none flex-col gap-1 px-3 py-2" id={listId}>
@@ -154,10 +144,13 @@ export function AgentTurnChangesCard({
         })}
       </ul>
       {hiddenCount > 0 && (
+        // The toggle's box starts on the rows' edge, with its padding drawn in
+        // so the label sits just inside it: at rest and on hover it lines up
+        // with the list above instead of reaching past it.
         <Button
           aria-controls={listId}
           aria-expanded={expanded}
-          className="mx-1 mb-2 text-ui-12"
+          className="mx-3 mb-2 px-1.5"
           onClick={() => setExpanded((value) => !value)}
           size="compact"
           trailingIcon={expanded ? ChevronUp : ChevronDown}

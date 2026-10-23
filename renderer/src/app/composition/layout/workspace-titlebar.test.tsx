@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
+import type { UpdatesPort } from '@/features/updates/public';
 import { appDependencies } from '@/test/fakes/app';
 import { projectApi, projectRegistrySnapshot, workspaceAdapters } from '@/test/fakes/workspace';
 
@@ -12,6 +13,24 @@ import { projectApi, projectRegistrySnapshot, workspaceAdapters } from '@/test/f
 const SLOW = { timeout: 5_000 };
 
 afterEach(cleanup);
+
+const readyUpdate: UpdatesPort['read'] = async () => ({
+  ok: true,
+  state: {
+    autoCheckEnabled: true,
+    currentVersion: '2.8.0',
+    status: { phase: 'ready', version: '2.8.1' },
+  },
+});
+
+const updates: UpdatesPort = {
+  check: readyUpdate,
+  openReleasePage: readyUpdate,
+  read: readyUpdate,
+  runPrimaryAction: readyUpdate,
+  setAutoCheck: readyUpdate,
+  subscribe: () => () => undefined,
+};
 
 describe('workspace titlebar', () => {
   it('says Welcome while no folder is open instead of naming the hidden chat', async () => {
@@ -144,4 +163,29 @@ describe('Chats mode', () => {
     await waitFor(() => expect(screen.getAllByRole('heading', { name: chatName })).toHaveLength(1));
     expect(screen.getByRole('heading', { name: chatName }).closest('header')).toBeNull();
   });
+
+  it('marks the collapsed sidebar control while its foot holds a notice', async () => {
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <App dependencies={appDependencies({ updates })} />
+      </Providers>,
+    );
+
+    expect(
+      await screen.findByText('StashBase 2.8.1 is ready to install.', {}, SLOW),
+    ).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Hide files sidebar' }));
+    // Collapsing takes the card off screen, so the control that brings it
+    // back carries the mark, and says so to a screen reader.
+    const show = await screen.findByRole('button', { name: 'Show files sidebar' });
+    expect(show.getAttribute('aria-description')).toBe('Has notices');
+    expect(screen.getByTestId('sidebar-notice-dot')).not.toBeNull();
+
+    await user.click(show);
+    await user.click(screen.getByRole('button', { name: 'Dismiss update notification' }));
+    await user.click(screen.getByRole('button', { name: 'Hide files sidebar' }));
+    await screen.findByRole('button', { name: 'Show files sidebar' });
+    expect(screen.queryByTestId('sidebar-notice-dot')).toBeNull();
+  }, 20_000);
 });

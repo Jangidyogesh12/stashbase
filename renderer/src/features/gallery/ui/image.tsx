@@ -51,7 +51,7 @@ export function GalleryImage({
         <Button
           aria-label="Retry screenshot"
           size="compact"
-          variant="ghost"
+          variant="tertiary"
           onClick={() => {
             setAttempt(Date.now());
             setFailed(false);

@@ -31,9 +31,10 @@ export function AgentDecisionCard({
 }) {
   const shape = useShape();
   return (
+    // Paper like every card set in the transcript: a hairline and no fill.
     <div
       className={cn(
-        'relative flex min-h-[60px] min-w-0 flex-col overflow-hidden border border-border bg-surface-2 pb-4',
+        'relative flex min-h-[60px] min-w-0 flex-col overflow-hidden border border-border/50 pb-4',
         shape.panel,
       )}
     >

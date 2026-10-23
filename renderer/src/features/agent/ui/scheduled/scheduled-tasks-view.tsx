@@ -175,7 +175,7 @@ export function ScheduledTasksView({
               {tasks.loadFailure && (
                 <div className="flex items-center gap-2">
                   <FailureNotice className="m-0" failure={tasks.loadFailure} />
-                  <Button onClick={tasks.retry} size="compact" variant="ghost">
+                  <Button onClick={tasks.retry} size="compact" variant="tertiary">
                     Retry
                   </Button>
                 </div>

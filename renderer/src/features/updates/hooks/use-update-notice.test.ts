@@ -63,6 +63,7 @@ describe('useUpdateNotice', () => {
     expect(result.current.offer).toEqual({
       actionLabel: 'Restart to update',
       message: 'StashBase 1.5.0 is ready to install.',
+      recovers: false,
     });
   });
 
@@ -114,7 +115,7 @@ describe('useUpdateNotice', () => {
   it('asks again when the table names the action a check', async () => {
     const updates = harness(accepted({ phase: 'error' }));
     const { result } = renderHook(() => useUpdateNotice(updates.port));
-    await waitFor(() => expect(result.current.offer?.actionLabel).toBe('Try again'));
+    await waitFor(() => expect(result.current.offer?.actionLabel).toBe('Retry'));
 
     await act(async () => result.current.act());
     expect(updates.port.check).toHaveBeenCalledTimes(1);

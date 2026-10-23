@@ -98,9 +98,9 @@ it('imports desktop files into the folder they are dropped on, and never a dropp
 
   fireDrag(docs, 'dragover', desktopDrag([new File(['a'], 'album')], true));
   fireDrag(docs, 'drop', desktopDrag([new File(['a'], 'album')], true));
-  expect(
-    await screen.findByText('Choose files to import. To use a whole folder, open it as a project.'),
-  ).not.toBeNull();
+  expect((await screen.findByRole('alert')).textContent).toBe(
+    'Choose files to import. To use a whole folder, open it as a project.',
+  );
   expect(upload).not.toHaveBeenCalled();
 
   const scan = new File(['scan'], 'scan.pdf');

@@ -2802,6 +2802,47 @@ not the truth of a test's claims or intent metadata.
 
 ## Cross-cutting Gaps
 
+- **Interface consistency pass (2026-10-23):** the
+  [Visual Style](../design-docs/visual-style.md) rules for cards, buttons,
+  working buttons, menus, drop targets and dots, and the
+  [Glossary](../design-docs/glossary.md) terms for chat, approval and the
+  Default Agent, were applied across the renderer and host copy. Owners:
+  `lib/local/drop-target.ts` (the one drop highlight), `components/ui/menu-item.tsx`
+  (`destructive`), `features/workspace/ui/file-tree-menu.tsx` (the tree menu on
+  the shared kit, opened by right click or a row's "…"), and
+  `server/agent-runtime-installer.ts` with `POST /api/terminal/clis/:id/stop`
+  (a stoppable runtime sign-in that asks for the browser only once one opens).
+  Unit evidence: `access-dialog.test.tsx` (hand-off to the account dialog,
+  failures kept, Stop waiting), `use-account.test.ts`,
+  `account-access-dialog.test.tsx`, `runtime-row.test.tsx`, the installer
+  tests, `menu-item.test.tsx`, `file-tree-menu.test.tsx`,
+  `conversation-tree.test.tsx`, `context-tiles.test.tsx` (one chip or tile
+  predicate before and after sending). A built-app pass showed the tree's "…" and its
+  shared menu with Delete last in the error colour; Storybook showed the paper
+  turn-changes, approval and upgrade cards, the Agents panel and the account
+  dialog. Real CLI and browser sign-in, the stop route against a live login,
+  and dark-theme composition of the paper cards are unproven.
+- **Notice placement (2026-10-23):** the
+  [Visual Style](../design-docs/visual-style.md) places a notice inline, in
+  the strip, floating, or in the sidebar's corner. `shared/ui/notice.tsx`
+  owns the strip and the floating and corner cards; the window strip and every
+  document strip draw through `NoticeStrip`, and only the sign-in offer and its
+  wait keep their own centred banner. `app/composition/folder/use-workspace-notices.ts`
+  sorts the shell's own notices: preparation the shell ran reports from the
+  corner, a reprocess the reader asked for and turn reviews that did not open
+  float, and a host folder disagreement holds the strip beside the sign-in
+  banner. The file-tree menu, opened without a trigger, is named through
+  `DropdownContent`'s `aria-label`. Document open and link failures float in
+  `documents/ui/workspace/workspace.tsx` and the HTML, DOCX and Markdown viewers;
+  `features/updates/ui/update-notice.tsx` is a corner card, and
+  `app/composition/layout/workspace-titlebar.tsx` marks the collapsed sidebar's
+  control while the corner holds a notice. `use-workspace-notices.test.ts`
+  covers the sorting and `workspace-titlebar.test.tsx` the collapsed mark.
+  A driven pass of the built app refused a Markdown link with the external
+  open stubbed to fail. The card floated on one line below the pane's reading
+  bar, left its controls uncovered, and Dismiss cleared it, in light and dark.
+  The corner card, the strips, and the long-sentence wrap were reviewed in
+  Storybook only.
 - **Native crash recovery (2026-09-16):** confirmed renderer termination
   releases its save barrier; a live renderer timeout still blocks close.
   Lifecycle tests cover reload and refusal, and an isolated real Electron

@@ -76,7 +76,7 @@ function mapIndexStatus(wire: IndexStatusResponseWire): FolderIndexStatus {
   };
 }
 
-const SCOPE_LOST = 'This folder is no longer available in this window.';
+const SCOPE_LOST = 'This project is no longer available in this window.';
 
 /** The daemon also names a vanished folder in the failure body, ahead of any
  *  status the shared ladder could read. */

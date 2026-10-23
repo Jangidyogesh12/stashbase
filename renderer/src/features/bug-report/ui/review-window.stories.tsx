@@ -44,7 +44,7 @@ type Story = StoryObj<typeof meta>;
 
 const clickPrepare = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   const canvas = within(canvasElement);
-  await userEvent.click(await canvas.findByRole('button', { name: 'Prepare Report' }));
+  await userEvent.click(await canvas.findByRole('button', { name: 'Prepare report' }));
 };
 
 export const Reviewing: Story = {};
@@ -82,7 +82,7 @@ export const Preparing: Story = {
   args: { prepare: () => new Promise<PrepareOutcome>(() => undefined) },
   play: async (context) => {
     await clickPrepare(context);
-    await within(context.canvasElement).findByRole('button', { name: 'Preparing…' });
+    await within(context.canvasElement).findByText('Checking and preparing the report…');
   },
 };
 
@@ -103,7 +103,7 @@ export const ReadyHandoffFailed: Story = {
   },
   play: async (context) => {
     await clickPrepare(context);
-    await within(context.canvasElement).findByRole('button', { name: 'Try Again' });
+    await within(context.canvasElement).findByRole('button', { name: 'Retry' });
   },
 };
 

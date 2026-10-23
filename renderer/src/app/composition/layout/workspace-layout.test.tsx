@@ -48,6 +48,7 @@ function mount(overrides: Partial<WorkspaceComposition> = {}) {
   }
   const composition: WorkspaceComposition = {
     dialogs: <div data-testid="dialogs" />,
+    floatingNotices: null,
     hasActiveFolder: true,
     notices: null,
     panes: <div data-testid="panes" />,
@@ -118,7 +119,7 @@ describe('workspace layout', () => {
 
     // What the reader can correct interrupts; a capability that could not
     // answer is said quietly.
-    expect(screen.getByRole('alert').textContent).toBe('Preparation was refused.Dismiss');
+    expect(screen.getByRole('alert').textContent).toBe('Preparation was refused.');
     expect(screen.getByRole('status').textContent).toBe('The host lost this folder.');
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Dismiss' }));

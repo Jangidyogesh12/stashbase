@@ -13,7 +13,10 @@ import { useCallback, useRef, useState } from 'react';
 
 import { useBootProgress } from '@/app/bootstrap/use-boot-progress';
 import type { TurnReview } from '@/app/composition/folder/use-turn-review';
-import { useWorkspaceNotices } from '@/app/composition/folder/use-workspace-notices';
+import {
+  useWorkspaceNotices,
+  type WorkspaceNoticePlacement,
+} from '@/app/composition/folder/use-workspace-notices';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
 import type { SettingsSectionId, SettingsTarget } from '@/features/settings/public';
 import type {
@@ -21,7 +24,6 @@ import type {
   WorkspaceRuntime,
   WorkspaceSessionController,
 } from '@/features/workspace/public';
-import type { WorkspaceNotice } from '@/shared/domain/workspace-notice';
 import { useCommandSurface, type CommandSurface } from '@/shared/runtime/use-command-surface';
 
 import type { PreparationCommands } from './use-preparation-commands';
@@ -70,8 +72,8 @@ export interface SettingsCommand {
 
 export interface WorkspaceCommands {
   navigator: SidebarNavigatorState;
-  /** Things raised by work the reader did not ask about directly. */
-  notices: readonly WorkspaceNotice[];
+  /** Things raised outside any one panel, sorted by where each is shown. */
+  notices: WorkspaceNoticePlacement;
   quickOpen: Pick<CommandSurface, 'close' | 'open'>;
   settings: SettingsCommand;
   /** True once the window has settled far enough to show the Agent. */
@@ -95,7 +97,7 @@ export function useWorkspaceCommands({
   documents: DocumentTabsRuntime | null;
   hostFailure: string | null;
   project: ProjectRegistrySnapshot | null;
-  preparation: Pick<PreparationCommands, 'dismissFailure' | 'failure'>;
+  preparation: Pick<PreparationCommands, 'dismissFailure' | 'failure' | 'failureRequested'>;
   revisions: TurnReview;
   session: WorkspaceSessionController;
   workspace: WorkspaceRuntime | null;
@@ -143,6 +145,7 @@ export function useWorkspaceCommands({
     dismissRevisionFailure: revisions.dismiss,
     hostFailure,
     preparationFailure: preparation.failure,
+    preparationRequested: preparation.failureRequested,
     revisionFailures: revisions.failures,
   });
 
