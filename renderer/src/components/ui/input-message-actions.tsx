@@ -3,7 +3,8 @@
  *
  *  That control has three modes and the module derives them rather than being
  *  told — Send while idle, Queue while the assistant is responding and the
- *  draft has something in it, Stop while it is responding and the draft is
+ *  draft has something in it (Send now when the owner hands that draft to the
+ *  response in progress), Stop while it is responding and the draft is
  *  empty. Send and Queue share the arrow-up glyph, so only the Stop⇄arrow
  *  swap animates. Slot content is consumer-authored, which is why the compact
  *  step scales every button in the row through a scoped override. */
@@ -69,6 +70,8 @@ interface ComposerActionsProps {
   streaming: boolean;
   /** A draft submitted mid-response can be staged instead of sent. */
   queueable: boolean;
+  /** A draft submitted mid-response joins the running response instead. */
+  steerable: boolean;
   /** Send, or queue while streaming — the same call either way. */
   onSend: () => void;
   /** Halt the current response. Absent means the composer offers no Stop. */
@@ -84,6 +87,7 @@ export function ComposerActions({
   canSend,
   streaming,
   queueable,
+  steerable,
   onSend,
   onStop,
 }: ComposerActionsProps) {
@@ -101,7 +105,14 @@ export function ComposerActions({
       : onStop
         ? 'stop'
         : 'send';
-  const label = mode === 'stop' ? 'Stop' : mode === 'queue' ? 'Queue message' : sendLabel;
+  const label =
+    mode === 'stop'
+      ? 'Stop'
+      : mode === 'queue'
+        ? steerable
+          ? 'Send now'
+          : 'Queue message'
+        : sendLabel;
   const leftContent = typeof leftSlot === 'function' ? leftSlot(slotContext) : leftSlot;
   const rightContent = typeof rightSlot === 'function' ? rightSlot(slotContext) : rightSlot;
 

@@ -112,6 +112,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       onQueueChange,
       onEditQueued,
       showQueue = true,
+      onSteer,
       sendable = true,
       sendableWithoutText = false,
       className,
@@ -164,20 +165,25 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       (trimmed.length > 0 || composerFiles.items.length > 0 || sendableWithoutText);
     const dropHint = composerFiles.dragOver && composerFiles.supported;
 
-    const handleSend = useCallback(() => {
-      if (!canSend) return;
-      // While the assistant is streaming, a submit enqueues instead of sending:
-      // snapshot the draft (text + currently-attached files) into a queue item,
-      // then clear the composer and keep focus.
-      if (composerQueue.streaming && composerQueue.supported) {
-        composerQueue.enqueue(trimmed, composerFiles.items);
-        onValueChange('');
-        composerFiles.replace([]);
-        requestAnimationFrame(focusInput);
-        return;
-      }
-      onSend?.(trimmed, composerFiles.items);
-    }, [canSend, composerQueue, composerFiles, trimmed, onSend, onValueChange, focusInput]);
+    const handleSend = useCallback(
+      (options?: { queue?: boolean }) => {
+        if (!canSend) return;
+        // While the assistant is streaming, a submit goes to the running
+        // response when the owner takes that, and otherwise into the queue as
+        // a snapshot of the draft (text + attached files). Either way the
+        // composer clears and keeps focus.
+        if (composerQueue.streaming && composerQueue.supported) {
+          if (onSteer && !options?.queue) onSteer(trimmed, composerFiles.items);
+          else composerQueue.enqueue(trimmed, composerFiles.items);
+          onValueChange('');
+          composerFiles.replace([]);
+          requestAnimationFrame(focusInput);
+          return;
+        }
+        onSend?.(trimmed, composerFiles.items);
+      },
+      [canSend, composerQueue, composerFiles, trimmed, onSend, onSteer, onValueChange, focusInput],
+    );
 
     const handleContainerMouseDown = useCallback(
       (event: React.MouseEvent<HTMLDivElement>) => {
@@ -269,9 +275,10 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
             canSend={canSend}
             disabled={disabled}
             leftSlot={leftSlot}
-            onSend={handleSend}
+            onSend={() => handleSend()}
             onStop={onStop}
             queueable={composerQueue.supported}
+            steerable={onSteer !== undefined}
             rightSlot={rightSlot}
             sendLabel={sendLabel}
             slotContext={slotContext}

@@ -182,6 +182,12 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
         }
         return false;
       };
+      // Enter sends. Mid-response, Alt+Enter keeps the follow-up for after
+      // the reply instead of handing it to the reply in progress.
+      const submit = (options?: { queue: boolean }) => {
+        if (!ctxRef.current.disabled) ctxRef.current.submit(options);
+        return true;
+      };
       // Tab on an empty field takes the placeholder as the draft when the
       // composer says it is a request, and only then: a hint is not a draft.
       const acceptPlaceholder = (target: EditorView) => {
@@ -221,14 +227,8 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
             keymap.of([
               { key: 'ArrowDown', run: () => runListboxKey('ArrowDown') },
               { key: 'ArrowUp', run: () => runListboxKey('ArrowUp') },
-              {
-                key: 'Enter',
-                run: () => {
-                  if (runListboxKey('Enter')) return true;
-                  if (!ctxRef.current.disabled) ctxRef.current.submit();
-                  return true;
-                },
-              },
+              { key: 'Enter', run: () => runListboxKey('Enter') || submit() },
+              { key: 'Alt-Enter', run: () => submit({ queue: true }) },
               { key: 'Shift-Enter', run: insertNewline },
               { key: 'Tab', run: (target) => runListboxKey('Tab') || acceptPlaceholder(target) },
               { key: 'Escape', run: () => runListboxKey('Escape') },

@@ -1,34 +1,22 @@
 /** Presents shaped conversation blocks in order, with day breaks and a quiet
  *  action row for settled prompts and replies. */
-import { Check, Copy, Pencil } from 'lucide-react';
 import { Fragment, memo, useCallback, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { ChatMessage, ChatMessageAction } from '@/components/ui/chat-message';
-import { FileTypeIcon } from '@/components/ui/file-type-icon';
+import { ChatMessage } from '@/components/ui/chat-message';
 import { ThinkingIndicator } from '@/components/ui/thinking-indicator';
 import { agentRoleCallView } from '@/features/agent/domain/agent-role-call';
-import { segmentFileMentions, type AgentContextItem } from '@/features/agent/domain/context';
+import type { AgentContextItem } from '@/features/agent/domain/context';
 import { agentQuestions } from '@/features/agent/domain/question';
 import { latestUserBlock, type AgentTranscriptBlock } from '@/features/agent/domain/session';
 import type { AgentPermissionDecision } from '@/features/agent/domain/session-command';
-import {
-  promptTimeLabel,
-  replyTimeLabel,
-  startOfLocalDay,
-  transcriptDayBreaks,
-} from '@/features/agent/domain/time';
+import { replyTimeLabel, startOfLocalDay, transcriptDayBreaks } from '@/features/agent/domain/time';
 import type { AgentModelRefreshView } from '@/features/agent/hooks/use-agent-model-refresh';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
-import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
-import { CollapsibleUserText } from '@/features/agent/ui/transcript/collapsible-user-text';
-import { useShape } from '@/lib/shape-context';
-import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
-import { writeToClipboard } from '@/shared/ui/clipboard';
-import { basePathName } from '@/shared/utils/file-path';
 
 import { AgentActivityGroup, AgentPermissionCard, visibleActivitySteps } from './activity';
+import { CopyAction } from './copy-action';
 import { DayDivider } from './day-divider';
 import { AgentMarkdown } from './markdown';
 import { AgentQuestionCard } from './question-card';
@@ -40,42 +28,16 @@ import { TurnFailure } from './turn-failure';
 export { closingReplies } from './transcript-order';
 
 import { useTranscriptPage } from './use-transcript-page';
+import { UserMessage } from './user-message';
 
-/** Copies the untouched source text; the glyph confirms for a moment. */
-function CopyAction({ label, text }: { label: string; text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    void writeToClipboard(text).then(
-      () => {
-        setCopied(true);
-        globalThis.setTimeout(() => setCopied(false), 1_500);
-      },
-      // A host that refused the write has not copied anything, so the glyph
-      // stays as it was rather than confirming something that did not happen.
-      () => undefined,
-    );
-  };
-  return (
-    <ChatMessageAction
-      icon={copied ? Check : Copy}
-      label={copied ? 'Copied' : label}
-      onClick={copy}
-    />
-  );
+/** A follow-up waiting for the running turn to read it. */
+export interface PendingFollowUp {
+  id: string;
+  text: string;
+  context: AgentContextItem[];
 }
 
-/** Context as it was sent, or the replayed attachments a native history
- *  record kept when this renderer never bound them. */
-function sentContext(block: Extract<AgentTranscriptBlock, { kind: 'user' }>): AgentContextItem[] {
-  if (block.context) return block.context;
-  return (block.attachments ?? []).map((attachment) => ({
-    dims: attachment.dims,
-    kind: 'transient',
-    name: attachment.name,
-    path: attachment.path,
-    previewUrl: attachment.previewUrl,
-  }));
-}
+const NO_PENDING: readonly PendingFollowUp[] = [];
 
 const TranscriptBlock = memo(function TranscriptBlock({
   block,
@@ -119,72 +81,15 @@ const TranscriptBlock = memo(function TranscriptBlock({
   runtimeUpdate?: AgentRuntimeUpdateView | undefined;
   transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
-  const shape = useShape();
   if (block.kind === 'user') {
-    const context = sentContext(block);
-    const transientPaths = context.flatMap((item) =>
-      item.kind === 'transient' ? [item.path] : [],
-    );
-    const segments = segmentFileMentions(block.text, transientPaths);
-    const mentioned = new Set(
-      segments.flatMap((segment) => (segment.kind === 'mention' ? [segment.path] : [])),
-    );
-    // A source the text already mentions inline is not repeated as a tile;
-    // only sources bound without a mention, such as a dropped row, get one.
-    const tiles = context.filter(
-      (item) => item.kind !== 'source' || !mentioned.has(item.source.path),
-    );
     return (
-      <div className="flex max-w-[72%] flex-col items-end gap-1.5 self-end not-first:mt-4">
-        <SentContextTiles fileFor={transientFile} items={tiles} />
-        <ChatMessage
-          actions={
-            <>
-              <CopyAction label="Copy message" text={block.text} />
-              {editable && onEditPrompt && (
-                <ChatMessageAction
-                  icon={Pencil}
-                  label="Reuse message"
-                  onClick={() => onEditPrompt(block.id)}
-                />
-              )}
-            </>
-          }
-          className="max-w-full"
-          from="user"
-          time={block.at === undefined ? undefined : promptTimeLabel(block.at, now)}
-        >
-          <CollapsibleUserText>
-            <span className="sr-only">You: </span>
-            {segments.map((segment) =>
-              segment.kind === 'text' ? (
-                segment.text
-              ) : (
-                // The same token the mention wore in the draft: paper, with an
-                // inset hairline that adds nothing to the line's height, and the
-                // muted file glyph the @ list drew.
-                <span
-                  className={cn(
-                    'mx-px inline-flex max-w-full items-center gap-1 px-1.5 py-px align-baseline font-medium ring-1 ring-border/50 ring-inset',
-                    shape.chip,
-                  )}
-                  key={`${segment.start}:${segment.path}`}
-                  title={segment.path}
-                >
-                  <FileTypeIcon
-                    aria-hidden="true"
-                    className="shrink-0 text-muted-foreground"
-                    path={segment.path}
-                    size={12}
-                  />
-                  <span className="truncate">{basePathName(segment.path)}</span>
-                  <span className="sr-only"> (file mention: {segment.path})</span>
-                </span>
-              ),
-            )}
-          </CollapsibleUserText>
-        </ChatMessage>
-      </div>
+      <UserMessage
+        block={block}
+        editable={editable}
+        now={now}
+        onEditPrompt={onEditPrompt}
+        transientFile={transientFile}
+      />
     );
   }
   if (block.kind === 'assistant') {
@@ -258,12 +163,16 @@ export const AgentTranscript = memo(function AgentTranscript({
   onPermission,
   onRetry,
   onReviewTurnChange,
+  pending = NO_PENDING,
   runtimeUpdate,
   sourceFor,
   transientFile,
 }: {
   activeTurn: boolean;
   blocks: AgentTranscriptBlock[];
+  /** Follow-ups sent into the running turn that its runtime has not read
+   *  yet. They wait, dimmed, below the turn and join it where it reads them. */
+  pending?: readonly PendingFollowUp[] | undefined;
   focusBlockId?: string | undefined;
   /** Reads the hosted models again, offered on a turn refused because the
    *  chosen model's configuration changed. Absent where no hosted list exists. */
@@ -388,6 +297,22 @@ export const AgentTranscript = memo(function AgentTranscript({
         ),
       )}
       {activeTurn && !narrated && <ThinkingIndicator className="px-0" size="compact" />}
+      {pending.map((prompt) => (
+        <div className="flex min-w-0 flex-col opacity-60" key={prompt.id}>
+          <span className="sr-only">Not read yet. </span>
+          <UserMessage
+            block={{
+              ...(prompt.context.length > 0 ? { context: prompt.context } : {}),
+              id: prompt.id,
+              kind: 'user',
+              text: prompt.text,
+            }}
+            editable={false}
+            now={now}
+            transientFile={transientFile}
+          />
+        </div>
+      ))}
     </>
   );
 });

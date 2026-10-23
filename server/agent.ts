@@ -313,6 +313,10 @@ export class AgentSession implements AttributedAgentSession {
   private pendingResult: ClaudeResultMessage | null = null;
   private interruptRequested = false;
   private interruptTask: Promise<void> | null = null;
+  /** Follow-ups pushed into the running turn, by the uuid Claude reports
+   *  them under, until Claude starts reading one. `returned` marks one the
+   *  renderer has already been told to send as a turn of its own. */
+  private steers = new Map<string, { id: string; returned: boolean }>();
   private nativeDerivedReadRedirected = new Set<string>();
   /** The SDK session_id, captured from the init message. Sent to the
    *  client so the history dropdown can mark this session active. */
@@ -580,6 +584,13 @@ export class AgentSession implements AttributedAgentSession {
       }
       return;
     }
+    // Not in the SDK's message union, but the CLI reports every queued input
+    // that carries a uuid through it.
+    const lifecycle = msg as { type: string; command_uuid?: unknown; state?: unknown };
+    if (lifecycle.type === 'command_lifecycle') {
+      this.onSteerLifecycle(String(lifecycle.command_uuid ?? ''), String(lifecycle.state ?? ''));
+      return;
+    }
     if (msg.type === 'system' && msg.subtype === 'api_retry') {
       log.info(`Claude SDK is retrying: attempt ${msg.attempt} of ${msg.max_retries} (delay ${msg.retry_delay_ms}ms)`);
       return;
@@ -643,6 +654,46 @@ export class AgentSession implements AttributedAgentSession {
     }
   }
 
+  /** Claude reads a follow-up at its next tool boundary, or runs it right
+   *  after the reply when none comes; both stay inside the turn the renderer
+   *  shows, since the turn ends only at the CLI's idle. A Stop that lands
+   *  first must not let it run on as a turn nobody asked for, so it is
+   *  interrupted as it starts and handed back to be sent next instead. */
+  private onSteerLifecycle(uuid: string, state: string): void {
+    const steer = this.steers.get(uuid);
+    if (!steer) return;
+    if (state !== 'started' && state !== 'cancelled' && state !== 'completed') return;
+    this.steers.delete(uuid);
+    const unwanted = steer.returned || this.interruptRequested || !this.turnActive;
+    if (state === 'started' && unwanted) {
+      void this.q?.interrupt().catch((err: unknown) => {
+        log.debug(`Claude follow-up interrupt failed: ${errorMessage(err)}`);
+      });
+    }
+    if (steer.returned) return;
+    const taken = state !== 'cancelled' && !unwanted;
+    this.send({
+      t: 'steer-result',
+      id: steer.id,
+      ok: taken,
+      ...(taken ? {} : { message: 'Claude did not read this before the turn ended.' }),
+    });
+  }
+
+  /** The turn ended before Claude started reading these: they go next. */
+  private returnSteers(): void {
+    for (const steer of this.steers.values()) {
+      if (steer.returned) continue;
+      steer.returned = true;
+      this.send({
+        t: 'steer-result',
+        id: steer.id,
+        ok: false,
+        message: 'Claude did not read this before the turn ended.',
+      });
+    }
+  }
+
   private completeClaudeTurn(msg: ClaudeResultMessage): void {
     const pendingInterrupt = this.interruptTask;
     if (pendingInterrupt) {
@@ -662,6 +713,7 @@ export class AgentSession implements AttributedAgentSession {
     if (!this.turnActive) return;
     const isError = msg.is_error === true;
     const wasCancelled = this.interruptRequested;
+    this.returnSteers();
     this.turnActive = false;
     this.pendingResult = null;
     this.interruptRequested = false;
@@ -793,6 +845,27 @@ export class AgentSession implements AttributedAgentSession {
         break;
       }
       case 'refresh-skills': void this.publishSkills(); break;
+      case 'steer': {
+        const id = typeof msg.id === 'string' ? msg.id : '';
+        const body = typeof msg.text === 'string' ? msg.text : '';
+        if (!id || !body.trim()) return;
+        // Without the CLI's idle event a follow-up Claude runs after the
+        // reply would settle as a turn of its own, out of the renderer's view.
+        if (!this.turnActive || this.interruptRequested || !this.nativeSessionStateSeen) {
+          this.send({ t: 'steer-result', id, ok: false, message: 'Claude is not running a turn that can take this.' });
+          return;
+        }
+        const uuid = randomUUID();
+        this.steers.set(uuid, { id, returned: false });
+        this.input.push({
+          type: 'user',
+          message: { role: 'user', content: body },
+          parent_tool_use_id: null,
+          priority: 'next',
+          uuid,
+        } as SDKUserMessage);
+        break;
+      }
       case 'permission-reply': {
         const id = typeof msg.id === 'string' ? msg.id : '';
         const p = this.pending.get(id);

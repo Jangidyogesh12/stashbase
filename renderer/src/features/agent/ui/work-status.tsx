@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import { agentSessionIsBusy } from '@/features/agent/domain/session';
 
-/** Recovery actions for an uncertain, failed, or paused turn stay above the composer. */
+/** Recovery actions for an uncertain or failed turn stay above the composer. */
 export function AgentWorkStatus({
   session,
   onOpenSettings,
@@ -24,8 +24,7 @@ export function AgentWorkStatus({
     !['network', 'rate-limit', 'model-changed'].includes(failure.failure);
   const unknown = state.delivery === 'unknown';
   const repair = needsRepair && state.delivery === 'failed';
-  const paused = state.queuePaused && state.queuedPrompts.length > 0;
-  if (!unknown && !repair && !paused) return null;
+  if (!unknown && !repair) return null;
   return (
     <div className="mx-auto flex w-full max-w-[46rem] flex-wrap items-center gap-2 px-5 pb-2 text-caption text-muted-foreground">
       {unknown && (
@@ -47,23 +46,6 @@ export function AgentWorkStatus({
         <Button size="compact" variant="tertiary" onClick={onOpenSettings}>
           Open agent settings
         </Button>
-      )}
-      {paused && (
-        <>
-          <span>{state.queuedPrompts.length} queued · paused</span>
-          <Button
-            size="compact"
-            variant="secondary"
-            disabled={
-              state.connection.kind !== 'live' ||
-              agentSessionIsBusy(state) ||
-              state.delivery === 'unknown'
-            }
-            onClick={() => void session.continueQueue()}
-          >
-            Continue queue
-          </Button>
-        </>
       )}
     </div>
   );

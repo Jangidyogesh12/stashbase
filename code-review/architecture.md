@@ -440,6 +440,12 @@ stable status without download, retry, or a new durable demand latch.
   agents run do not release the turn or its queue. Native runtimes that emit no
   state events retain the result boundary. Stop still requires native completion
   and interrupt acknowledgement; process death remains a failed session exit.
+  A follow-up joins the running turn as a uuid-tagged `priority: 'next'` input
+  only while the CLI reports session state; its `command_lifecycle` `started`
+  confirms it. Claude reads it at a tool boundary or runs it after the reply,
+  both inside the turn that ends at idle. One a Stop or the turn's end overtook
+  is interrupted as it starts and returned. Replay restores follow-ups read
+  mid-turn, stored as `queued_command` attachments the SDK reader omits.
 - OpenQuill retains native finish reasons; an unknown final completion is a
   failed turn. Native errors during execution wait for idle, and message events
   retain their originating turn so trailing error updates cannot fail a new turn.
@@ -536,8 +542,12 @@ stable status without download, retry, or a new durable demand latch.
 - Context/attachments are explicit. Validate source identity before send; stale
   context blocks it. The queue captures prompt, context, skill, and id, and Retry
   uses that exact submission after checking locally available context. Sessions,
-  not mounted composers, advance queues only after normal completion; cancellation,
-  failure, and connection loss pause them. Transport refusal retains the queued
+  not mounted composers, hold follow-ups sent into a running turn as pending
+  `steers` until the runtime's `steer-result`: a taken one becomes a user block
+  at that point, and a refused one, or one a turn or connection ended without,
+  goes to the head of the queue. Sessions advance queues after a completed or confirmed-stopped
+  turn; failure and connection loss hold them until a later turn completes or an
+  uncertain outcome is confirmed. Transport refusal retains the queued
   request; uncertain delivery retains the visible submission and forbids automatic
   resend. Clear only the accepted draft snapshot, never newer input. Explicit
   queue/message reuse refuses to overwrite another draft. A reused prompt starts a new turn rather

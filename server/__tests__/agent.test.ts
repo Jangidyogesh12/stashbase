@@ -363,6 +363,8 @@ async function startScriptedClaudeTurn(
   interrupt: () => Promise<void> = async () => {},
 ): Promise<{
   ws: FakeAgentWebSocket;
+  /** Every user message the session pushed into Claude's input stream. */
+  inputs: Array<{ uuid?: string; priority?: string; message: { content: unknown } }>;
   releaseMessages(): void;
   turnEvents(): TurnEvent[];
 }> {
@@ -374,6 +376,7 @@ async function startScriptedClaudeTurn(
   let finishStream!: () => void;
   const streamGate = new Promise<void>((resolve) => { finishStream = resolve; });
   let emitSessionState = false;
+  const inputs: Array<{ uuid?: string; priority?: string; message: { content: unknown } }> = [];
   const nativeQuery = {
     async *[Symbol.asyncIterator]() {
       await messageGate;
@@ -399,8 +402,9 @@ async function startScriptedClaudeTurn(
     'default',
     undefined,
     undefined,
-    ((request: { options: { env: NodeJS.ProcessEnv } }) => {
+    ((request: { prompt: AsyncIterable<(typeof inputs)[number]>; options: { env: NodeJS.ProcessEnv } }) => {
       emitSessionState = request.options.env.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS === '1';
+      void (async () => { for await (const input of request.prompt) inputs.push(input); })();
       return nativeQuery;
     }) as never,
     () => '/fake/claude',
@@ -420,6 +424,7 @@ async function startScriptedClaudeTurn(
 
   return {
     ws,
+    inputs,
     releaseMessages,
     turnEvents: () => ws.sent
       .map((value) => JSON.parse(value) as TurnEvent)
@@ -981,6 +986,87 @@ test('Claude keeps the turn running until background work and its continuation b
   assert.deepEqual(turn.turnEvents(), [
     { t: 'turn-start' }, { t: 'turn-end', isError: false }, { t: 'turn-start' },
   ]);
+});
+
+function claudeLifecycle(commandUuid: string, state: 'queued' | 'started' | 'completed' | 'cancelled'): SDKMessage {
+  return {
+    type: 'command_lifecycle', command_uuid: commandUuid, state,
+    uuid: randomUUID(), session_id: 'test-session',
+  } as unknown as SDKMessage;
+}
+
+function steerResults(ws: FakeAgentWebSocket): unknown[] {
+  return ws.sent.map((value) => JSON.parse(value) as { t: string }).filter((event) => event.t === 'steer-result');
+}
+
+test('Claude takes a follow-up into the running turn once it starts reading it', async (t) => {
+  let pushed!: () => void;
+  const pushedGate = new Promise<void>((resolve) => { pushed = resolve; });
+  let steerUuid = '';
+  const turnRef: { inputs?: Array<{ uuid?: string }> } = {};
+  async function* messages(): AsyncIterable<SDKMessage> {
+    yield claudeSessionState('running');
+    await pushedGate;
+    steerUuid = turnRef.inputs?.at(-1)?.uuid ?? '';
+    yield claudeLifecycle(steerUuid, 'queued');
+    yield claudeLifecycle(steerUuid, 'started');
+    yield claudeSuccessResult();
+    yield claudeLifecycle(steerUuid, 'completed');
+    yield claudeSessionState('idle');
+  }
+  const turn = await startScriptedClaudeTurn(t, 'claude-steer-window', messages());
+  turnRef.inputs = turn.inputs;
+  turn.releaseMessages();
+  await settle();
+  turn.ws.emit('message', JSON.stringify({ t: 'steer', id: 'follow-up', text: 'Also check the dates' }));
+  await settle();
+  const steer = turn.inputs.at(-1);
+  assert.equal(steer?.message.content, 'Also check the dates');
+  assert.equal(steer?.priority, 'next');
+  assert.ok(steer?.uuid, 'Claude reports the follow-up under the uuid it was pushed with');
+  assert.deepEqual(steerResults(turn.ws), [], 'Nothing is confirmed before Claude starts reading it');
+  pushed();
+  await settle();
+  assert.deepEqual(steerResults(turn.ws), [{ t: 'steer-result', id: 'follow-up', ok: true }]);
+  assert.deepEqual(turn.turnEvents(), [{ t: 'turn-start' }, { t: 'turn-end', isError: false }]);
+
+  turn.ws.emit('message', JSON.stringify({ t: 'steer', id: 'late', text: 'After the turn' }));
+  assert.deepEqual(steerResults(turn.ws).at(-1), {
+    t: 'steer-result', id: 'late', ok: false, message: 'Claude is not running a turn that can take this.',
+  });
+});
+
+test('Claude hands back a follow-up that a Stop overtook, interrupting it as it starts', async (t) => {
+  let stopped!: () => void;
+  const stopGate = new Promise<void>((resolve) => { stopped = resolve; });
+  let interrupts = 0;
+  const turnRef: { inputs?: Array<{ uuid?: string }> } = {};
+  async function* messages(): AsyncIterable<SDKMessage> {
+    yield claudeSessionState('running');
+    await stopGate;
+    const steerUuid = turnRef.inputs?.at(-1)?.uuid ?? '';
+    yield claudeErrorResult('error_during_execution', []);
+    // The CLI runs the queued follow-up as a turn of its own after a Stop.
+    yield claudeLifecycle(steerUuid, 'started');
+    yield claudeErrorResult('error_during_execution', []);
+    yield claudeSessionState('idle');
+  }
+  const turn = await startScriptedClaudeTurn(t, 'claude-steer-stop-window', messages(), async () => {
+    interrupts += 1;
+  });
+  turnRef.inputs = turn.inputs;
+  turn.releaseMessages();
+  await settle();
+  turn.ws.emit('message', JSON.stringify({ t: 'steer', id: 'follow-up', text: 'Also check the dates' }));
+  turn.ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+  stopped();
+  await settle();
+  assert.equal(interrupts, 2, 'The follow-up is interrupted as it starts');
+  assert.deepEqual(steerResults(turn.ws), [{
+    t: 'steer-result', id: 'follow-up', ok: false, message: 'Claude did not read this before the turn ended.',
+  }]);
+  assert.deepEqual(turn.turnEvents(), [{ t: 'turn-start' }, { t: 'turn-end', isError: false }]);
 });
 
 test('Claude reports a failed continuation instead of its earlier successful result', async (t) => {

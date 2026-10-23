@@ -43,8 +43,10 @@ function harness(
   const dispatcher = createPromptDispatcher({
     contextPort: options.contextPort ?? agentContextPort(),
     disposed: () => disposed,
+    enqueue: vi.fn(),
     environment: () => environment,
     ledger: createPromptLedger(),
+    sendSteer: vi.fn(() => true),
     signal: new AbortController().signal,
     start,
     state: () => state,

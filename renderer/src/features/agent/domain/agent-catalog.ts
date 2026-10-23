@@ -27,6 +27,9 @@ export interface AgentAbilities {
    *  order; empty means the mode control is not shown for it. */
   readonly modes: readonly AgentAccessMode[];
   readonly skills: boolean;
+  /** Whether a follow-up can join the turn already running instead of
+   *  waiting for it to end. */
+  readonly steering: boolean;
 }
 
 /**
@@ -143,7 +146,14 @@ export function undescribedAgent(id: AgentId): Agent {
     ready: false,
     needsSignIn: false,
     models: [],
-    abilities: { attachments: false, effort: false, models: false, modes: [], skills: false },
+    abilities: {
+      attachments: false,
+      effort: false,
+      models: false,
+      modes: [],
+      skills: false,
+      steering: false,
+    },
   };
 }
 

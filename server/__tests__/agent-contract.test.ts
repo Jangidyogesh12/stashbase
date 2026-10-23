@@ -43,7 +43,7 @@ test('every built-in runtime declares the fundamental Shared Agent Contract beha
 
 test('runtime-only capabilities stay adapter-specific', () => {
   const capabilities = Object.fromEntries(BUILT_IN_AGENT_ADAPTERS.map((adapter) => [adapter.id, adapter.capabilities]));
-  assert.equal(capabilities.claude!.steering, false);
+  assert.equal(capabilities.claude!.steering, true);
   assert.equal(capabilities.claude!.titleHint, false);
   assert.equal(capabilities.codex!.steering, true);
   assert.equal(capabilities.codex!.titleHint, true);

@@ -65,6 +65,12 @@ export interface QueueEntry {
 
 /** Capture context once when a draft enters the queue. Removing a row only
  * removes it; explicit reuse is owned by the session controls. */
+/** The queue as entries, with one more follow-up after the rest. */
+export function queueWith(state: AgentSessionState, text: string): QueueEntry[] {
+  const entries = state.queuedPrompts.map(({ id, text: queued }) => ({ id, text: queued }));
+  return [...entries, { id: crypto.randomUUID(), text }];
+}
+
 export function planQueue(state: AgentSessionState, entries: readonly QueueEntry[]) {
   const previous = new Map(state.queuedPrompts.map((prompt) => [prompt.id, prompt]));
   let draftTaken = false;

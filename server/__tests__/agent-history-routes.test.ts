@@ -143,6 +143,49 @@ test('production Claude replay joins SDK-selected active UUIDs to raw JSONL effo
   });
 });
 
+test('Claude replay shows a follow-up Claude read mid-turn where it read it', async (t) => {
+  const config = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-follow-up-'));
+  const project = path.join(config, 'projects', '-workspace');
+  const sessionId = '22222222-2222-4222-8222-222222222222';
+  fs.mkdirSync(project, { recursive: true });
+  const entry = (value: Record<string, unknown>) => JSON.stringify({ sessionId, isSidechain: false, ...value });
+  // The shape Claude writes: the follow-up is an attachment chained behind
+  // another attachment that hangs from the tool result it arrived with.
+  fs.writeFileSync(path.join(project, `${sessionId}.jsonl`), [
+    entry({ type: 'user', uuid: 'prompt', parentUuid: null, message: { role: 'user', content: 'Run the checks' } }),
+    entry({ type: 'assistant', uuid: 'call', parentUuid: 'prompt', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tool-1', name: 'Bash', input: { command: 'make check' } }] } }),
+    entry({ type: 'user', uuid: 'result', parentUuid: 'call', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'ok' }] } }),
+    entry({ type: 'attachment', uuid: 'snapshot', parentUuid: 'result', attachment: { type: 'prompt_snapshot' } }),
+    entry({ type: 'attachment', uuid: 'follow-up', parentUuid: 'snapshot', timestamp: '2026-10-23T09:49:48.004Z', attachment: { type: 'queued_command', prompt: 'Also check the dates', commandMode: 'prompt' } }),
+    entry({ type: 'assistant', uuid: 'reply', parentUuid: 'follow-up', message: { role: 'assistant', content: [{ type: 'text', text: 'Checks pass; dates too.' }] } }),
+    '',
+  ].join('\n'));
+  const previousConfig = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = config;
+  t.after(() => {
+    if (previousConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previousConfig;
+    fs.rmSync(config, { recursive: true, force: true });
+  });
+  // The SDK's reader keeps the conversation and drops every attachment.
+  const sanitized = [
+    { type: 'user' as const, uuid: 'prompt', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: 'Run the checks' } },
+    { type: 'assistant' as const, uuid: 'call', session_id: sessionId, parent_tool_use_id: null, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tool-1', name: 'Bash', input: { command: 'make check' } }] } },
+    { type: 'user' as const, uuid: 'result', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'ok' }] } },
+    { type: 'assistant' as const, uuid: 'reply', session_id: sessionId, parent_tool_use_id: null, message: { role: 'assistant', content: [{ type: 'text', text: 'Checks pass; dates too.' }] } },
+  ];
+  const history = claudeHistory.claudeHistoryActions({
+    belongsToFolder: async () => true,
+    getMessages: async () => sanitized,
+  });
+  const replay = await history.replay!(sessionId, '/workspace') as { messages: Array<{ kind: string; text?: string; at?: number }> };
+  assert.deepEqual(
+    replay.messages.map((block) => [block.kind, block.text]),
+    [['user', 'Run the checks'], ['tool', undefined], ['user', 'Also check the dates'], ['assistant', 'Checks pass; dates too.']],
+  );
+  assert.equal(replay.messages[2]?.at, Date.parse('2026-10-23T09:49:48.004Z'));
+});
+
 test('history rejects aggregate scope before calling a runtime', async () => {
   const app = express();
   sharedRoutes.mount(app);

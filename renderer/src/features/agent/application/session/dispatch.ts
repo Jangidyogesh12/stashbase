@@ -46,6 +46,10 @@ export interface AgentSessionEnvironment {
 
 const NO_ENVIRONMENT: AgentSessionEnvironment = { listing: null, readiness: {} };
 
+/** A running turn that is neither stopping nor uncertain can take a follow-up. */
+const takesFollowUp = (state: AgentSessionState) =>
+  agentTurnIsActive(state.connection) && state.delivery === 'idle';
+
 const refuseContext = () =>
   Promise.reject(
     new AgentContextError('unavailable', 'File context is unavailable in this session.'),
@@ -61,6 +65,8 @@ export interface AgentPromptDispatcherOptions {
   telemetryTurnId?(): string | undefined;
   contextPort: AgentContextPort;
   disposed(): boolean;
+  /** Queues a follow-up the running turn cannot take, from the draft. */
+  enqueue(text: string): void;
   environment(): AgentSessionEnvironment | null;
   ledger: AgentPromptLedger;
   signal: AbortSignal;
@@ -69,6 +75,8 @@ export interface AgentPromptDispatcherOptions {
   start(): void;
   state(): AgentSessionState;
   submit(prompt: PendingPrompt): boolean;
+  /** Puts a follow-up for the running turn on the wire; false when refused. */
+  sendSteer(id: string, text: string): boolean;
   /** Uploaded Files by temp path, so tiles can render what was sent. */
   transientFiles: Map<string, File>;
   transition(action: AgentSessionAction): void;
@@ -76,6 +84,11 @@ export interface AgentPromptDispatcherOptions {
 
 export interface AgentPromptDispatcher {
   send(text: string, options?: { queuedId?: string }): Promise<AgentSendResult>;
+  /** Hands the draft to the running turn, or queues it when that turn
+   *  cannot take it: a skill or files without text only start a turn, and so
+   *  does every prompt sent while the turn is stopping or its outcome is
+   *  unknown. */
+  steer(text: string): Promise<void>;
   attach(files: File[]): Promise<void>;
   cancel(): void;
 }
@@ -84,9 +97,11 @@ export function createPromptDispatcher({
   telemetryTurnId,
   contextPort,
   disposed,
+  enqueue,
   environment,
   ledger,
   signal,
+  sendSteer,
   start,
   state,
   submit,
@@ -223,6 +238,47 @@ export function createPromptDispatcher({
             transition({ kind: 'delivery', value: 'idle' });
         }
       }
+    },
+
+    async steer(text) {
+      const opening = state();
+      const prompt = text.trim();
+      if (disposed()) return;
+      // Files alone are not a message to read mid-turn; they start one.
+      if (!prompt || !takesFollowUp(opening) || opening.skill) {
+        enqueue(prompt);
+        return;
+      }
+      const steer = {
+        context: opening.context,
+        id: crypto.randomUUID(),
+        skill: null,
+        text: prompt,
+      };
+      const stale = staleContext(
+        validateContext(steer.context, {
+          ...(environment() ?? NO_ENVIRONMENT),
+          scope: opening.scope,
+          hasUpload: (path) => transientFiles.has(path),
+        }),
+      );
+      // The queue holds what cannot go now and refuses it there, with the reason.
+      if (stale.length > 0) {
+        enqueue(prompt);
+        return;
+      }
+      transition({ kind: 'steer-sent', prompt: steer });
+      const lines = await resolveLines(steer.context);
+      if (disposed()) return;
+      const current = state();
+      // A turn that ended meanwhile already sent this follow-up back to the queue.
+      if (!current.steers.some((item) => item.id === steer.id)) return;
+      if (
+        lines === 'stale' ||
+        !takesFollowUp(current) ||
+        !sendSteer(steer.id, renderPromptContext(prompt, lines))
+      )
+        transition({ id: steer.id, kind: 'steer-returned' });
     },
 
     async attach(files) {

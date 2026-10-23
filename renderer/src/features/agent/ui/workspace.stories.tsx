@@ -110,6 +110,7 @@ const abilities: Agent['abilities'] = {
   models: true,
   modes: ['default', 'plan', 'acceptEdits', 'auto'],
   skills: true,
+  steering: true,
 };
 
 const codexModels = [
@@ -168,6 +169,7 @@ function WorkspacePreview({
   context = false,
   docked = false,
   empty = false,
+  followUp = false,
   interrupted = false,
   preparation,
   ready = true,
@@ -177,6 +179,8 @@ function WorkspacePreview({
   context?: boolean;
   docked?: boolean;
   empty?: boolean;
+  /** A follow-up sent into the running turn waits for the agent to read it. */
+  followUp?: boolean;
   interrupted?: boolean;
   /** The step Codex's preparation stays on once the reader connects it. */
   preparation?: AgentPreparation;
@@ -213,6 +217,13 @@ function WorkspacePreview({
           queueMicrotask(() => {
             listener.onEvent({ error: null, kind: 'skills', skills: SKILLS, state: 'available' });
             listener.onEvent({ kind: 'ready' });
+            if (followUp) {
+              // A real turn that never answers, and a follow-up sent into it.
+              const session = next.activeSession();
+              void session
+                .sendPrompt('Compare their export formats.')
+                .then(() => session.steer('Check whether it exports PNG too.'));
+            }
             if (interrupted) {
               listener.onEvent({
                 kind: 'exited',
@@ -333,7 +344,7 @@ function WorkspacePreview({
       queueMicrotask(() => session.setSkill('review'));
     }
     return next;
-  }, [context, empty, interrupted, skills]);
+  }, [context, empty, followUp, interrupted, skills]);
 
   useEffect(() => () => runtime.dispose(), [runtime]);
 
@@ -389,6 +400,15 @@ export const InterruptedTurn: Story = {
   play: async () => {
     await readyWorkspace();
     await screen.findByText('Agent stream failed: connection reset by peer.');
+  },
+};
+
+/** A follow-up sent mid-turn waits, dimmed, until the agent reads it. */
+export const FollowUpWaiting: Story = {
+  args: { followUp: true },
+  play: async () => {
+    await readyWorkspace();
+    await screen.findByText(/Check whether it exports PNG too/);
   },
 };
 

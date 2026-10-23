@@ -26,6 +26,7 @@ const nativeAbilities: AgentAbilities = {
   models: true,
   modes: ['default', 'plan', 'acceptEdits', 'auto'],
   skills: true,
+  steering: true,
 };
 
 /** The bundled Agent supports attachments but has no model or effort picker. */
@@ -35,6 +36,7 @@ const plainAbilities: AgentAbilities = {
   models: false,
   modes: ['default', 'plan', 'acceptEdits', 'auto'],
   skills: false,
+  steering: false,
 };
 
 export function agentDefinition(overrides: Partial<Agent> = {}): Agent {

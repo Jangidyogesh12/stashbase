@@ -60,6 +60,9 @@ supported files directly.
 - **File → New Window** or **Cmd/Ctrl+Shift+N:** work in another window.
 - **Cmd/Ctrl+W:** close the active document tab.
 - **@ mentions in Chat:** find a file or folder and insert its relative path.
+- **Enter while the agent works:** with Claude or Codex, your message joins the
+  work in progress and the agent reads it at its next step. **Option/Alt+Enter**
+  keeps it for after the reply instead. Other agents always keep it for after.
 
 Tool calls and file edits can be reviewed in Chat. Use **Persona** in the
 composer to choose who the agent is when it talks and writes in this chat. Your

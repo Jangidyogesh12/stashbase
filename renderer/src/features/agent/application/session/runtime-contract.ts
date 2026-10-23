@@ -71,6 +71,9 @@ export interface AgentSessionRuntime {
   /** Validates and resolves the bound context, then sends the prompt. A
    *  queued id sends that prompt's own context snapshot. */
   sendPrompt(text?: string, options?: { queuedId?: string }): Promise<AgentSendResult>;
+  /** Hands the draft to the turn already running, on a runtime that can take
+   *  it; it waits in the queue instead when the turn cannot. */
+  steer(text: string): void;
   setAccessMode(mode: AgentAccessMode): void;
   setEffort(effort: string | null): void;
   /** Runs this Chat under a library persona, or none. A started session

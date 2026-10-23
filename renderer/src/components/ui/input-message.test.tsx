@@ -207,6 +207,29 @@ describe('InputMessage composer regions', () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it('hands a mid-response draft to the response when the owner takes it, and queues on request', async () => {
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    const onQueueChange = vi.fn();
+    const onSteer = vi.fn();
+    const onValueChange = vi.fn();
+    const props = { onQueueChange, onSteer, onValueChange, status: 'streaming' as const };
+    const view = render(fullComposer(seen, { ...props, value: 'keep it short' }));
+
+    expect(screen.getByRole('button', { name: 'Send now' })).not.toBeNull();
+    await userEvent.click(screen.getByRole('textbox', { name: 'Message' }));
+    await userEvent.keyboard('{Enter}');
+    expect(onSteer).toHaveBeenCalledWith('keep it short', []);
+    expect(onQueueChange).not.toHaveBeenCalled();
+    expect(onValueChange).toHaveBeenLastCalledWith('');
+
+    view.rerender(fullComposer(seen, { ...props, value: 'after that, a title' }));
+    seen.context?.submit({ queue: true });
+    expect(onSteer).toHaveBeenCalledOnce();
+    expect(onQueueChange).toHaveBeenCalledWith([
+      { files: [], id: expect.any(String), text: 'after that, a title' },
+    ]);
+  });
+
   it('removes an attachment from the preview row', async () => {
     const seen: { context: InputMessageEditorContext | null } = { context: null };
     const onFilesChange = vi.fn();

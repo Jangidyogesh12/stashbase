@@ -99,6 +99,10 @@ export interface AgentSessionState {
    *  after the request. */
   composerFocusRequested: boolean;
   queuedPrompts: AgentQueuedPrompt[];
+  /** Follow-ups sent into the running turn that its runtime has not taken
+   *  yet. Each becomes a user message where the runtime takes it, or goes
+   *  back to the head of the queue when the turn ends without it. */
+  steers: AgentQueuedPrompt[];
   nativeSessionId: string | null;
   transcript: AgentTranscriptBlock[];
   lastModified: number;
@@ -141,6 +145,7 @@ export function createAgentSessionState(options: {
     contextIssue: null,
     composerFocusRequested: false,
     queuedPrompts: [],
+    steers: [],
     nativeSessionId: null,
     transcript: [],
     lastModified: 0,
@@ -227,6 +232,8 @@ type AgentSessionStreamEvent =
   | { kind: 'notice'; message: string }
   | { kind: 'failed'; failure?: AgentTurnFailureReason | undefined; message: string }
   | { kind: 'turn-ended'; isError: boolean }
+  /** Whether the runtime took a follow-up into the running turn. */
+  | { kind: 'steer-result'; id: string; ok: boolean }
   | { kind: 'exited'; message: string | null }
   | { kind: 'scope-retired'; folderPath: string };
 
@@ -252,6 +259,12 @@ type AgentSessionLocalAction =
   | { kind: 'set-context-issue'; message: string | null }
   | { kind: 'request-composer-focus'; requested: boolean }
   | { kind: 'set-queue'; queue: AgentQueuedPrompt[] }
+  /** A follow-up left for the running turn; the draft it came from clears. */
+  | { kind: 'steer-sent'; prompt: AgentQueuedPrompt }
+  /** The runtime took it: it becomes a user message here, mid-turn. */
+  | { kind: 'steer-taken'; id: string; blockId: string; at: number }
+  /** The runtime did not take it, so it goes next instead. */
+  | { kind: 'steer-returned'; id: string }
   | {
       kind: 'submit-prompt';
       id: string;

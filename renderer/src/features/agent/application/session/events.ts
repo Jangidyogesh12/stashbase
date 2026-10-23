@@ -136,6 +136,13 @@ export function applyAgentSessionEvent(context: AgentEventContext, event: AgentS
     case 'failed':
       applyFailure(context, event);
       return;
+    case 'steer-result':
+      transition(
+        event.ok
+          ? { at: Date.now(), blockId: nextBlockId('user'), id: event.id, kind: 'steer-taken' }
+          : { id: event.id, kind: 'steer-returned' },
+      );
+      return;
     case 'turn-ended': {
       // A shell command or a subagent writes without naming a file, so the
       // turn that ran one is the only signal that the folder moved.

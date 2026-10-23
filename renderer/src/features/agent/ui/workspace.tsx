@@ -101,6 +101,7 @@ function ChatWorkspace({
       scope: session.scope,
       skill: session.skill,
       skillCatalog: session.skillCatalog,
+      steers: session.steers,
       transcript: session.transcript,
     })),
   );
@@ -214,6 +215,7 @@ function ChatWorkspace({
               onPermission={active.replyPermission}
               onRetry={active.retry}
               onReviewTurnChange={onReviewTurnChange}
+              pending={state.steers}
               runtimeUpdate={selectedAgent.updatable ? runtimeUpdate : undefined}
               sourceFor={sourceFor}
               transientFile={active.fileForTransient}
@@ -260,6 +262,7 @@ function ChatWorkspace({
               onSkillChange={active.setSkill}
               onStop={active.interrupt}
               onSend={access.send}
+              onSteer={selectedAgent.abilities.steering ? active.steer : undefined}
               placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Message your agent…'}
               placeholderIsPrompt={promptPlaceholder !== null}
               queue={state.queuedPrompts.map(({ context, id, text }) => ({

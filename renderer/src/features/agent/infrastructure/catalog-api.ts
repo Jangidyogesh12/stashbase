@@ -43,6 +43,7 @@ function toAbilities(wire: AgentWire['capabilities']): AgentAbilities {
         ? AGENT_ACCESS_MODES
         : AGENT_ACCESS_MODES.filter((mode) => honored.includes(mode)),
     skills: wire?.skills === true,
+    steering: wire?.steering === true,
   };
 }
 

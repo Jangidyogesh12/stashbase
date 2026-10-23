@@ -62,6 +62,8 @@ export interface AgentContextComposerProps {
   onSkillChange: (skill: string | null) => void;
   onStop: () => void;
   onSend?: (text: string, options?: { queuedId?: string }) => void;
+  /** Present when the runtime can take a follow-up into the running turn. */
+  onSteer?: ((text: string) => void) | undefined;
   placeholder: string;
   placeholderIsPrompt?: boolean;
   queue: QueuedMessage[];
@@ -116,6 +118,7 @@ export function AgentContextComposer({
   onSkillChange,
   onStop,
   onSend,
+  onSteer,
   placeholder,
   placeholderIsPrompt = false,
   queue,
@@ -346,6 +349,7 @@ export function AgentContextComposer({
             meta?.queuedId ? { queuedId: meta.queuedId } : undefined,
           )
         }
+        onSteer={onSteer && ((text) => onSteer(text))}
         onStop={onStop}
         onValueChange={session.setDraft}
         placeholder={placeholder}

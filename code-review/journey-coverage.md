@@ -2391,10 +2391,19 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   turn, a real hosted OpenQuill turn/credit response, external CLI installation
   and browser authentication, and runtime-supported clipboard image attachment.
   This is attachment support, not the removed clipboard screenshot capture.
-- **Interaction contract:** session-owned queues advance after success and pause
-  on Stop/failure/connection loss. Focused runtime tests cover refusal, retained
-  drafts and context, explicit continuation, unknown outcomes, restored identity,
-  and protected titles. Sidebar title search includes drafts; arrows follow
+- **Interaction contract:** session-owned queues advance after success and a
+  confirmed Stop, and hold on failure/connection loss until a later turn
+  completes or an unknown outcome is reviewed. Claude and Codex take follow-ups
+  into the running turn; runtime tests cover placement where the runtime reads
+  one, return to the queue when a turn ends or refuses it, and Alt+Enter
+  queueing. Server tests cover Claude's lifecycle confirmation, the Stop
+  re-interrupt, and replay of follow-ups read mid-turn. A live Haiku probe
+  (2026-10-23) confirmed mid-turn absorption at a tool boundary, a follow-on
+  turn inside one idle when no tool remains, and that a Stop leaves a queued
+  follow-up to run unless interrupted again; Codex `turn/steer` has no live
+  probe. `FollowUpWaiting` is the composition fixture. Focused runtime tests
+  cover refusal, retained drafts and context, unknown outcomes, restored
+  identity, and protected titles. Sidebar title search includes drafts; arrows follow
   project visits. Thinking/routine tools fold per turn, with approvals, failures,
   and file results visible. Markdown supports math and scoped file navigation.
 - **Limits:** historical attachment metadata cannot recover upload bytes; reuse

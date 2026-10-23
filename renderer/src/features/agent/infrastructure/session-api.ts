@@ -117,6 +117,8 @@ function clientEvent(command: AgentSessionCommand): AgentClientEvent {
         ...(command.titleHint ? { titleHint: command.titleHint } : {}),
         ...(command.skill === null ? {} : { skill: command.skill }),
       };
+    case 'steer':
+      return { id: command.id, t: 'steer', text: command.text };
     case 'interrupt':
       return { t: 'interrupt' };
     case 'reply-permission':
@@ -211,7 +213,7 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
         state: event.state,
       };
     case 'steer-result':
-      return null;
+      return { id: event.id, kind: 'steer-result', ok: event.ok };
     case 'turn-changes':
       return { files: event.files, kind: 'turn-changed', turnId: event.turnId };
   }

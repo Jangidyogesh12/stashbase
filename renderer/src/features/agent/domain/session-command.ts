@@ -22,6 +22,9 @@ export type AgentSessionCommand =
       titleHint?: string;
       attachments?: string[];
     }
+  /** Hands a follow-up to the turn already running, for runtimes that can
+   *  take one; its answer is a `steer-result` event under the same id. */
+  | { kind: 'steer'; id: string; text: string }
   | { kind: 'interrupt' }
   /** Answers one permission request; `always` remembers the decision and
    *  `answers` carry a clarifying question's replies. */

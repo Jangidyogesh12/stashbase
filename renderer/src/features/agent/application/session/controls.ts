@@ -140,10 +140,16 @@ export function createSessionControls({
     dispose() {
       clearTimeout(stopTimer);
     },
+    /** After a turn ends, completed or stopped, the next queued message goes
+     *  unless a failure holds the queue. */
+    advanceQueue() {
+      const { delivery, queuePaused } = state();
+      if ((delivery === 'completed' || delivery === 'stopped') && !queuePaused)
+        queueMicrotask(() => void session().continueQueue());
+    },
     interrupt() {
       if (disposed() || !agentSessionIsBusy(state()) || state().delivery === 'stopping')
         return false;
-      transition({ kind: 'pause-queue', paused: true });
       if (!agentTurnIsActive(state().connection)) {
         dispatcher.cancel();
         transport.invalidate();
@@ -190,8 +196,11 @@ export function createSessionControls({
         });
     },
     confirmOutcome() {
-      if (state().delivery === 'unknown' && !agentTurnIsActive(state().connection))
-        transition({ kind: 'delivery', value: 'stopped' });
+      if (state().delivery !== 'unknown' || agentTurnIsActive(state().connection)) return;
+      transition({ kind: 'delivery', value: 'stopped' });
+      // Reviewing the uncertain turn is the go-ahead the held queue waited for.
+      transition({ kind: 'pause-queue', paused: false });
+      void session().continueQueue();
     },
     changeAgent(agent: AgentId) {
       if (disposed() || !agentCanChangeAgent(state())) return false;

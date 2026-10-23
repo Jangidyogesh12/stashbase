@@ -162,10 +162,14 @@ describe('mention editor', () => {
     const { field, onAccept, rerender, submit } = harness();
     pressKey(field, 'Enter');
     expect(submit).toHaveBeenCalledTimes(1);
+    // Alt+Enter keeps a mid-response follow-up queued for after the reply.
+    pressKey(field, 'Enter', { altKey: true });
+    expect(submit).toHaveBeenLastCalledWith({ queue: true });
+    expect(submit).toHaveBeenCalledTimes(2);
     rerender({ listboxOpen: true });
     pressKey(field, 'Enter');
     expect(onAccept).toHaveBeenCalledTimes(1);
-    expect(submit).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveBeenCalledTimes(2);
     // The open popup is announced through the controlled listbox and the
     // active option; `aria-expanded` is not allowed on a textbox and axe
     // scores the composer's story for exactly that.

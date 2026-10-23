@@ -38,6 +38,10 @@ export interface InputMessageQueueProps {
    *  `false` to suppress them and render the queue yourself (e.g. as full-width
    *  rows above the composer). */
   showQueue?: boolean;
+  /** Takes a draft submitted mid-response into the running response instead
+   *  of the queue. A submit asked to queue still queues; absent, every
+   *  mid-response submit does. */
+  onSteer?: ((value: string, files: File[]) => void) | undefined;
 }
 
 interface ComposerQueueOptions {

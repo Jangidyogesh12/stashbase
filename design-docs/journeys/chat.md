@@ -33,7 +33,10 @@ Chat, Documents assistance, and runtimes.
    file appears in Documents. New output preserves reading position. Deciding
    an approval preserves that position too; keyboard focus can follow the
    decided tool into its activity group without scrolling to the group header.
-4. Continue, queue a follow-up, stop, or reuse a message for another turn. Open a
+4. Continue, send a follow-up into the running turn or queue it for after,
+   stop, or reuse a message for another turn. An agent that can take a
+   follow-up mid-turn gets it there by default; it shows as not yet read until
+   the agent reads it, then stays where the agent read it. Open a
    file result or a local file link to switch to Documents and show that file,
    retaining the conversation and unsent input. A link that cites a passage
    also locates the quoted phrase, or says the file no longer holds it. Agent writes do not take focus.
@@ -91,7 +94,7 @@ update or override removal instead. Repair setup/account failures
 without losing the idea. Keep partial output and file results after a turn fails.
 A missing context item needs refresh, replacement, or deliberate removal.
 
-Stop remains Stopping until confirmed and leaves queued work paused. Lost delivery
+Stop remains Stopping until confirmed, then queued work carries on. Lost delivery
 or unconfirmed cancellation stays uncertain; reconnect/recover the same session
 before considering another send. Retry and Reuse follow
 [session recovery](../capabilities/agent-sessions.md#failure-and-recovery).

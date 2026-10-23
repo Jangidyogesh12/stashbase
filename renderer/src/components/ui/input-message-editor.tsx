@@ -25,8 +25,10 @@ export const DROP_HINT = 'Drop files here to add to chat';
 export interface InputMessageEditorContext {
   value: string;
   onValueChange(value: string): void;
-  /** Exactly what Enter does on the textarea: send, or queue while streaming. */
-  submit(): void;
+  /** Exactly what Enter does on the textarea: send, or while streaming hand
+   *  the draft to the running response (when the owner takes that) or queue
+   *  it. `queue` keeps a mid-response submit in the queue either way. */
+  submit(options?: { queue?: boolean }): void;
   disabled: boolean;
   /** Already swapped to the drop hint while a file drag hovers. */
   placeholder: string;

@@ -64,6 +64,7 @@ export {
   type AgentSkillCatalog,
 } from './session-state';
 
+import { returnSteers, transitionFollowUp } from './session-follow-ups';
 import type { AgentTranscriptBlock } from './session-transcript';
 
 export {
@@ -90,6 +91,7 @@ export function transitionAgentSession(
     case 'connect':
       return {
         ...state,
+        ...returnSteers(state),
         queuePaused: state.queuePaused || agentTurnIsActive(state.connection),
         delivery: agentTurnIsActive(state.connection) ? 'unknown' : state.delivery,
         connection: { attempt: action.attempt, kind: 'connecting' },
@@ -97,6 +99,7 @@ export function transitionAgentSession(
     case 'schedule-reconnect':
       return {
         ...state,
+        ...returnSteers(state),
         queuePaused: true,
         delivery: agentTurnIsActive(state.connection)
           ? 'unknown'
@@ -182,6 +185,10 @@ export function transitionAgentSession(
       return { ...state, composerFocusRequested: action.requested };
     case 'set-queue':
       return { ...state, queuedPrompts: action.queue.slice(0, MAX_QUEUED_PROMPTS) };
+    case 'steer-sent':
+    case 'steer-taken':
+    case 'steer-returned':
+      return transitionFollowUp(state, action);
     case 'submit-prompt':
       return {
         ...state,
@@ -253,17 +260,21 @@ export function transitionAgentSession(
           action.answers,
         ),
       };
-    case 'settle-turn':
+    case 'settle-turn': {
+      const delivery =
+        state.delivery === 'stopping'
+          ? 'stopped'
+          : state.delivery === 'failed' || action.isError
+            ? 'failed'
+            : 'completed';
       return {
         ...state,
+        ...returnSteers(state),
         connection: withTurn(state.connection, null),
-        delivery:
-          state.delivery === 'stopping'
-            ? 'stopped'
-            : state.delivery === 'failed' || action.isError
-              ? 'failed'
-              : 'completed',
-        queuePaused: state.queuePaused || action.isError || state.delivery === 'stopping',
+        delivery,
+        // Stop ends only the running turn. A turn that ends, completed or
+        // stopped, releases a queue an earlier failure held; a failed one holds it.
+        queuePaused: delivery === 'failed',
         transcript: stampClosingReply(
           settlePendingTools(
             state.transcript,
@@ -272,6 +283,7 @@ export function transitionAgentSession(
           action.at,
         ),
       };
+    }
     case 'append-notice':
       return {
         ...state,
@@ -284,6 +296,7 @@ export function transitionAgentSession(
     case 'turn-fail':
       return {
         ...state,
+        ...returnSteers(state),
         delivery: 'failed',
         queuePaused: true,
         connection: withTurn(state.connection, null),
@@ -300,6 +313,7 @@ export function transitionAgentSession(
     case 'fail':
       return {
         ...state,
+        ...returnSteers(state),
         queuePaused: true,
         delivery:
           agentTurnIsActive(state.connection) || state.delivery === 'unknown'
@@ -311,6 +325,7 @@ export function transitionAgentSession(
     case 'close':
       return {
         ...state,
+        ...returnSteers(state),
         queuePaused: true,
         delivery:
           agentTurnIsActive(state.connection) || state.delivery === 'unknown'
@@ -349,6 +364,7 @@ export function transitionAgentSession(
         queuePaused: true,
         contextIssue: null,
         queuedPrompts: [],
+        steers: [],
         transcript: retiredTranscript(state),
       };
     case 'dispose':

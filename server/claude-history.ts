@@ -62,7 +62,9 @@ export function claudeHistoryActions(overrides: Partial<ClaudeHistoryDependencie
     },
     async messages(id, folder) {
       if (!(await belongsToFolder(id, folder))) throw new SessionNotFoundError();
-      return transcriptToBlocks(await getMessages(id), nativeTimesByUuid(await readNativeTranscript(id)));
+      const messages = await getMessages(id);
+      const native = await readNativeTranscript(id);
+      return transcriptToBlocks(withFollowUps(messages, native), nativeTimesByUuid(native));
     },
     async replay(id, folder) {
       if (!(await belongsToFolder(id, folder))) throw new SessionNotFoundError();
@@ -73,7 +75,7 @@ export function claudeHistoryActions(overrides: Partial<ClaudeHistoryDependencie
       const native = await readNativeTranscript(id);
       return {
         protocol: 2,
-        messages: transcriptToBlocks(messages, nativeTimesByUuid(native)),
+        messages: transcriptToBlocks(withFollowUps(messages, native), nativeTimesByUuid(native)),
         effort: claudeTranscriptEffort(native, messages),
       };
     },
@@ -95,6 +97,7 @@ type NativeTranscriptEntry = {
   uuid?: string;
   parentUuid?: string | null;
   isSidechain?: boolean;
+  attachment?: unknown;
   effort?: unknown;
   timestamp?: unknown;
   message?: unknown;
@@ -247,6 +250,42 @@ function appendUserBlock(blocks: WireBlock[], id: () => string, text: string, at
     ...(restored.attachments.length ? { attachments: restored.attachments } : {}),
     ...(at !== undefined ? { at } : {}),
   });
+}
+
+type HistoryMessage = { type: string; uuid?: string; message: unknown };
+
+/** Claude records a follow-up it read mid-turn as a `queued_command`
+ *  attachment, which the SDK's history reader leaves out. Each goes back as a
+ *  user message after the message its chain hangs from, so a reopened chat
+ *  shows what the reader sent where Claude read it. */
+export function withFollowUps(
+  messages: HistoryMessage[],
+  native: NativeTranscriptEntry[],
+): HistoryMessage[] {
+  const byUuid = new Map(native.flatMap((entry) =>
+    typeof entry.uuid === 'string' && entry.uuid ? [[entry.uuid, entry] as const] : []));
+  const listed = new Set(messages.flatMap((message) => (message.uuid ? [message.uuid] : [])));
+  const after = new Map<string, HistoryMessage[]>();
+  for (const entry of native) {
+    const attachment = entry.attachment as { type?: unknown; prompt?: unknown; commandMode?: unknown } | undefined;
+    if (entry.type !== 'attachment' || entry.isSidechain || !entry.uuid) continue;
+    if (attachment?.type !== 'queued_command' || typeof attachment.prompt !== 'string') continue;
+    if (attachment.commandMode !== undefined && attachment.commandMode !== 'prompt') continue;
+    // Attachments chain to one another; the anchor is the nearest ancestor
+    // the SDK kept in the conversation.
+    let anchor = entry.parentUuid ?? null;
+    const seen = new Set<string>();
+    while (anchor && !listed.has(anchor) && !seen.has(anchor)) {
+      seen.add(anchor);
+      anchor = byUuid.get(anchor)?.parentUuid ?? null;
+    }
+    if (!anchor) continue;
+    const followUps = after.get(anchor) ?? [];
+    followUps.push({ type: 'user', uuid: entry.uuid, message: { role: 'user', content: attachment.prompt } });
+    after.set(anchor, followUps);
+  }
+  if (after.size === 0) return messages;
+  return messages.flatMap((message) => [message, ...(message.uuid ? after.get(message.uuid) ?? [] : [])]);
 }
 
 /** Native-line times keyed by uuid. Only real, parseable timestamps enter

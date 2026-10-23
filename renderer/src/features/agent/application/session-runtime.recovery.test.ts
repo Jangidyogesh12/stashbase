@@ -42,7 +42,76 @@ describe('conversation recovery and pending work', () => {
     expect(session.store.getState().draft).toBe('A different unsent idea');
   });
 
-  it('keeps a refused queued request and pauses it for explicit recovery', async () => {
+  it('takes a follow-up into the running turn where the runtime reads it', async () => {
+    const { session, emit, sent } = live();
+    await session.sendPrompt('Draft the intro');
+    emit({ kind: 'text', delta: 'Working on it' });
+    session.setDraft('Keep it short');
+    session.steer('Keep it short');
+    await vi.waitFor(() =>
+      expect(sent.at(-1)).toMatchObject({ kind: 'steer', text: 'Keep it short' }),
+    );
+    const steer = sent.at(-1) as { id: string };
+    expect(session.store.getState()).toMatchObject({
+      draft: '',
+      steers: [{ text: 'Keep it short' }],
+    });
+    // Until the runtime reads it, the reply in progress keeps its own block.
+    emit({ kind: 'text', delta: ', still' });
+    emit({ kind: 'steer-result', id: steer.id, ok: true });
+    emit({ kind: 'text', delta: 'Short version:' });
+    expect(
+      session.store
+        .getState()
+        .transcript.map((block) => [block.kind, 'text' in block ? block.text : null]),
+    ).toEqual([
+      ['user', 'Draft the intro'],
+      ['assistant', 'Working on it, still'],
+      ['user', 'Keep it short'],
+      ['assistant', 'Short version:'],
+    ]);
+    expect(session.store.getState().steers).toEqual([]);
+    expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
+  });
+
+  it('sends a follow-up next when the turn ends before the runtime reads it', async () => {
+    const { session, emit, sent } = live();
+    const prompts = () => sent.filter((command) => command.kind === 'prompt');
+    await session.sendPrompt('Draft the intro');
+    session.steer('Keep it short');
+    await vi.waitFor(() => expect(sent.some((command) => command.kind === 'steer')).toBe(true));
+    const steer = sent.find((command) => command.kind === 'steer') as { id: string };
+    emit({ kind: 'turn-ended', isError: false });
+    await vi.waitFor(() => expect(prompts()).toHaveLength(2));
+    expect(prompts().at(-1)).toMatchObject({ text: 'Keep it short' });
+    // A late answer for the follow-up it already sent changes nothing.
+    emit({ kind: 'steer-result', id: steer.id, ok: true });
+    expect(
+      session.store
+        .getState()
+        .transcript.flatMap((block) => (block.kind === 'user' ? [block.text] : [])),
+    ).toEqual(['Draft the intro', 'Keep it short']);
+  });
+
+  it('queues a follow-up the running turn cannot take, without losing it', async () => {
+    const { session, emit, sent } = live();
+    const prompts = () => sent.filter((command) => command.kind === 'prompt');
+    await session.sendPrompt('Draft the intro');
+    session.steer('Keep it short');
+    await vi.waitFor(() => expect(sent.some((command) => command.kind === 'steer')).toBe(true));
+    const steer = sent.find((command) => command.kind === 'steer') as { id: string };
+    emit({ kind: 'steer-result', id: steer.id, ok: false });
+    expect(session.store.getState()).toMatchObject({
+      queuedPrompts: [{ text: 'Keep it short' }],
+      steers: [],
+    });
+    expect(prompts()).toHaveLength(1);
+    emit({ kind: 'turn-ended', isError: false });
+    await vi.waitFor(() => expect(prompts()).toHaveLength(2));
+    expect(prompts().at(-1)).toMatchObject({ text: 'Keep it short' });
+  });
+
+  it('keeps a refused queued request held instead of retrying it', async () => {
     const { session, emit, port } = live();
     await session.sendPrompt('First');
     session.setQueue([{ id: 'q', text: 'Second' }]);
@@ -57,7 +126,7 @@ describe('conversation recovery and pending work', () => {
     );
   });
 
-  it('stops approvals and pauses the queue until cancellation is confirmed and the user continues', async () => {
+  it('stops approvals and sends the next queued request once cancellation is confirmed', async () => {
     const { session, emit, sent } = live();
     await session.sendPrompt('First');
     session.setQueue([{ id: 'q', text: 'Second' }]);
@@ -78,12 +147,29 @@ describe('conversation recovery and pending work', () => {
       always: null,
       answers: null,
     });
-    emit({ kind: 'turn-ended', isError: false });
-    await Promise.resolve();
-    expect(session.store.getState().delivery).toBe('stopped');
+    // Nothing advances while the stop is unconfirmed.
     expect(session.store.getState().queuedPrompts).toHaveLength(1);
-    expect(await session.continueQueue()).toBe(true);
+    emit({ kind: 'turn-ended', isError: false });
+    expect(session.store.getState().delivery).toBe('stopped');
+    await vi.waitFor(() =>
+      expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(2),
+    );
     expect(session.store.getState().queuedPrompts).toEqual([]);
+  });
+
+  it('holds the queue after a failed turn and releases it when the next turn completes', async () => {
+    const { session, emit, sent } = live();
+    const prompts = () => sent.filter((command) => command.kind === 'prompt');
+    await session.sendPrompt('First');
+    session.setQueue([{ id: 'q', text: 'Depends on first' }]);
+    emit({ kind: 'turn-ended', isError: true });
+    await Promise.resolve();
+    expect(session.store.getState().queuePaused).toBe(true);
+    expect(prompts()).toHaveLength(1);
+    await session.sendPrompt('First, again');
+    emit({ kind: 'turn-ended', isError: false });
+    await vi.waitFor(() => expect(prompts()).toHaveLength(3));
+    expect(prompts().at(-1)).toMatchObject({ text: 'Depends on first' });
   });
 
   it('pauses on failure and preserves uncertainty through reconnect without automatically resending', async () => {
@@ -96,8 +182,11 @@ describe('conversation recovery and pending work', () => {
     listeners[1]?.onEvent({ kind: 'ready' });
     expect(await session.sendPrompt('Another change')).toEqual({ ok: false, reason: 'busy' });
     expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
+    // Reviewing the uncertain turn is the go-ahead; the queue continues by itself.
     session.confirmOutcome();
-    expect(await session.continueQueue()).toBe(true);
+    await vi.waitFor(() =>
+      expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(2),
+    );
     listeners[1]?.onEvent({ kind: 'failed', message: 'Try later', failure: 'rate-limit' });
     emit({ kind: 'text', delta: 'late old output' });
     expect(session.store.getState().queuePaused).toBe(true);

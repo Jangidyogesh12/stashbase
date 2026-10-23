@@ -57,8 +57,16 @@ permissions, with current model and tool choices checked before use.
 
 - Capture text, context, and choices on Send. Clear only the accepted snapshot.
   Refused delivery retains it; uncertain delivery forbids automatic resend.
-- One turn runs per conversation. Follow-ups queue explicitly; normal completion
-  may advance the queue. Stop, failure, or connection loss pauses it.
+- One turn runs per conversation. Follow-ups queue explicitly and advance on
+  their own; the queue never needs starting. Stop ends only the running turn,
+  and once it is confirmed the next queued message goes. Failure, connection
+  loss, or a refused send holds the queue until a later turn completes or the
+  reader reviews an uncertain outcome.
+- A runtime that can take a follow-up into the running turn (Claude, Codex)
+  gets one there unless the reader asks to queue it. It joins the transcript
+  where the runtime reads it. One the turn ends without reading, including
+  after Stop, goes next, ahead of the queue. A follow-up that arms a skill
+  always queues, since a skill starts a turn.
   Waiting for a background subagent and processing its result remain part of
   that turn; an interim reply must not show Completed or release queued work.
 - Validate context before sending. Opening a document does not attach it; missing
@@ -271,7 +279,7 @@ Hosted retry responses carry the service's suggested delay to the native runtime
 When the service changes the configuration of a Default model a chat runs on,
 or withdraws it, the refused turn offers **Refresh models**. Refreshing
 reconnects the same conversation to read the list again and keeps the
-transcript, draft, and paused queue. It never resends; the failed turn offers
+transcript, draft, and held queue. It never resends; the failed turn offers
 a manual retry only after the refresh.
 Default retries an empty model response or a hosted stream interruption before
 output once within the current turn, retaining completed tool results and file

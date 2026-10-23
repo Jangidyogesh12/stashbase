@@ -49,7 +49,7 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
   },
   {
     id: 'claude', label: 'Claude', vendor: 'Anthropic',
-    capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: false, titleHint: false },
+    capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: true, titleHint: false },
     attach: attachAgentWebSocket,
     stop: killActiveAgent,
     stopFolder: killAgentSessionsForFolder,
