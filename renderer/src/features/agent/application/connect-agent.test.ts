@@ -55,6 +55,33 @@ it('follows a sign-in already running instead of asking for a second one', async
   expect(login.mock.calls.map(([, action]) => action)).toEqual(['login']);
 });
 
+it('reports a followed sign-in that was stopped instead of opening another', async () => {
+  const signingIn = {
+    step: 'sign-in' as const,
+    note: 'Finish signing in to Claude in your browser.',
+  };
+  const running = { ...CLAUDE_AGENT, ready: false, preparation: signingIn };
+  const stopped = {
+    ...CLAUDE_AGENT,
+    ready: false,
+    needsSignIn: true,
+    setupFailure: { stage: 'authentication' as const, message: 'Claude sign-in was stopped.' },
+  };
+  const prepareAgent = vi.fn();
+  const port = agentCatalogPort([], {
+    prepareAgent,
+    listAgents: vi
+      .fn()
+      .mockResolvedValueOnce({ agents: [running] })
+      .mockResolvedValueOnce({ agents: [stopped] }),
+  });
+
+  await expect(
+    connectAgent(port, 'claude', running, new AbortController().signal, { wait: immediately }),
+  ).rejects.toMatchObject({ setup: stopped.setupFailure });
+  expect(prepareAgent).not.toHaveBeenCalled();
+});
+
 it('reports each step the service reaches until the runtime is ready', async () => {
   const installing = { step: 'install' as const, note: 'Downloading Codex CLI…' };
   const signingIn = {

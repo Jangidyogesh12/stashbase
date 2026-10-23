@@ -67,9 +67,24 @@ export async function connectAgent(
   if (current?.preparation) {
     // A preparation already running, such as a sign-in started in Settings or
     // one left going behind Not now, is followed: the service refuses a second.
-    current = await settled(await port.listAgents(bounded));
+    let signingIn = false;
+    current = await settledAgent(
+      port,
+      agent,
+      await port.listAgents(bounded),
+      bounded,
+      wait,
+      (step) => {
+        signingIn ||= step.step === 'sign-in';
+        onStep?.(step);
+      },
+    );
     bounded.throwIfAborted();
     if (current?.ready) return;
+    // A browser sign-in followed to an end without signing in, such as one
+    // stopped in Settings, is this answer too: it is reported rather than
+    // opened again, and answering once more starts a new one.
+    if (signingIn) throw new AgentSetupRefused(current?.setupFailure);
   }
   const loginFirst = current?.needsSignIn;
   let entry = await settled(

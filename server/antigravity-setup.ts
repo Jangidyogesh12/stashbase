@@ -98,11 +98,20 @@ export async function loginToAntigravity(
   const pollMs = overrides.pollMs ?? 4_000;
   const deadline = Date.now() + (overrides.timeoutMs ?? LOGIN_TIMEOUT_MS);
   signal.throwIfAborted();
-  // Reuse an account signed in outside StashBase. A failed or refused check
-  // must keep its diagnostic instead of starting another browser sign-in.
-  const authenticated = await isAuthenticated(executable, signal);
-  signal.throwIfAborted();
-  if (authenticated) return;
+  // Reuse an account signed in outside StashBase. A refused account stays
+  // refused, so it opens no sign-in. A check that cannot answer may be a
+  // signed-out account in words StashBase does not read, so it opens the
+  // sign-in, as Claude's and Codex's do; the loop below polls the same check.
+  let lastCheckError: unknown;
+  try {
+    const authenticated = await isAuthenticated(executable, signal);
+    signal.throwIfAborted();
+    if (authenticated) return;
+  } catch (error) {
+    signal.throwIfAborted();
+    if (error instanceof AgentAccountRefusedError) throw error;
+    lastCheckError = error;
+  }
   options.onBrowserSignIn?.();
   const child = (overrides.spawnSignIn ?? spawnAntigravitySignIn)(executable);
   let output = '';
@@ -116,7 +125,6 @@ export async function loginToAntigravity(
     if (!exited) terminateExtractorTree(child);
     await completion;
   };
-  let lastCheckError: unknown;
   try {
     while (true) {
       await delay(pollMs, signal);

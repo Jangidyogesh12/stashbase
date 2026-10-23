@@ -61,13 +61,49 @@ test('sign-in reuses the selected CLI account without starting an interactive lo
   });
 });
 
-test('a refused account or failed initial check does not start an interactive login', async () => {
-  for (const error of [new AgentAccountRefusedError('refused'), new Error('check unavailable')]) {
-    await assert.rejects(loginToAntigravity('/native/agy', new AbortController().signal, {
-      isAuthenticated: async () => { throw error; },
-      spawnSignIn: () => { throw new Error('An unsuccessful check must not start login.'); },
-    }), (received) => received === error);
-  }
+test('a refused account does not start an interactive login', async () => {
+  const error = new AgentAccountRefusedError('refused');
+  await assert.rejects(loginToAntigravity('/native/agy', new AbortController().signal, {
+    isAuthenticated: async () => { throw error; },
+    spawnSignIn: () => { throw new Error('A refused account must not start login.'); },
+  }), (received) => received === error);
+});
+
+// A signed-out answer in words the check does not read must still leave a way
+// to sign in: Settings offers sign-in as the retry, and the sign-in opens.
+test('a check that cannot answer offers sign-in, and that sign-in opens and finishes', { skip: process.platform === 'win32' }, async () => {
+  let signedIn = false;
+  let checks = 0;
+  const check = async () => {
+    checks += 1;
+    if (signedIn) return true;
+    throw new Error('Could not check Antigravity sign-in using /native/agy (exit 1: Login required).');
+  };
+  const coordinator = new AgentBootstrapCoordinator({
+    resolveExecutable: () => '/native/agy',
+    resolveNativeExecutable: () => '/native/agy',
+    installRuntime: async () => { throw new Error('A copy that runs must not be reinstalled.'); },
+    verifyExecutable: async () => {},
+    isAuthenticated: check,
+    login: (_id, executable, signal, options) => loginToAntigravity(executable, signal, {
+      pollMs: 5,
+      isAuthenticated: check,
+      spawnSignIn: () => {
+        signedIn = true;
+        return spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+      },
+    }, { onBrowserSignIn: options.onBrowserSignIn }),
+    configureMcp: () => {},
+    consumeFailure: () => false,
+  });
+  coordinator.connectIfInstalled('antigravity');
+  const failed = await coordinator.wait('antigravity');
+  assert.equal(failed.failure?.code, 'authentication-check-failed');
+  assert.equal(failed.failure?.retryAction, 'login');
+  coordinator.login('antigravity');
+  assert.equal((await coordinator.wait('antigravity')).phase, 'ready');
+  assert.ok(signedIn, 'the sign-in terminal was started');
+  assert.ok(checks >= 3);
 });
 
 test('cancelling the initial check neither starts login nor reports successful sign-in', async () => {

@@ -78,7 +78,9 @@ readiness. While preparation runs, the prompt names the step the service is on
 in its own words and how long the wait has lasted, so a slow download or a
 pending browser sign-in never reads as a failure. During sign-in it offers Stop
 waiting, which ends the runtime's login and returns the prompt to its question
-with the send still held. For a browser that did not open, it also offers the
+with the send still held. A send that joined a sign-in already running reports
+how it ended when it ends without signing in, for example stopped in Settings,
+rather than opening another. For a browser that did not open, it also offers the
 provider page the runtime printed when that page finishes sign-in by itself, as
 Codex's does. Claude's printed page ends with a code to paste into its terminal,
 so Claude's wait offers none.

@@ -302,7 +302,9 @@ test('connecting a copy that cannot answer its sign-in check installs the native
       return true;
     },
   }).dependencies);
-  assert.equal((await connect(coordinator, 'codex')).failure?.code, 'authentication-check-failed');
+  const unanswered = (await connect(coordinator, 'codex')).failure;
+  assert.equal(unanswered?.code, 'authentication-check-failed');
+  assert.equal(unanswered?.retryAction, 'bootstrap', 'connecting again, not another sign-in, is the retry');
   assert.equal(installs, 0);
 
   assert.equal((await prepare(coordinator, 'codex')).phase, 'ready');
@@ -640,17 +642,26 @@ test('a stop that lands in the sign-in check reads as stopped, not as a failed c
   assert.match(stopped.failure?.message ?? '', /Codex sign-in was stopped\.$/);
 });
 
-test('stopping leaves a background connection and an idle runtime alone', async () => {
+test('stopping leaves a background connection, an update, and an idle runtime alone', async () => {
   let release!: () => void;
+  let discovered = Promise.resolve();
   const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
-    resolveExecutable: () => new Promise<string>((resolve) => { release = () => resolve('/managed/codex'); }),
+    resolveExecutable: async () => {
+      await discovered;
+      return '/managed/codex';
+    },
   }).dependencies);
   assert.equal((await coordinator.stop('codex')).phase, 'idle');
-  coordinator.connectIfInstalled('codex');
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  const stopping = coordinator.stop('codex');
-  release();
-  assert.equal((await stopping).phase, 'ready');
+  // A stop that arrives once another run has replaced the sign-in, such as a
+  // late one, answers at once and leaves that run to finish.
+  for (const start of [() => coordinator.connectIfInstalled('codex'), () => coordinator.update('codex')]) {
+    discovered = new Promise<void>((resolve) => { release = resolve; });
+    start();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.notEqual((await coordinator.stop('codex')).phase, 'failed');
+    release();
+    assert.equal((await coordinator.wait('codex')).phase, 'ready');
+  }
 });
 
 test('startup connects MCP for discovered runtimes without installing missing ones', async () => {

@@ -1817,11 +1817,15 @@ checks before it are `configuring`, so Stop is offered only while the reader
 is waited on, and a stop that lands in a check reads as stopped. A send while a
 sign-in already runs follows it (`connectAgent`) instead of being refused, and
 Stop waiting keeps the answer busy until the service has retired the login
-(`connect-agent.test.ts`, `access-dialog.test.tsx`, installer tests).
+(`connect-agent.test.ts`, `access-dialog.test.tsx`, installer tests). A
+followed sign-in that ends without signing in is reported, not restarted, and a
+stop that finds an update or background connection leaves it alone.
 **Gap:** signing in again after a refused credential disables status polling
 and the after-exit check, so a CLI that keeps waiting after a successful
 browser sign-in still waits out the 10-minute limit. Antigravity's sign-in
-launch does not yet go through `agent-cli-launch.ts`.
+launch does not yet go through `agent-cli-launch.ts`. Stop carries no attempt
+id, so a late stop can still end a newer sign-in started in another window.
+Chat first-send does not yet follow Antigravity's sign-in retry; Settings does.
 
 **Real CLI connect pass (2026-10-23):** a source host with an isolated home and
 real CLIs, its browser launch intercepted, exercised the new-user path over

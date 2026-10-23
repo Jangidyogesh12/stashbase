@@ -111,6 +111,8 @@ Settings owns lasting preferences and connection configuration:
   regions, reads as Account not accepted with the provider's own sentence. It
   offers a recheck, not another sign-in. So does a sign-in check the agent
   could not answer, which can come from an installed copy that does not run.
+  Antigravity's check asks Google, so for Antigravity that Retry signs in,
+  opening the browser when the check still cannot answer.
   An expired sign-in reported by
   a running conversation restores that action without clearing credentials.
   Setup and update failures show the failed operation, stage, and available

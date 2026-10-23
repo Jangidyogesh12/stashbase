@@ -310,8 +310,17 @@ export class AgentBootstrapCoordinator {
     } catch (error) {
       // A stop or timeout is the run's to report, not a failed check.
       if (signal.aborted) throw error;
-      this.fail(id, action, 'authentication',
-        error instanceof AgentAccountRefusedError ? 'account-refused' : 'authentication-check-failed', error);
+      if (error instanceof AgentAccountRefusedError) {
+        this.fail(id, action, 'authentication', 'account-refused', error);
+        return false;
+      }
+      // Antigravity's check asks Google, so an answer it cannot read may be a
+      // signed-out account in words StashBase does not know; its sign-in, which
+      // polls the same check, is the way on. Claude's and Codex's checks read
+      // their own stored sign-in, where no answer can mean a copy that does
+      // not run, which connecting again replaces.
+      this.fail(id, action, 'authentication', 'authentication-check-failed', error, undefined,
+        id === 'antigravity' ? 'login' : undefined);
     }
     return false;
   }
@@ -335,16 +344,16 @@ export class AgentBootstrapCoordinator {
     return this.status(id);
   }
 
-  /** The reader stopped waiting on a preparation they started, such as a
-   * browser sign-in that may never come back. The run's own cancellation
-   * retires its processes, and the answer is the status it settles on. A
-   * background connection is not the reader's to stop. */
+  /** The reader stopped waiting on a browser sign-in that may never come
+   * back. The run's own cancellation retires its processes, and the answer is
+   * the status it settles on. Only a sign-in waits on the reader: a stop that
+   * arrives once another kind of run has taken its place, such as an update
+   * or a background connection, leaves that run alone and answers at once. */
   async stop(id: NativeAgentId): Promise<AgentBootstrapStatus> {
     const controller = this.controllers.get(id);
-    if (controller && this.actions.get(id) !== 'connect') {
-      this.stopped.add(id);
-      controller.abort();
-    }
+    if (!controller || this.actions.get(id) !== 'login') return this.status(id);
+    this.stopped.add(id);
+    controller.abort();
     return this.wait(id);
   }
 
@@ -362,6 +371,7 @@ export class AgentBootstrapCoordinator {
     code: AgentBootstrapFailureCode,
     error: unknown,
     manualRecovery?: AgentBootstrapManualRecovery,
+    retryAction: AgentBootstrapAction = action === 'connect' ? 'bootstrap' : action,
   ): void {
     const message = agentSetupDiagnostic(error);
     const diagnostic = errorDiagnostic(error);
@@ -374,7 +384,7 @@ export class AgentBootstrapCoordinator {
         message: `${agentLabel(id)} · ${ACTION_LABELS[action]} · ${stage}\n${message}`,
         retryable: true,
         manualRecovery,
-        retryAction: action === 'connect' ? 'bootstrap' : action,
+        retryAction,
       },
     });
   }

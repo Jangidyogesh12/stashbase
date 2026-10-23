@@ -326,6 +326,9 @@ stable status without download, retry, or a new durable demand latch.
   otherwise it reruns the installer. Connecting after a sign-in check that
   could not answer applies the same verification, so a discovered copy that
   does not run is replaced by the native installation rather than retried.
+  Antigravity's check asks Google, so its unanswered check retries through
+  sign-in instead. Stop ends only a running sign-in; a stop that finds another
+  run in its place leaves that run alone and answers at once.
   While a flight runs, its status carries the step sentence the service wrote
   and, during browser sign-in, the complete `https` page the login command
   printed when its OAuth redirect stays on loopback; the first-send prompt and
@@ -403,8 +406,11 @@ stable status without download, retry, or a new durable demand latch.
   Discovery, installation, readiness, and the CLI listing read them there.
   Antigravity readiness runs `agy --output-format json -p /usage`, which needs
   the cached sign-in but starts no turn. Its sign-in entry runs that same check
-  before starting a terminal: a signed-in account returns immediately; a failed
-  check or refused account keeps its error without opening login. Cancellation
+  before starting a terminal: a signed-in account returns immediately and a
+  refused account keeps its error without opening login. A check that cannot
+  answer starts the terminal, because an answer it does not recognize may be a
+  signed-out account, and the readiness failure it leaves names sign-in as its
+  retry action. Cancellation
   during that check cannot start a terminal or report success.
   `agy` has no login command, so its
   sign-in gives an interactive `agy` a pseudo-terminal (`script`) or, on Windows,
