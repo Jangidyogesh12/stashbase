@@ -94,6 +94,38 @@ describe('useExternalFiles', () => {
     dispose();
   });
 
+  it("opens another project's file and one the tree hides, but binds only what the chat can use", async () => {
+    const openings: Record<string, ExternalFileOpening> = {
+      'config.md': { kind: 'project', path: '.notes/config.md' },
+      'draft.md': { kind: 'project', path: 'drafts/draft.md' },
+      'plan.md': { folderPath: '/Users/reader/Other', kind: 'project', path: 'notes/plan.md' },
+    };
+    const { agent, documents, dispose, hook } = setup(
+      async (file) =>
+        openings[file.name] ?? { kind: 'refused', name: file.name, reason: 'unavailable' },
+    );
+    agent.setScopeEnvironment({
+      folderPath,
+      listing: { files: [{ format: 'md', path: 'drafts/draft.md' }], folders: ['drafts'] },
+      readiness: {},
+      versions: {},
+    });
+
+    act(() =>
+      hook.result.current.dropFiles?.(
+        ['plan.md', 'config.md', 'draft.md'].map((name) => new File(['x'], name)),
+      ),
+    );
+
+    await vi.waitFor(() => expect(documents.openSources()).toHaveLength(3));
+    // Bound, either of the first two would only refuse the next send.
+    expect(agent.activeSession().store.getState().context).toMatchObject([
+      { dropped: true, kind: 'source', source: { folderPath, path: 'drafts/draft.md' } },
+    ]);
+    expect(hook.result.current.notice).toBeNull();
+    dispose();
+  });
+
   it('explains every refused file in one notice and opens nothing in their place', async () => {
     const refusals: Record<string, ExternalFileOpening> = {
       'clip.mp3': { kind: 'refused', name: 'clip.mp3', reason: 'copy-required' },

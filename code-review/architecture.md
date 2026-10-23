@@ -1255,12 +1255,16 @@ renderer never names a path. Main registers that path for the sender's window
 through the process-private `/api/internal/external-files` route. A development
 server that Electron did not start writes its token to an owner-only file under
 `~/.stashbase`, which a source launch reads after its own token is refused. The server
-resolves the real path, answers with the project file when it lies inside the
-window's project or another registered project (the latter opening read-only),
-and otherwise issues an opaque token only for the formats
-`shared/file-formats.ts` admits. The registration token is removed from the
-server's environment once read and never passed to an agent CLI, so no agent
-can grant itself a file. Token routes serve that one file, re-check its
+resolves the real path and refuses files under `~/.stashbase` and the app-data
+root. It answers with the project file when the file lies inside the window's
+project or another registered project (the latter opening read-only), matching
+each root by real path, or by directory identity for a spelling realpath keeps,
+such as a macOS `/System/Volumes/Data` firmlink. Otherwise it issues an opaque
+token only for the formats `shared/file-formats.ts` admits. The server deletes
+the registration token from its environment once read, so no process it spawns
+inherits it, and agent CLIs are launched without it. Its initial environment
+stays readable to same-user tools such as `ps eww`, so the token keeps out other
+local clients, not a process that already shares the user's file access. Token routes serve that one file, re-check its
 real path on every read, save Markdown, text, JSON, and CSV against the version read
 (preserving BOM, line endings, and permissions, never indexing), are bound to the
 window for `/api/` reads and saves, and serve

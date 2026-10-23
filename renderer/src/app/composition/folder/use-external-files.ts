@@ -1,8 +1,9 @@
 /**
  * Files dropped on the document pane, bound to the window's live runtimes.
  *
- * A dropped file opens where it is, read-only, in a tab of its own, and goes
- * to the chat beside it; a file already in the project opens as itself.
+ * A dropped file opens where it is, in a tab of its own, and goes to the chat
+ * beside it; a file already in a project opens as itself, and goes to the
+ * chat only when that chat can use it.
  * Closing the tab ends the read grant and takes back the card the drop added.
  * Nothing here copies, prepares, or indexes a file: a file that cannot open in
  * place is refused, and Files remains where a file is copied into the project.
@@ -37,6 +38,21 @@ type Refused = Pick<Refusal, 'name' | 'reason'>;
 
 function sourceKey(source: SourceReference): string {
   return `${source.folderPath}\0${source.path}`;
+}
+
+/** Whether the chat beside can use a dropped source as context, as its send
+ *  will check it: an external file by its own path, a project file only in
+ *  the chat's own project and while that project's listing shows it. Another
+ *  project's file, or one the tree hides, opens all the same; bound, it would
+ *  only refuse the next send. */
+function chatCanUse(agent: AgentWorkspaceRuntime, source: SourceReference): boolean {
+  if (externalFileToken(source)) return true;
+  if (agent.activeSession().store.getState().scope.path !== source.folderPath) return false;
+  const environment = agent.store.getState().scopeEnvironment;
+  return (
+    environment?.folderPath !== source.folderPath ||
+    environment.listing.files.some((file) => file.path === source.path)
+  );
 }
 
 /** A few names, then a count, so one drop of many files stays one line. */
@@ -119,7 +135,14 @@ export function useExternalFiles({
       if (!workspace || !documents) return false;
       const opened = await openDocument(workspace, documents, source, { preview: false });
       if (!opened) return false;
-      dropped.current.set(sourceKey(source), { chat: attachDroppedSource(agent, source), source });
+      // An external file is always usable, so every grant is tracked here
+      // and ends with its tab.
+      if (chatCanUse(agent, source)) {
+        dropped.current.set(sourceKey(source), {
+          chat: attachDroppedSource(agent, source),
+          source,
+        });
+      }
       onOpened?.();
       return true;
     },

@@ -96,7 +96,8 @@ document needs to be open first. A drop in Chats mode brings Documents on screen
 A drop is accepted only while a project is open, and a file whose real path is
 inside the current project opens as that project file. A file inside another
 registered project opens as that project's file, read-only like any source
-from another project folder.
+from another project folder. Files under StashBase's own data (`~/.stashbase`
+and app data) do not open from a drop.
 
 - A file opens in place only when its preview needs nothing but the file itself:
   Markdown, plain text, JSON, CSV/TSV, PDF, images, XLSX, and other UTF-8 text. DOCX falls back

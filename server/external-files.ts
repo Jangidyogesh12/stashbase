@@ -27,6 +27,7 @@ import { detectViewerFormat, isKnownBinaryFile } from './format.ts';
 import { decodeGenericText } from './generic-file-preview.ts';
 import { isSpreadsheetFile, spreadsheetFilePreview } from './spreadsheet-preview.ts';
 import { isCloudPlaceholderName } from './indexable.ts';
+import { appDataRoot } from './local-data.ts';
 import { preserveTextSourceFormat } from './markdown-source-format.ts';
 import { decodeTextSnapshotBytes } from './text-decoding.ts';
 import { fileChanged, textVersion } from './text-file-transaction.ts';
@@ -106,6 +107,68 @@ async function isTextFile(realPath: string, size: number): Promise<boolean> {
   }
 }
 
+/** The device and inode `target` resolves to, or null where the filesystem
+ *  reports no inode number, which would name nothing. */
+async function onDiskIdentityAsync(target: string): Promise<string | null> {
+  try {
+    const stat = await fs.promises.stat(target, { bigint: true });
+    return stat.ino === 0n ? null : `${stat.dev}:${stat.ino}`;
+  } catch {
+    return null;
+  }
+}
+
+interface DroppedFile {
+  realPath: string;
+  identity: string | null;
+  /** Each directory holding the file, nearest first, with the file's path
+   *  below it. */
+  directories: ReadonlyArray<{ identity: string; relative: string }>;
+}
+
+async function droppedFileAsync(realPath: string): Promise<DroppedFile> {
+  const directories: Array<{ identity: string; relative: string }> = [];
+  for (let directory = path.dirname(realPath); ; directory = path.dirname(directory)) {
+    const identity = await onDiskIdentityAsync(directory);
+    if (identity) {
+      directories.push({ identity, relative: path.relative(directory, realPath).split(path.sep).join('/') });
+    }
+    if (path.dirname(directory) === directory) break;
+  }
+  return { directories, identity: await onDiskIdentityAsync(realPath), realPath };
+}
+
+/**
+ * The dropped file's path below `root`, or null when it lies elsewhere. Real
+ * paths decide first, which covers symlinks and Windows 8.3 names. A macOS
+ * firmlink spelling (`/System/Volumes/Data/Users/...` for `/Users/...`) keeps
+ * its spelling through realpath, so the root is then found by identity among
+ * the file's directories, and counts only when the root's own spelling
+ * reaches the same file.
+ */
+async function pathBelowRootAsync(root: string, file: DroppedFile): Promise<string | null> {
+  let rootReal: string;
+  try { rootReal = await fs.promises.realpath(root); } catch { return null; }
+  const relative = await filesystemPath.relativeAsync(rootReal, file.realPath);
+  if (relative) return relative;
+  const rootIdentity = file.identity ? await onDiskIdentityAsync(rootReal) : null;
+  const holding = rootIdentity ? file.directories.find((entry) => entry.identity === rootIdentity) : undefined;
+  if (!holding) return null;
+  return (await onDiskIdentityAsync(filesystemPath.join(root, holding.relative))) === file.identity
+    ? holding.relative
+    : null;
+}
+
+/** StashBase's own state: `~/.stashbase` holds the config with every stored
+ *  credential, and app data holds derived notes and the index. A drop opens
+ *  neither, so no tab edits them and no chat is handed them. */
+async function isStashBaseDataAsync(file: DroppedFile): Promise<boolean> {
+  for (const root of [path.join(os.homedir(), '.stashbase'), appDataRoot()]) {
+    if (await pathBelowRootAsync(root, file)) return true;
+  }
+  return false;
+}
+
 /**
  * Resolves one dropped path for `windowId`: the project's own source when the
  * file already lives in the window's project, a grant when it can open in
@@ -128,24 +191,23 @@ export async function registerExternalFile(windowId: string, droppedPath: string
   if (stat.isDirectory()) return refused(name, 'directory');
   if (!stat.isFile() || isCloudPlaceholderName(path.basename(realPath))) return refused(name, 'unavailable');
 
-  let projectRealRoot: string | null = null;
-  try { projectRealRoot = await fs.promises.realpath(projectRoot); } catch { /* treated as outside */ }
-  const projectPath = projectRealRoot ? await filesystemPath.relativeAsync(projectRealRoot, realPath) : null;
+  const file = await droppedFileAsync(realPath);
+  if (await isStashBaseDataAsync(file)) return refused(name, 'unavailable');
+
+  const projectPath = await pathBelowRootAsync(projectRoot, file);
   const format: ViewerFormat = detectViewerFormat(realPath) ?? 'generic';
   if (projectPath) return { format, kind: 'project', path: projectPath };
   // A file of another registered project opens as that project's, read-only
   // here like any other project's source; its saves and index stay its own.
-  // Compare real paths on both sides: registered roots may use a directory
-  // alias (including Windows 8.3 names), while the dropped file is canonical.
-  // Keep the registry spelling in the result and prefer the deepest owner.
-  let owner: { folderPath: string; path: string; depth: number } | undefined;
+  // Registered roots may use a directory alias, so each is matched against
+  // the file as it is on disk. Keep the registry spelling in the result and
+  // prefer the deepest owner: the one the file lies fewest levels below.
+  let owner: { folderPath: string; path: string; levels: number } | undefined;
   for (const root of await registeredFolderRootsAsync()) {
-    let rootReal: string;
-    try { rootReal = await fs.promises.realpath(root); } catch { continue; }
-    const relative = await filesystemPath.relativeAsync(rootReal, realPath);
-    const depth = filesystemPath.absolute(rootReal).split('/').length;
-    if (relative && (!owner || depth > owner.depth)) {
-      owner = { folderPath: root, path: relative, depth };
+    const relative = await pathBelowRootAsync(root, file);
+    const levels = relative ? relative.split('/').length : 0;
+    if (relative && (!owner || levels < owner.levels)) {
+      owner = { folderPath: root, path: relative, levels };
     }
   }
   if (owner) return { folderPath: owner.folderPath, format, kind: 'project', path: owner.path };

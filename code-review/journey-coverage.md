@@ -689,7 +689,8 @@ editor no longer pastes a dropped file's text.
 the process-private grant in `server/external-files.ts`; reads go through
 `server/routes/external-files.ts` by token only. The source is a
 `SourceReference` whose folder is an `external:` marker (`shared/domain/external-source.ts`),
-so the existing read-only, unpersisted cross-folder tab applies, and the Agent
+so like a cross-folder tab it stays out of the session and history; Markdown,
+text, JSON and CSV save through the grant and the rest are read-only, and the Agent
 binds it by absolute path (`features/agent/application/ask-about.ts`).
 `server/routes/external-files.test.ts` covers the registration token, window
 binding of reads and revocation, sibling bytes refused whatever the URL names, a
@@ -699,7 +700,10 @@ saves that keep BOM, line endings, and permissions, refuse a stale version or
 another window, and write a deleted file back only on an explicit overwrite.
 Directory-alias regressions resolve both registered roots and dropped files to
 real paths, keep the registry spelling, and select the deepest registered owner;
-this includes Windows short-name temporary paths. The native HTTP fixture also
+this includes Windows short-name temporary paths. A macOS-only server test covers
+a project spelled through the `/System/Volumes/Data` firmlink, another refuses
+StashBase's own data, and `use-external-files.test.tsx` covers another project's
+file and a hidden one opening without binding to the chat. The native HTTP fixture also
 checks canonical reveal paths instead of assuming the input spelling survives.
 A built-host HTTP pass (2026-10-23) opened two projects, dropped a file through
 a registered directory alias, and confirmed project ownership with unchanged

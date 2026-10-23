@@ -72,7 +72,10 @@ permissions, with current model and tool choices checked before use.
 - Validate context before sending. Opening a document does not attach it; missing
   or changed context needs replacement, refresh, or explicit removal.
 - A file dropped on the workspace outside the message box does attach, to the
-  chat beside it, without a click and without opening the pane. It shows as the
+  chat beside it, without a click and without opening the pane, when that chat
+  can use it: an external file, or a file of the chat's own project that its
+  listing shows. Another project's file, or one the tree hides, opens without
+  attaching. It shows as the
   suggestion's chip, attached, since opening it is what made it context. An attachment added that way leaves the
   draft when the file's tab closes; one the reader adds by hand stays. An
   [external file](project-files.md#external-files) attaches by its absolute path,

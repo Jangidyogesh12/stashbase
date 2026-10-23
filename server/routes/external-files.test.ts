@@ -18,6 +18,7 @@ import {
   externalFileRegistrationToken,
 } from '../external-files.ts';
 import { filesystemPath } from '../filesystem-path.ts';
+import { appDataRoot } from '../local-data.ts';
 import {
   clearCurrentFolder,
   openProjectFolder,
@@ -234,6 +235,62 @@ for (const alias of [false, true]) {
     });
   });
 }
+
+// realpath keeps a macOS firmlink spelling as it is, so only the directory's
+// identity on disk ties it to the spelling a dropped file arrives with.
+const DATA_VOLUME = '/System/Volumes/Data';
+test('a project spelled through the macOS data-volume firmlink still owns its files', {
+  skip: process.platform !== 'darwin' || !fs.existsSync(`${DATA_VOLUME}${fs.realpathSync(os.tmpdir())}`),
+}, async () => {
+  await withServer(async ({ outside, project, register }) => {
+    const other = path.join(outside, 'other-project');
+    fs.mkdirSync(path.join(other, 'notes'), { recursive: true });
+    fs.writeFileSync(path.join(other, 'notes', 'plan.md'), '# Plan');
+    fs.writeFileSync(path.join(project, 'own.md'), '# Own');
+    const otherSpelled = `${DATA_VOLUME}${other}`;
+    const projectSpelled = `${DATA_VOLUME}${project}`;
+    await registerProjectFolderAsync(otherSpelled);
+    try {
+      assert.deepEqual(await opened(await register('window-a', path.join(other, 'notes', 'plan.md'))), {
+        folderPath: otherSpelled,
+        format: 'md',
+        kind: 'project',
+        path: 'notes/plan.md',
+      });
+      await runWithWindowId('window-b', () => openProjectFolder(projectSpelled));
+      assert.deepEqual(await opened(await register('window-b', path.join(project, 'own.md'))), {
+        format: 'md',
+        kind: 'project',
+        path: 'own.md',
+      });
+    } finally {
+      await removeRecentAsync(otherSpelled);
+      await removeRecentAsync(projectSpelled);
+    }
+  });
+});
+
+test("StashBase's own data never opens from a drop", async () => {
+  await withServer(async ({ register }) => {
+    const files = [
+      path.join(os.homedir(), '.stashbase', 'drop-fixture.json'),
+      path.join(appDataRoot(), 'derived.nosync', 'drop-fixture.md'),
+    ];
+    try {
+      for (const file of files) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, '{}');
+        assert.deepEqual(await opened(await register('window-a', file)), {
+          kind: 'refused',
+          name: path.basename(file),
+          reason: 'unavailable',
+        });
+      }
+    } finally {
+      for (const file of files) fs.rmSync(file, { force: true });
+    }
+  });
+});
 
 test('generic text previews through its grant, and leaving the project revokes it', async () => {
   await withServer(async ({ base, outside, register, revealed }) => {
