@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { DocumentSourcePort } from '@/features/documents/application/ports';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
@@ -63,6 +63,12 @@ const documentWorkspaceProps = {
 };
 
 const runtimes: ReturnType<typeof createRuntime>[] = [];
+
+// Mode retention exercises the real editor, but cold chunk transformation is
+// fixture setup and must not consume the interaction assertion's deadline.
+beforeAll(async () => {
+  await import('@/features/documents/ui/source/viewers/markdown');
+}, 30_000);
 
 afterEach(() => {
   cleanup();

@@ -1077,6 +1077,12 @@ The final built host/renderer repeated both runs with the same allocation and
 release results; a captured Electron frame was visually checked at 300%. All
 twelve renderer gates and the built Electron smoke passed.
 
+**Markdown test setup (2026-10-24):** The Intel CI run exposed a cold Markdown
+viewer import exceeding `tabs.test.tsx`'s five-second interaction wait. That
+suite now loads the real
+viewer in bounded setup before testing mode retention; a 5.5-second injected
+module delay failed before and passed after this test-only change.
+
 **PDF component probes and textless pages (2026-10-14):** `pdf-runtime.test.ts`
 covers a packaged layout with no loose extractor scripts: unavailable probes
 neither launch nor request a download, and installed probes/conversions select
