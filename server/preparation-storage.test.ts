@@ -151,24 +151,28 @@ test('another process holding the state write lock neither stalls nor fails the 
   fixture(t);
   assert.deepEqual(checkPreparationStorage(), { ok: true });
   closeStateDb();
-  // A separate process, like a second StashBase host sharing this app data.
+  // A separate process, like a second StashBase host sharing this app data,
+  // holds the lock until told to let go.
   const holder = spawn(process.execPath, ['--eval', `
     const db = new (require('better-sqlite3'))(process.env.STATE_DB);
     db.exec('BEGIN IMMEDIATE');
     console.log('locked');
-    setTimeout(() => { db.exec('COMMIT'); db.close(); }, 1_000);
+    process.stdin.once('data', () => setTimeout(() => { db.exec('COMMIT'); db.close(); }, 500));
   `], {
     cwd: fileURLToPath(new URL('../', import.meta.url)),
     env: { ...process.env, STATE_DB: appStateDbPath() },
-    stdio: ['ignore', 'pipe', 'inherit'],
+    stdio: ['pipe', 'pipe', 'inherit'],
   });
   t.after(() => holder.kill());
   await once(holder.stdout!, 'data');
 
   const started = Date.now();
   assert.deepEqual(checkPreparationStorage(), { ok: true });
-  assert.ok(Date.now() - started < 900, 'the check must not wait for the full busy timeout');
-  // Ordinary writes keep the full timeout and complete once the lock is released.
+  // The default busy timeout is 5 s; the check gives up on a held lock well before it.
+  assert.ok(Date.now() - started < 4_000, 'the check must not wait for the full busy timeout');
+  // Ordinary writes keep the full timeout: one made while the lock is still
+  // held waits for its release instead of failing after the check's 250 ms.
+  await new Promise<void>((resolve) => holder.stdin!.end('release', resolve));
   const source = path.join(os.tmpdir(), 'draft.pdf');
   setConversionStatus(source, 'done');
   assert.equal(getConversionStatus(source)?.status, 'done');
