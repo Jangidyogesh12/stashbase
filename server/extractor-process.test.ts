@@ -103,3 +103,51 @@ test('extractor cancellation terminates the descendant process tree', { timeout:
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+for (const failure of ['sync', 'async', 'persistent', 'denied', 'cancelled'] as const) {
+  test(`extractor spawn ${failure} preserves evidence and bounds Windows recovery`, async () => {
+    const { runExtractor } = await import('./extractor-process.ts');
+    const controller = new AbortController();
+    let calls = 0;
+    const spawnProcess = (() => {
+      calls++;
+      if (calls === 1 || failure === 'persistent' || failure === 'denied') {
+        const error = Object.assign(new Error('spawn UNKNOWN'), { code: failure === 'denied' ? 'EACCES' : 'UNKNOWN', errno: -4094, syscall: 'spawn' });
+        if (failure === 'cancelled') queueMicrotask(() => controller.abort());
+        if (failure === 'async') {
+          const child = Object.assign(new EventEmitter(), { stderr: new PassThrough() });
+          queueMicrotask(() => { child.emit('error', error); child.emit('close', -4094); });
+          return child;
+        }
+        throw error;
+      }
+      return spawn(process.execPath, ['-e', 'process.stdout.write("x".repeat(2 * 1024 * 1024)); process.stderr.write("extracted\\n")'], spawnOptionsForPdfOcr());
+    }) as unknown as typeof spawn;
+    const run = runExtractor({ mode: 'pdf', script: 'pdf_extract.py', args: [], signal: controller.signal }, { spawn: spawnProcess, platform: 'win32' });
+    if (failure === 'sync' || failure === 'async') {
+      assert.equal((await run).code, 0);
+      assert.equal(calls, 2);
+    } else if (failure === 'cancelled') {
+      await assert.rejects(run, { name: 'AbortError' });
+      assert.equal(calls, 1);
+    } else {
+      await assert.rejects(run, (error: any) => {
+        assert.equal(error.code, 'EXTRACTOR_SPAWN_FAILED');
+        assert.equal(error.cause.code, failure === 'denied' ? 'EACCES' : 'UNKNOWN');
+        assert.equal(error.cause.errno, -4094);
+        assert.equal(error.spawn_attempts, failure === 'persistent' ? 2 : 1);
+        return true;
+      });
+    }
+  });
+}
+
+test('cancelled extraction never creates a process; non-Windows launch failure is not retried', async () => {
+  const { runExtractor } = await import('./extractor-process.ts');
+  let calls = 0;
+  const spawnProcess = (() => { calls++; throw Object.assign(new Error('spawn UNKNOWN'), { code: 'UNKNOWN' }); }) as typeof spawn;
+  await assert.rejects(runExtractor({ mode: 'ocr', script: 'ocr_extract.py', args: [], signal: AbortSignal.abort() }, { spawn: spawnProcess }), { name: 'AbortError' });
+  assert.equal(calls, 0);
+  await assert.rejects(runExtractor({ mode: 'ocr', script: 'ocr_extract.py', args: [] }, { spawn: spawnProcess, platform: 'linux' }), { code: 'EXTRACTOR_SPAWN_FAILED' });
+  assert.equal(calls, 1);
+});

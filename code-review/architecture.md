@@ -229,7 +229,11 @@ source URL and installed package version.
   admission resumes; an unrepaired process crash cannot preserve those writes.
   User Cancel is durable until Reprocess; shutdown/mutation
   interruption remains recoverable. Cancel the full native process tree and await
-  handle release. Optional helpers must not block browsing or steal native focus.
+  handle release. A Windows extractor launch returning `UNKNOWN` retries once
+  after a cancellable 250 ms delay; no successfully started extraction is replayed.
+  Persistent launch failure retains its cause, errno/syscall and attempt count.
+  Extractor stdout is drained even though artifacts are written to files.
+  Optional helpers must not block browsing or steal native focus.
 - Reconcile is folder-explicit and rediscovers lost in-memory work. Boot binds
   every registered folder and reconciles none; a folder reconciles when a window
   opens it, offering sources in bounded batches that yield the shared event loop.
@@ -1061,6 +1065,14 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   at most twenty pending RPC method names, never RPC parameters. Connection
   closure is an observation separate from turn outcome, including idle/intentional
   closure. These observations cannot retroactively fail a completed turn.
+  Agent sockets retain the authorized window UUID and host instance UUID. Main
+  records renderer load/exit and actual window closure with that window UUID,
+  an ephemeral app-session UUID, available renderer PID and webContents ID;
+  host exits carry the same host instance UUID even for unexpected code-zero
+  exits. Socket errors retain bounded code/errno, never frames. Normal lifecycle
+  observations use `native_lifecycle`, not failure counters. They share consent,
+  identity, delivery and the native spool, with admission capped at 25 pending
+  observations so errors can use the remaining slots in its 50-record limit.
   Renderer JSON-body failures retain the original cause, status (including 2xx),
   content type and host-issued response request ID. Requested cancellation stays
   cancellation; empty HEAD/204/205 responses are not decode failures. The agent

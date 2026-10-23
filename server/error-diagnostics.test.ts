@@ -43,3 +43,14 @@ test('large multilingual diagnostics obey one byte budget without losing both en
   assert.match(diagnostic.causes![0].message, /cause-end$/);
   assert.equal(diagnostic.truncated, true);
 });
+
+test('spawn diagnostics retain errno and syscall without copying arguments or environment', () => {
+  const result = errorDiagnostic(Object.assign(new Error('Could not start PDF extractor', {
+    cause: Object.assign(new Error('spawn UNKNOWN'), { errno: -4094, syscall: 'spawn', code: 'UNKNOWN', spawnargs: ['PRIVATE'], env: { SECRET: 'PRIVATE' } }),
+  }), { spawn_attempts: 2 }));
+  assert.equal(result.causes?.[0]?.errno, -4094);
+  assert.equal(result.causes?.[0]?.syscall, 'spawn');
+  assert.equal(result.spawn_attempts, 2);
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE/);
+  assert.deepEqual(errorDiagnostic(result), result);
+});

@@ -1055,6 +1055,17 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 ## J04: Preparation
 
+**Windows extractor launch recovery (2026-10-24):** the reported stack reaches
+`runExtractor` before a child starts; historical logs contain no native Windows
+error beyond `UNKNOWN`, so its original cause remains unproven. Controlled sync
+and async launch-failure fixtures verify one cancellable Windows-only retry,
+persistent error/cause retention and refusal to launch after cancellation.
+A real child writes 2 MiB to stdout before exiting; the host drains it rather
+than blocking on an unread pipe. This is recovery and diagnostic hardening,
+not a reproduction of the unavailable Windows device or a fix for all OS launch
+refusals. `error-diagnostics.test.ts` verifies errno/syscall/attempt preservation
+without command arguments or environment capture.
+
 **Daemon exit evidence (2026-10-16):** the host retains a bounded, credential-filtered
 stderr tail and exit code/signal for unexpected MFS exits. A real child-process
 fixture verifies startup failure evidence and a subsequent successful restart.
@@ -1242,6 +1253,22 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
   evaluation does not establish ranking quality.
 
 ## J06: Agent
+
+**1006 lifecycle correlation (2026-10-24):** host socket diagnostics now join
+main-process window/renderer observations through window UUID and host instance
+UUID. `lifecycle-diagnostics.test.cjs` exercises crash, destroyed-window closure
+and clean shutdown; `native-diagnostics.test.ts` drives socket loss and native
+spool delivery through the same collector, checks correlation, normal-event
+severity and opt-out, and rejects renderer fabrication of lifecycle events.
+Unexpected code-zero host exits are retained too. The built Electron boundary
+smoke kills a real renderer with an open loopback WebSocket and checks the
+spooled PID/window/host correlation after destruction. On macOS Chromium sent
+1001 via its surviving network service, demonstrating why a socket code alone
+cannot establish renderer health. These observations do not
+establish the cause of historical 1006 events; missing records remain unknown.
+Pre-commit verification passed 916 host tests, host/renderer type checks,
+protocol/Electron checks, documentation/inventory checks, service builds and
+built Electron smoke including this real process-exit scenario.
 
 **Codex MCP project attribution (2026-10-22):** `server/agent-mcp.ts` now
 allowlists the window and private session variable names in Codex's stdio

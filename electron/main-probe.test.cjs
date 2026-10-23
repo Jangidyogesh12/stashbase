@@ -381,6 +381,8 @@ test('storage warning crosses a verified health probe without blocking source re
     spawn: (instanceId) => { spawned = true; currentInstance = instanceId; return fixture.child; },
   }), fixture.child);
   assert.deepEqual(ready, [warning, warning]);
+  assert.equal((await shared.probe(currentInstance)).instanceId, currentInstance,
+    'verified identity must reach window lifecycle correlation');
 
   body = { ...body, appRoot: '/foreign' };
   assert.equal((await shared.probe(currentInstance)).preparationStorageWarning, undefined);

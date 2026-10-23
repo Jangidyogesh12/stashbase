@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 import { extractorSpawn } from './python-host.ts';
 import { errorDiagnostic, diagnosticText } from '../shared/protocols/diagnostics.ts';
 import type { z } from 'zod';
@@ -76,10 +77,37 @@ export interface ExtractorOutcome {
 /** Spawn one PDF/OCR extractor at lowered priority and settle after its whole
  * process tree has exited. Rejects only when the spawn itself fails; exit
  * codes and cancellation are the caller's error policy. */
-export function runExtractor({ mode, script, args, signal, onStderrLine }: ExtractorRun): Promise<ExtractorOutcome> {
+export async function runExtractor(request: ExtractorRun, options: {
+  spawn?: typeof spawn; platform?: NodeJS.Platform;
+} = {}): Promise<ExtractorOutcome> {
+  for (let attempt = 1; ; attempt++) {
+    request.signal?.throwIfAborted();
+    try { return await runExtractorOnce(request, options.spawn ?? spawn); }
+    catch (error) {
+      const failure = error as Error & { code?: string; cause?: NodeJS.ErrnoException; spawn_attempts?: number };
+      if (failure.code !== 'EXTRACTOR_SPAWN_FAILED') throw error;
+      failure.spawn_attempts = attempt;
+      // Retry only a failed Windows launch, never an extractor that started
+      // processing source files. Persistent failures keep the original cause.
+      if ((options.platform ?? process.platform) !== 'win32' || failure.cause?.code !== 'UNKNOWN' || attempt >= 2) throw error;
+      await delay(250, undefined, { signal: request.signal });
+    }
+  }
+}
+
+function runExtractorOnce({ mode, script, args, signal, onStderrLine }: ExtractorRun, spawnProcess: typeof spawn): Promise<ExtractorOutcome> {
   return new Promise((resolve, reject) => {
     const spawnSpec = extractorSpawn(mode, script, args);
-    const proc = spawn(spawnSpec.cmd, spawnSpec.args, spawnOptionsForPdfOcr());
+    const spawnFailure = (cause: unknown) => Object.assign(
+      new Error(`Could not start the ${mode.toUpperCase()} extraction process. Retry preparation; if it persists, check the PDF/OCR component and system resources.`, { cause }),
+      { code: 'EXTRACTOR_SPAWN_FAILED' },
+    );
+    let proc: ChildProcess;
+    try { proc = spawnProcess(spawnSpec.cmd, spawnSpec.args, spawnOptionsForPdfOcr()); }
+    catch (error) { reject(spawnFailure(error)); return; }
+    // Output artifacts are files; consume stdout so a verbose child cannot
+    // fill its pipe and stall forever while the host only reads stderr.
+    proc.stdout?.resume();
     lowerExtractorPriority(proc);
     let stderr = '';
     let lineBuffer = '';
@@ -89,6 +117,7 @@ export function runExtractor({ mode, script, args, signal, onStderrLine }: Extra
       terminateExtractorTree(proc);
     };
     signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
     proc.stderr?.on('data', (chunk) => {
       const text = String(chunk);
       stderr = (stderr + text).slice(-STDERR_TAIL_BYTES);
@@ -98,7 +127,7 @@ export function runExtractor({ mode, script, args, signal, onStderrLine }: Extra
     });
     proc.on('error', (err) => {
       signal?.removeEventListener('abort', onAbort);
-      reject(new Error(`spawn failed: ${err.message}`));
+      reject(proc.pid ? err : spawnFailure(err));
     });
     void waitForExtractorTree(proc).then((code) => {
       signal?.removeEventListener('abort', onAbort);

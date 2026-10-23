@@ -20,7 +20,7 @@ const recordSchema = z.object({
   identity: z.object({ installationId: z.string().uuid(), anonymousId: z.string().uuid(),
     firstSeenAt: z.string().datetime(), userId: z.string().optional() }).optional(),
   operation: z.string().max(200), diagnostic: diagnosticSchema,
-  severity: z.enum(['error', 'warning']).optional(),
+  severity: z.enum(['error', 'warning', 'info']).optional(),
   context: diagnosticContextSchema,
 }).strict();
 export type NativeDiagnostic = z.infer<typeof recordSchema>;
@@ -37,13 +37,14 @@ export function createNativeDiagnostics(options: {
   const clear = () => { for (const name of files()) fs.rmSync(path.join(directory, name), { force: true }); };
   return {
     clear() { try { clear(); } catch { /* Never block preference changes. */ } },
-    record(error: unknown, operation: string, context: DiagnosticContext = {}, severity: 'error' | 'warning' = 'error') {
+    record(error: unknown, operation: string, context: DiagnosticContext = {}, severity: 'error' | 'warning' | 'info' = 'error') {
       try {
         if (!options.available) return;
         const config = read();
         const state = usageState(config, now());
         if (!state.enabled) { clear(); return; }
-        if (files().length >= 50) return;
+        const pending = files();
+        if (pending.length >= (severity === 'info' ? 25 : 50)) return;
         const identity = state.userId === accountUsageId(config) && state.installationId && state.anonymousId && state.firstSeenAt
           ? { installationId: state.installationId, anonymousId: state.anonymousId, firstSeenAt: state.firstSeenAt,
             ...(accountUsageId(config) ? { userId: accountUsageId(config) } : {}) } : undefined;

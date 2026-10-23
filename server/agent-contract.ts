@@ -291,7 +291,7 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
     ws.close();
     return;
   }
-  attachAgentDiagnostics(ws, adapter.id, options.telemetryConnectionId);
+  attachAgentDiagnostics(ws, adapter.id, options.telemetryConnectionId, options.windowId);
   const runtime = runtimeDescriptorFor(adapter);
   if (!runtime.installed || runtime.state !== 'available') {
     const message = runtime.error ?? `${adapter.label} is not ready.`;

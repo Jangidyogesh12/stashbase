@@ -91,6 +91,9 @@ async function probeServerHealth(port, timeoutMs, expected) {
   if (health.statusCode === 200 && health.result !== 'invalid_json' && !mismatch) {
     return { compatible: true, occupied: true, legacyStashBase: false, transient: false,
       ...evidence, probe_result: 'ready',
+      ...(typeof health.body.instanceId === 'string'
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(health.body.instanceId)
+        ? { instanceId: health.body.instanceId } : {}),
       ...(health.body.preparationStorage?.ok === false
         && ['PREPARATION_NATIVE_UNAVAILABLE', 'PREPARATION_STORAGE_UNAVAILABLE'].includes(health.body.preparationStorage.code)
         && typeof health.body.preparationStorage.message === 'string'

@@ -134,10 +134,13 @@ const SERVER_ENTRY = app.isPackaged
 const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
 const { createNativeDiagnostics, telemetryAvailable } = require('../dist/electron/diagnostics/native.cjs');
+const { attachWindowDiagnostics } = require('./renderer/lifecycle-diagnostics.cjs');
+const appSessionId = crypto.randomUUID();
+let hostInstanceId;
 const nativeDiagnostics = createNativeDiagnostics({ available: telemetryAvailable(), distribution: app.isPackaged ? 'packaged' : 'source', version: app.getVersion() });
-process.on('uncaughtExceptionMonitor', (error) => nativeDiagnostics.record(error, 'uncaught', { process: 'electron-main' }));
+process.on('uncaughtExceptionMonitor', (error) => nativeDiagnostics.record(error, 'uncaught', { process: 'electron-main', app_session_id: appSessionId }));
 app.on('child-process-gone', (_event, details) => {
-  if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Child process exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: details.type, reason: details.reason });
+  if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Child process exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: details.type, reason: details.reason, app_session_id: appSessionId, ...(hostInstanceId ? { host_instance_id: hostInstanceId } : {}) });
 });
 let serverProc = null;
 let serverStartPromise = null;
@@ -684,6 +687,7 @@ function needsCmdShell(command) {
 
 /** Construct the owned server child; readiness and port arbitration live in main-probe. */
 function spawnServer(instanceId) {
+  hostInstanceId = instanceId;
   const serverBin = app.isPackaged
     ? process.execPath
     : localBin('tsx');
@@ -797,7 +801,7 @@ function spawnServer(instanceId) {
   // the 'error' event as fatal and the whole Electron process crashes
   // with an unhelpful stack — surface a useful message instead.
   serverProc.on('error', (err) => {
-    nativeDiagnostics.record(err, 'startup', { process: 'host', stage: 'spawn' });
+    nativeDiagnostics.record(err, 'startup', { process: 'host', stage: 'spawn', host_instance_id: instanceId, app_session_id: appSessionId });
     console.warn(`[electron] server spawn failed: ${err.message}`);
     if (err.code === 'ENOENT') {
       console.warn(`[electron]   couldn't find ${serverBin}. ` +
@@ -807,7 +811,11 @@ function spawnServer(instanceId) {
   const child = serverProc;
   child.on('exit', (code, signal) => {
     if (serverProc === child) authNetworkBridge?.cancelPending();
-    if (!quitRequested && (code !== 0 || signal)) nativeDiagnostics.record({ message: 'Host process exited unexpectedly', exitCode: code, signal, stderr: readServerLogTail(getServerLogPath()) }, 'native', { process: 'host', stage: 'exit' });
+    const unexpected = !quitRequested;
+    nativeDiagnostics.record({ message: unexpected ? 'Host process exited unexpectedly' : 'Host process exited', exitCode: code, signal,
+      ...(unexpected ? { stderr: readServerLogTail(getServerLogPath()) } : {}) }, 'host-lifecycle',
+      { process: 'host', stage: 'exit', reason: unexpected ? 'unexpected_exit' : 'app_shutdown', host_instance_id: instanceId,
+        app_session_id: appSessionId, ...(child.pid ? { pid: child.pid } : {}) }, unexpected ? 'error' : 'info');
     if (serverProc === child) serverStartPromise = null;
     if (code != null && code !== 0) {
       console.warn(`[electron] server exited with code ${code}`);
@@ -831,7 +839,7 @@ async function startOrReuseServer() {
       packaged: app.isPackaged,
       port: SERVER_PORT,
       probe: (instanceId) => probeServer(SERVER_PORT, 300, instanceId),
-      onReady: (health) => { preparationStorageWarning = health.preparationStorageWarning ?? null; },
+      onReady: (health) => { hostInstanceId = health.instanceId; preparationStorageWarning = health.preparationStorageWarning ?? null; },
       spawn: (instanceId) => { spawnedChild = spawnServer(instanceId); return spawnedChild; },
     });
     if (!child) console.log(`[electron] reusing existing server at ${SERVER_URL}`);
@@ -1053,9 +1061,8 @@ async function createWindow({ background = false, reopensProject = false } = {})
       if (!win.webContents.isDestroyed()) win.webContents.setBackgroundThrottling(true);
     });
   }
-  win.webContents.on('render-process-gone', (_event, details) => {
-    if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Renderer exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: 'renderer', reason: details.reason });
-  });
+  attachWindowDiagnostics(win, { windowId, appSessionId, hostInstanceId: () => hostInstanceId,
+    record: (...args) => nativeDiagnostics.record(...args), quitting: () => quitRequested });
   mainWindows.add(win);
   windowRegistry.add(windowId, win);
   if (

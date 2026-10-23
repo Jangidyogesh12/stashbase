@@ -351,7 +351,9 @@ export function createTelemetry(options: {
   };
   const drainNative = () => {
     if (collectionStopped) { options.native?.clear(); return; }
-    options.native?.drain((record) => capture({ event: record.severity === 'warning' ? 'application_warning' : 'application_error', source: 'native',
+    options.native?.drain((record) => record.severity === 'info'
+      ? capture({ event: 'native_lifecycle', operation: record.operation, diagnostic: errorDiagnostic(record.diagnostic), context: record.context }, record.identity, generation, false, record) === true
+      : capture({ event: record.severity === 'warning' ? 'application_warning' : 'application_error', source: 'native',
     operation: record.operation, diagnostic: record.diagnostic, context: record.context, occurrences: 1 }, record.identity, generation, false, record) === true);
   };
   const nativeTimer = options.native && options.available ? setInterval(drainNative, 5000) : undefined;

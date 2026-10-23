@@ -191,6 +191,15 @@ For task failure rates, use `agent_turn_finished.outcome`; join tool failures by
 `turn_id` to inspect recovery. Count tool failures separately by category. A
 failed meaning-search tool followed by a successful terminal is tool degradation,
 not task failure. Missing terminal evidence is unknown, not inferred success.
+For 1006 investigations, join host connection records to native lifecycle records
+by `context.window_id` and `context.host_instance_id`. These are ephemeral UUIDs,
+not project paths. Main records renderer load/exit, actual window closure and host
+exit, with available PID, webContents ID and app-session UUID. Expected closure
+uses `native_lifecycle`; a renderer crash or unexpected host exit remains an
+`application_error`. Socket errors retain code/errno if emitted. Their absence
+is not proof of a clean exit. OS process IDs alone are not stable join keys.
+Extractor launch failures preserve numeric errno, syscall and bounded launch
+attempt count, without adding command arguments or environment variables.
 Error context may include native session IDs and diagnostic paths; turn events
 contain no conversation content.
 
@@ -222,11 +231,12 @@ Collection never waits on network delivery to complete a writing operation or
 shutdown. The host re-reads current configuration after each outbound request so
 an acknowledgement cannot overwrite newer preferences or newly queued work.
 Renderer delivery queues up to 100 errors and retries each up to three times.
-Native processes spool up to 50 bounded errors for seven days, including startup,
+Native processes spool up to 50 bounded diagnostic records for seven days, including startup,
 renderer/child-process crashes, MCP startup and actual updater failures. The host
 imports them every five seconds or on shutdown, retaining occurrence time and
 source version. A crash before any host can run is recoverable only after a later
-healthy launch; a full spool can lose further errors.
+healthy launch; a full spool can lose further errors. Normal lifecycle observations
+stop admission at 25 pending records to leave room for failures.
 
 Queue expiry, saturation, unavailable local storage, ingestion rejection and
 uninstall can still lose events. HTTP acceptance alone does not establish that a

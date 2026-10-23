@@ -74,8 +74,11 @@ const agentCaptures = new WeakMap<object, ReturnType<typeof telemetry.scoped>>()
 const agentProcessSnapshots = new WeakMap<object, () => NonNullable<ErrorContext['context']>>();
 const agentDiagnostics = new WeakMap<object, Omit<ErrorContext, 'source' | 'operation' | 'runtime'>>();
 /** Installed before runtime listeners; connection identity exists even if setup fails. */
-export function attachAgentDiagnostics(connection: WebSocket, runtime: NonNullable<ErrorContext['runtime']>, connectionId?: string): void {
-  agentDiagnostics.set(connection, { context: { connection_id: connectionId && validTurnId(connectionId) ? connectionId : randomUUID() } });
+export function attachAgentDiagnostics(connection: WebSocket, runtime: NonNullable<ErrorContext['runtime']>, connectionId?: string, windowId?: string): void {
+  agentDiagnostics.set(connection, { context: { connection_id: connectionId && validTurnId(connectionId) ? connectionId : randomUUID(),
+    ...(windowId && validTurnId(windowId) ? { window_id: windowId } : {}),
+    ...(process.env.STASHBASE_SERVER_INSTANCE_ID && validTurnId(process.env.STASHBASE_SERVER_INSTANCE_ID)
+      ? { host_instance_id: process.env.STASHBASE_SERVER_INSTANCE_ID } : {}) } });
   agentStates.set(connection, { interrupted: false, closing: false });
   agentCaptures.set(connection, telemetry.scoped());
   connection.on('message', (raw) => {
@@ -89,7 +92,11 @@ export function attachAgentDiagnostics(connection: WebSocket, runtime: NonNullab
       }
     } catch { /* Runtime validation owns invalid commands. */ }
   });
-  connection.once('error', () => updateAgentDiagnosticContext(connection, { close_initiator: 'unknown', close_reason: 'socket_error' }));
+  connection.once('error', (error: NodeJS.ErrnoException) => updateAgentDiagnosticContext(connection, {
+    close_initiator: 'unknown', close_reason: 'socket_error',
+    ...(typeof error.code === 'string' ? { socket_error_code: error.code.slice(0, 160) } : {}),
+    ...(Number.isSafeInteger(error.errno) ? { socket_error_errno: error.errno } : {}),
+  }));
   connection.once('close', (code) => {
     updateAgentDiagnosticContext(connection, agentProcessSnapshots.get(connection)?.() ?? {});
     const details = agentDiagnostics.get(connection);

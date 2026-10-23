@@ -27,6 +27,10 @@ import { diagnosticText, diagnosticSchema as diagnostic } from '../diagnostics';
  * including this one. Absent from envelopes queued by older builds. */
 const occurrences = z.number().int().min(1).max(1_000_000).optional();
 export const diagnosticContextSchema = z.object({
+  window_id: z.string().uuid().optional(), host_instance_id: z.string().uuid().optional(),
+  app_session_id: z.string().uuid().optional(), pid: z.number().int().positive().optional(),
+  web_contents_id: z.number().int().positive().optional(),
+  socket_error_code: z.string().max(160).optional(), socket_error_errno: z.number().int().optional(),
   method: z.string().max(16).optional(), route: z.string().max(500).optional(),
   action: z.string().max(200).optional(), stage: z.string().max(100).optional(),
   model: z.string().max(200).optional(), runtime_version: z.string().max(100).optional(),
@@ -54,7 +58,7 @@ export type DiagnosticContext = z.infer<typeof diagnosticContextSchema>;
 export function boundedDiagnosticContext(input: unknown): unknown {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
   const limits: Record<string, number> = { method: 16, route: 500, action: 200, stage: 100,
-    model: 200, runtime_version: 100, tool_call_id: 512, native_session_id: 512, target_version: 100, process: 100, reason: 500, app_version: 100 };
+    socket_error_code: 160, model: 200, runtime_version: 100, tool_call_id: 512, native_session_id: 512, target_version: 100, process: 100, reason: 500, app_version: 100 };
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key,
     typeof value === 'string' && limits[key] ? diagnosticText(value, limits[key])
       : key === 'pending_rpc_methods' && Array.isArray(value)
@@ -133,6 +137,7 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
   z.object({ event: z.literal('agent_setup_stage'), runtime, attempt_id: z.string().uuid(), stage: z.enum(['discovery', 'installation', 'authentication', 'mcp']), outcome: z.enum(['started', 'success']), ...correlation }).strict(),
   z.object({ event: z.literal('application_error'), ...diagnosticFields }).strict(),
   z.object({ event: z.literal('application_warning'), ...diagnosticFields }).strict(),
+  z.object({ event: z.literal('native_lifecycle'), operation: z.string().max(200), diagnostic, context: diagnosticContextSchema }).strict(),
 ]);
 export type TelemetryEvent = z.infer<typeof telemetryEventSchema>;
 /** Authentication, billing and persisted writes are host facts. Renderers

@@ -7,6 +7,9 @@ const fields = {
   stack: z.string().max(16_000).optional(),
   http_status: z.number().int().min(100).max(599).optional(),
   exit_code: z.number().int().optional(),
+  errno: z.number().int().optional(),
+  syscall: z.string().max(200).optional(),
+  spawn_attempts: z.number().int().positive().max(2).optional(),
   request_id: z.string().max(200).optional(),
   content_type: z.string().max(200).optional(),
   signal: z.string().max(80).optional(),
@@ -58,7 +61,7 @@ export function errorDiagnostic(error: unknown): ErrorDiagnostic {
       const message = text(record.message ?? (typeof value === 'string' ? value : undefined), 8_000) ?? 'Unknown error';
       const result: Omit<ErrorDiagnostic, 'causes' | 'truncated'> = { message };
       for (const [key, limit, raw] of [
-        ['name', 120, record.name], ['code', 160, record.code], ['stack', 16_000, record.stack],
+        ['syscall', 200, record.syscall], ['name', 120, record.name], ['code', 160, record.code], ['stack', 16_000, record.stack],
         ['content_type', 200, record.content_type], ['request_id', 200, record.request_id ?? record.requestId], ['signal', 80, record.signal],
         ['stdout', 8_000, record.stdout], ['stderr', 8_000, record.stderr], ['response_body', 8_000, record.response_body],
         ['component_stack', 8_000, record.component_stack ?? record.componentStack],
@@ -70,6 +73,10 @@ export function errorDiagnostic(error: unknown): ErrorDiagnostic {
       if (status !== undefined && status >= 100 && status <= 599) result.http_status = status;
       const exit = integer(record.exit_code ?? record.exitCode);
       if (exit !== undefined) result.exit_code = exit;
+      const errno = integer(record.errno);
+      if (errno !== undefined) result.errno = errno;
+      const attempts = integer(record.spawn_attempts);
+      if (attempts !== undefined && attempts >= 1 && attempts <= 2) result.spawn_attempts = attempts;
       return result;
     };
     const diagnostic = read(error);
