@@ -1061,6 +1061,22 @@ fixture verifies startup failure evidence and a subsequent successful restart.
 The fixture uses Node, not Python/MFS; the reported production code-1 failure's
 traceback and root cause remain unknown.
 
+**PDF raster allocation and disposal (2026-10-24):** `ui/pdf/page.tsx` caps
+high-DPI raster dimensions while preserving CSS zoom and text coordinates, and
+explicitly releases visible/scratch backing stores on scroll, close and render
+settlement. Three `page.test.tsx` regressions failed on the baseline and pass
+with the fix, including cancellation without stale pixels. The isolated Electron
+`profile:pdf-memory` scenario ran twice before and after: one A4 page at 300% and
+DPR 2 dropped from 69,797,376 to 16,768,800 backing bytes; its detached canvas
+dropped from 69,797,376 to zero. CSS geometry remained 1836 × 2376 px. These are
+canvas allocation measurements, not process RSS. The reported Windows renderer
+OOM and adjacent GPU crash occurred on an approximately 4 GB machine that is
+unavailable for reproduction; driver behavior and complex PDF decoding remain
+unproven. See [the profiling scenario](../scripts/profiling/README.md#scenario-pdf-raster-memory).
+The final built host/renderer repeated both runs with the same allocation and
+release results; a captured Electron frame was visually checked at 300%. All
+twelve renderer gates and the built Electron smoke passed.
+
 **PDF component probes and textless pages (2026-10-14):** `pdf-runtime.test.ts`
 covers a packaged layout with no loose extractor scripts: unavailable probes
 neither launch nor request a download, and installed probes/conversions select

@@ -27,6 +27,11 @@ Playback depends on codecs. Previewability, content editing, file mutation, and
 retrieval are independent capabilities. The [glossary](../glossary.md#format-capability)
 defines those distinctions; [Project Context](project-context.md) owns preparation.
 
+PDF preview keeps zoomed page geometry and selectable text while bounding raster
+resolution. Pages outside the nearby viewport release their canvas storage;
+zooming or closing a preview cancels obsolete rendering. Extremely large pages
+may appear less sharp at high zoom to keep preview memory bounded.
+
 ## Shared Rules and Differences
 
 - Reads, edits, search results, and file links retain project-and-path identity.

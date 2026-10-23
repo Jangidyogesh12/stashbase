@@ -124,6 +124,26 @@ symlinks, hence its raw revision label includes `+dirty`. These measurements
 exclude real catalog network latency, model generation, and UI rendering.
 An expired or incompatible spare still requires cold startup.
 
+## Scenario: PDF raster memory
+
+`pnpm profile:pdf-memory --label after --runs 2` opens a generated twelve-page
+vector PDF in isolated Electron, emulates DPR 2, zooms to 300%, then scrolls to
+page ten. Use it for PDF raster allocation and disposal changes. The script
+retains the first detached canvas long enough to measure explicit release
+without depending on garbage collection. No user document is read.
+
+Reference ranges on macOS arm64, two runs per label, baseline `24026773`:
+
+| Metric | Before | After raster cap and disposal |
+|---|---|---|
+| First-page backing bytes | 69,797,376–69,797,376 | 16,768,800–16,768,800 |
+| Detached first-page backing bytes | 69,797,376–69,797,376 | 0–0 |
+| CSS page dimensions | 1836 × 2376 px | 1836 × 2376 px |
+
+This measures canvas dimensions × four bytes, not total renderer/GPU RSS or PDF
+image-decoder allocations. It does not reproduce the reported low-memory Windows
+OOM/GPU crash, establish a driver fault, or measure arbitrary complex documents.
+
 ## Adding a scenario
 
 Write `<scenario>.mjs` beside `editing.mjs`:

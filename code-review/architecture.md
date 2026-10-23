@@ -1102,6 +1102,10 @@ registered host boundaries; renderer shared types are a different layer.
   same-folder subtree mutation. Separate request lanes cannot cancel unrelated work.
   Stores, query caches, timers, subscriptions, workers, and URLs have explicit
   owners and disposal. One window has one query client, not durable authority.
+  The PDF page owner caps each raster backing store at four megapixels and
+  4096 pixels per edge, independently of CSS zoom and text-layer coordinates.
+  Effect cleanup resets the captured visible canvas even after React detaches it;
+  scratch storage is reset after rendering or cancellation settles.
 - Main's one-shot folder claim and server binding decide entry, not saved layout.
   The startup window, and each window a launch reopens a project in, claims
   restoration. Native session persistence serializes

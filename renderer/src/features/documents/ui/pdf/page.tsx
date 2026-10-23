@@ -1,7 +1,13 @@
+/** Owns one nearby PDF page, its cancellable rendering and bounded raster storage. */
 import { TextLayer, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist';
 import { useEffect, useRef, useState } from 'react';
 
 import { useErrorReporter } from '@/shared/runtime/error-reporting';
+
+// One backing store stays within 16 MiB even on high-DPI displays at 300%.
+// CSS dimensions and text coordinates retain the requested zoom.
+const MAX_RASTER_PIXELS = 4 * 1024 * 1024;
+const MAX_RASTER_EDGE = 4096;
 
 export function PdfPage({
   document: pdf,
@@ -36,13 +42,10 @@ export function PdfPage({
   }, []);
 
   useEffect(() => {
-    if (!nearViewport) {
-      canvasRef.current
-        ?.getContext('2d')
-        ?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      textRef.current?.replaceChildren();
-      return;
-    }
+    if (!nearViewport) return;
+    const visibleCanvas = canvasRef.current;
+    const visibleText = textRef.current;
+    let rendered: HTMLCanvasElement | null = null;
     let cancelled = false;
     let page: PDFPageProxy | null = null;
     let renderTask: ReturnType<PDFPageProxy['render']> | null = null;
@@ -57,10 +60,14 @@ export function PdfPage({
         }
         page = loadedPage;
         const viewport = loadedPage.getViewport({ scale });
-        const ratio = globalThis.devicePixelRatio || 1;
-        const rendered = globalThis.document.createElement('canvas');
-        rendered.width = Math.floor(viewport.width * ratio);
-        rendered.height = Math.floor(viewport.height * ratio);
+        const ratio = Math.min(
+          globalThis.devicePixelRatio || 1,
+          Math.sqrt(MAX_RASTER_PIXELS / (viewport.width * viewport.height)),
+          MAX_RASTER_EDGE / Math.max(viewport.width, viewport.height),
+        );
+        rendered = globalThis.document.createElement('canvas');
+        rendered.width = Math.max(1, Math.floor(viewport.width * ratio));
+        rendered.height = Math.max(1, Math.floor(viewport.height * ratio));
         renderTask = loadedPage.render({
           canvas: rendered,
           transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0],
@@ -105,12 +112,20 @@ export function PdfPage({
           reportError?.(error, 'pdf-preview');
           setFailed(true);
         }
+      })
+      .finally(() => {
+        // clearRect and DOM removal do not release canvas backing storage.
+        // Wait for cancelled rendering to settle before resizing its target.
+        if (rendered) rendered.width = rendered.height = 0;
+        page?.cleanup();
       });
     return () => {
       cancelled = true;
       renderTask?.cancel();
       textLayer?.cancel();
       page?.cleanup();
+      if (visibleCanvas) visibleCanvas.width = visibleCanvas.height = 0;
+      visibleText?.replaceChildren();
     };
   }, [nearViewport, pageNumber, pdf, scale, reportError]);
 
