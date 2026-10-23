@@ -47,23 +47,28 @@ export function useWorkspaceNotices({
   revisionFailures: readonly string[];
 }): WorkspaceNoticePlacement {
   return useMemo(() => {
-    const preparation: DismissibleNotice | null = preparationFailure
-      ? {
-          action: null,
-          dismissLabel: 'Dismiss preparation notice',
-          message: preparationFailure.message,
-          onDismiss: dismissPreparationFailure,
-          tone: preparationFailure.tone,
-        }
-      : null;
+    // A floating card names its dismissal in words; the corner's cross needs
+    // an accessible name that says what it dismisses.
+    const preparation = (dismissLabel: string): DismissibleNotice[] =>
+      preparationFailure
+        ? [
+            {
+              action: null,
+              dismissLabel,
+              message: preparationFailure.message,
+              onDismiss: dismissPreparationFailure,
+              tone: preparationFailure.tone,
+            },
+          ]
+        : [];
     return {
       // Preparation run on the reader's behalf reports from the corner; a
       // reprocess they asked for answers where they acted, floating.
-      corner: preparation && !preparationRequested ? [preparation] : [],
+      corner: preparationRequested ? [] : preparation('Dismiss preparation notice'),
       // A review that did not open is StashBase failing to show what was
       // offered, not the reader's own request refused.
       floating: [
-        ...(preparation && preparationRequested ? [preparation] : []),
+        ...(preparationRequested ? preparation('Dismiss') : []),
         ...revisionFailures.map((message) => ({
           action: null,
           dismissLabel: 'Dismiss',

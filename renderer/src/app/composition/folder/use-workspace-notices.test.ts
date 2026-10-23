@@ -37,6 +37,7 @@ describe('useWorkspaceNotices', () => {
     // Background work reports from the corner, a request that did not land
     // floats, and the window's standing condition holds the strip.
     expect(messages(result.current.corner)).toEqual(['Preparation was refused.']);
+    expect(result.current.corner[0]?.dismissLabel).toBe('Dismiss preparation notice');
     expect(messages(result.current.floating)).toEqual(['plan.md did not open.']);
     expect(messages(result.current.strip)).toEqual(['The host lost this folder.']);
   });
@@ -55,6 +56,12 @@ describe('useWorkspaceNotices', () => {
     expect(messages(result.current.floating)).toEqual([
       'Reprocess was refused.',
       'plan.md did not open.',
+    ]);
+    // A floating card shows its dismissal as words, the same on every card;
+    // only the corner's cross carries the longer accessible name.
+    expect(result.current.floating.map((notice) => notice.dismissLabel)).toEqual([
+      'Dismiss',
+      'Dismiss',
     ]);
   });
 
