@@ -16,6 +16,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { parseTOML, getStaticTOMLValue } from 'toml-eslint-parser';
 import { registerProjectFolderAsync } from '../folder.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import { registerAttributedAgentSession, unregisterAttributedAgentSession } from '../agent-session-registry.ts';
 import { createProjectOperations } from '../project-operations/index.ts';
 import { mount as mountProjectFiles } from '../routes/project-files.ts';
@@ -114,7 +115,7 @@ test('generated Codex MCP config retains each chat project through the stdio and
     assert.notEqual(result.isError, true, JSON.stringify(result));
     assert.deepEqual(received.at(-1), { session: `codex-mcp-${i}`, window: 'shared-window', folder: undefined });
   }
-  assert.deepEqual(searched, folders);
+  assert.deepEqual(searched, folders.map(folder => filesystemPath.absolute(folder)));
   for (const [name, args] of [
     ['search_project', { query: 'draft', folder: folders[1] }],
     ['read_file', { path: path.join(folders[1], 'note.txt') }],
@@ -123,7 +124,7 @@ test('generated Codex MCP config retains each chat project through the stdio and
   }
   unregisterAttributedAgentSession('codex-mcp-0');
   await assert.rejects(clients[0].callTool({ name: 'search_project', arguments: { query: 'draft' } }), /SESSION_UNAVAILABLE/);
-  assert.deepEqual(searched, folders, 'cross-project and retired calls never reach retrieval or inherit the other active chat');
+  assert.deepEqual(searched, folders.map(folder => filesystemPath.absolute(folder)), 'cross-project and retired calls never reach retrieval or inherit the other active chat');
 });
 
 test('Claude MCP setup keeps the user\'s other settings and asks for StashBase tools to stay loaded', () => {
@@ -197,6 +198,12 @@ test('a timed-out child keeps one failure until late pipe closure releases owner
     return emit(event, ...args);
   });
   t.after(() => { if (closeArgs) emit('close', ...closeArgs); child.kill('SIGKILL'); });
+  // This fixture exercises delayed pipe closure after exit, independently of
+  // how long Windows taskkill takes on a loaded runner. Tree cancellation has
+  // its own real-process coverage in extractor-process.test.ts.
+  const exited = once(child, 'exit');
+  child.kill();
+  await exited;
   let completed = false;
   void agentProcessClosed(child).then(() => { completed = true; });
   const closing = retireAgentProcess(child, 'spare_expired');

@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
-const os = require('node:os');
 const path = require('node:path');
 const { app, BrowserWindow, net, protocol, session } = require('electron');
 const { WebSocketServer } = require('ws');
@@ -11,7 +10,8 @@ const { APP_ORIGIN, installAppProtocol, registerAppScheme } = require('../app-pr
 const { applicationWindowWebPreferences, secureApplicationWindow } = require('../window-security.cjs');
 const { installRequestAuthorization } = require('./requests.cjs');
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-request-authorization-'));
+const root = process.env.STASHBASE_SMOKE_ROOT;
+if (!root) throw new Error('Launch this fixture through smoke-runner.cjs.');
 app.setPath('userData', path.join(root, 'profile'));
 fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><body>Request boundary fixture</body>');
 registerAppScheme(protocol);
@@ -128,6 +128,5 @@ app.whenReady().then(async () => {
   sockets.close();
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
-  fs.rmSync(root, { recursive: true, force: true });
   app.exit(process.exitCode || 0);
 });

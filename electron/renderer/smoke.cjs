@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, protocol, session } = require('electron');
 
@@ -22,7 +21,8 @@ const { installRequestAuthorization } = require('./requests.cjs');
 const { serveGalleryFixture, checkGalleryImages } = require('./gallery-smoke.cjs');
 const { serveDocumentImageFixture, checkDocumentImage } = require('./document-image-smoke.cjs');
 
-const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-boundary-'));
+const smokeRoot = process.env.STASHBASE_SMOKE_ROOT;
+if (!smokeRoot) throw new Error('Launch this fixture through smoke-runner.cjs.');
 app.setPath('userData', path.join(smokeRoot, 'profile'));
 registerAppScheme(protocol);
 
@@ -548,7 +548,6 @@ app
     window.destroy();
     projectServer.closeAllConnections();
     await new Promise((resolve) => projectServer.close(resolve));
-    fs.rmSync(smokeRoot, { recursive: true, force: true });
     app.quit();
   })
   .catch((error) => {
@@ -559,6 +558,5 @@ app
       projectServer.close();
     }
     for (const window of BrowserWindow.getAllWindows()) window.destroy();
-    fs.rmSync(smokeRoot, { recursive: true, force: true });
     app.exit(1);
   });

@@ -1230,6 +1230,14 @@ stores no session values. `agent-runtime-recovery.test.ts` drives that config
 through real stdio MCP and production HTTP/scope handling, with controlled
 retrieval: two active Chats in one window search their own projects without a
 folder argument; cross-project search/read and retired identities are refused.
+The scope assertions compare normalized project paths on every OS. The delayed
+pipe-closure fixture waits for a real child exit before testing the retirement
+deadline; `extractor-process.test.ts` separately verifies real descendant-tree
+cancellation, so Windows taskkill latency is not mistaken for a pipe-state failure.
+The Electron smoke runner owns temporary profiles and removes them after the
+child exits, with bounded filesystem retries. This avoids deleting Chromium
+cache files while Windows still holds them open; the real Electron smoke passed
+locally after moving cleanup to the parent.
 An isolated Codex CLI 0.160.0 app-server pass through the built MCP launcher
 reproduced the original 400 with both headers absent, then returned 200 for
 each Chat after the fix, 403 for cross-project search/read, and 409 after
