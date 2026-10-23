@@ -348,7 +348,11 @@ stable status without download, retry, or a new durable demand latch.
   overrides, npm package, official installer, and Windows bin directory.
   Discovery, installation, readiness, and the CLI listing read them there.
   Antigravity readiness runs `agy --output-format json -p /usage`, which needs
-  the cached sign-in but starts no turn. `agy` has no login command, so its
+  the cached sign-in but starts no turn. Its sign-in entry runs that same check
+  before starting a terminal: a signed-in account returns immediately; a failed
+  check or refused account keeps its error without opening login. Cancellation
+  during that check cannot start a terminal or report success.
+  `agy` has no login command, so its
   sign-in gives an interactive `agy` a pseudo-terminal (`script`) or, on Windows,
   its own console, polls readiness, and retires that run after success,
   cancellation, or the shared ten-minute deadline.

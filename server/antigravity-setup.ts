@@ -89,6 +89,11 @@ export async function loginToAntigravity(
   const pollMs = overrides.pollMs ?? 4_000;
   const deadline = Date.now() + (overrides.timeoutMs ?? LOGIN_TIMEOUT_MS);
   signal.throwIfAborted();
+  // Reuse an account signed in outside StashBase. A failed or refused check
+  // must keep its diagnostic instead of starting another browser sign-in.
+  const authenticated = await isAuthenticated(executable, signal);
+  signal.throwIfAborted();
+  if (authenticated) return;
   const child = (overrides.spawnSignIn ?? spawnAntigravitySignIn)(executable);
   let output = '';
   const append = (chunk: Buffer | string) => { output = (output + chunk.toString()).slice(-4000); };

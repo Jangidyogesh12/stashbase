@@ -46,6 +46,38 @@ test('a refused account fails setup as refused, not as a failed sign-in check', 
   assert.match(status.failure?.message ?? '', /Google refused this account: not available in your location\./);
 });
 
+test('sign-in reuses the selected CLI account without starting an interactive login', async () => {
+  const signal = new AbortController().signal;
+  await loginToAntigravity('/native/agy', signal, {
+    isAuthenticated: async (executable, receivedSignal) => {
+      assert.equal(executable, '/native/agy');
+      assert.equal(receivedSignal, signal);
+      return true;
+    },
+    spawnSignIn: () => { throw new Error('An existing sign-in must not open another login.'); },
+  });
+});
+
+test('a refused account or failed initial check does not start an interactive login', async () => {
+  for (const error of [new AgentAccountRefusedError('refused'), new Error('check unavailable')]) {
+    await assert.rejects(loginToAntigravity('/native/agy', new AbortController().signal, {
+      isAuthenticated: async () => { throw error; },
+      spawnSignIn: () => { throw new Error('An unsuccessful check must not start login.'); },
+    }), (received) => received === error);
+  }
+});
+
+test('cancelling the initial check neither starts login nor reports successful sign-in', async () => {
+  for (const signedIn of [false, true]) {
+    const cancel = new AbortController();
+    const reason = new Error('cancelled during the initial check');
+    await assert.rejects(loginToAntigravity('/native/agy', cancel.signal, {
+      isAuthenticated: async () => { cancel.abort(reason); return signedIn; },
+      spawnSignIn: () => { throw new Error('A cancelled sign-in must not start login.'); },
+    }), (received) => received === reason);
+  }
+});
+
 test('sign-in keeps the interactive run until the check passes, then retires it', { skip: process.platform === 'win32' }, async () => {
   let child: ReturnType<typeof spawn> | undefined;
   let checks = 0;
@@ -57,11 +89,15 @@ test('sign-in keeps the interactive run until the check passes, then retires it'
   assert.equal(checks, 3);
   assert.ok(child!.exitCode !== null || child!.signalCode !== null, 'the interactive run is retired once signed in');
 
+  let refusalChecks = 0;
   await assert.rejects(loginToAntigravity('/unused/agy', new AbortController().signal, {
     pollMs: 5,
     timeoutMs: 60_000,
     spawnSignIn: () => spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: ['pipe', 'pipe', 'pipe'] }),
-    isAuthenticated: async () => { throw new AgentAccountRefusedError('refused'); },
+    isAuthenticated: async () => {
+      if (++refusalChecks === 1) return false;
+      throw new AgentAccountRefusedError('refused');
+    },
   }), AgentAccountRefusedError, 'a refused account ends sign-in at once');
 
   await assert.rejects(loginToAntigravity('/unused/agy', new AbortController().signal, {

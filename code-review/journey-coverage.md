@@ -2281,10 +2281,21 @@ streamed text and tool rows, the history record and its project scope, process
 reuse and restart on a model change, read/write/command decisions per mode,
 always-answers, withdrawn and post-Stop approvals, Stop and resume, empty
 `SUCCESS`, a crash with `AGY_ERROR`, and the hook route's refusal of unknown
-sessions. `antigravity-setup.test.ts` covers sign-in classification, the sign-in
-loop's retirement, cancellation and early exit, model-variant grouping, nested
+sessions. `antigravity-setup.test.ts` covers sign-in classification, reuse of an
+existing sign-in without launching an interactive login, initial check failures
+and cancellation without launching login, the sign-in loop's retirement,
+cancellation and early exit, model-variant grouping, nested
 and flat event forms, setup that keeps the reader's own MCP servers and hooks,
 and the generated POSIX hook launcher against a real local server.
+On macOS (2026-10-23), the sign-in entry checked the locally installed `agy`
+with its real `/usage` probe and reused the existing account without invoking
+the interactive-login launcher. An isolated macOS Electron pass through the
+built renderer and server used a fake `agy` that initially reported signed out,
+then reported signed in after an external marker changed. Clicking Sign in in
+Settings → Agents reached Ready without invoking the interactive CLI; the row
+was inspected by eye. These checks do not establish a packaged pass or a fresh
+OAuth exchange. Manual-code OAuth remains blocked in StashBase on POSIX: the
+login terminal is hidden and no UI forwards the code to its input.
 A driven pass through the built app (2026-10-17, macOS, scratch HOME, port 8097)
 used a fake `agy` in `~/.local/bin` that answers `--version`, `/usage` and
 `models`, speaks stream-json, and runs the real configured `PreToolUse` hooks
