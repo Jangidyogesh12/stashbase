@@ -18,6 +18,11 @@ if (process.platform === 'linux' && environment.CI === 'true') {
 }
 
 async function run() {
+  const fuses = spawn(process.execPath, ['--test', 'scripts/packaging/electron-fuses.test.mjs'], {
+    cwd: path.resolve(__dirname, '../..'), env: environment, stdio: 'inherit',
+    detached: process.platform !== 'win32',
+  });
+  await waitForChildExit(fuses, { launch: 'Electron fuse behavior', timeoutMs: 100_000 });
   for (const script of ['smoke.cjs', 'request-authorization-smoke.cjs', 'bug-report-smoke.cjs', '../account/auth-network-smoke.cjs']) {
     const child = spawn(
       require('electron'),

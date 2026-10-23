@@ -7,6 +7,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOpencodeClient } from '@opencode-ai/sdk';
+import { getCurrentFuseWire, FuseV1Options } from '@electron/fuses';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -708,6 +711,16 @@ async function smokePdfExtractor(extractBin) {
 const appPath = findPackagedApp();
 const layout = packagedLayout(appPath);
 const { resourcesPath, appRoot, electronBin } = layout;
+const fuseWire = await getCurrentFuseWire(electronBin);
+for (const [name, option] of [
+  ['runAsNode', FuseV1Options.RunAsNode],
+  ['enableNodeOptionsEnvironmentVariable', FuseV1Options.EnableNodeOptionsEnvironmentVariable],
+  ['enableNodeCliInspectArguments', FuseV1Options.EnableNodeCliInspectArguments],
+]) {
+  const expected = pkg.build.electronFuses[name] ? 49 : 48; // fuse wire uses ASCII '1' / '0'
+  if (fuseWire[option] !== expected) throw new Error(`Packaged Electron fuse ${name} does not match build policy`);
+}
+console.log('[smoke] packaged Electron fuse policy verified');
 const serverEntry = path.join(appRoot, 'dist', 'server', 'index.mjs');
 const daemonBin = findSidecarExecutable(resourcesPath, 'stashbase-daemon');
 const bundledExtractBin = findSidecarExecutable(resourcesPath, 'stashbase-extract');
@@ -815,6 +828,34 @@ try {
   if (telemetry.available !== false) throw new Error('Packaged smoke must disable telemetry before exercising user flows');
   await assertPackagedRendererWorkers(port);
   await assertPackagedUserFlow(port, home);
+  const mcpStatus = await requestApi(port, 'GET', '/api/mcp/status');
+  const mcpConfig = mcpStatus.config?.mcpServers?.stashbase;
+  assertFile(mcpConfig?.command, 'packaged stdio MCP launcher');
+  const transport = new StdioClientTransport({
+    command: mcpConfig.command,
+    args: mcpConfig.args ?? [],
+    cwd: home,
+    env: {
+      HOME: home, USERPROFILE: home, APPDATA: appData, LOCALAPPDATA: localAppData,
+      HOMEDRIVE: path.parse(home).root.replace(/[\\/]$/, ''),
+      HOMEPATH: home.slice(path.parse(home).root.length - (path.parse(home).root.endsWith(path.sep) ? 1 : 0)),
+      PATH: process.env.PATH ?? '', ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+      STASHBASE_TELEMETRY_DISABLED: '1',
+    },
+    stderr: 'inherit',
+  });
+  const mcp = new Client({ name: 'packaged-smoke', version: '1.0.0' });
+  try {
+    await mcp.connect(transport, { timeout: 10_000 });
+    const projects = await mcp.callTool({ name: 'list_projects', arguments: {} }, undefined, { timeout: 10_000 });
+    if (projects.isError || !JSON.stringify(projects.content).includes('StashBase Demo')) {
+      throw new Error(`Packaged stdio MCP could not read the host project: ${JSON.stringify(projects)}`);
+    }
+    console.log('[smoke] packaged stdio MCP launcher initialized and read the host project');
+  } finally {
+    await mcp.close();
+    await transport.close();
+  }
 } finally {
   if (child.exitCode == null) child.kill('SIGTERM');
   await Promise.race([

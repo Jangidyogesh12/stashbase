@@ -205,6 +205,23 @@ toolchain rather than the linter any gate runs.
 - Electron packages use electron-builder's official zip download and extraction
   path. Do not point `electronDist` at the unpacked npm installation: that path
   can flatten macOS framework symlinks before Developer ID signing.
+- `package.json` owns the Electron fuse policy; electron-builder applies it
+  before signing. Keep `runAsNode` enabled because the packaged local service
+  and stdio MCP launcher execute Electron's embedded Node runtime. Keep
+  `enableNodeOptionsEnvironmentVariable` enabled: disabling it also removes
+  `NODE_EXTRA_CA_CERTS`, which current runtime environment handling preserves.
+  Removing either capability requires a separate compatibility decision and
+  startup/certificate evidence. Disable `enableNodeCliInspectArguments` for
+  the Electron main process. In Electron 39.8.8, this fuse does **not** block
+  inspection in `ELECTRON_RUN_AS_NODE` mode; it is not a general ban on Node
+  debugging or arbitrary code execution.
+- Native Electron smoke includes `scripts/packaging/electron-fuses.test.mjs`.
+  It uses a disposable runtime, a working-inspector positive control, blocked
+  `--inspect`/`--inspect-brk` launches, and retained Node/environment behavior.
+  `scripts/smoke-packaged-server.mjs` reads all three configured values from the
+  actual packaged binary, starts its local service, and initializes its stdio
+  MCP process to read a registered project. These checks run on each native
+  release platform; reading fuse bits alone does not establish compatibility.
 - Each platform publishes electron-updater metadata beside its artifacts:
   the platform-specific latest-mac.yml, latest.yml, or latest-linux.yml plus generated
   differential-download sidecars. Metadata and artifacts come from the same

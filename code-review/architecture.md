@@ -1169,6 +1169,12 @@ If it stays live, startup reports the occupied port instead of racing a second b
 The Linux deb updater defers relaunch scheduling until the owned server has
 exited during main's quit sequence.
 
+The packaged local service and stdio MCP launcher depend on Electron's embedded
+Node runtime (`ELECTRON_RUN_AS_NODE=1`). Keep that capability until both launch
+owners are deliberately replaced and verified. The
+[release fuse policy](release-pipeline.md#native-packaging) owns binary settings,
+certificate compatibility, and the limits of main-process debug hardening.
+
 - Main records which projects its windows show (`electron/window-restore.cjs`,
   a record in Electron user data) on every folder, focus, and close change,
   the focused project last. Quit and update installation close every window

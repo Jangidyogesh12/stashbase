@@ -70,6 +70,9 @@ importers:
       '@codemirror/state':
         specifier: ^6.6.0
         version: 6.6.0
+      '@electron/fuses':
+        specifier: 1.8.0
+        version: 1.8.0
       '@electron/notarize':
         specifier: 2.5.0
         version: 2.5.0

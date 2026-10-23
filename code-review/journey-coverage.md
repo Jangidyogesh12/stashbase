@@ -49,6 +49,18 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Electron fuse review (2026-10-23, release validation pending):** SHA-256-verified
+2.16.17 macOS arm64/x64, Windows x64, and Linux x64 artifacts all enable
+RunAsNode, Node environment options, and Node CLI inspection. The
+[packaging policy](release-pipeline.md#native-packaging) retains the first two
+and disables Electron main-process inspection. Native regression exercises
+working and blocked inspectors plus preserved Node/environment behavior.
+An isolated, ad-hoc-signed copy of the published macOS arm64 app with the new
+fuses passed packaged service, file, daemon, extractor, OpenCode, and stdio MCP
+checks. This establishes compatibility with that published payload, not a new
+release: changed Windows/Linux/Intel runtime behavior, final distribution
+signatures, and packaged desktop interaction remain release checks.
+
 **Installer CDN (2026-10-22, source deployment pending):** the
 [release mirror](release-pipeline.md#installer-download-cdn) adds Cloudflare R2
 delivery for website installer downloads. The mirror suite covers checksum
@@ -2479,11 +2491,17 @@ agent turn and is not promised for standalone external MCP clients.
   MCP, lists tools, reads a registered Markdown file through production Project
   Operations, rejects an outside-project read, and verifies token rotation.
   This is a controlled protocol client, not a third-party agent or packaged launcher.
+  On 2026-10-23, `scripts/smoke-packaged-server.mjs` used the Settings-generated
+  stdio launcher/configuration in an isolated macOS arm64 2.16.17 app copy with
+  the new fuses, initialized MCP, and listed the host's registered project.
+  The app copy was ad-hoc signed; this is protocol/launcher evidence rather than
+  final signed distribution or representative third-party-client evidence.
 - **AI Eval:** retrieval quality is J05; client generation is outside app ownership.
 - **Release Check:** packaged launcher, copied configuration, URL access, and a
   representative external client.
-- **Gap:** deterministic boundaries have focused evidence; third-party connection
-  and packaged launcher use remain unproven by those suites.
+- **Gap:** deterministic boundaries and the macOS arm64 stdio launcher have
+  focused evidence; representative third-party connection and changed-fuse
+  launchers on the other release platforms remain unproven.
 - **Listener retirement (2026-09-16):** disabling Docker access closes active
   connections as well as the listener. A real incomplete HTTP request in the
   MCP suite verifies disable and subsequent enable; the removed audio-search
