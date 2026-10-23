@@ -126,7 +126,7 @@ test('Codex history distinguishes allocated blanks from started conversations', 
   assert.equal(codexThreadHasContent({ id: 'started', preview: 'Review the plan' }), true);
 });
 
-test('restores a transient image attachment from the persisted prompt marker', () => {
+test('restores an expired transient image as a name-only card from the persisted prompt marker', () => {
   const imagePath = path.join(os.tmpdir(), 'stashbase-attachments', 'batch-1', 'image.png');
   const blocks = codexThreadToBlocks({
     turns: [{
@@ -147,7 +147,6 @@ test('restores a transient image attachment from the persisted prompt marker', (
     attachments: [{
       path: imagePath,
       name: 'image.png',
-      previewUrl: `/api/agent/attachment-preview?path=${encodeURIComponent(imagePath)}`,
     }],
   }]);
 });
@@ -199,7 +198,7 @@ test('does not expose arbitrary filesystem paths embedded in a prompt', () => {
   }]);
 });
 
-test('restores the same attachment thumbnail for a Claude SDK transcript', () => {
+test('restores the same expired attachment card for a Claude SDK transcript', () => {
   const imagePath = path.join(os.tmpdir(), 'stashbase-attachments', 'batch-2', 'image.png');
   const blocks = transcriptToBlocks([{
     type: 'user',
@@ -213,7 +212,6 @@ test('restores the same attachment thumbnail for a Claude SDK transcript', () =>
     attachments: [{
       path: imagePath,
       name: 'image.png',
-      previewUrl: `/api/agent/attachment-preview?path=${encodeURIComponent(imagePath)}`,
     }],
   }]);
 });

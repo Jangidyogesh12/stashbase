@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { VIEWABLE_FILE_EXTENSIONS } from '../shared/file-formats.ts';
 import { AGENT_SESSION_QUOTE_MAX } from '../shared/protocols/http/agent-sessions.ts';
-import { isTransientAttachmentPath, transientAttachmentPreviewUrl } from './routes/attach.ts';
+import { isTransientAttachmentPath, transientAttachmentPreviewPath, transientAttachmentPreviewUrl } from './routes/attach.ts';
 
 export interface RestoredAttachment {
   path: string;
@@ -104,7 +104,7 @@ export function historyImageAttachment(candidate: string): RestoredAttachment | 
   return {
     path: candidate,
     name: path.basename(candidate),
-    previewUrl: transientAttachmentPreviewUrl(candidate),
+    ...(transientAttachmentPreviewPath(candidate) ? { previewUrl: transientAttachmentPreviewUrl(candidate) } : {}),
   };
 }
 

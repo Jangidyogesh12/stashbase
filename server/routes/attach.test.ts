@@ -1,3 +1,4 @@
+import { restoreHistoryAttachments } from '../agent-history-attachments.ts';
 import { attachmentPdf } from '../__tests__/attachment-fixtures.ts';
 import '../__tests__/isolated-home.ts';
 import assert from 'node:assert/strict';
@@ -141,4 +142,21 @@ test('Default prepares only unchanged uploads in its project, with bounded suppo
   fs.rmSync(pdf);
   await assert.rejects(prepareAgentAttachments([pdf], project, signal), /unavailable/);
   assert.deepEqual(fs.readdirSync(project), [], 'attachments never become project sources');
+});
+
+test('history offers previews only while attachment bytes remain safely available', () => {
+  fs.mkdirSync(attachRoot(), { recursive: true, mode: 0o700 });
+  const batch = fs.mkdtempSync(path.join(attachRoot(), 'history-preview-'));
+  const image = path.join(batch, 'image.png');
+  const transcript = `Look at this\n\nAttached files:\n- ${image}`;
+  try {
+    fs.writeFileSync(image, fs.readFileSync('build/icons/16x16.png'));
+    assert.ok(restoreHistoryAttachments(transcript).attachments[0].previewUrl);
+    fs.unlinkSync(image);
+    assert.deepEqual(restoreHistoryAttachments(transcript), {
+      text: 'Look at this', attachments: [{ path: image, name: 'image.png' }],
+    });
+  } finally {
+    fs.rmSync(batch, { recursive: true, force: true });
+  }
 });

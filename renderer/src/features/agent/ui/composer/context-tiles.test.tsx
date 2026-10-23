@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -192,4 +192,22 @@ it('locates draft and sent passages without triggering their remove action', asy
   await userEvent.click(screen.getByRole('button', { name: /^Locate passage in essay.md/ }));
   expect(onOpenSource).toHaveBeenCalledTimes(2);
   await expectNoA11yViolations(view.container);
+});
+
+it('keeps an expired history preview as a named file card and retries only a new URL', () => {
+  const item: AgentContextItem = {
+    kind: 'transient',
+    name: 'expired.png',
+    path: '/tmp/expired.png',
+    previewUrl: '/api/agent/attachment-preview?path=expired',
+  };
+  const view = render(<SentContextTiles items={[item]} />);
+  fireEvent.error(screen.getByRole('img', { name: item.name }));
+  expect(screen.getByRole('img', { name: item.name }).tagName).toBe('DIV');
+  expect(screen.getByText(item.name)).not.toBeNull();
+  expect(screen.getByText('Preview unavailable')).not.toBeNull();
+  view.rerender(<SentContextTiles items={[{ ...item }]} />);
+  expect(screen.getByRole('img', { name: item.name }).tagName).toBe('DIV');
+  view.rerender(<SentContextTiles items={[{ ...item, previewUrl: '/new-preview' }]} />);
+  expect(screen.getByRole('img', { name: item.name }).getAttribute('src')).toBe('/new-preview');
 });

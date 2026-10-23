@@ -114,7 +114,10 @@ permissions, with current model and tool choices checked before use.
   file paths it reads with its own tools, as they do for Claude and Codex.
 - A runtime that advertises attachments accepts ordinary local files through the
   picker, drop, or paste. Images and PDFs may have visual previews; other files
-  remain named file cards. Attachment acceptance does not promise that every
+  remain named file cards. History preserves a named card when temporary image
+  bytes have expired. If an offered preview fails to load, the card shows
+  “Preview unavailable” without discarding the attachment reference.
+  Attachment acceptance does not promise that every
   runtime can interpret every binary format, and a refused read must stay visible.
 - Default sends local attachments with the model request, without cloud object
   storage, project import, or indexing. It accepts PNG, JPEG, GIF, WebP, PDF,

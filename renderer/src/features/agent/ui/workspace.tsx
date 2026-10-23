@@ -10,6 +10,7 @@ import type { AgentSessionRuntime } from '@/features/agent/application/session-r
 import { honoredAccessMode } from '@/features/agent/domain/access';
 import {
   agentGate,
+  type Agent,
   offersRuntimeUpdate,
   undescribedAgent,
 } from '@/features/agent/domain/agent-catalog';
@@ -68,7 +69,12 @@ function ChatWorkspace({
   active,
 }: Omit<AgentWorkspaceProps, 'catalog'> & {
   active: AgentSessionRuntime;
-  catalog: ReturnType<typeof useAgentCatalog>;
+  catalog: {
+    agents: Agent[];
+    error: boolean;
+    loading: boolean;
+    refresh: () => void;
+  };
   /** The catalog as a Port, for the new-chat control that reads it itself. */
   catalogPort: AgentCatalogPort;
 }) {

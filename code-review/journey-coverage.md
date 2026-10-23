@@ -2322,6 +2322,25 @@ where the header advances call by call, remains unverified.
 Validation: all 12 renderer gates passed, including coverage and Story
 accessibility, and documentation checks passed.
 
+**Expired attachment previews (2026-10-23):** history restoration checks that a
+transient image still resolves safely before offering its preview URL; missing
+bytes retain a named card. `ui/composer/context-tiles.tsx` handles subsequent
+load/decode failure by showing the filename and “Preview unavailable”, retaining
+the reference and retrying only when the preview URL changes. Route/history tests
+exercise deletion and shared Codex/Claude replay; renderer tests cover load failure,
+rerenders and a replacement URL. Historical PostHog IMG events do not distinguish
+missing bytes from decoding/access failure, so this is a reproduced failure path,
+not proof that every historical report has the same cause.
+Validation: all twelve renderer gates passed (the final four were retried after
+package manager cache permission failures), host types and docs passed, and attachment/history
+host tests passed 22 cases. Electron suites and built smoke passed, including
+production-CSP attachment decoding. The built `UnavailableHistoryPreviews` Story
+was driven in Electron: actual image decode failure removed the broken image,
+kept both named cards, and displayed the fallback without overflow. This fixture
+does not establish recovery of old attachment bytes or Windows/Linux packaged
+behavior. A pre-existing workspace hook-return-type convention failure was
+replaced with the panel's explicit catalog shape while completing the gate.
+
 **Request and attachment lifetime (2026-09-16):** the hosted broker binds
 requests to the active turn's cancellation signal before reading the body.
 Retirement closes local requests and aborts upstream work; token acquisition and

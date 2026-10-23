@@ -558,7 +558,10 @@ stable status without download, retry, or a new durable demand latch.
   completion; failed summaries and idle without continuation still fail.
 - Attachment age cleanup excludes batches created by the active server process;
   drafts, queues, and retries may retain them until process exit. They remain
-  temporary files, not durable historical attachments.
+  temporary files, not durable historical attachments. History restoration only
+  offers a preview URL after checking the real path within transient storage;
+  the preview route repeats that check. Remote context tiles fall back to a named
+  card on load failure, covering deletion between restoration and image loading.
 - Context/attachments are explicit. Validate source identity before send; stale
   context blocks it. The queue captures prompt, context, skill, and id, and Retry
   uses that exact submission after checking locally available context. Sessions,

@@ -10,6 +10,7 @@
  * source turns red.
  */
 import { AnimatePresence, motion } from 'framer-motion';
+import { useState } from 'react';
 
 import { FileThumbnail } from '@/components/ui/file-thumbnail';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
@@ -182,21 +183,26 @@ function SourceChip({
 /** A sent upload whose File is gone, which is every replayed history record:
  *  the same box over a server preview or a type glyph. */
 function RemoteTile({ item, size }: { item: TransientItem; size: number }) {
+  const [failedPreview, setFailedPreview] = useState<string>();
+  const previewFailed = Boolean(item.previewUrl && item.previewUrl === failedPreview);
   return (
     <TileBox size={size} title={item.name}>
-      {item.previewUrl ? (
+      {item.previewUrl && !previewFailed ? (
         <img
           alt={item.name}
           className="absolute inset-0 h-full w-full object-cover"
           src={item.previewUrl}
+          onError={() => setFailedPreview(item.previewUrl)}
         />
       ) : (
         <div
           aria-label={item.name}
-          className="absolute inset-0 flex items-center justify-center text-muted-foreground"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-1 text-muted-foreground"
           role="img"
         >
-          <FileTypeIcon aria-hidden="true" path={item.path} size={Math.max(16, size * 0.35)} />
+          <FileTypeIcon aria-hidden="true" path={item.path} size={Math.max(16, size * 0.25)} />
+          <span className="max-w-full truncate text-ui-10">{item.name}</span>
+          {previewFailed && <span className="text-center text-ui-10">Preview unavailable</span>}
         </div>
       )}
     </TileBox>
