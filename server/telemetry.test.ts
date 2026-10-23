@@ -857,6 +857,36 @@ test('tool failure can recover and interrupt acknowledgement remains cancellatio
   f.service.close();
 });
 
+test('tool failure diagnostics retain only a bounded failure category, never tool output', async (t) => {
+  const { EventEmitter } = await import('node:events');
+  const { telemetry } = await import('./telemetry.ts');
+  const { attachAgentDiagnostics, reportAgentRuntimeError } = await import('./error-reporting.ts');
+  const f = fixture();
+  t.mock.method(telemetry, 'scoped', () => f.service.scoped());
+  const connection = new EventEmitter();
+  attachAgentDiagnostics(connection as any, 'stashbase');
+  const failures = [
+    ['Error: File not found: C:/PRIVATE/document.txt', 'not_found'],
+    ['ENOENT: no such file or directory, open PRIVATE', 'not_found'],
+    ['Error: EACCES: permission denied, open PRIVATE', 'permission_denied'],
+    ['Error: Permission denied for PRIVATE', 'permission_denied'],
+    ['Error: Invalid arguments: PRIVATE', 'invalid_arguments'],
+    ['Error: Operation timed out: PRIVATE', 'timeout'],
+    ['PRIVATE source text mentions file not found', 'unknown'],
+  ];
+  for (const [index, [content]] of failures.entries()) {
+    const id = `call-${index}`;
+    reportAgentRuntimeError('stashbase', { t: 'tool', id, name: 'read', input: { path: 'PRIVATE' } }, connection);
+    reportAgentRuntimeError('stashbase', { t: 'tool-result', id, content, isError: true }, connection);
+  }
+  await f.service.flush();
+  const events = f.sent.filter(({ body }) => body.properties.operation === 'tool');
+  assert.deepEqual(events.map(({ body }) => body.properties.context.tool_failure_kind), failures.map(([, kind]) => kind));
+  assert.ok(events.every(({ body }) => body.properties.context.tool_category === 'read'));
+  assert.doesNotMatch(JSON.stringify(f.sent), /PRIVATE|document\.txt|ENOENT|EACCES/);
+  f.service.close();
+});
+
 test('startup attempts retain initiating scope, successful latency and retry linkage through delivery', async () => {
   const { diagnosticScope } = await import('./diagnostic-context.ts');
   const { rendererTelemetryEventSchema } = await import('../shared/protocols/http/telemetry.ts');

@@ -150,6 +150,16 @@ export function beginAgentDiagnosticTurn(connection: object, turnId: string | un
   agentDiagnosticStage(connection, 'host_accepted');
 }
 
+/** Only recognize an error prefix; never retain arbitrary tool output or paths. */
+function toolFailureKind(content: string): NonNullable<NonNullable<ErrorContext['context']>['tool_failure_kind']> {
+  const prefix = content.slice(0, 256).trimStart().replace(/^Error:\s*/i, '');
+  if (/^(ENOENT\b|file not found\b|no such file or directory\b)/i.test(prefix)) return 'not_found';
+  if (/^(EACCES\b|EPERM\b|permission denied\b|access denied\b)/i.test(prefix)) return 'permission_denied';
+  if (/^(invalid (arguments|parameters)\b|validation error\b)/i.test(prefix)) return 'invalid_arguments';
+  if (/^(ETIMEDOUT\b|timeout\b|(?:operation|request|tool) timed out\b)/i.test(prefix)) return 'timeout';
+  return 'unknown';
+}
+
 export function reportAgentRuntimeError(runtime: NonNullable<ErrorContext['runtime']>, event: AgentServerEvent, connection?: object, cause?: unknown): void {
   if (connection && !agentDiagnostics.has(connection)) beginAgentDiagnosticTurn(connection, undefined);
   const context = connection ? agentDiagnostics.get(connection) ?? {} : {};
@@ -186,9 +196,10 @@ export function reportAgentRuntimeError(runtime: NonNullable<ErrorContext['runti
       }, { ...context, source: 'agent', operation: event.t === 'exit' ? 'connection' : 'runtime', runtime });
     }
   } else if (event.t === 'tool-result' && event.isError) {
-    // Tool output can contain source text; only the failure fact and call ID are safe.
+    // Tool output can contain source text. Export only fixed categories, never the matched text.
     capture({ message: 'Agent tool call failed', code: 'AGENT_TOOL_FAILED' }, { ...context,
-      context: { ...context.context, tool_call_id: event.id, tool_category: state?.tools?.get(event.id) ?? 'other' },
+      context: { ...context.context, tool_call_id: event.id, tool_category: state?.tools?.get(event.id) ?? 'other',
+        tool_failure_kind: toolFailureKind(event.content) },
       source: 'agent', operation: 'tool', runtime });
   } else if (event.t === 'skills' && event.state === 'failed') {
     capture(event.error ?? 'Could not load agent skills', { ...context, source: 'agent', operation: 'skills', runtime });

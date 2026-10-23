@@ -274,6 +274,9 @@ repair, an outdated runtime, provider limits, transport loss, and turn failure s
 recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
+An unexpectedly ended native event stream is a visible connection failure even
+when the transport reports no exception. It retires the session and never
+automatically resends an already submitted turn.
 When listing Default history, a runtime startup timeout or early exit gets one
 automatic retry after the failed process has fully retired. This retries only
 startup, before reading history; it never replays a chat turn or a history edit.

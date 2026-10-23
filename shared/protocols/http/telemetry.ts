@@ -33,6 +33,7 @@ export const diagnosticContextSchema = z.object({
   turn_id: z.string().uuid().optional(),
   call_id: z.string().uuid().optional(), call_attempt: z.number().int().positive().optional(),
   tool_call_id: z.string().max(512).optional(), tool_category: z.enum(['read', 'write', 'shell', 'search', 'agent', 'other']).optional(),
+  tool_failure_kind: z.enum(['not_found', 'permission_denied', 'invalid_arguments', 'timeout', 'unknown']).optional(),
   close_code: z.number().int().min(0).max(65535).optional(), was_clean: z.boolean().optional(),
   close_initiator: z.enum(['client', 'server', 'unknown']).optional(),
   close_reason: z.enum(['client_close', 'socket_closed', 'socket_error', 'process_exit', 'session_disposed', 'scope_removed', 'rpc_timeout']).optional(),

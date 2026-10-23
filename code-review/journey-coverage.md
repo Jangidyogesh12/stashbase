@@ -1470,6 +1470,21 @@ Template and colored tray assets were inspected at normal and enlarged sizes;
 colored attention uses the app's fixed badge-red with a transparent separation
 around the dot, while macOS retains native template contrast. Physical menu clicks, packaged Windows overlays and Linux
 tray/launcher availability remain explicit release checks.
+**Native stream EOF and tool diagnostics (2026-10-24):** The OpenCode panel now
+fails and retires an unexpectedly completed event stream instead of leaving a
+turn running indefinitely. `opencode-agent.test.ts` reproduces the missing error
+and socket closure on the baseline, checks one failure/exit without prompt
+replay, and covers EOF racing native initialization. `server/telemetry.test.ts`
+checks fixed tool failure kinds survive delivery while private tool input/output
+never does; recovered tool failures still permit a successful turn. Historical
+read-tool failures contain no error reason, so their cause remains unknown.
+These checks do not identify the cause of the historical Windows WebSocket 1006.
+A separate local runtime pass used the pinned SDK against a controlled HTTP SSE
+server and a real WebSocket: EOF delivered one error and exit, closed the socket,
+aborted the native session and retired its runtime once, with exactly one prompt.
+The 908 host tests, three bundled OpenCode checks, host types and Electron
+protocol/boundary/smoke checks passed; this does not exercise the affected device.
+
 **Startup recovery and correlation (2026-10-18):** `opencode-startup.ts` removes
 startup listeners and makes failure rejection wait for process retirement.
 `opencode-runtime.ts` retains single-flight ownership through cleanup and fences

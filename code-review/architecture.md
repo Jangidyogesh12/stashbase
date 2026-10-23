@@ -426,6 +426,9 @@ stable status without download, retry, or a new durable demand latch.
   retains a timed-out child until final pipe/group closure; OpenCode releases its
   runtime only after that closure and startup settlement, preserving the original
   failed promise. Shutdown attempts every runtime and broker despite a failed peer.
+  Normal EOF of an owned OpenCode event stream is also terminal unless the
+  session is already disposing. It reports once, retires the runtime and socket,
+  and never replays a prompt; late initialization failures cannot report again.
   Process death settles pending RPCs/turns, and generation guards reject late
   messages. An ambiguous timed-out start retires its generation before retry.
   Claude replacement waits for native iterator/query cleanup after verifying scope.
@@ -1027,8 +1030,11 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   and terminal facts independently of renderer delivery. The owned model broker
   reports request/response boundaries and failures directly. Only stage transitions
   persist, never each streamed token; last stage is evidence, not inferred cause.
-  Tool failures contain bounded call IDs/categories, not inputs or results, and do
-  not themselves settle a turn. Setup stages share attempt
+  Tool failures contain bounded call IDs/categories and a fixed failure kind,
+  never inputs or results. The host recognizes only bounded error prefixes for
+  missing files, permissions, invalid arguments and timeouts; unmatched output
+  stays unknown. Classification does not establish the underlying cause or
+  settle a turn. Setup stages share attempt
   and retry IDs. Background diagnostics retain the operation sentence. HTTP, agent,
   background and renderer failures converge here without throwing into operations,
   recursively reporting analytics failures, or creating another privacy setting.

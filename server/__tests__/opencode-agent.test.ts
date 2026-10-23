@@ -1004,6 +1004,7 @@ function modelHarness(options: {
   resume?: string;
   model?: string;
   storedModel?: string;
+  beforeCreate?: () => Promise<void>;
 } = {}) {
   const ws = new FakeWebSocket();
   const feed = new EventEmitter();
@@ -1023,11 +1024,17 @@ function modelHarness(options: {
       return {
         event: { subscribe: async ({ signal }: { signal: AbortSignal }) => ({
           stream: (async function* () {
-            for await (const [event] of on(feed, 'event', { signal })) yield event;
+            for await (const [event] of on(feed, 'event', { signal })) {
+              if (event === null) return;
+              yield event;
+            }
           })(),
         }) },
         session: {
-          create: async () => ({ data: { id: 'model-session', title: 'New Chat', directory } }),
+          create: async () => {
+            await options.beforeCreate?.();
+            return { data: { id: 'model-session', title: 'New Chat', directory } };
+          },
           get: async () => ({ data: { id: options.resume, title: 'Earlier', directory } }),
           messages: async () => ({ data: options.storedModel ? [
             { info: { id: 'u1', role: 'user', model: { providerID: 'stashbase', modelID: 'writer-fast' } }, parts: [] },
@@ -1055,6 +1062,37 @@ function modelHarness(options: {
     events: () => ws.sent.map(value => JSON.parse(value) as { t: string; [key: string]: unknown }),
   };
 }
+
+test('an ended native event stream fails the active turn and releases the session without replay', async (t) => {
+  const h = modelHarness();
+  t.after(() => h.session.dispose());
+  await settle();
+  h.send({ t: 'prompt', text: 'Keep this turn once' });
+  await settle();
+  assert.ok(h.events().some(event => event.t === 'turn-start'));
+  h.feed.emit('event', null);
+  await settle();
+  assert.equal(h.ws.readyState, 3, 'an ended stream must not leave a seemingly live panel');
+  assert.equal(h.events().filter(event => event.t === 'error').length, 1);
+  assert.equal(h.events().filter(event => event.t === 'exit').length, 1);
+  assert.match(String(h.events().find(event => event.t === 'error')?.message), /event stream ended/i);
+  assert.equal(h.feed.listenerCount('event'), 0);
+  assert.equal(h.prompts.length, 1, 'a transport failure must not replay a submitted turn');
+});
+
+test('stream EOF during initialization reports once even if native creation then rejects', async (t) => {
+  let rejectCreate!: (error: Error) => void;
+  const h = modelHarness({ beforeCreate: () => new Promise<void>((_, reject) => { rejectCreate = reject; }) });
+  t.after(() => h.session.dispose());
+  await settle();
+  h.feed.emit('event', null);
+  await settle();
+  rejectCreate(new Error('Late native creation failure'));
+  await settle();
+  assert.equal(h.events().filter(event => event.t === 'error').length, 1);
+  assert.equal(h.events().filter(event => event.t === 'exit').length, 1);
+  assert.equal(h.events().filter(event => event.t === 'ready').length, 0);
+});
 
 test('a Default chat runs its main agent on the service default, whatever model is asked for', async (t) => {
   const harness = modelHarness({ model: 'writer-pro' });

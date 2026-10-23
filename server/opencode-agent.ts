@@ -536,6 +536,13 @@ export class OpenCodePanelSession {
           this.runtime.endTurn();
         }
       }
+      // EOF is terminal even when the transport does not throw. Otherwise a
+      // running turn keeps its tools and panel alive without any more events.
+      if (!this.disposed && !this.abort.signal.aborted) {
+        throw Object.assign(new Error('The agent event stream ended. Reconnect to continue this chat.'), {
+          code: 'AGENT_EVENT_STREAM_CLOSED',
+        });
+      }
     } catch (error) {
       if (!this.abort.signal.aborted) this.fail(error, true);
     }
@@ -681,6 +688,7 @@ export class OpenCodePanelSession {
   }
 
   private fail(error: unknown, terminal: boolean): void {
+    if (this.disposed) return;
     this.permissionReview.abort();
     this.pendingPermissions.clear();
     this.seenPermissions.clear();
