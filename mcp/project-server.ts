@@ -338,7 +338,9 @@ const BUILTIN_TOOLS = [
         'Read a file from StashBase by absolute path ' +
         '(for example `/Users/me/notes/topic/note.md`). Markdown, HTML, JSON, and UTF-8 plain text return source text, ' +
         'including source code, configuration, dotfiles and extensionless files. ' +
-        'PDFs and DOCX return current prepared text. Images are visible in ' +
+        'PDFs and DOCX return current prepared text. XLSX workbooks return their visible worksheets as ' +
+        'Markdown tables with sheet names, column letters and row numbers; formula cells show the result ' +
+        'saved in the file and are not recalculated, and any rows or columns left out are stated. Images are visible in ' +
         '`list_directory` and searchable through OCR evidence, but are not returned as bytes. ' +
         'Files omitted from `list_directory`, including code and dotfiles, can be read by their exact path. ' +
         'Binary files and invalid UTF-8 are refused. ' +

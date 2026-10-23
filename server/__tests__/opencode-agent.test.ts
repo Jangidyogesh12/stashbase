@@ -875,6 +875,24 @@ test('OpenCode history returns a prompt\'s passage to its chip instead of raw te
   }]);
 });
 
+test('a table selection replays as its passage chip, for CSV and XLSX alike', () => {
+  const table = 'Sheet 销售, cells A2:B3 (2 rows × 2 columns).\n\n| Row | A | B |\n| --- | --- | --- |\n| 2 | Pro | 12 |';
+  const quoted = (file: string) =>
+    `explain the change\n\nSelected passages:\n- ${file}\n${table.split('\n').map((line) => (line ? `  > ${line}` : '  >')).join('\n')}`;
+  for (const file of ['/home/me/data/sales.xlsx', '/home/me/data/sales.csv']) {
+    const blocks = blocksForMessage(
+      { id: 'prompt-1', sessionID: 'session-1', role: 'user' } as unknown as Parameters<typeof blocksForMessage>[0],
+      [{ id: 'part-1', sessionID: 'session-1', messageID: 'prompt-1', type: 'text', text: quoted(file) }] as unknown as Parameters<typeof blocksForMessage>[1],
+    );
+    assert.deepEqual(blocks, [{
+      kind: 'user',
+      id: 'prompt-1',
+      text: 'explain the change',
+      attachments: [{ path: file, name: path.basename(file), quote: table }],
+    }]);
+  }
+});
+
 test('OpenCode translator isolates sessions and classifies hosted allowance failures', () => {
   const translator = new OpenCodeEventTranslator();
   translator.bindSession('ours');

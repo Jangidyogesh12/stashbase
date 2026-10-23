@@ -17,6 +17,8 @@ editing capabilities remain explicit for each surface.
 | PDF | Source preview | Prepared Markdown | Read prepared text |
 | Image | Source preview | Prepared OCR text | Native attachments depend on runtime; MCP does not return image bytes |
 | DOCX | Sanitized preview with prepared fallback | Prepared HTML | Read prepared text |
+| CSV/TSV | Table, or source text editing up to 8 MiB | None | Read/write source |
+| XLSX | Read-only worksheet preview | None | Read worksheet tables through `read_file` |
 | Audio/video | Playback when supported, otherwise open externally | None | None |
 | Other UTF-8 text (code, configuration, dotfiles, extensionless files) | Bounded read-only text | None | Read/write source by exact path |
 | Other binary file | Explicit unavailable state | None | None through text tools |
@@ -89,14 +91,14 @@ registered project opens as that project's file, read-only like any source
 from another project folder.
 
 - A file opens in place only when its preview needs nothing but the file itself:
-  Markdown, plain text, JSON, PDF, images, and other UTF-8 text. DOCX falls back
+  Markdown, plain text, JSON, CSV/TSV, PDF, images, XLSX, and other UTF-8 text. DOCX falls back
   to prepared output and HTML loads neighbouring resources, so both must be
   copied into the project; audio and video qualify but are not offered. Other
   binary files and folders are refused. One drop reports all its refusals in a
   single message the reader dismisses. It offers no copy of its own: it names
   Files, where a dropped file is copied into the project.
 - Each dropped file gets a kept tab of its own, like any other document, with its
-  full path in the tab's tooltip. Markdown, plain text, and JSON are edited in
+  full path in the tab's tooltip. Markdown, plain text, CSV/TSV, and JSON are edited in
   place and saved to the file itself under the same versioned save and conflict
   rules as a project file; the rest are read-only. It is never prepared, indexed,
   or listed in Files, Quick Open, search, document history once closed, or
@@ -108,6 +110,48 @@ from another project folder.
   does not widen project scope, MCP, upload, or agent tool access, and it ends
   when the tab closes, the project changes, or the window closes. A deleted file
   is written back only by the reader's explicit choice, into the same folder.
+
+## Tables
+
+CSV, TSV, and XLSX open as tables: column letters stay on top and row numbers on
+the left while the reader scrolls either way. Only the rows in view are drawn,
+so a long table scrolls as freely as a short one.
+
+- **CSV and TSV.** The first row is the header and stays pinned under the
+  column letters. The delimiter is recognized from the file (comma, tab,
+  semicolon, or pipe; TSV is always tab). Quoting follows spreadsheet apps: a
+  quoted field may hold delimiters, quotes, and line breaks. The file is read
+  in segments, so tables up to 512 MiB open; only the saved file is shown.
+  **Table / Source** switches to the source text, edited as plain text under
+  the ordinary versioned save and conflict handling. Switching back saves the
+  source first; until a save lands, the table says it shows the last saved
+  version. A file over the 8 MiB text ceiling opens only as a table. A save
+  keeps the line endings of the rows it did not change, so a line break inside
+  a cell survives an edit elsewhere. A file that is not UTF-8 opens neither
+  way: the reader is told so and how to save the file again as CSV UTF-8,
+  with UTF-16 named outright and GBK/GB18030, as Excel writes on Chinese
+  Windows, offered as a likely encoding. CSV is never indexed or offered as
+  automatic chat context.
+- **XLSX.** Visible worksheets, row and column coordinates, and formatted cell
+  values, read-only. The reader switches sheets. Formulas show saved results
+  when present, or their formula text when no result was saved; StashBase does
+  not recalculate them. Preview limits are stated beside the table. Empty,
+  damaged, encrypted, and oversized workbooks have explicit states. Preview
+  never changes the workbook or adds search eligibility.
+- **Agent reading.** `read_file` returns an XLSX from the same parse the
+  preview uses: Markdown tables of its visible worksheets with each sheet's
+  name, column letters, and row numbers, empty rows and columns left out,
+  formula cells listed as saved results that were not recalculated, and every
+  row or column beyond the preview's limits named as left out. The workbook
+  itself is never written. CSV is ordinary text to agent tools.
+- **Selection.** The reader selects cells, whole rows, or whole columns by
+  pointer or keyboard. **Copy** puts tab-separated values on the clipboard,
+  quoted the way spreadsheets paste them. **Ask agent** binds the selection to
+  the chat beside the document as a passage: where it is (sheet and range),
+  then its rows as a table keeping row numbers, column letters, and a CSV's
+  header names, with a worksheet's first row and formula cells noted. A
+  selection over the passage limit is refused at once with the request to
+  select fewer rows or columns; it is never cut to fit.
 
 ## Saving and Release
 
@@ -161,7 +205,8 @@ slash menu.
 **Ask agent**, last on the selection toolbar, binds the exact selection, as
 Markdown, to the chat beside the document and brings that chat into view. It writes
 nothing and needs no service; the selection is saved first so the agent reads
-what the reader selected. [Agent Sessions](agent-sessions.md) owns how the
+what the reader selected. A table selection binds the same way from the table's
+footer ([Tables](#tables)). [Agent Sessions](agent-sessions.md) owns how the
 passage is sent.
 
 Markdown frontmatter is outside the prose editor. A turn review that would change it is

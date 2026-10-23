@@ -21,6 +21,7 @@ import {
   sameSource,
   setDocumentJsonSession,
   setDocumentMarkdownMode,
+  setDocumentTableMode,
   setDocumentPdfPage,
   type DocumentScope,
   type DocumentState,
@@ -354,6 +355,10 @@ export function createDocumentRuntime({
     setPdfPage(page) {
       if (disposed) return;
       store.setState((state) => setDocumentPdfPage(state, page));
+    },
+    setTableMode(mode) {
+      if (disposed) return;
+      store.setState((state) => setDocumentTableMode(state, mode));
     },
   };
 }

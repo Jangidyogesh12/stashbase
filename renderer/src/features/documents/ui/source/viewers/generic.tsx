@@ -5,16 +5,20 @@ export default function GenericViewer({
   active,
   genericPreviewApi,
   navigation,
+  onAskAgent,
   onReveal,
   revealLabel,
   runtime,
   status,
-}: DocumentViewerProps<'genericPreviewApi' | 'navigation' | 'onReveal' | 'revealLabel'>) {
+}: DocumentViewerProps<
+  'genericPreviewApi' | 'navigation' | 'onAskAgent' | 'onReveal' | 'revealLabel'
+>) {
   return (
     <GenericFileDocument
       active={active}
       api={genericPreviewApi}
       navigation={navigation}
+      onAskAgent={onAskAgent}
       onReveal={onReveal}
       revealLabel={revealLabel}
       runtime={runtime}

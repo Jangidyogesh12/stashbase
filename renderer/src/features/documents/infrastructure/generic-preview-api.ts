@@ -48,6 +48,15 @@ function mapPreview(body: PreviewResponse, expectedName: string): GenericFilePre
       'The file preview returned an invalid response.',
     );
   }
+  if (body.kind === 'spreadsheet') {
+    return {
+      kind: 'spreadsheet',
+      name: body.name,
+      size: body.size,
+      version: body.version,
+      workbook: body.workbook,
+    };
+  }
   if (body.kind === 'text') {
     return {
       content: body.content,

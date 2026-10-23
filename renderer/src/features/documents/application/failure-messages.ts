@@ -18,6 +18,7 @@ import {
 
 import type { TurnChangeReviewFailure } from './open-revision';
 import type {
+  DelimitedTableFailureKind,
   DocumentAssetFailureKind,
   DocumentSaveFailureKind,
   DocumentSourceFailureKind,
@@ -63,6 +64,21 @@ export const DOCUMENT_OVERWRITE_MESSAGES: Readonly<Record<DocumentSaveFailureKin
   unauthorized: 'The document could not be overwritten. Both versions are still available.',
   unavailable: 'The document could not be overwritten. Both versions are still available.',
 };
+
+export const DELIMITED_TABLE_MESSAGES: Readonly<Record<DelimitedTableFailureKind, string>> = {
+  missing: 'The source file is missing. Open work is still available; restore the file and retry.',
+  'invalid-response': 'The table could not be read. Your source file has not been changed.',
+  'scope-lost': 'That project is no longer available in this window.',
+  unauthorized: 'This window can no longer open that file.',
+  unavailable: 'The table could not be read. Your source file has not been changed.',
+};
+
+/** What a table's Copy and Ask agent say when they cannot finish. */
+export const TABLE_ACTION_MESSAGES = {
+  clipboard: 'StashBase could not reach the clipboard. Try copying again.',
+  read: 'The selected rows could not be read. Try again.',
+  tooManyToCopy: 'This selection is too large to copy. Select fewer than 200,000 cells.',
+} as const;
 
 export const DOCUMENT_ASSET_MESSAGES: Readonly<Record<DocumentAssetFailureKind, string>> = {
   missing: 'The source file is missing. Open work is still available; restore the file and retry.',

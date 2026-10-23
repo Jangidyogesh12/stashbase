@@ -21,7 +21,7 @@ import {
   DocumentWorkspace,
   type DocumentWorkspaceProps,
 } from '@/features/documents/ui/workspace/workspace';
-import { assetApi, docxPreviewApi, genericPreviewApi } from '@/test/fakes/documents';
+import { assetApi, docxPreviewApi, genericPreviewApi, tableApi } from '@/test/fakes/documents';
 import { createTestQueryClient, withQueryClient } from '@/test/query';
 
 /** A port call that never settles, for the viewers a test leaves pending. */
@@ -52,6 +52,8 @@ type SourceOptions = Partial<
     DocumentWorkspaceProps,
     | 'assetApi'
     | 'genericPreviewApi'
+    | 'onAskAgent'
+    | 'tableApi'
     | 'onNavigate'
     | 'onOpenExternal'
     | 'onOpenPrepared'
@@ -84,6 +86,8 @@ export function renderSource(
       assetApi={options.assetApi ?? assetApi({ load: vi.fn(pending()) })}
       docxPreviewApi={docxPreviewApi({ load: vi.fn(pending()) })}
       genericPreviewApi={options.genericPreviewApi ?? genericPreviewApi({ load: vi.fn(pending()) })}
+      tableApi={options.tableApi ?? tableApi()}
+      onAskAgent={options.onAskAgent}
       onNavigate={options.onNavigate}
       onOpenExternal={options.onOpenExternal}
       onOpenPrepared={options.onOpenPrepared}

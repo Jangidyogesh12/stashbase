@@ -5,6 +5,7 @@ import { basePathName } from '@/shared/utils/file-path';
 
 import { documentTextFormat, type DocumentTextFormat } from './document-format';
 import type { DocumentRevision } from './revision';
+import type { TableViewMode } from './table';
 
 export interface DocumentScope {
   readonly generation: number;
@@ -25,6 +26,8 @@ export interface DocumentState {
    *  `./revision`; `editor.revision` below is an edit counter, not this. */
   revision: DocumentRevision;
   scope: DocumentScope;
+  /** Whether a CSV shows as a table or as its source text. */
+  tableMode: TableViewMode;
 }
 
 export type DocumentAccess = 'editable' | 'read-only';
@@ -163,6 +166,7 @@ export function createDocumentState(scope: DocumentScope, access: DocumentAccess
     readingRequest: 0,
     revision: { kind: 'idle' },
     scope,
+    tableMode: 'table',
   };
 }
 
@@ -187,6 +191,11 @@ export function setDocumentJsonSession(
     return state;
   }
   return { ...state, jsonSession };
+}
+
+export function setDocumentTableMode(state: DocumentState, mode: TableViewMode): DocumentState {
+  if (state.lifecycle === 'disposed' || state.tableMode === mode) return state;
+  return { ...state, tableMode: mode };
 }
 
 export function setDocumentMarkdownMode(

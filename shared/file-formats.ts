@@ -10,6 +10,10 @@ export const HTML_NOTE_EXTENSIONS = ['html', 'htm'] as const;
 export const NOTE_EXTENSIONS = [...MARKDOWN_NOTE_EXTENSIONS, ...HTML_NOTE_EXTENSIONS] as const;
 export const STRUCTURED_DATA_EXTENSIONS = ['json'] as const;
 export const PLAIN_TEXT_EXTENSIONS = ['txt'] as const;
+/** Delimited tables. The source is editable text, but rows of data are not
+ *  prose: they open as a table and stay out of search and automatic context. */
+export const DELIMITED_TEXT_EXTENSIONS = ['csv', 'tsv'] as const;
+export const SPREADSHEET_EXTENSIONS = ['xlsx'] as const;
 export const DIRECT_TEXT_EXTENSIONS = [
   ...NOTE_EXTENSIONS,
   ...STRUCTURED_DATA_EXTENSIONS,
@@ -52,8 +56,10 @@ export const LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS = [
 
 export const VIEWABLE_FILE_EXTENSIONS = [
   ...DIRECT_TEXT_EXTENSIONS,
+  ...DELIMITED_TEXT_EXTENSIONS,
   ...CONVERTIBLE_SOURCE_EXTENSIONS,
   ...AUDIO_SOURCE_EXTENSIONS,
+  ...SPREADSHEET_EXTENSIONS,
 ] as const;
 
 export const AUDIO_SOURCE_EXTENSION_ALTERNATION = extensionAlternation(AUDIO_SOURCE_EXTENSIONS);
@@ -94,14 +100,15 @@ export type KnownViewerFormat = Exclude<ViewerFormat, 'generic'>;
  * The complete workspace-tree format vocabulary. `generic` is deliberately
  * not a known/indexable format: it means only that the source exists and can
  * be selected in the workbench. Opening it performs bounded content
- * inspection and may produce either a read-only text view or an honest
- * binary/unavailable placeholder.
+ * inspection and may produce read-only text, an XLSX worksheet preview, or
+ * a binary/unavailable placeholder. Preview support does not grant retrieval.
  */
 export const VIEWER_FORMATS = [
   'md',
   'html',
   'json',
   'txt',
+  'csv',
   'pdf',
   'image',
   'docx',
@@ -122,6 +129,7 @@ export function viewerFormatOfPath(path: string): ViewerFormat {
   if (claims(MARKDOWN_NOTE_EXTENSIONS)) return 'md';
   if (claims(STRUCTURED_DATA_EXTENSIONS)) return 'json';
   if (claims(PLAIN_TEXT_EXTENSIONS)) return 'txt';
+  if (claims(DELIMITED_TEXT_EXTENSIONS)) return 'csv';
   if (claims(HTML_NOTE_EXTENSIONS)) return 'html';
   if (claims(DOCX_EXTENSIONS)) return 'docx';
   if (claims(PDF_EXTENSIONS)) return 'pdf';
@@ -130,8 +138,10 @@ export function viewerFormatOfPath(path: string): ViewerFormat {
 }
 
 /** Search and automatic Agent context may consume only these formats. */
-export function isRetrievableViewerFormat(format: ViewerFormat): format is Exclude<KnownViewerFormat, 'audio'> {
-  return format !== 'generic' && format !== 'audio';
+export function isRetrievableViewerFormat(
+  format: ViewerFormat,
+): format is Exclude<KnownViewerFormat, 'audio' | 'csv'> {
+  return format !== 'generic' && format !== 'audio' && format !== 'csv';
 }
 
 /**
@@ -140,9 +150,9 @@ export function isRetrievableViewerFormat(format: ViewerFormat): format is Exclu
  * itself qualifies: no prepared output and no neighbouring files. DOCX falls
  * back to prepared output and HTML loads relative resources, so both must be
  * copied into the project; audio and video qualify but are not needed.
- * `generic` opens for UTF-8 text.
+ * `generic` opens for UTF-8 text and self-contained XLSX previews.
  */
-export const EXTERNAL_FILE_VIEWER_FORMATS = ['md', 'json', 'txt', 'pdf', 'image', 'generic'] as const;
+export const EXTERNAL_FILE_VIEWER_FORMATS = ['md', 'json', 'txt', 'csv', 'pdf', 'image', 'generic'] as const;
 
 export type ExternalFileViewerFormat = (typeof EXTERNAL_FILE_VIEWER_FORMATS)[number];
 

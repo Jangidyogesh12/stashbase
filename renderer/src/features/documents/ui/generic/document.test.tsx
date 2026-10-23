@@ -59,6 +59,36 @@ afterEach(() => {
 });
 
 describe('generic file document', () => {
+  it('opens an XLSX inspection as a worksheet instead of the binary placeholder', async () => {
+    renderDocument(
+      genericPreviewApi({
+        load: vi.fn(async () => ({
+          kind: 'spreadsheet' as const,
+          name: 'test.xlsx',
+          size: 9000,
+          version: 'sha256:workbook',
+          workbook: {
+            sheetCount: 1,
+            hasFormulas: false,
+            sheets: [
+              {
+                name: 'Sheet1',
+                firstRow: 0,
+                firstColumn: 0,
+                rowCount: 1,
+                columnCount: 1,
+                rows: [['Workbook value']],
+                formulas: [],
+              },
+            ],
+          },
+        })),
+      }),
+      'test.xlsx',
+    );
+    expect(await screen.findByRole('gridcell', { name: 'Workbook value' })).not.toBeNull();
+    expect(screen.queryByText('Binary file cannot be opened')).toBeNull();
+  });
   it('shows the format-neutral loading panel while the inspection is in flight', () => {
     renderDocument(pendingPreviewApi());
 

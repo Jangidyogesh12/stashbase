@@ -6,10 +6,12 @@ import { detectFormat, detectViewerFormat, isKnownBinaryFile } from './format.ts
 import {
   fileStatVersionAsync,
   pathExistsAsync,
+  readFileBytesBoundedAsync,
   readUtf8FileBoundedAsync,
 } from './active-file-operations.ts';
 import { currentPreparedTextPathAsync } from './conversion-dispatch.ts';
 import { derivedHtmlPathForDocx } from './docx.ts';
+import { isSpreadsheetFile, spreadsheetAgentText, spreadsheetFilePreview } from './spreadsheet-preview.ts';
 import {
   normalizeProjectFilePath,
   resolveProjectAbs,
@@ -170,6 +172,7 @@ async function readWholeProjectFile(rawPath: unknown): Promise<ProjectFileRead> 
       if (viewerFormat === 'image') {
         throw routeError('read_file cannot return image bytes; image OCR text is used for search evidence, while the image remains the source file', 415, 'UNSUPPORTED_FORMAT');
       }
+      if (isSpreadsheetFile(target.folderRel)) return readSpreadsheetFile(target.abs, target.folderRel);
       if (isKnownBinaryFile(target.folderRel)) throw routeError('unsupported format: binary files cannot be read as text', 415, 'UNSUPPORTED_FORMAT');
     }
     const snapshot = await readTextSnapshotAsync(target.folderRel);
@@ -180,6 +183,24 @@ async function readWholeProjectFile(rawPath: unknown): Promise<ProjectFileRead> 
       ...snapshot,
     };
   });
+}
+
+/** The workbook through the same parse the preview uses, as Markdown with
+ *  sheet names, column letters and row numbers. The source stays untouched. */
+async function readSpreadsheetFile(sourceAbs: string, folderRel: string): Promise<ProjectFileRead> {
+  if (!(await pathExistsAsync(folderRel))) throw routeError('not found', 404);
+  const preview = await spreadsheetFilePreview(await readFileBytesBoundedAsync(sourceAbs), folderRel);
+  if (preview.kind !== 'spreadsheet') {
+    throw routeError(preview.kind === 'invalid-spreadsheet' && preview.message ? preview.message : 'This workbook could not be read.', 422, 'UNSUPPORTED_FORMAT');
+  }
+  return {
+    path: sourceAbs,
+    format: 'xlsx-derived-md',
+    sourceFormat: 'xlsx',
+    derived: true,
+    content: spreadsheetAgentText(path.basename(sourceAbs), preview.workbook),
+    version: preview.version,
+  };
 }
 
 async function readSourceDerivedFile(

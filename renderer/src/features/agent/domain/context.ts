@@ -11,6 +11,7 @@ import {
 } from '@/contracts/file-formats';
 import type { AgentScope } from '@/features/agent/domain/session';
 import { isExternalSource } from '@/shared/domain/external-source';
+import { PASSAGE_QUOTE_LIMIT } from '@/shared/domain/passage';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { basePathName } from '@/shared/utils/file-path';
 
@@ -51,8 +52,7 @@ export type AgentContextItem =
       previewUrl?: string | undefined;
     };
 
-/** The most selected text one passage carries: about 1,000 words. */
-export const PASSAGE_QUOTE_LIMIT = 6_000;
+export { PASSAGE_QUOTE_LIMIT };
 
 /** FNV-1a, enough to tell two passages of one file apart in a key. */
 function quoteDigest(quote: string): string {

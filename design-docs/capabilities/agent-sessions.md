@@ -76,7 +76,9 @@ permissions, with current model and tool choices checked before use.
   suggestion until another document comes to the front. Chat mode shows no
   suggestion, since no document is on screen there.
 - A **passage** is selected text bound as context, from **Ask agent** on a
-  Markdown selection. Its words travel with the request, so later edits to the
+  Markdown selection or on selected table cells. A table passage starts with
+  where it is, the sheet and range, then its rows as a Markdown table that
+  keeps row numbers and column names. Its words travel with the request, so later edits to the
   file do not change what was asked about; it is refused only when its file
   leaves the project or it exceeds 6,000 characters. A passage of an external
   file goes to the chat beside it and carries the file's absolute path. Reloaded history shows it

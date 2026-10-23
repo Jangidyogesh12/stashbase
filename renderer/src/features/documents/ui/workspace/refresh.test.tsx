@@ -9,6 +9,7 @@ import {
   docxPreviewApi,
   genericPreviewApi,
   sourceApi,
+  tableApi,
   textSource,
 } from '@/test/fakes/documents';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
@@ -40,6 +41,7 @@ it('retains a covered workspace without polling and refreshes when it returns', 
         assetApi={assetApi()}
         docxPreviewApi={docxPreviewApi()}
         genericPreviewApi={genericPreviewApi()}
+        tableApi={tableApi()}
         onReveal={async () => undefined}
         revealLabel="Show in file manager"
         runtime={runtime}

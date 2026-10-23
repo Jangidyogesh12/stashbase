@@ -293,6 +293,7 @@
     "tar": "7.5.22",
     "toml-eslint-parser": "^0.10.1",
     "ws": "^8.20.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "3.25.76"
   },
   "devDependencies": {

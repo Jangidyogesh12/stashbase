@@ -71,7 +71,7 @@ export function usageState(config: AppConfigFile, now: number): TelemetryState {
     ...(typeof raw.subscription === 'string' && /^(free|plus|pro|other):(true|false):(true|false)$/.test(raw.subscription)
       ? { subscription: raw.subscription } : {}),
     markers: Object.fromEntries(Object.entries(raw.markers ?? {}).filter(([key, time]) =>
-      /^(app_active:(welcome|documents|chat)|document_engaged:(read|edit):(md|txt|json|html|pdf|docx|image|audio|generic))$/.test(key)
+      /^(app_active:(welcome|documents|chat)|document_engaged:(read|edit):(md|txt|json|csv|html|pdf|docx|image|audio|generic))$/.test(key)
       && Number.isFinite(time) && time > now - 60_000 && time <= now)),
     turns: (Array.isArray(raw.turns) ? raw.turns.slice(0, TURN_LIMIT) : []).flatMap((entry) => {
       const parsed = turnSchema.safeParse(entry);

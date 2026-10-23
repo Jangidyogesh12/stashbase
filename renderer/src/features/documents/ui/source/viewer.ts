@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import type {
+  DelimitedTablePort,
   DocumentAssetPort,
   DocumentSourcePort,
   DocxPreviewPort,
@@ -40,8 +41,8 @@ export interface DocumentViewerServices {
   docxPreviewApi: DocxPreviewPort;
   genericPreviewApi: GenericFilePreviewPort;
   navigation: DocumentNavigationRuntime;
-  /** Absent where no Agent sits beside the document; the Markdown surface
-   *  then offers no Ask Agent control. */
+  /** Absent where no Agent sits beside the document; the surfaces that
+   *  select text or cells then offer no Ask agent control. */
   onAskAgent?: ((selection: DocumentSelection) => void) | undefined;
   onNavigate(target: DocumentNavigationTarget): void;
   onOpenExternal(href: string): Promise<boolean>;
@@ -55,6 +56,7 @@ export interface DocumentViewerServices {
   renderReadingControl?: (() => ReactNode) | undefined;
   revealLabel: string;
   sourceApi: DocumentSourcePort;
+  tableApi: DelimitedTablePort;
 }
 
 /** A load in flight (`error` absent) or one that refused. */

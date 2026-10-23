@@ -11,6 +11,7 @@ import type {
 } from '@/features/documents/domain/document';
 import type { DocumentViewerFormat } from '@/features/documents/domain/document-format';
 import type { RevisionRefusal, RevisionReview } from '@/features/documents/domain/revision';
+import type { TableViewMode } from '@/features/documents/domain/table';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import type { CapturedScope } from '@/shared/runtime/scope-guard';
 
@@ -55,6 +56,7 @@ export interface DocumentRuntime {
   setJsonSession(patch: Partial<JsonDocumentSession>): void;
   setMarkdownMode(mode: MarkdownViewMode): void;
   setPdfPage(page: number): void;
+  setTableMode(mode: TableViewMode): void;
 }
 
 export interface DocumentUsageEvent {

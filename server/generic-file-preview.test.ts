@@ -22,19 +22,19 @@ test('generic preview strictly distinguishes readable text from binary and overs
     fs.truncateSync(path.join(root, 'huge.zip'), MAX_TEXT_READ_BYTES + 1);
     await openProjectFolder(root);
 
-    const text = readGenericFilePreview('script.ts');
+    const text = await readGenericFilePreview('script.ts');
     assert.equal(text.kind, 'text');
     if (text.kind === 'text') {
       assert.equal(text.content, 'const greeting = "你好";\r\n');
       assert.ok(text.version);
     }
-    assert.equal(readGenericFilePreview('payload.bin').kind, 'binary');
-    assert.equal(readGenericFilePreview('invalid.data').kind, 'binary');
-    assert.equal(readGenericFilePreview('looks-textual.zip').kind, 'binary');
-    assert.equal(readGenericFilePreview('huge.log').kind, 'too-large');
-    assert.equal(readGenericFilePreview('huge.zip').kind, 'binary', 'known binary type wins over the text-size ceiling');
-    assert.equal(readGenericFilePreview('.remote.txt.icloud').kind, 'cloud-placeholder');
-    assert.throws(() => readGenericFilePreview('known.md'), /known document formats/);
+    assert.equal((await readGenericFilePreview('payload.bin')).kind, 'binary');
+    assert.equal((await readGenericFilePreview('invalid.data')).kind, 'binary');
+    assert.equal((await readGenericFilePreview('looks-textual.zip')).kind, 'binary');
+    assert.equal((await readGenericFilePreview('huge.log')).kind, 'too-large');
+    assert.equal((await readGenericFilePreview('huge.zip')).kind, 'binary', 'known binary type wins over the text-size ceiling');
+    assert.equal((await readGenericFilePreview('.remote.txt.icloud')).kind, 'cloud-placeholder');
+    await assert.rejects(readGenericFilePreview('known.md'), /known document formats/);
   } finally {
     clearCurrentFolder();
     fs.rmSync(root, { recursive: true, force: true });
@@ -53,7 +53,7 @@ test('generic preview reports symlinks without following them', { skip: process.
     fs.writeFileSync(path.join(root, 'target.ts'), 'secret');
     fs.symlinkSync('target.ts', path.join(root, 'alias.ts'));
     await openProjectFolder(root);
-    assert.equal(readGenericFilePreview('alias.ts').kind, 'symlink');
+    assert.equal((await readGenericFilePreview('alias.ts')).kind, 'symlink');
   } finally {
     clearCurrentFolder();
     fs.rmSync(root, { recursive: true, force: true });

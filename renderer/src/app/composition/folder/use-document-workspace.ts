@@ -17,7 +17,7 @@ export function useDocumentWorkspace(
   session: Pick<WorkspaceSessionController, 'runtime' | 'status'>,
   sourceApi: DocumentAdapters['source'],
   createId: () => string,
-  previewAdapters?: Pick<DocumentAdapters, 'asset' | 'genericPreview'>,
+  previewAdapters?: Pick<DocumentAdapters, 'asset' | 'genericPreview' | 'table'>,
   recordUsage?: (event: DocumentUsageEvent) => void,
 ): DocumentTabsRuntime | null {
   const queryClient = useQueryClient();

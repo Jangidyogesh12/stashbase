@@ -5,6 +5,35 @@ import type { HttpClient } from '@/platform/http/client';
 import { createGenericFilePreviewAdapter } from './generic-preview-api';
 
 describe('generic file preview API', () => {
+  it('maps a workbook preview without dropping its worksheets or source version', async () => {
+    const body = {
+      kind: 'spreadsheet',
+      name: 'test.xlsx',
+      size: 9000,
+      version: 'sha256:workbook',
+      workbook: {
+        sheetCount: 1,
+        hasFormulas: false,
+        sheets: [
+          {
+            name: 'Sheet1',
+            firstRow: 0,
+            firstColumn: 0,
+            rowCount: 1,
+            columnCount: 1,
+            rows: [['Value']],
+            formulas: [],
+          },
+        ],
+      },
+    };
+    const api = createGenericFilePreviewAdapter({
+      request: vi.fn(async () => ({ body, status: 200 })),
+    });
+    await expect(
+      api.load({ folderPath: '/project', path: 'test.xlsx' }, new AbortController().signal),
+    ).resolves.toEqual(body);
+  });
   it('loads a bounded preview through its explicit member folder', async () => {
     const client: HttpClient = {
       request: vi.fn(async () => ({

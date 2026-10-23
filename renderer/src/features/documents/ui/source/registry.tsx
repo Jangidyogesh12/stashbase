@@ -10,6 +10,7 @@ import {
   FileAudio,
   FileCode2,
   FileImage,
+  FileSpreadsheet,
   FileText,
   FileType2,
   FileVideo,
@@ -18,6 +19,7 @@ import {
 import { lazy } from 'react';
 
 import {
+  DELIMITED_TABLE_MESSAGES,
   DOCUMENT_ASSET_MESSAGES,
   DOCUMENT_SOURCE_MESSAGES,
   GENERIC_PREVIEW_MESSAGES,
@@ -49,6 +51,11 @@ const assetStatus = documentStatusRenderer<'missing'>(
 const genericStatus = documentStatusRenderer<'not-generic' | 'missing'>(
   'GenericFilePreviewError',
   GENERIC_PREVIEW_MESSAGES,
+);
+
+const tableStatus = documentStatusRenderer<'missing'>(
+  'DelimitedTableError',
+  DELIMITED_TABLE_MESSAGES,
 );
 
 const constantIcon = (icon: LucideIcon) => () => icon;
@@ -85,6 +92,15 @@ const plainText = viewerEntry({
   outline: false,
   services: ['navigation', 'sourceApi'],
   status: sourceStatus,
+});
+
+const csv = viewerEntry({
+  component: lazy(() => import('./viewers/csv')),
+  find: true,
+  icon: constantIcon(FileSpreadsheet),
+  outline: false,
+  services: ['navigation', 'onAskAgent', 'sourceApi', 'tableApi'],
+  status: tableStatus,
 });
 
 const html = viewerEntry({
@@ -145,12 +161,13 @@ const generic = viewerEntry({
   find: true,
   icon: constantIcon(FileText),
   outline: false,
-  services: ['genericPreviewApi', 'navigation', 'onReveal', 'revealLabel'],
+  services: ['genericPreviewApi', 'navigation', 'onAskAgent', 'onReveal', 'revealLabel'],
   status: genericStatus,
 });
 
 export const documentViewers: DocumentViewerRegistry = {
   audio,
+  csv,
   docx,
   generic,
   html,

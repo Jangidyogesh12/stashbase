@@ -596,6 +596,74 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 
 ## J03: Documents
 
+**Tables: CSV/TSV and XLSX (2026-10-23):** `csv` is a viewer format of its own
+(`shared/file-formats.ts`), editable through `detectEditableTextFormat` and kept
+out of `detectFormat`, indexing, Quick Open and automatic context.
+`server/delimited-table.ts` reads it in pages for `/api/file-table/*` and the
+external grant's `/table` route; `features/documents/ui/csv/document.tsx` shows
+the table or the plain-text source (`ui/source/plain-text-source.tsx`) by the
+runtime's `tableMode`, saving the source before it returns to the table.
+`features/documents/ui/table/` is the virtual grid both CSV and XLSX use, with
+selection, Copy through the clipboard event or the button, and Ask agent;
+`domain/table.ts` owns coordinates, TSV and the passage text, checked against
+`shared/domain/passage.ts`. `read_file` serves XLSX from the preview's parse
+(`spreadsheetAgentText`). `delimited-table.test.ts` covers quoting, embedded
+line breaks, lone CR, BOM, delimiter choice, checkpoint pages across 1 MiB scan
+chunks, rescans after a change, and encoding guesses; `markdown-source-format.test.ts`
+the line endings a CSV save keeps; `routes/files.test.ts` and
+`routes/external-files.test.ts` the routes, text save, index exclusion and grant
+ownership; `spreadsheet-preview.test.ts` the agent text, its stated limits and
+refused edits; `agent.test.ts` the one-time native Read redirect;
+`opencode-agent.test.ts` table passages replayed as chips. Renderer tests cover
+the table domain, geometry, adapter, CSV view (pages on scroll, source save,
+the text ceiling, encodings, Ask agent) and the worksheet grid (virtual rows,
+selection, Copy, oversize refusal). A 121 MB, 2,000,001-row CSV scanned in 331 ms
+on this Mac and served a middle page in 1 ms.
+An isolated macOS Electron pass (built renderer, source host, scratch HOME) opened
+an Excel-style CSV (CRLF records, a quoted cell with an LF, quoted commas and
+quotes), a 300,001-row semicolon CSV over the text ceiling, a GBK CSV and a
+workbook with formulas. It confirmed the pinned header, 32 of 3,002 rows drawn,
+scrolling to row 2,402 and to the large file's last row with its column widened
+to fit, B2:D4 copied as TSV through the menu's copy command, Ask agent binding
+"Cells B2:D4" and "Sheet 销售, cells A2:D4" chips with formula notes, a refused
+whole-file selection, a typed source row saved with every other record's CRLF
+and the cell's LF intact and then shown in the table, the disabled Source on the
+large file, the GBK notice, the formula's title, and `/api/project/file`
+returning the workbook's tables. Light and dark themes were inspected by eye.
+Not driven: a desktop CSV drop, a real agent turn reading the passage or
+`read_file` output, packaged builds, Windows and Linux.
+A review then fixed: unchanged rows keep their endings beside blank or repeated
+lines (a patience line match, bounded in work, replaced a look-ahead that let a
+blank line pull later rows to the dominant ending); tables past Chromium's
+layout ceiling scroll to their last row in proportion; Shift+Arrow extends whole
+rows and columns as such; a possible GBK file is offered as a hint, not named;
+a password-protected workbook says so; the parser resolves on first use, so
+the MCP bundle cannot fail to load over it; formula text counts toward the
+workbook's text bound. **Gaps:** one huge CSV record is checked against the
+response budget only once it is decoded; XLSX workers have no concurrency cap;
+Copy of a narrow column in a wide CSV reads whole pages; an attached or
+mentioned XLSX gets no `read_file` hint in the prompt; hidden rows and columns
+appear in the preview and agent text.
+
+**XLSX preview (2026-10-23):** project and granted external XLSX files use
+`server/spreadsheet-preview.ts` through the existing generic-preview adapters;
+`features/documents/ui/spreadsheet/document.tsx` displays visible worksheets,
+formatted values and coordinates in the shared table, with explicit preview limits.
+The source remains read-only and outside retrieval; agents read it only as
+derived text. `spreadsheet-preview.test.ts` exercises source preservation, formatted values,
+cached formulas, hidden/empty sheets, changed-source refresh, bounded dimensions,
+invalid archives and cancellation. External-file route tests exercise the owning
+window grant; renderer tests cover opening, sheet switching, virtual rows and safe text.
+An isolated macOS Electron pass using the built renderer and bundled host opened
+the XLSX fixture from Files, switched worksheets, and verified the empty-sheet
+and damaged-workbook states. The original workbook remained byte-identical.
+The built Spreadsheet Story was visually inspected in light theme. Host types,
+focused host/protocol tests, documentation checks and Electron boundary/smoke
+checks passed. All renderer gates passed across the validation run; coverage
+was rerun with two workers after a Markdown shell test timed out, passing all
+356 files and 1,794 tests without changing timeouts or coverage thresholds.
+Packaged and Windows/Linux workbook previews remain unverified.
+
 **External files (2026-10-23):** `features/documents/ui/workspace/drop-zone.tsx`
 wraps the whole content row, document pane and chat alike, so a drop works with no
 document open. It outlines the row while a desktop file is over it, lets preview
@@ -2453,6 +2521,10 @@ included, again as agent text: OpenCode streams the prompt's text part like a
 reply's, and `OpenCodeEventTranslator` forwarded every text part. It now drops
 parts of messages OpenCode announced as the user's; `opencode-agent.test.ts`
 owns that rule and the history restore.
+A table selection (2026-10-23) is the same passage kind: Documents builds its
+text (`domain/table.ts`) and binds it through the same `askAbout` path, so
+validation, prompt rendering and history replay are unchanged; replay now
+recognizes CSV, TSV and XLSX paths.
 
 Additional hosted accounting evidence (API repository):
 *agent-credit-admission.test.ts* reproduces the long-context/remaining-credit

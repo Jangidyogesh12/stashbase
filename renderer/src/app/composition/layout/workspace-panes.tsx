@@ -184,6 +184,7 @@ export function WorkspacePanes({
                   revealLabel={dependencies.workspace.revealLabel}
                   runtime={documents}
                   sourceApi={dependencies.documents.adapters.source}
+                  tableApi={dependencies.documents.adapters.table}
                 />
               </div>
               {newTab.open && (

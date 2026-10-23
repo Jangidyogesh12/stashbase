@@ -118,7 +118,8 @@ test('file-listing reports the truthful workbench tree without traversing exclud
     assert.equal(result.files.find((f) => f.name === 'mixed/readme.txt')?.format, 'txt');
     assert.equal(result.files.find((f) => f.name === 'src/main.ts')?.format, 'generic');
     assert.equal(result.files.find((f) => f.name === 'src/utils.py')?.format, 'generic');
-    assert.equal(result.files.find((f) => f.name === 'mixed/data.csv')?.format, 'generic');
+    assert.equal(result.files.find((f) => f.name === 'mixed/data.csv')?.format, 'csv');
+    assert.equal(shouldIndexFilePath('mixed/data.csv'), false, 'a table opens and edits but is not indexed');
     assert.equal(result.files.find((f) => f.name === 'mixed/archive.zip')?.format, 'generic');
     assert.equal(result.files.find((f) => f.name === 'mixed/unfinished.tmp')?.format, 'generic');
     assert.ok(fileNames.includes('mixed/config.json_files/asset.md'), 'JSON must not claim a note bundle');

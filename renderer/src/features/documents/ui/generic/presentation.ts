@@ -6,12 +6,19 @@ export interface GenericPreviewCopy {
 }
 
 export function genericPreviewCopy(
-  preview: Exclude<GenericFilePreview, { kind: 'text' }>,
+  preview: Exclude<GenericFilePreview, { kind: 'text' | 'spreadsheet' }>,
 ): GenericPreviewCopy {
   switch (preview.kind) {
+    case 'invalid-spreadsheet':
+      return {
+        description:
+          preview.message ??
+          'The workbook may be damaged or password-protected. Open it in a spreadsheet app.',
+        title: 'Workbook cannot be previewed',
+      };
     case 'too-large':
       return {
-        description: 'StashBase does not load text files larger than 8 MiB.',
+        description: 'StashBase previews text files and workbooks up to 8 MiB.',
         title: 'File is too large to open',
       };
     case 'unreadable':

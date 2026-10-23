@@ -136,7 +136,7 @@ export const documentTextSourceRequestSchema = z
 
 const documentTextSourceBaseSchema = {
   content: boundedSourceTextSchema,
-  format: z.enum(['md', 'html', 'json', 'txt']),
+  format: z.enum(['md', 'html', 'json', 'txt', 'csv']),
   name: relativePathSchema,
   version: sourceVersionSchema,
 };
@@ -147,7 +147,7 @@ export const documentTextSourceResponseSchema = z.union([
     .object({
       ...documentTextSourceBaseSchema,
       content: z.literal(''),
-      format: z.literal('txt'),
+      format: z.enum(['txt', 'csv']),
       error: z
         .object({
           code: z.literal('UNSUPPORTED_ENCODING'),
@@ -170,7 +170,34 @@ const genericFilePreviewBaseSchema = {
   size: z.number().finite().nonnegative().optional(),
 };
 
+export const spreadsheetPreviewSchema = z.object({
+  sheets: z.array(z.object({
+    name: z.string().max(255),
+    firstRow: z.number().int().nonnegative(),
+    firstColumn: z.number().int().nonnegative(),
+    rowCount: z.number().int().nonnegative(),
+    columnCount: z.number().int().nonnegative(),
+    rows: z.array(z.array(z.string().max(32_767)).max(64)).max(1_000),
+    /** Formula cells among `rows`, by their index there. The value shown is
+     *  the result saved in the file; StashBase does not recalculate it. */
+    formulas: z.array(z.object({
+      row: z.number().int().nonnegative().max(999),
+      column: z.number().int().nonnegative().max(63),
+      formula: z.string().min(1).max(8_192),
+    }).strict()).max(2_000),
+  }).strict()).max(20),
+  sheetCount: z.number().int().nonnegative(),
+  hasFormulas: z.boolean(),
+}).strict();
+
 export const genericFilePreviewResponseSchema = z.union([
+  z.object({
+    ...genericFilePreviewBaseSchema,
+    kind: z.literal('spreadsheet'),
+    workbook: spreadsheetPreviewSchema,
+    size: z.number().finite().nonnegative(),
+    version: sourceVersionSchema,
+  }).strict(),
   z
     .object({
       ...genericFilePreviewBaseSchema,
@@ -190,11 +217,63 @@ export const genericFilePreviewResponseSchema = z.union([
         'symlink',
         'special',
         'cloud-placeholder',
+        'invalid-spreadsheet',
       ]),
       message: z.string().trim().min(1).max(500).optional(),
     })
     .strict(),
 ]);
+
+export const TABLE_DELIMITERS = [',', '\t', ';', '|'] as const;
+export const TABLE_ENCODINGS = ['utf-16le', 'utf-16be', 'gb18030'] as const;
+export type TableDelimiter = (typeof TABLE_DELIMITERS)[number];
+export type TableEncoding = (typeof TABLE_ENCODINGS)[number];
+
+export const delimitedTableRequestSchema = z
+  .object({
+    count: z.coerce.number().int().min(1).max(500),
+    start: z.coerce.number().int().nonnegative(),
+  })
+  .strict();
+
+/** One page of a CSV/TSV table, read in segments. `rowCount` counts records
+ *  including the first; `columnCount` is the widest record, capped, and
+ *  `totalColumns` is the uncapped width. `editable` says whether the source
+ *  is within the ceiling for opening it as text. */
+export const delimitedTableResponseSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      columnCount: z.number().int().nonnegative(),
+      delimiter: z.enum(TABLE_DELIMITERS),
+      editable: z.boolean(),
+      kind: z.literal('table'),
+      name: relativePathSchema,
+      rowCount: z.number().int().nonnegative(),
+      rows: z.array(z.array(z.string().max(32_768))).max(500),
+      size: z.number().finite().nonnegative(),
+      start: z.number().int().nonnegative(),
+      totalColumns: z.number().int().nonnegative(),
+      version: sourceVersionSchema,
+    })
+    .strict(),
+  z
+    .object({
+      encoding: z.enum(TABLE_ENCODINGS).nullable(),
+      kind: z.literal('unsupported-encoding'),
+      name: relativePathSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('too-large'),
+      name: relativePathSchema,
+      size: z.number().finite().nonnegative(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('binary'), name: relativePathSchema }).strict(),
+]);
+
+export type DelimitedTable = z.infer<typeof delimitedTableResponseSchema>;
 
 export const documentTextSaveRequestSchema = z
   .object({
@@ -217,7 +296,7 @@ export const documentTextOverwriteRequestSchema = z
 export const documentTextSaveResponseSchema = z
   .object({
     content: boundedSourceTextSchema,
-    format: z.enum(['json', 'md', 'txt']),
+    format: z.enum(['json', 'md', 'txt', 'csv']),
     indexWarning: z.string().trim().min(1).max(1_000).optional(),
     name: relativePathSchema,
     version: sourceVersionSchema,

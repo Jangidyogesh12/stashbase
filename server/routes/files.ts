@@ -9,9 +9,9 @@ import {
   pathExistsAsync,
   resolveExistingAsync,
 } from '../active-file-operations.ts';
-import { getCurrentFolderBasename, sanitizeFilename } from '../file-paths.ts';
+import { getCurrentFolderBasename, resolveSafeAsync, sanitizeFilename } from '../file-paths.ts';
 import { listFilesAndFoldersAsync } from '../file-listing.ts';
-import { detectFormat, detectViewerFormat, isNoteName } from '../format.ts';
+import { detectEditableTextFormat, detectViewerFormat, isDelimitedTextFile, isNoteName } from '../format.ts';
 import { getWorkspacePreferences } from '../app-config.ts';
 import {
   exactRegisteredFolderRootAsync,
@@ -25,10 +25,13 @@ import { noteTreeChanged } from '../watcher.ts';
 import { saveFileContent, upsertSavedFile } from '../file-save.ts';
 import { readTextSnapshotAsync } from '../text-file-transaction.ts';
 import { readGenericFilePreview } from '../generic-file-preview.ts';
+import { readDelimitedTable } from '../delimited-table.ts';
 import { documentAssetVersionAsync } from '../document-asset-version.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
 import {
+  delimitedTableRequestSchema,
+  delimitedTableResponseSchema,
   documentTextOverwriteRequestSchema,
   documentTextSaveRequestSchema,
   documentTextSaveResponseSchema,
@@ -118,8 +121,8 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
       res.status(400).json({ error: 'invalid versioned text save request' });
       return;
     }
-    const format = detectFormat(request.data.path);
-    if (format !== 'json' && format !== 'md' && format !== 'txt') {
+    const format = detectEditableTextFormat(request.data.path);
+    if (format !== 'json' && format !== 'md' && format !== 'txt' && format !== 'csv') {
       res.status(415).json({ code: 'UNSUPPORTED_FORMAT', error: 'unsupported editable format' });
       return;
     }
@@ -285,11 +288,49 @@ export function mount(
   // from becoming an editable, indexable, or Agent-readable document.
   app.get('/api/file-preview/*', (req, res) => {
     const name = (req.params as any)[0] as string;
-    void runWithExplicitReadFolder(req, res, () => {
+    const controller = new AbortController();
+    const cancel = () => { if (!res.writableEnded) controller.abort(); };
+    res.once('close', cancel);
+    void runWithExplicitReadFolder(req, res, async () => {
       try {
-        res.json(readGenericFilePreview(name));
+        res.json(await readGenericFilePreview(name, controller.signal));
       } catch (err: unknown) {
+        if (!controller.signal.aborted) sendError(res, err);
+      } finally {
+        res.off('close', cancel);
+      }
+    });
+  });
+
+  // CSV/TSV rows, a page at a time. Separate from the text route below, so a
+  // table far above the editing ceiling still opens, read-only.
+  app.get('/api/file-table/*', (req, res) => {
+    const name = (req.params as any)[0] as string;
+    const page = delimitedTableRequestSchema.safeParse({ count: req.query.count, start: req.query.start });
+    if (!isDelimitedTextFile(name) || !page.success) {
+      res.status(400).json({ error: 'invalid table request' });
+      return;
+    }
+    const controller = new AbortController();
+    const cancel = () => { if (!res.writableEnded) controller.abort(); };
+    res.once('close', cancel);
+    void runWithExplicitReadFolder(req, res, async () => {
+      try {
+        let target: string;
+        try {
+          target = await resolveSafeAsync(name, 'existing', 'file');
+        } catch (err: unknown) {
+          if ((err as { code?: unknown })?.code !== 'ENOENT') throw err;
+          return res.status(404).json({ error: 'not found' });
+        }
+        const table = await readDelimitedTable(target, name, page.data.start, page.data.count, controller.signal);
+        res.json(delimitedTableResponseSchema.parse(table));
+      } catch (err: unknown) {
+        if (controller.signal.aborted) return;
+        if ((err as { code?: unknown })?.code === 'ENOENT') return res.status(404).json({ error: 'not found' });
         sendError(res, err);
+      } finally {
+        res.off('close', cancel);
       }
     });
   });
@@ -305,7 +346,7 @@ export function mount(
         // via `/asset/*`, but they're not viewable through this route —
         // a `readTextAsync` of binary bytes would otherwise hand the editor
         // garbled UTF-8 to render.
-        const format = detectFormat(name);
+        const format = detectEditableTextFormat(name);
         if (!format) return res.status(415).json({ error: 'unsupported format' });
         let snapshot;
         try {

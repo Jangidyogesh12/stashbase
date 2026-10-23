@@ -5,6 +5,7 @@ import { useStore } from 'zustand';
 import type { DocumentUsageEvent } from '@/features/documents/application/document-runtime-contract';
 import { SEARCH_NOTICES } from '@/features/documents/application/navigation-runtime';
 import type {
+  DelimitedTablePort,
   DocumentAssetPort,
   DocumentSourcePort,
   DocxPreviewPort,
@@ -60,6 +61,7 @@ export interface DocumentWorkspaceProps {
   revealLabel: string;
   runtime: DocumentTabsRuntime;
   sourceApi: DocumentSourcePort;
+  tableApi: DelimitedTablePort;
   /** Overridable so a test can register a viewer of its own. */
   viewers?: DocumentViewerRegistry | undefined;
 }
@@ -80,6 +82,7 @@ export function DocumentWorkspace({
   recordUsage,
   runtime,
   sourceApi,
+  tableApi,
   viewers,
 }: DocumentWorkspaceProps) {
   const searchNotice = useStore(runtime.navigation.store, (state) => state.searchNotice);
@@ -162,6 +165,7 @@ export function DocumentWorkspace({
             revealLabel={revealLabel}
             runtime={document}
             sourceApi={sourceApi}
+            tableApi={tableApi}
             viewers={viewers}
           />
         </DocumentReadingSurface>

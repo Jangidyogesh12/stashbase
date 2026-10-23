@@ -25,6 +25,7 @@ import { filesystemPath } from './filesystem-path.ts';
 import { getCurrentFolder, onClose, onSwitch, registeredRootForAbsAsync } from './folder.ts';
 import { detectViewerFormat, isKnownBinaryFile } from './format.ts';
 import { decodeGenericText } from './generic-file-preview.ts';
+import { isSpreadsheetFile, spreadsheetFilePreview } from './spreadsheet-preview.ts';
 import { isCloudPlaceholderName } from './indexable.ts';
 import { preserveTextSourceFormat } from './markdown-source-format.ts';
 import { decodeTextSnapshotBytes } from './text-decoding.ts';
@@ -143,7 +144,7 @@ export async function registerExternalFile(windowId: string, droppedPath: string
   }
 
   if (!isExternalFileViewerFormat(format)) return refused(name, 'copy-required');
-  if (format === 'generic' && (isKnownBinaryFile(realPath) || !(await isTextFile(realPath, stat.size)))) {
+  if (format === 'generic' && !isSpreadsheetFile(realPath) && (isKnownBinaryFile(realPath) || !(await isTextFile(realPath, stat.size)))) {
     return refused(name, 'copy-required');
   }
 
@@ -259,6 +260,7 @@ export async function readExternalGenericPreviewAsync(grant: ExternalFileGrant, 
   const stat = await fs.promises.stat(target);
   if (stat.size > MAX_TEXT_READ_BYTES) return { kind: 'too-large', name: grant.path, size: stat.size };
   const bytes = await readFileBytesBoundedAsync(target);
+  if (isSpreadsheetFile(target)) return spreadsheetFilePreview(bytes, grant.path, signal);
   const content = decodeGenericText(bytes);
   if (content === null) return { kind: 'binary', name: grant.path, size: stat.size };
   const version = await externalFileVersionAsync(grant);
@@ -267,7 +269,7 @@ export async function readExternalGenericPreviewAsync(grant: ExternalFileGrant, 
 
 /** Formats an external file can be edited and saved in, as a project file can. */
 export function isEditableExternalFile(grant: ExternalFileGrant): boolean {
-  return grant.format === 'md' || grant.format === 'txt' || grant.format === 'json';
+  return grant.format === 'md' || grant.format === 'txt' || grant.format === 'json' || grant.format === 'csv';
 }
 
 /** Where a save of the grant's file lands: the file itself, or, when it is
@@ -319,7 +321,9 @@ export async function saveExternalTextAsync(
     const target = await externalWriteTargetAsync(grant, baseVersion === undefined);
     if (!target) return null;
     const previous = await readExternalSnapshotAsync(target, grant.name);
-    const saved = preserveTextSourceFormat(previous?.content ?? '', content);
+    const saved = preserveTextSourceFormat(previous?.content ?? '', content, {
+      keepUnchangedLineEndings: grant.format === 'csv',
+    });
     if (previous?.content === saved) return previous;
     if (baseVersion !== undefined && previous?.version !== baseVersion) throw fileChanged(previous?.version ?? null);
     const mode = await fs.promises.stat(target).then((stat) => stat.mode & 0o777, () => undefined);

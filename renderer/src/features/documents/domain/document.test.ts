@@ -57,6 +57,7 @@ describe('document identity', () => {
       readingRequest: 0,
       revision: { kind: 'idle' },
       scope,
+      tableMode: 'table',
     });
     expect(disposeDocumentState(disposed)).toBe(disposed);
   });

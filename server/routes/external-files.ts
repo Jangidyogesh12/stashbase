@@ -15,6 +15,8 @@ import {
   externalFileTokenSchema,
 } from '../../shared/protocols/http/external-files.ts';
 import {
+  delimitedTableRequestSchema,
+  delimitedTableResponseSchema,
   documentTextSaveResponseSchema,
   documentTextSourceResponseSchema,
   genericFilePreviewResponseSchema,
@@ -32,6 +34,7 @@ import {
   saveExternalTextAsync,
   type ExternalFileGrant,
 } from '../external-files.ts';
+import { readDelimitedTable } from '../delimited-table.ts';
 import { currentWindowId } from '../folder.ts';
 import { revealInOsFileManager, sendError } from '../http.ts';
 import { processPrivateTokenMatches } from '../process-private-token.ts';
@@ -126,6 +129,26 @@ export function mount(app: express.Express, options: ExternalFileRouteOptions): 
       res.json(documentTextSaveResponseSchema.parse({ ...saved, format: grant.format, name: grant.path }));
     } catch (err: unknown) {
       sendError(res, err);
+    }
+  });
+
+  app.get('/api/external-files/:token/table', async (req, res) => {
+    const grant = ownGrant(req);
+    if (!grant || grant.format !== 'csv') return notFound(res);
+    const page = delimitedTableRequestSchema.safeParse({ count: req.query.count, start: req.query.start });
+    if (!page.success) return res.status(400).json({ error: 'invalid table request' });
+    const controller = new AbortController();
+    const cancel = () => { if (!res.writableEnded) controller.abort(); };
+    res.once('close', cancel);
+    try {
+      const target = await resolveExternalFileAsync(grant);
+      if (!target) return notFound(res);
+      const table = await readDelimitedTable(target, grant.path, page.data.start, page.data.count, controller.signal);
+      res.json(delimitedTableResponseSchema.parse(table));
+    } catch (err: unknown) {
+      if (!controller.signal.aborted) sendError(res, err);
+    } finally {
+      res.off('close', cancel);
     }
   });
 

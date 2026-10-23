@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createDocumentQueryScope } from '@/features/documents/application/queries';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { DocumentWorkspace } from '@/features/documents/ui/workspace/workspace';
-import { assetApi, docxPreviewApi, genericPreviewApi, sourceApi } from '@/test/fakes/documents';
+import {
+  assetApi,
+  docxPreviewApi,
+  genericPreviewApi,
+  sourceApi,
+  tableApi,
+} from '@/test/fakes/documents';
 import { createTestQueryClient, withQueryClient } from '@/test/query';
 
 import { documentViewerEntry, documentViewers } from './registry';
@@ -54,6 +60,7 @@ function renderWith(path: string, entry: DocumentViewerEntry) {
       assetApi={assetApi()}
       docxPreviewApi={docxPreviewApi()}
       genericPreviewApi={genericPreviewApi()}
+      tableApi={tableApi()}
       onReveal={vi.fn(async () => undefined)}
       revealLabel="Show in file manager"
       runtime={runtime}

@@ -53,7 +53,7 @@ export async function editProjectFile(
 ): Promise<{ path: string; replacements: number; version?: string; indexWarning?: string }> {
   const current = await readProjectFile(rawPath);
   if (current.derived) {
-    throw routeError('edit_file cannot edit derived PDF/DOCX text; create or edit a UTF-8 text source file instead', 415, 'UNSUPPORTED_FORMAT');
+    throw routeError('edit_file cannot edit derived PDF, DOCX or XLSX text; create or edit a UTF-8 text source file instead', 415, 'UNSUPPORTED_FORMAT');
   }
   if (!oldText) {
     if (current.content !== '') throw routeError('empty old_text only matches an empty file', 409, 'EDIT_MISMATCH');

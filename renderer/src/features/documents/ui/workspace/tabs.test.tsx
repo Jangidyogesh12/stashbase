@@ -15,6 +15,7 @@ import {
   docxPreviewApi,
   genericPreviewApi,
   sourceApi,
+  tableApi,
   textSource,
 } from '@/test/fakes/documents';
 import { withQueryClient } from '@/test/query';
@@ -56,6 +57,7 @@ const documentWorkspaceProps = {
   assetApi: assetApi({ load: vi.fn(pending()) }),
   docxPreviewApi: docxPreviewApi({ load: vi.fn(pending()) }),
   genericPreviewApi: genericPreviewApi({ load: vi.fn(pending()) }),
+  tableApi: tableApi(),
   onReveal: vi.fn(async () => undefined),
   revealLabel: 'Show in file manager',
 };

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import express from 'express';
+import { spreadsheetFixture } from '../__tests__/spreadsheet-fixtures.ts';
 
 import {
   EXTERNAL_FILE_REGISTRATION_TOKEN_HEADER,
@@ -203,7 +204,7 @@ test('dropping decides between the project copy, a grant, and a refusal', async 
       reason: 'directory',
     });
     const csv = await opened(await register('window-a', path.join(outside, 'data.csv')));
-    assert.equal(csv.kind === 'external' && csv.format, 'generic');
+    assert.equal(csv.kind === 'external' && csv.format, 'csv');
     const log = await opened(await register('window-a', path.join(outside, 'server.log')));
     assert.equal(log.kind === 'external' && log.format, 'generic');
   });
@@ -248,6 +249,57 @@ test('generic text previews through its grant, and leaving the project revokes i
 
     clearCurrentFolder('window-a');
     assert.equal((await fetch(`${base}/api/external-files/${result.token}/preview`, inWindow('window-a'))).status, 404);
+  });
+});
+
+test('an outside CSV reads as table pages and saves as text only through its owning window grant', async () => {
+  await withServer(async ({ base, outside, register }) => {
+    const file = path.join(outside, 'sales.csv');
+    fs.writeFileSync(file, 'item,note\r\nA,"two\nlines"\r\nB,x\r\n');
+    const result = await opened(await register('window-a', file));
+    assert.equal(result.kind === 'external' && result.format, 'csv');
+    if (result.kind !== 'external') return;
+    const tableUrl = `${base}/api/external-files/${result.token}/table?start=1&count=10`;
+    assert.equal((await fetch(tableUrl, inWindow('window-b'))).status, 404);
+    assert.equal((await fetch(`${base}/api/external-files/${result.token}/table?start=-1&count=10`, inWindow('window-a'))).status, 400);
+    const table = (await (await fetch(tableUrl, inWindow('window-a'))).json()) as { kind: string; rowCount: number; rows: string[][] };
+    assert.equal(table.kind, 'table');
+    assert.equal(table.rowCount, 3);
+    assert.deepEqual(table.rows, [['A', 'two\nlines'], ['B', 'x']]);
+    assert.equal((await fetch(`${base}/api/external-files/${result.token}/preview`, inWindow('window-a'))).status, 404);
+
+    const read = (await (await fetch(`${base}/api/external-files/${result.token}/text`, inWindow('window-a'))).json()) as {
+      format: string;
+      version: string;
+    };
+    assert.equal(read.format, 'csv');
+    const saved = await fetch(`${base}/api/external-files/${result.token}/text`, {
+      body: JSON.stringify({ baseVersion: read.version, content: 'item,note\nA,"two\nlines"\nB,changed\n' }),
+      headers: { 'content-type': 'application/json', [WINDOW_ID_HEADER]: 'window-a' },
+      method: 'PUT',
+    });
+    assert.equal(saved.status, 200);
+    // The cell's own LF survives; record breaks keep the file's CRLF.
+    assert.equal(fs.readFileSync(file, 'utf8'), 'item,note\r\nA,"two\nlines"\r\nB,changed\r\n');
+  });
+});
+
+test('an outside XLSX previews only through its owning window grant and remains read-only', async () => {
+  await withServer(async ({ base, outside, register }) => {
+    const file = path.join(outside, 'test.xlsx');
+    const bytes = spreadsheetFixture();
+    fs.writeFileSync(file, bytes);
+    const result = await opened(await register('window-a', file));
+    assert.equal(result.kind, 'external');
+    if (result.kind !== 'external') return;
+    const url = `${base}/api/external-files/${result.token}/preview`;
+    assert.equal((await fetch(url, inWindow('window-b'))).status, 404);
+    const preview = await fetch(url, inWindow('window-a'));
+    assert.equal(preview.status, 200);
+    const body = await preview.json() as { kind: string; workbook: { sheets: { name: string }[] } };
+    assert.equal(body.kind, 'spreadsheet');
+    assert.equal(body.workbook.sheets[0].name, '销售');
+    assert.deepEqual(fs.readFileSync(file), bytes);
   });
 });
 

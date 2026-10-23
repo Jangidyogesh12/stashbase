@@ -24,6 +24,7 @@
 import {
   AUDIO_SOURCE_EXTENSION_ALTERNATION,
   CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION,
+  DELIMITED_TEXT_EXTENSIONS,
   DOCX_EXTENSIONS,
   DOCX_EXTENSION_ALTERNATION,
   HTML_NOTE_EXTENSIONS,
@@ -119,9 +120,11 @@ const PDF_PATTERN = new RegExp(`\\.(${PDF_EXTENSION_ALTERNATION})$`, 'i');
 const IMAGE_PATTERN = new RegExp(`\\.(${IMAGE_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
 const DOCX_PATTERN = new RegExp(`\\.(${DOCX_EXTENSION_ALTERNATION})$`, 'i');
 const AUDIO_PATTERN = new RegExp(`\\.(${AUDIO_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
+const DELIMITED_TEXT_PATTERN = new RegExp(`\\.(${DELIMITED_TEXT_EXTENSIONS.join('|')})$`, 'i');
 const CONVERTIBLE_SOURCE_PATTERN = new RegExp(`\\.(${CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
 
 const VIEWER_ONLY_FORMATS: Array<{ pattern: RegExp; format: KnownViewerFormat }> = [
+  { pattern: DELIMITED_TEXT_PATTERN, format: 'csv' },
   { pattern: PDF_PATTERN, format: 'pdf' },
   { pattern: IMAGE_PATTERN, format: 'image' },
   { pattern: AUDIO_PATTERN, format: 'audio' },
@@ -183,6 +186,19 @@ export function detectFormat(name: string): FileFormat | null {
     if (re.test(name)) return format;
   }
   return null;
+}
+
+/** Formats Documents edits as source text. CSV and TSV save like plain text
+ *  but are tables of data, not prose, so they stay outside `detectFormat`,
+ *  which is also the indexing and retrieval test. */
+export type EditableTextFormat = FileFormat | 'csv';
+
+export function detectEditableTextFormat(name: string): EditableTextFormat | null {
+  return detectFormat(name) ?? (DELIMITED_TEXT_PATTERN.test(name) ? 'csv' : null);
+}
+
+export function isDelimitedTextFile(name: string): boolean {
+  return DELIMITED_TEXT_PATTERN.test(name);
 }
 
 /** Like `detectFormat` but also recognises viewer-only formats.

@@ -1,6 +1,6 @@
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { toSourcePath } from './folder.ts';
-import { detectFormat, isDerivedNoteName, isKnownBinaryFile } from './format.ts';
+import { detectEditableTextFormat, detectFormat, isDelimitedTextFile, isDerivedNoteName, isKnownBinaryFile } from './format.ts';
 import { fileChanged, readTextSnapshotAsync, replaceTextSnapshotAsync, withTextFileTransaction } from './text-file-transaction.ts';
 import { contentSizeError, shouldIndexFilePath } from './indexable.ts';
 import { errorMessage, logger } from './log.ts';
@@ -19,7 +19,7 @@ function fileWriteError(message: string, status = 400, code = 'INVALID_FILE_WRIT
 
 export function validateEditableFileWrite(name: string): void {
   validateTextFileWrite(name);
-  if (!detectFormat(name)) {
+  if (!detectEditableTextFormat(name)) {
     throw fileWriteError('unsupported editable format', 415, 'UNSUPPORTED_FORMAT');
   }
 }
@@ -93,7 +93,9 @@ export async function saveTextFileContent(
     const previous = await readTextSnapshotAsync(name);
     const format = detectFormat(name);
     const savedContent = format !== 'html'
-      ? preserveTextSourceFormat(previous?.content ?? '', content)
+      ? preserveTextSourceFormat(previous?.content ?? '', content, {
+          keepUnchangedLineEndings: isDelimitedTextFile(name),
+        })
       : content;
     // A byte-identical retry succeeds even if its original baseline is stale.
     if (previous?.content === savedContent) {

@@ -6,6 +6,7 @@ import {
   FileImage,
   FileJson2,
   FileQuestion,
+  FileSpreadsheet,
   FileText,
   FileType2,
   FileVideo,
@@ -21,6 +22,7 @@ const EXTENSION_ICONS: Record<string, LucideIcon> = {
   avi: FileVideo,
   bmp: FileImage,
   css: FileCode2,
+  csv: FileSpreadsheet,
   docx: FileText,
   flac: FileAudio,
   gif: FileImage,
@@ -43,11 +45,13 @@ const EXTENSION_ICONS: Record<string, LucideIcon> = {
   png: FileImage,
   svg: FileImage,
   ts: FileCode2,
+  tsv: FileSpreadsheet,
   tsx: FileCode2,
   txt: FileText,
   wav: FileAudio,
   webm: FileVideo,
   webp: FileImage,
+  xlsx: FileSpreadsheet,
 };
 
 interface FileTypeIconProps extends LucideProps {

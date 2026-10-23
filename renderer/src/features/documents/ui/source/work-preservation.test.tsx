@@ -16,6 +16,7 @@ import {
   docxPreviewApi,
   genericPreviewApi,
   sourceApi,
+  tableApi,
   textSource,
 } from '@/test/fakes/documents';
 import { createTestQueryClient, withQueryClient } from '@/test/query';
@@ -73,6 +74,7 @@ it('keeps undo history when returning to a text tab', async () => {
       assetApi={assetApi()}
       docxPreviewApi={docxPreviewApi()}
       genericPreviewApi={genericPreviewApi()}
+      tableApi={tableApi()}
       onReveal={async () => {}}
       revealLabel="Reveal"
     />,
@@ -164,6 +166,7 @@ it('offers restore, and asks before closing, a draft whose source file is gone',
       assetApi={assetApi()}
       docxPreviewApi={docxPreviewApi()}
       genericPreviewApi={genericPreviewApi()}
+      tableApi={tableApi()}
       onReveal={async () => {}}
       revealLabel="Reveal"
     />,

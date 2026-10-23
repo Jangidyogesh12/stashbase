@@ -13,12 +13,22 @@ import type {
   DocumentTextSource,
 } from '@/features/documents/domain/document';
 import type { GenericFilePreview } from '@/features/documents/domain/generic-preview';
+import type { DelimitedTablePage } from '@/features/documents/domain/table';
 import {
   featureErrorClass,
   FeatureError,
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
+
+/** A CSV/TSV table, read a page of rows at a time. */
+export interface DelimitedTablePort {
+  load(
+    source: SourceReference,
+    page: { count: number; start: number },
+    signal: AbortSignal,
+  ): Promise<DelimitedTablePage>;
+}
 
 export interface DocumentSourcePort {
   load(source: SourceReference, signal: AbortSignal): Promise<DocumentTextSource>;
@@ -133,6 +143,11 @@ export type DocumentSourceError = FeatureError<'unsupported-encoding' | 'missing
 export const DocumentSourceError = featureErrorClass<'unsupported-encoding' | 'missing'>(
   'DocumentSourceError',
 );
+
+export type DelimitedTableFailureKind = FeatureFailureKind<'missing'>;
+
+export type DelimitedTableError = FeatureError<'missing'>;
+export const DelimitedTableError = featureErrorClass<'missing'>('DelimitedTableError');
 
 export type GenericFilePreviewFailureKind = FeatureFailureKind<'not-generic' | 'missing'>;
 

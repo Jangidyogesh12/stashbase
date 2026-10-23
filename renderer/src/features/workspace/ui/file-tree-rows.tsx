@@ -17,6 +17,7 @@ import {
   FileImage,
   FileJson2,
   FileQuestion,
+  FileSpreadsheet,
   FileText,
   FileType2,
   Folder,
@@ -49,6 +50,7 @@ const TREE_LEVEL_INDENT = 26;
 
 const FILE_ICONS: Record<ViewerFormat, LucideIcon> = {
   audio: FileAudio,
+  csv: FileSpreadsheet,
   docx: FileText,
   generic: FileQuestion,
   html: FileCode2,
@@ -123,7 +125,12 @@ function rowTitle(row: TreeRow, { marker, revealLabel }: RowDescription): string
 
 /** The leading icon: a folder's disclosure state, or the file's format. */
 export function rowIcon(row: TreeRow, expanded: boolean): LucideIcon {
-  if (row.node.type !== 'folder') return FILE_ICONS[row.node.format];
+  if (row.node.type !== 'folder') {
+    // A workbook has no format of its own yet opens as a worksheet preview.
+    return row.node.format === 'generic' && /\.xlsx$/i.test(row.node.path)
+      ? FileSpreadsheet
+      : FILE_ICONS[row.node.format];
+  }
   if (rowIsRestricted(row)) return Folder;
   return expanded ? ChevronDown : ChevronRight;
 }

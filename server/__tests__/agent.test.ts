@@ -241,6 +241,14 @@ test('Claude permission callback asks for mutations and unknown tools, and settl
   assert.equal(redirect.behavior, 'deny');
   if (redirect.behavior === 'deny') assert.match(redirect.message, /read_file/);
   assert.equal((await nativeRead()).behavior, 'allow', 'the source redirect is only a one-time hint');
+  // A workbook is parsed when read_file asks, so there is no preparation to wait for.
+  const workbook = path.join(project, 'sales.xlsx');
+  fs.writeFileSync(workbook, 'workbook bytes');
+  const workbookRead = () => canUseTool!('Read', { file_path: workbook }, { signal: new AbortController().signal, toolUseID: 'xlsx' });
+  const workbookRedirect = await workbookRead();
+  assert.equal(workbookRedirect.behavior, 'deny');
+  if (workbookRedirect.behavior === 'deny') assert.match(workbookRedirect.message, /worksheet tables ready for this XLSX/);
+  assert.equal((await workbookRead()).behavior, 'allow', 'the workbook redirect is only a one-time hint');
   for (const name of ['mcp__stashbase__edit_file', 'mcp__stashbase__move_file', 'mcp__stashbase__write_file', 'mcp__stashbase__delete_file', 'Bash', 'new_tool', 'mcp__other__read_file']) {
     let settled = false;
     const input = { path: '/project/note.md' };

@@ -5,9 +5,10 @@ import { fileStatVersion, MAX_TEXT_READ_BYTES } from './active-file-operations.t
 import { resolveSafe } from './file-paths.ts';
 import { detectViewerFormat, isKnownBinaryFile } from './format.ts';
 import { isCloudPlaceholderName } from './indexable.ts';
+import { isSpreadsheetFile, spreadsheetFilePreview } from './spreadsheet-preview.ts';
 
 function previewState(
-  kind: Exclude<GenericFilePreview['kind'], 'text'>,
+  kind: Exclude<GenericFilePreview['kind'], 'text' | 'spreadsheet'>,
   name: string,
   size?: number,
   message?: string,
@@ -45,7 +46,7 @@ export function decodeGenericText(bytes: Uint8Array): string | null {
 /** Read a generic workspace entry only after the user opens it. This seam is
  * intentionally separate from normal file reads so it cannot widen Search,
  * MCP, save, or automatic Agent-context capabilities. */
-export function readGenericFilePreview(name: string): GenericFilePreview {
+export async function readGenericFilePreview(name: string, signal?: AbortSignal): Promise<GenericFilePreview> {
   let target: string;
   try {
     target = resolveSafe(name);
@@ -74,7 +75,7 @@ export function readGenericFilePreview(name: string): GenericFilePreview {
     error.status = 415;
     throw error;
   }
-  if (isKnownBinaryFile(name)) {
+  if (isKnownBinaryFile(name) && !isSpreadsheetFile(name)) {
     return previewState('binary', name, st.size);
   }
   if (st.size > MAX_TEXT_READ_BYTES) return previewState('too-large', name, st.size);
@@ -93,6 +94,7 @@ export function readGenericFilePreview(name: string): GenericFilePreview {
       if (count === 0) break;
       offset += count;
     }
+    if (isSpreadsheetFile(name)) return await spreadsheetFilePreview(bytes.subarray(0, offset), name, signal);
     const content = decodeGenericText(bytes.subarray(0, offset));
     if (content == null) return previewState('binary', name, opened.size);
     return {

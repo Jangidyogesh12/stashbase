@@ -95,6 +95,28 @@ preview, content editing, and rename/delete are separate permissions.
   replacement; atomic writes preserve existing file permissions. Generic text
   never enters indexing or automatic context merely because a tool can edit it.
   Paths remain literal; tools never complete a filename with a document suffix.
+- XLSX remains a generic file to the editor. `spreadsheet-preview.ts` parses a
+  bounded source snapshot in a cancellable worker and returns display strings and
+  formula cells to the generic preview route, including exact-file external grants,
+  and to `read_file` in `project-file-reader.ts`, which renders that same parse as
+  Markdown tables (`spreadsheetAgentText`) marked as derived. Archive expansion,
+  parsing time, worker heap, worksheet count, cell range and output text are bounded.
+  A bounded content-hash cache reuses unchanged parses across both. The renderer
+  displays text, never workbook HTML, hyperlinks or executable formulas. Neither
+  path widens the binary-file write gate, preparation or retrieval; `edit_file`
+  refuses the derived text, and Claude's native `Read` of a project workbook is
+  redirected once to `read_file`, as for prepared PDF and DOCX.
+- CSV and TSV are editable text outside `detectFormat`, which stays the indexing
+  and retrieval test: `detectEditableTextFormat` admits them to the versioned text
+  read/save routes and external-file grants. `delimited-table.ts` owns the quoting
+  rules in one resumable byte-level record reader shared by the full-file scan
+  (strict UTF-8, a checkpoint every 256 records, the widest record) and page reads
+  that seek to the nearest checkpoint. Scans yield between 1 MiB chunks, stop at
+  512 MiB, are cached by stat identity, and run again when the file changes
+  underneath; one response is bounded in rows and characters. A non-UTF-8 file
+  reports a likely encoding instead of being decoded. A CSV save restores the line
+  endings of unchanged lines (`keepUnchangedLineEndings`), matched by a bounded
+  patience line diff; other formats keep the dominant-ending rule.
 - Read content/version from one bounded snapshot. Hash complete bytes, not mtime.
   Serialize in-process writes, stage, then recheck the expected version before
   publishing. The queue does not provide OS compare-and-swap against external writers.
@@ -1123,6 +1145,15 @@ registered host boundaries; renderer shared types are a different layer.
   ordinary save; ending the review keeps the source byte-identical. The adapter supplies fixed
   Undo/Keep labels and the surface swaps the colours. The retired proposal
   store, delivery poll, chat controls, and provenance branches have no callers.
+- Tables (`features/documents/ui/table/`) draw a fixed-row-height window of rows
+  and columns with sticky headers; column widths start from a sample and only
+  widen. Past 15 million pixels of rows, below Chromium's layout ceiling, the
+  scroll range maps to rows in proportion (`verticalScale`). CSV rows arrive through version-keyed page queries
+  (`use-delimited-table.ts`): the first page carries the shape and follows the
+  file, and a page from a newer version refetches the shape instead of mixing
+  files. Copy and Ask agent read the selection's rows asynchronously, refuse
+  before reading when the selection cannot fit, and check Ask agent's text against
+  `shared/domain/passage.ts`, the limit the agent feature validates at send.
 - Surface recovery remounts the smallest boundary. Shell remount loses live buffers
   and reloads only saved source files. HTTP loss must not reload the app.
   Raw failures are mapped to feature-owned messages and recovery kinds.
@@ -1157,7 +1188,7 @@ and otherwise issues an opaque token only for the formats
 `shared/file-formats.ts` admits. The registration token is removed from the
 server's environment once read and never passed to an agent CLI, so no agent
 can grant itself a file. Token routes serve that one file, re-check its
-real path on every read, save Markdown, text, and JSON against the version read
+real path on every read, save Markdown, text, JSON, and CSV against the version read
 (preserving BOM, line endings, and permissions, never indexing), are bound to the
 window for `/api/` reads and saves, and serve
 browser-loaded PDF and image bytes under `/asset/__external/`, inside the

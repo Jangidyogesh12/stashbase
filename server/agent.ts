@@ -76,6 +76,7 @@ import {
 } from './agent-runtime-paths.ts';
 import { agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { detectViewerFormat } from './format.ts';
+import { isSpreadsheetFile } from './spreadsheet-preview.ts';
 import { stringifyToolResult } from './claude-history.ts';
 import { currentPreparedTextPathAsync } from './conversion-dispatch.ts';
 
@@ -208,9 +209,11 @@ function answeredInput(p: Pending, answers: unknown): Record<string, unknown> {
   return { ...p.input, answers };
 }
 
-type AgentReadableDerivedFormat = 'pdf' | 'docx';
+type AgentReadableDerivedFormat = 'pdf' | 'docx' | 'xlsx';
 
-function agentReadableDerivedFormat(format: string | null): AgentReadableDerivedFormat | null {
+function agentReadableDerivedFormat(rel: string): AgentReadableDerivedFormat | null {
+  if (isSpreadsheetFile(rel)) return 'xlsx';
+  const format = detectViewerFormat(rel);
   return format === 'pdf' || format === 'docx' ? format : null;
 }
 
@@ -241,13 +244,16 @@ async function nativeDerivedReadRedirect(
   if (!folderRoot) return null;
   const rel = filesystemPath.relative(folderRoot, abs);
   if (!rel) return null;
-  const sourceFormat = agentReadableDerivedFormat(detectViewerFormat(rel));
-  if (!sourceFormat || !await currentPreparedTextPathAsync(abs)) return null;
+  const sourceFormat = agentReadableDerivedFormat(rel);
+  // A workbook is parsed when read, so it has no prepared file to wait for.
+  if (!sourceFormat || (sourceFormat !== 'xlsx' && !await currentPreparedTextPathAsync(abs))) return null;
   const key = filesystemPath.identity(abs);
   if (alreadyRedirected.has(key)) return null;
   alreadyRedirected.add(key);
   const textKind = sourceFormat === 'docx'
     ? 'derived HTML'
+    : sourceFormat === 'xlsx'
+      ? 'worksheet tables'
       : 'extracted Markdown';
   return {
     behavior: 'deny',

@@ -1,4 +1,5 @@
 import type {
+  DelimitedTablePort,
   DocumentAssetPort,
   DocumentSourcePort,
   DocumentTurnChangesPort,
@@ -16,6 +17,7 @@ import { createDocxPreviewAdapter } from './docx-preview-api';
 import { createExternalFileAdapter } from './external-file-api';
 import { createGenericFilePreviewAdapter } from './generic-preview-api';
 import { createDocumentSourceAdapter } from './source-api';
+import { createDelimitedTableAdapter } from './table-api';
 import { createDocumentTurnChangesAdapter } from './turn-change-api';
 import { createDocumentWindowLifecycleAdapter } from './window-lifecycle';
 
@@ -27,6 +29,7 @@ export interface DocumentAdapters {
   externalFiles: ExternalFilePort;
   genericPreview: GenericFilePreviewPort;
   source: DocumentSourcePort;
+  table: DelimitedTablePort;
   turnChanges: DocumentTurnChangesPort;
   windowLifecycle: DocumentWindowLifecyclePort;
 }
@@ -59,6 +62,7 @@ export function createDocumentAdapters({
     externalFiles: createExternalFileAdapter(http, externalFiles),
     genericPreview: createGenericFilePreviewAdapter(http),
     source: createDocumentSourceAdapter(http),
+    table: createDelimitedTableAdapter(http),
     turnChanges: createDocumentTurnChangesAdapter(http),
     windowLifecycle: createDocumentWindowLifecycleAdapter(windowLifecycle),
   };

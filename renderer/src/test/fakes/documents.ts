@@ -8,6 +8,7 @@ import { vi } from 'vite-plus/test';
 
 import type { AppDependencies } from '@/app/dependencies';
 import type {
+  DelimitedTablePort,
   DocumentAssetPort,
   DocumentQueryScope,
   DocumentSourcePort,
@@ -80,6 +81,29 @@ export function genericPreviewApi(
   };
 }
 
+export function tableApi(overrides: Partial<DelimitedTablePort> = {}): DelimitedTablePort {
+  return {
+    load: vi.fn(async (source, page) => ({
+      columnCount: 2,
+      delimiter: ',' as const,
+      editable: true,
+      kind: 'table' as const,
+      name: source.path,
+      rowCount: 3,
+      rows: [
+        ['item', 'amount'],
+        ['A', '12'],
+        ['B', '8'],
+      ].slice(page.start, page.start + page.count),
+      size: 20,
+      start: page.start,
+      totalColumns: 2,
+      version: 'v1',
+    })),
+    ...overrides,
+  };
+}
+
 export function turnChangesApi(
   overrides: Partial<DocumentTurnChangesPort> = {},
 ): DocumentTurnChangesPort {
@@ -135,6 +159,7 @@ export function documentAdapters(overrides: Partial<DocumentAdapters> = {}): Doc
     externalFiles: externalFilesApi(),
     genericPreview: genericPreviewApi(),
     source: sourceApi(),
+    table: tableApi(),
     turnChanges: turnChangesApi(),
     windowLifecycle: documentWindowLifecycle(),
     ...overrides,

@@ -84,8 +84,8 @@ the reader had sent it, while StashBase is open. It lives in the project's
 
 ## Passage
 
-Selected document text bound to an agent request with **Ask agent**. Its words
-are sent with the request; it is not a file attachment or a revision.
+Selected document text or table cells bound to an agent request with **Ask agent**.
+Its words are sent with the request; it is not a file attachment or a revision.
 
 ## Citation
 

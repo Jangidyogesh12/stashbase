@@ -82,7 +82,7 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
   z.object({ event: z.literal('app_opened') }).strict(),
   z.object({ event: z.literal('app_active'), mode: z.enum(['welcome', 'documents', 'chat']) }).strict(),
   z.object({ event: z.literal('document_engaged'), activity: z.enum(['read', 'edit']),
-    format: z.enum(['md', 'txt', 'json', 'html', 'pdf', 'docx', 'image', 'audio', 'generic']) }).strict(),
+    format: z.enum(['md', 'txt', 'json', 'csv', 'html', 'pdf', 'docx', 'image', 'audio', 'generic']) }).strict(),
   z.object({ event: z.literal('account_login_started') }).strict(),
   z.object({ event: z.literal('account_login_result'), ...correlation, outcome }).strict(),
   z.object({ event: z.literal('account_signed_out') }).strict(),

@@ -111,6 +111,71 @@ test("versioned document route accepts JSON through the shared source authority"
   }
 });
 
+test('a project CSV opens as table pages and saves as text without entering the index', async (t) => {
+  const { indexer } = await import('../state.ts');
+  const upserts = t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'updated' }));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-csv-route-'));
+  fs.writeFileSync(path.join(root, 'sales.csv'), 'item,note\r\nA,"two\nlines"\r\nB,x\r\n');
+  fs.writeFileSync(path.join(root, 'legacy.csv'), Buffer.from('caf\xe9,1\n', 'latin1'));
+  await openProjectFolder(root);
+  const app = express();
+  app.use(express.json());
+  mount(app);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const base = `http://127.0.0.1:${address.port}`;
+  const folder = `folder=${encodeURIComponent(root)}`;
+  try {
+    const table = await fetch(`${base}/api/file-table/sales.csv?start=1&count=10&${folder}`);
+    assert.equal(table.status, 200);
+    const page = (await table.json()) as { version: string };
+    assert.match(page.version, /^stat:/);
+    assert.deepEqual(page, {
+      columnCount: 2,
+      delimiter: ',',
+      editable: true,
+      kind: 'table',
+      name: 'sales.csv',
+      rowCount: 3,
+      rows: [['A', 'two\nlines'], ['B', 'x']],
+      size: fs.statSync(path.join(root, 'sales.csv')).size,
+      start: 1,
+      totalColumns: 2,
+      version: page.version,
+    });
+    assert.equal((await fetch(`${base}/api/file-table/sales.csv?start=0&count=501&${folder}`)).status, 400);
+    assert.equal((await fetch(`${base}/api/file-table/notes.md?start=0&count=10&${folder}`)).status, 400);
+    assert.equal((await fetch(`${base}/api/file-table/gone.csv?start=0&count=10&${folder}`)).status, 404);
+    assert.equal((await fetch(`${base}/api/file-table/../outside.csv?start=0&count=10&${folder}`)).status >= 400, true);
+    assert.deepEqual(await (await fetch(`${base}/api/file-table/legacy.csv?start=0&count=10&${folder}`)).json(), {
+      encoding: null,
+      kind: 'unsupported-encoding',
+      name: 'legacy.csv',
+    });
+
+    const source = (await (await fetch(`${base}/api/files/sales.csv?${folder}`)).json()) as { format: string; version: string };
+    assert.equal(source.format, 'csv');
+    const saved = await fetch(`${base}/api/files/sales.csv?${folder}`, {
+      body: JSON.stringify({ baseVersion: source.version, content: 'item,note\nA,"two\nlines"\nB,changed\n' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(((await saved.json()) as { format: string }).format, 'csv');
+    assert.equal(fs.readFileSync(path.join(root, 'sales.csv'), 'utf8'), 'item,note\r\nA,"two\nlines"\r\nB,changed\r\n');
+    assert.equal(upserts.mock.callCount(), 0, 'a table is not indexed');
+    const legacy = (await (await fetch(`${base}/api/files/legacy.csv?${folder}`)).json()) as { error?: { code: string } };
+    assert.equal(legacy.error?.code, 'UNSUPPORTED_ENCODING');
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    clearCurrentFolder();
+    await removeRecentAsync(root);
+    fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
+  }
+});
+
 test("reveal resolves the requested registered folder and rejects an unregistered folder", async () => {
   const activeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-reveal-active-"));
   const memberRoot = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-reveal-member-"));

@@ -4,7 +4,6 @@
  * what the file is and offers to reveal it on disk.
  */
 import { useQuery } from '@tanstack/react-query';
-import { FileQuestion, RefreshCw } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -19,10 +18,13 @@ import {
   type GenericFilePreviewPort,
 } from '@/features/documents/application/ports';
 import { genericFilePreviewQuery } from '@/features/documents/application/queries';
+import type { DocumentSelection } from '@/features/documents/domain/selection';
 import { useDocumentRefresh } from '@/features/documents/hooks/use-document-refresh';
 import { RefreshFailedBanner } from '@/features/documents/ui/banner';
 import { CodeEditorDocument } from '@/features/documents/ui/code-editor/document';
+import { FilePlaceholder } from '@/features/documents/ui/file-placeholder';
 import type { DocumentViewerStatus } from '@/features/documents/ui/source/viewer';
+import { SpreadsheetDocument } from '@/features/documents/ui/spreadsheet/document';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 import { FailureLine } from '@/shared/ui/failure-notice';
@@ -33,6 +35,8 @@ export interface GenericFileDocumentProps {
   active: boolean;
   api: GenericFilePreviewPort;
   navigation: DocumentNavigationRuntime;
+  /** Binds selected workbook cells to the Agent beside the document. */
+  onAskAgent?: ((selection: DocumentSelection) => void) | undefined;
   onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
   revealLabel: string;
   runtime: DocumentRuntime;
@@ -43,6 +47,7 @@ export function GenericFileDocument({
   active,
   api,
   navigation,
+  onAskAgent,
   onReveal,
   revealLabel,
   runtime,
@@ -92,12 +97,7 @@ export function GenericFileDocument({
       >
         {!formatSpecific && (
           <div className="mt-4 flex justify-center gap-2">
-            <Button
-              leadingIcon={RefreshCw}
-              onClick={() => void preview.refetch()}
-              size="compact"
-              variant="tertiary"
-            >
+            <Button onClick={() => void preview.refetch()} size="compact" variant="tertiary">
               Retry
             </Button>
             <Button
@@ -118,6 +118,20 @@ export function GenericFileDocument({
   const refreshFailure = preview.isError && (
     <RefreshFailedBanner onRetry={() => void preview.refetch()} />
   );
+
+  if (preview.data.kind === 'spreadsheet') {
+    return (
+      <>
+        {refreshFailure}
+        <SpreadsheetDocument
+          onAskAgent={
+            onAskAgent && ((text) => onAskAgent({ markdown: text, source: runtime.scope.source }))
+          }
+          workbook={preview.data.workbook}
+        />
+      </>
+    );
+  }
 
   if (preview.data.kind === 'text') {
     return (
@@ -158,36 +172,5 @@ export function GenericFileDocument({
         {revealError}
       </FilePlaceholder>
     </>
-  );
-}
-
-/** What stands in for a file this viewer cannot show: its glyph, a title, the
- *  sentence that explains it, and whatever the reader can do next. */
-function FilePlaceholder({
-  children,
-  description,
-  role,
-  title,
-}: {
-  children: ReactNode;
-  description: string;
-  role: 'alert' | 'status';
-  title: string;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
-      <div className="max-w-md">
-        <FileQuestion
-          aria-hidden="true"
-          className="mx-auto size-4 text-muted-foreground"
-          strokeWidth={1.5}
-        />
-        <h2 className="mt-3 text-body font-medium">{title}</h2>
-        <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role={role}>
-          {description}
-        </p>
-        {children}
-      </div>
-    </div>
   );
 }

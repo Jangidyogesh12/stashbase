@@ -205,7 +205,8 @@ async function finishWorkspaceFileEntryAsync(
 ): Promise<FileEntry> {
   const base = workspaceFileBase(entry, rel, st);
   if (base.format === 'generic') return base;
-  if (base.format === 'pdf' || base.format === 'image' || base.format === 'docx' || base.format === 'audio') {
+  // A table's first line is a header row, not a heading or snippet worth reading ahead.
+  if (base.format === 'pdf' || base.format === 'image' || base.format === 'docx' || base.format === 'audio' || base.format === 'csv') {
     previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at: base.imported_at });
     return base;
   }
