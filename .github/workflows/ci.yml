@@ -57,9 +57,10 @@ jobs:
         run: pnpm check:web
 
       - name: Test renderer behavior
-        timeout-minutes: 10
+        timeout-minutes: 15
         if: runner.os != 'Linux'
-        # Leave room for lazy imports plus each assertion's own wait timeout.
+        # Leave room for lazy imports plus each assertion's own wait timeout;
+        # the full suite has taken 4 to 10 minutes on macOS Intel runners.
         run: pnpm test:renderer --maxWorkers=2 --testTimeout=15000
 
       - name: Build renderer
