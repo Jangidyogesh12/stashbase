@@ -30,14 +30,21 @@ async function run() {
     const [peer] = await connected;
     const closed = once(peer, 'close');
     const gone = once(win.webContents, 'render-process-gone');
-    win.webContents.forcefullyCrashRenderer();
-    const [[code], [, details]] = await Promise.all([closed, gone]);
+    // Kill only this fixture's renderer. forcefullyCrashRenderer uses a
+    // fatal crash path that can wait for OS core dumping on hosted Linux.
+    const rendererPid = win.webContents.getOSProcessId();
+    assert.ok(rendererPid > 0 && rendererPid !== process.pid);
+    process.kill(rendererPid, 'SIGKILL');
+    const [, details] = await gone;
+    assert.notEqual(details.reason, 'clean-exit');
+    // The separate network service can retain the socket after renderer
+    // death on Linux. Release the owning window before awaiting its socket.
+    win.destroy();
+    const [code] = await closed;
     // Chromium's surviving network service may send Going Away even when
     // the renderer is killed. Correlate the real exit rather than infer it
     // from the socket code; a lost transport instead reports 1006.
     assert.ok(code === 1001 || code === 1006, `unexpected close code: ${code}`);
-    assert.notEqual(details.reason, 'clean-exit');
-    win.destroy();
     const records = [];
     native.drain(record => { records.push(record); return true; });
     assert.deepEqual(records.map(record => record.context.stage).sort(), ['closed', 'exit', 'loaded']);
