@@ -83,7 +83,9 @@ identify the running Node/ABI and rebuild command; packaged failures recommend
 reinstallation rather than asking readers to manage Node.
 `server/preparation-storage.test.ts` exercises real SQLite read/write/reopen,
 injected ABI/permission/disk-full failures, corrupt/read-only existing state,
-preserved cancellation records, cleanup, and repair. `main-probe.test.cjs` drives
+preserved cancellation records, cleanup, a cleanup failure that leaves the
+result unchanged, a write lock held by another process (no wait beyond 250 ms,
+with the full timeout restored for ordinary writes), and repair. `main-probe.test.cjs` drives
 real loopback warning handoff while retaining identity and launch availability.
 An isolated built-server runtime pass exercised healthy and injected ABI-failure
 starts, project open, Markdown read, versioned save, and saved-byte verification.

@@ -208,7 +208,9 @@ recovery remain separate responsibilities.
 `server/state-db.ts` owns the startup preparation-storage check: load the native
 addon in the actual server runtime, round-trip a disposable WAL database in app
 data, and verify the existing status database permits a write transaction without
-changing records. The health response carries this startup snapshot separately
+changing records. The write probe waits at most 250 ms: a lock held by another
+process counts as in use, not failed, and scratch cleanup never changes the
+result. The health response carries this startup snapshot separately
 from server identity. Electron relays only a verified server's bounded warning,
 once on a foreground window; unavailable preparation does not block editing.
 Checks never replace damaged state or rebuild dependencies inside the running app.

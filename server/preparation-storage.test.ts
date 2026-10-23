@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -130,4 +131,46 @@ test('a read-only existing state file fails while the application data directory
   }
   assert.deepEqual(checkPreparationStorage(), { ok: true });
   assert.equal(getConversionStatus(source)?.status, 'cancelled');
+});
+
+test('a scratch directory that cannot be removed does not fail a passed check', (t) => {
+  const root = fixture(t);
+  const rm = fs.rmSync;
+  t.mock.method(fs, 'rmSync', (...args: Parameters<typeof rm>) => {
+    if (path.basename(String(args[0])).startsWith('.storage-check-')) {
+      throw Object.assign(new Error('resource busy or locked'), { code: 'EBUSY' });
+    }
+    return rm(...args);
+  });
+  assert.deepEqual(checkPreparationStorage(), { ok: true });
+  setConversionStatus(path.join(root, 'draft.pdf'), 'done');
+  assert.equal(getConversionStatus(path.join(root, 'draft.pdf'))?.status, 'done', 'the state database stays open after the check');
+});
+
+test('another process holding the state write lock neither stalls nor fails the startup check', async (t) => {
+  fixture(t);
+  assert.deepEqual(checkPreparationStorage(), { ok: true });
+  closeStateDb();
+  // A separate process, like a second StashBase host sharing this app data.
+  const holder = spawn(process.execPath, ['--eval', `
+    const db = new (require('better-sqlite3'))(process.env.STATE_DB);
+    db.exec('BEGIN IMMEDIATE');
+    console.log('locked');
+    setTimeout(() => { db.exec('COMMIT'); db.close(); }, 1_000);
+  `], {
+    cwd: fileURLToPath(new URL('../', import.meta.url)),
+    env: { ...process.env, STATE_DB: appStateDbPath() },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  t.after(() => holder.kill());
+  await once(holder.stdout!, 'data');
+
+  const started = Date.now();
+  assert.deepEqual(checkPreparationStorage(), { ok: true });
+  assert.ok(Date.now() - started < 900, 'the check must not wait for the full busy timeout');
+  // Ordinary writes keep the full timeout and complete once the lock is released.
+  const source = path.join(os.tmpdir(), 'draft.pdf');
+  setConversionStatus(source, 'done');
+  assert.equal(getConversionStatus(source)?.status, 'done');
+  await once(holder, 'exit');
 });

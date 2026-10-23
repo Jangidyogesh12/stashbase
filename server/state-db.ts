@@ -76,12 +76,29 @@ export function checkPreparationStorage(): PreparationStorageCheck {
       const state = getStateDb();
       // Acquire write access without changing a row. Existing read-only state
       // must not pass merely because the parent allows scratch files.
-      state.transaction(() => {
-        state.prepare('UPDATE conversions SET attempts = attempts WHERE 0').run();
-      }).immediate();
+      // Startup waits only briefly: another StashBase host sharing this app
+      // data may hold the write lock, which means the file is in use, not
+      // broken, and the full busy timeout would delay the server's start.
+      const busyTimeout = state.pragma('busy_timeout', { simple: true }) as number;
+      state.pragma('busy_timeout = 250');
+      try {
+        state.transaction(() => {
+          state.prepare('UPDATE conversions SET attempts = attempts WHERE 0').run();
+        }).immediate();
+      } catch (error) {
+        if (!errorCode(error)?.startsWith('SQLITE_BUSY')) throw error;
+        logger('preparation-storage').info('Preparation status is in use by another process; skipped the startup write check.');
+      } finally {
+        state.pragma(`busy_timeout = ${busyTimeout}`);
+      }
     } finally {
-      try { probe?.close(); }
-      finally { if (temporary) fs.rmSync(temporary, { recursive: true, force: true }); }
+      // Cleanup never decides the result: a scanner briefly holding the
+      // scratch file must not fail a passed check or replace a real cause.
+      try { probe?.close(); } catch { /* removal below reports a held file */ }
+      if (temporary) {
+        try { fs.rmSync(temporary, { recursive: true, force: true }); }
+        catch (error) { logger('preparation-storage').warn(`Could not remove the storage check scratch directory ${temporary}:`, error); }
+      }
     }
     return { ok: true };
   } catch (cause) {
