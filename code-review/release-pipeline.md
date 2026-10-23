@@ -494,6 +494,9 @@ choice:
    For a packaging/upload failure, delete the incomplete application draft and dispatch `release.yml` with the
    same tag. Delete an incomplete component draft as well if component publication
    failed; retain already public components. Never clobber versioned assets.
+   A failed `publish-downloads` job leaves the GitHub release public; rerun that
+   job or dispatch `download-mirror.yml` with the tag instead of redispatching
+   `release.yml`, which refuses a tag that is no longer a draft.
 6. After Actions finish, verify the public app assets, all three update metadata
    files and generated sidecars, the separate four-platform component set pinned
    by the application, and the tap update. Perform residual packaged UI sanity,
