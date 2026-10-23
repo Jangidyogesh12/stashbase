@@ -50,6 +50,11 @@ const NO_ENVIRONMENT: AgentSessionEnvironment = { listing: null, readiness: {} }
 const takesFollowUp = (state: AgentSessionState) =>
   agentTurnIsActive(state.connection) && state.delivery === 'idle';
 
+/** A prompt still being prepared or connected starts the turn a follow-up
+ *  sent meanwhile joins. */
+const startsTurn = (state: AgentSessionState) =>
+  !agentTurnIsActive(state.connection) && state.delivery === 'preparing';
+
 const refuseContext = () =>
   Promise.reject(
     new AgentContextError('unavailable', 'File context is unavailable in this session.'),
@@ -89,6 +94,9 @@ export interface AgentPromptDispatcher {
    *  does every prompt sent while the turn is stopping or its outcome is
    *  unknown. */
   steer(text: string): Promise<void>;
+  /** Sends the follow-ups held for a turn that has now started, or returns
+   *  them to the queue when the prompt that was to start it did not. */
+  settleHeld(): void;
   attach(files: File[]): Promise<void>;
   cancel(): void;
 }
@@ -110,6 +118,8 @@ export function createPromptDispatcher({
 }: AgentPromptDispatcherOptions): AgentPromptDispatcher {
   let sending = false;
   let generation = 0;
+  /** Follow-ups waiting for the turn being started, as their wire text. */
+  const held = new Map<string, string>();
 
   const refuse = (message: string) => transition({ message, kind: 'set-context-issue' });
 
@@ -147,6 +157,7 @@ export function createPromptDispatcher({
     cancel() {
       generation += 1;
       sending = false;
+      held.clear();
       ledger.takeHeld();
     },
     async send(text, options = {}) {
@@ -245,7 +256,7 @@ export function createPromptDispatcher({
       const prompt = text.trim();
       if (disposed()) return;
       // Files alone are not a message to read mid-turn; they start one.
-      if (!prompt || !takesFollowUp(opening) || opening.skill) {
+      if (!prompt || !(takesFollowUp(opening) || startsTurn(opening)) || opening.skill) {
         enqueue(prompt);
         return;
       }
@@ -273,12 +284,24 @@ export function createPromptDispatcher({
       const current = state();
       // A turn that ended meanwhile already sent this follow-up back to the queue.
       if (!current.steers.some((item) => item.id === steer.id)) return;
-      if (
-        lines === 'stale' ||
-        !takesFollowUp(current) ||
-        !sendSteer(steer.id, renderPromptContext(prompt, lines))
-      )
+      if (lines === 'stale') {
         transition({ id: steer.id, kind: 'steer-returned' });
+        return;
+      }
+      const wire = renderPromptContext(prompt, lines);
+      if (startsTurn(current)) held.set(steer.id, wire);
+      else if (!takesFollowUp(current) || !sendSteer(steer.id, wire))
+        transition({ id: steer.id, kind: 'steer-returned' });
+    },
+
+    settleHeld() {
+      if (held.size === 0 || startsTurn(state())) return;
+      for (const [id, wire] of held) {
+        held.delete(id);
+        if (!state().steers.some((item) => item.id === id)) continue;
+        if (!takesFollowUp(state()) || !sendSteer(id, wire))
+          transition({ id, kind: 'steer-returned' });
+      }
     },
 
     async attach(files) {

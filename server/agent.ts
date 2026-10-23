@@ -317,6 +317,12 @@ export class AgentSession implements AttributedAgentSession {
    *  them under, until Claude starts reading one. `returned` marks one the
    *  renderer has already been told to send as a turn of its own. */
   private steers = new Map<string, { id: string; returned: boolean }>();
+  /** Whether the CLI reports when it reads uuid-tagged input. Older CLIs
+   *  read a follow-up without saying so, and one sent next would repeat it. */
+  private commandLifecycleSeen = false;
+  /** Follow-ups that arrived before the CLI showed it reports idle and when
+   *  it reads input; they go in once it has shown both. */
+  private earlySteers: Array<{ id: string; body: string }> = [];
   private nativeDerivedReadRedirected = new Set<string>();
   /** The SDK session_id, captured from the init message. Sent to the
    *  client so the history dropdown can mark this session active. */
@@ -577,6 +583,8 @@ export class AgentSession implements AttributedAgentSession {
     if (msg.type === 'system' && msg.subtype === 'commands_changed') this.publishSkillCommands(msg.commands);
     if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
       this.nativeSessionStateSeen = true;
+      // At idle the turn is ending; what it holds goes back instead.
+      if (msg.state !== 'idle') this.flushEarlySteers();
       if (msg.state === 'idle' && this.pendingResult) {
         const result = this.pendingResult;
         this.pendingResult = null;
@@ -588,6 +596,10 @@ export class AgentSession implements AttributedAgentSession {
     // that carries a uuid through it.
     const lifecycle = msg as { type: string; command_uuid?: unknown; state?: unknown };
     if (lifecycle.type === 'command_lifecycle') {
+      if (typeof lifecycle.command_uuid === 'string' && lifecycle.command_uuid) {
+        this.commandLifecycleSeen = true;
+        this.flushEarlySteers();
+      }
       this.onSteerLifecycle(String(lifecycle.command_uuid ?? ''), String(lifecycle.state ?? ''));
       return;
     }
@@ -682,16 +694,38 @@ export class AgentSession implements AttributedAgentSession {
 
   /** The turn ended before Claude started reading these: they go next. */
   private returnSteers(): void {
+    const message = 'Claude did not read this before the turn ended.';
     for (const steer of this.steers.values()) {
       if (steer.returned) continue;
       steer.returned = true;
-      this.send({
-        t: 'steer-result',
-        id: steer.id,
-        ok: false,
-        message: 'Claude did not read this before the turn ended.',
-      });
+      this.send({ t: 'steer-result', id: steer.id, ok: false, message });
     }
+    for (const steer of this.earlySteers.splice(0)) {
+      this.send({ t: 'steer-result', id: steer.id, ok: false, message });
+    }
+  }
+
+  /** A follow-up goes in only once the CLI has shown it reports idle and
+   *  when it reads input, so Claude's reading it can be confirmed. */
+  private canPushSteer(): boolean {
+    return this.turnActive && !this.interruptRequested && this.nativeSessionStateSeen && this.commandLifecycleSeen;
+  }
+
+  private flushEarlySteers(): void {
+    if (!this.canPushSteer()) return;
+    for (const steer of this.earlySteers.splice(0)) this.pushSteer(steer.id, steer.body);
+  }
+
+  private pushSteer(id: string, body: string): void {
+    const uuid = randomUUID();
+    this.steers.set(uuid, { id, returned: false });
+    this.input.push({
+      type: 'user',
+      message: { role: 'user', content: body },
+      parent_tool_use_id: null,
+      priority: 'next',
+      uuid,
+    } as SDKUserMessage);
   }
 
   private completeClaudeTurn(msg: ClaudeResultMessage): void {
@@ -814,6 +848,8 @@ export class AgentSession implements AttributedAgentSession {
       type: 'user',
       message: { role: 'user', content: claudeSkillPrompt(body, skill) },
       parent_tool_use_id: null,
+      // A CLI that reports reading this uuid can confirm follow-ups too.
+      uuid: randomUUID(),
     } as SDKUserMessage);
   }
 
@@ -849,21 +885,16 @@ export class AgentSession implements AttributedAgentSession {
         const id = typeof msg.id === 'string' ? msg.id : '';
         const body = typeof msg.text === 'string' ? msg.text : '';
         if (!id || !body.trim()) return;
-        // Without the CLI's idle event a follow-up Claude runs after the
-        // reply would settle as a turn of its own, out of the renderer's view.
-        if (!this.turnActive || this.interruptRequested || !this.nativeSessionStateSeen) {
+        if (!this.turnActive || this.interruptRequested) {
           this.send({ t: 'steer-result', id, ok: false, message: 'Claude is not running a turn that can take this.' });
           return;
         }
-        const uuid = randomUUID();
-        this.steers.set(uuid, { id, returned: false });
-        this.input.push({
-          type: 'user',
-          message: { role: 'user', content: body },
-          parent_tool_use_id: null,
-          priority: 'next',
-          uuid,
-        } as SDKUserMessage);
+        // Without the CLI's idle event a follow-up Claude runs after the
+        // reply would settle as a turn of its own, out of the renderer's view;
+        // without its read reports one Claude read would be sent again. It
+        // waits for both, and goes back at the turn's end if they never come.
+        if (this.canPushSteer()) this.pushSteer(id, body);
+        else this.earlySteers.push({ id, body });
         break;
       }
       case 'permission-reply': {

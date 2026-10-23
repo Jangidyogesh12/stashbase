@@ -1024,7 +1024,16 @@ test('Codex Session fences a timed-out turn/start generation before accepting an
   assert.equal(second.killed, true);
 });
 
-test('Codex Session handles steer timeout without ending an active turn', async (t) => {
+/** The turn's own prompt as Codex records it, under the id it was sent with
+ *  when the app-server keeps client ids. */
+function recordTurnPrompt(proc: FakeCodexProcess, clientId: string | null): void {
+  proc.stdout.write(`${JSON.stringify({ method: 'item/started', params: {
+    threadId: 'thread-1', turnId: 'turn-1',
+    item: { type: 'userMessage', id: 'u1', clientId, content: [{ type: 'text', text: 'prompt' }] },
+  } })}\n`);
+}
+
+test('Codex Session keeps a timed-out follow-up for the turn to decide', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-steer-timeout-'));
   await runWithWindowId('steer-timeout-window', () => openProjectFolder(folder));
   t.after(() => {
@@ -1035,12 +1044,15 @@ test('Codex Session handles steer timeout without ending an active turn', async 
   const ws = new FakeWebSocket();
   const proc = new FakeCodexProcess();
   proc.stdin.on('data', (chunk: Buffer) => {
-    const req = JSON.parse(String(chunk)) as { id: number; method: string };
+    const req = JSON.parse(String(chunk)) as { id: number; method: string; params?: { clientUserMessageId?: string } };
     if (req.method === 'initialize') proc.stdout.write(`${JSON.stringify({ id: req.id, result: {} })}\n`);
     else if (req.method === 'model/list') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { data: [] } })}\n`);
     else if (req.method === 'skills/list') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { data: [] } })}\n`);
     else if (req.method === 'thread/start') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { thread: { id: 'thread-1' } } })}\n`);
-    else if (req.method === 'turn/start') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { turn: { id: 'turn-1' } } })}\n`);
+    else if (req.method === 'turn/start') {
+      proc.stdout.write(`${JSON.stringify({ id: req.id, result: { turn: { id: 'turn-1' } } })}\n`);
+      recordTurnPrompt(proc, req.params?.clientUserMessageId ?? null);
+    }
     // ignore turn/steer
   });
 
@@ -1064,15 +1076,187 @@ test('Codex Session handles steer timeout without ending an active turn', async 
   ws.emit('message', JSON.stringify({ t: 'steer', id: 'steer-1', text: 'focus on tests' }));
   await new Promise((resolve) => setTimeout(resolve, 70));
 
-  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; id?: string; ok?: boolean; message?: string });
-  const steerResult = events.find((e) => e.t === 'steer-result' && e.id === 'steer-1');
-  assert.ok(steerResult);
-  assert.equal(steerResult.ok, false);
-  assert.match(steerResult.message ?? '', /request timed out: turn\/steer/);
-
+  const results = () => ws.sent
+    .map((item) => JSON.parse(item) as { t: string })
+    .filter((event) => event.t === 'steer-result' || event.t === 'turn-end');
+  // A request that timed out may still have reached the turn.
+  assert.deepEqual(results(), []);
   assert.equal(runtime.busy, true);
   assert.equal(runtime.activeTurnId, 'turn-1');
+
+  proc.stdout.write(`${JSON.stringify({ method: 'turn/completed', params: { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } } })}\n`);
+  await settle();
+  assert.deepEqual(results(), [
+    { t: 'steer-result', id: 'steer-1', ok: false, message: 'Codex did not read this before the turn ended.' },
+    { t: 'turn-end', isError: false },
+  ]);
   session.dispose();
+});
+
+test('Codex confirms a follow-up only when the turn records it, and hands back one it never read', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-steer-read-'));
+  await runWithWindowId('steer-read-window', () => openProjectFolder(folder));
+  t.after(() => {
+    runWithWindowId('steer-read-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const proc = new FakeCodexProcess();
+  const steered: string[] = [];
+  let promptId = '';
+  const notify = (method: string, params: unknown) => proc.stdout.write(`${JSON.stringify({ method, params })}\n`);
+  proc.stdin.on('data', (chunk: Buffer) => {
+    const req = JSON.parse(String(chunk)) as { id: number; method: string; params?: { clientUserMessageId?: string } };
+    const reply = (result: unknown) => proc.stdout.write(`${JSON.stringify({ id: req.id, result })}\n`);
+    if (req.method === 'initialize') reply({});
+    else if (req.method === 'model/list' || req.method === 'skills/list') reply({ data: [] });
+    else if (req.method === 'thread/start') reply({ thread: { id: 'thread-1' } });
+    else if (req.method === 'turn/start') {
+      promptId = req.params?.clientUserMessageId ?? '';
+      reply({ turn: { id: 'turn-1' } });
+      recordTurnPrompt(proc, promptId);
+    } else if (req.method === 'turn/steer') {
+      steered.push(req.params?.clientUserMessageId ?? '');
+      reply({ turnId: 'turn-1' });
+    }
+  });
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'steer-read-window',
+    undefined, undefined, undefined, undefined, undefined, undefined,
+    () => proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  t.after(() => session.dispose());
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'What is the weather today?' }));
+  await settle();
+  assert.ok(promptId, 'the turn\'s own prompt carries an id Codex can record it under');
+
+  const results = () => ws.sent
+    .map((item) => JSON.parse(item) as { t: string })
+    .filter((event) => event.t === 'steer-result' || event.t === 'turn-end');
+  ws.emit('message', JSON.stringify({ t: 'steer', id: 'city', text: 'Shanghai' }));
+  ws.emit('message', JSON.stringify({ t: 'steer', id: 'unread', text: 'In Celsius' }));
+  await settle();
+  assert.equal(steered.length, 2);
+  assert.ok(steered.every(Boolean), 'each follow-up carries the id Codex records it under');
+  assert.deepEqual(results(), [], 'accepting a follow-up is not reading it');
+
+  notify('item/started', { threadId: 'thread-1', turnId: 'turn-1', item: { type: 'userMessage', id: 'u2', clientId: steered[0], content: [{ type: 'text', text: 'Shanghai' }] } });
+  await settle();
+  assert.deepEqual(results(), [{ t: 'steer-result', id: 'city', ok: true }]);
+
+  notify('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } });
+  await settle();
+  assert.deepEqual(results(), [
+    { t: 'steer-result', id: 'city', ok: true },
+    { t: 'steer-result', id: 'unread', ok: false, message: 'Codex did not read this before the turn ended.' },
+    { t: 'turn-end', isError: false },
+  ]);
+});
+
+test('Codex holds a follow-up that arrives before the turn has its id, then steers it', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-steer-early-'));
+  await runWithWindowId('steer-early-window', () => openProjectFolder(folder));
+  t.after(() => {
+    runWithWindowId('steer-early-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const proc = new FakeCodexProcess();
+  const methods: string[] = [];
+  let startTurn!: () => void;
+  proc.stdin.on('data', (chunk: Buffer) => {
+    const req = JSON.parse(String(chunk)) as { id: number; method: string; params?: { clientUserMessageId?: string } };
+    methods.push(req.method);
+    const reply = (result: unknown) => proc.stdout.write(`${JSON.stringify({ id: req.id, result })}\n`);
+    if (req.method === 'initialize') reply({});
+    else if (req.method === 'model/list' || req.method === 'skills/list') reply({ data: [] });
+    else if (req.method === 'thread/start') reply({ thread: { id: 'thread-1' } });
+    // A fresh app-server takes its time to start the first turn.
+    else if (req.method === 'turn/start') startTurn = () => {
+      reply({ turn: { id: 'turn-1' } });
+      recordTurnPrompt(proc, req.params?.clientUserMessageId ?? null);
+    };
+    else if (req.method === 'turn/steer') reply({ turnId: 'turn-1' });
+  });
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'steer-early-window',
+    undefined, undefined, undefined, undefined, undefined, undefined,
+    () => proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  t.after(() => session.dispose());
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'What is the weather today?' }));
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'steer', id: 'city', text: 'Shanghai' }));
+  await settle();
+  assert.ok(!methods.includes('turn/steer'), 'nothing can steer a turn Codex has not named');
+  assert.ok(!ws.sent.some((item) => (JSON.parse(item) as { t: string }).t === 'steer-result'));
+  startTurn();
+  await settle();
+  assert.equal(methods.filter((method) => method === 'turn/steer').length, 1);
+});
+
+test('Codex confirms a follow-up on acceptance when the app-server drops client ids, and never hands it back', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-steer-noid-'));
+  await runWithWindowId('steer-noid-window', () => openProjectFolder(folder));
+  t.after(() => {
+    runWithWindowId('steer-noid-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const proc = new FakeCodexProcess();
+  let steers = 0;
+  const notify = (method: string, params: unknown) => proc.stdout.write(`${JSON.stringify({ method, params })}\n`);
+  proc.stdin.on('data', (chunk: Buffer) => {
+    const req = JSON.parse(String(chunk)) as { id: number; method: string };
+    const reply = (result: unknown) => proc.stdout.write(`${JSON.stringify({ id: req.id, result })}\n`);
+    if (req.method === 'initialize') reply({});
+    else if (req.method === 'model/list' || req.method === 'skills/list') reply({ data: [] });
+    else if (req.method === 'thread/start') reply({ thread: { id: 'thread-1' } });
+    else if (req.method === 'turn/start') {
+      reply({ turn: { id: 'turn-1' } });
+      // An older app-server ignores the id it was sent.
+      recordTurnPrompt(proc, null);
+    } else if (req.method === 'turn/steer') {
+      steers += 1;
+      reply({ turnId: 'turn-1' });
+    }
+  });
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'steer-noid-window',
+    undefined, undefined, undefined, undefined, undefined, undefined,
+    () => proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  t.after(() => session.dispose());
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'What is the weather today?' }));
+  await settle();
+
+  const results = () => ws.sent
+    .map((item) => JSON.parse(item) as { t: string })
+    .filter((event) => event.t === 'steer-result' || event.t === 'turn-end');
+  ws.emit('message', JSON.stringify({ t: 'steer', id: 'city', text: 'Shanghai' }));
+  await settle();
+  assert.equal(steers, 1);
+  assert.deepEqual(results(), [{ t: 'steer-result', id: 'city', ok: true }]);
+
+  notify('item/started', { threadId: 'thread-1', turnId: 'turn-1', item: { type: 'userMessage', id: 'u2', clientId: null, content: [{ type: 'text', text: 'Shanghai' }] } });
+  notify('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } });
+  await settle();
+  assert.deepEqual(results(), [
+    { t: 'steer-result', id: 'city', ok: true },
+    { t: 'turn-end', isError: false },
+  ], 'a follow-up Codex may have read is never sent again');
 });
 
 test('Codex model compatibility recovery correlates metadata warnings with the rejected model', async (t) => {

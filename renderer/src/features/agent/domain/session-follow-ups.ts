@@ -1,7 +1,11 @@
 /** Follow-ups the reader sends into a running turn. Each waits as a steer
  *  until the runtime answers: taken, it becomes a user message at that point
  *  in the transcript; not taken, it goes next, ahead of the queue. */
-import type { AgentSessionAction, AgentSessionState } from './session-state';
+import {
+  MAX_QUEUED_PROMPTS,
+  type AgentSessionAction,
+  type AgentSessionState,
+} from './session-state';
 import { appendBlock } from './session-transcript';
 
 type FollowUpAction = Extract<
@@ -17,6 +21,15 @@ export function returnSteers(
   return state.steers.length === 0
     ? { queuedPrompts: state.queuedPrompts, steers: state.steers }
     : { queuedPrompts: [...state.steers, ...state.queuedPrompts], steers: [] };
+}
+
+/** The bound stops the queue growing. Follow-ups a turn handed back can
+ *  already exceed it, and a later reorder or removal keeps them. */
+export function boundedQueue(
+  state: AgentSessionState,
+  queue: AgentSessionState['queuedPrompts'],
+): AgentSessionState['queuedPrompts'] {
+  return queue.slice(0, Math.max(MAX_QUEUED_PROMPTS, state.queuedPrompts.length));
 }
 
 export function transitionFollowUp(

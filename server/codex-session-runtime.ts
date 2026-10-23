@@ -101,6 +101,19 @@ export class CodexSession implements AttributedAgentSession {
   private busy = false;
   private interruptRequested = false;
   private interruptingTurnId: string | null = null;
+  /** Follow-ups Codex accepted into the running turn, by the client message id
+   *  it records them under, until it reads one at the turn's next step. */
+  private steers = new Map<string, string>();
+  /** Follow-ups that arrived while the turn was still starting; they go to
+   *  Codex once it names the turn and shows how it records input. */
+  private earlySteers: Array<{ id: string; prompt: string }> = [];
+  /** The client id the running turn's own prompt was sent with, until Codex
+   *  records that prompt. */
+  private turnMessageId: string | null = null;
+  /** Whether this app-server records input under the client id sent with it,
+   *  as a turn's own prompt shows; undefined until one does. One that does
+   *  not never names the follow-up it reads, so accepting it confirms it. */
+  private recordsClientIds: boolean | undefined;
   private appServer: CodexAppServerConnection | null = null;
   private pendingApprovals = new Map<string, PendingApproval>();
   /** The native catalog is resolved once. `selectedModel` may then change
@@ -211,6 +224,8 @@ export class CodexSession implements AttributedAgentSession {
 
   private spawnAppServer(cwd: string): CodexAppServerConnection {
     this.modelsWithoutMetadata.clear();
+    // An update can replace the executable between generations.
+    this.recordsClientIds = undefined;
     const processStartId = randomUUID();
     const proc = this.spawnProcess(cwd, {
       STASHBASE_WINDOW_ID: this.windowId,
@@ -280,21 +295,58 @@ export class CodexSession implements AttributedAgentSession {
     }
   }
 
+  /** Codex accepts a follow-up at once but reads it only at the turn's next
+   *  step, when it records the user message under our id; that, not the
+   *  acceptance, is when the renderer places it. An app-server that drops
+   *  our ids is confirmed on acceptance instead, never sent twice. */
   private async steerTurn(clientId: string, prompt: string): Promise<void> {
-    if (!this.busy || !this.threadId || !this.activeTurnId) {
+    if (!this.busy) {
       this.send({ t: 'steer-result', id: clientId, ok: false, message: 'Codex is not ready to steer this turn.' });
       return;
     }
+    if (!this.threadId || !this.activeTurnId || this.recordsClientIds === undefined) {
+      this.earlySteers.push({ id: clientId, prompt });
+      return;
+    }
+    const messageId = randomUUID();
+    this.steers.set(messageId, clientId);
     try {
       await this.request('turn/steer', {
         threadId: this.threadId,
         expectedTurnId: this.activeTurnId,
+        clientUserMessageId: messageId,
         input: [{ type: 'text', text: prompt, text_elements: [] }],
       });
-      this.send({ t: 'steer-result', id: clientId, ok: true });
+      if (!this.recordsClientIds && this.steers.delete(messageId)) {
+        this.send({ t: 'steer-result', id: clientId, ok: true });
+      }
     } catch (err: unknown) {
-      this.send({ t: 'steer-result', id: clientId, ok: false, message: errorMessage(err) });
+      // A request that timed out may still have reached the turn; Codex's
+      // record of it, or the turn's end, decides.
+      if (err instanceof CodexRpcRequestTimeoutError) return;
+      if (this.steers.delete(messageId)) {
+        this.send({ t: 'steer-result', id: clientId, ok: false, message: errorMessage(err) });
+      }
     }
+  }
+
+  /** Sends follow-ups held while the turn started; `steerTurn` holds them
+   *  again until Codex has named the turn and recorded its prompt. */
+  private flushEarlySteers(): void {
+    if (this.interruptRequested) return;
+    for (const steer of this.earlySteers.splice(0)) void this.steerTurn(steer.id, steer.prompt);
+  }
+
+  /** Codex drops a follow-up the turn ended or was stopped without reading,
+   *  and one held while the turn started never reached it, so the renderer
+   *  sends each next instead. */
+  private returnSteers(): void {
+    const message = 'Codex did not read this before the turn ended.';
+    for (const id of [...this.steers.values(), ...this.earlySteers.map((steer) => steer.id)]) {
+      this.send({ t: 'steer-result', id, ok: false, message });
+    }
+    this.steers.clear();
+    this.earlySteers = [];
   }
 
   private async runTurn(prompt: string, titleHint = '', skillId?: string): Promise<void> {
@@ -325,8 +377,12 @@ export class CodexSession implements AttributedAgentSession {
       const threadId = await this.ensureThread(titleHint);
       this.throwIfInterruptedBeforeTurn();
       agentDiagnosticStage(this.ws, 'runtime_dispatched');
+      // How Codex records this id shows how a follow-up can be confirmed.
+      const turnMessageId = randomUUID();
+      this.turnMessageId = turnMessageId;
       const startTurn = (override: string | undefined) => this.request('turn/start', {
         threadId,
+        clientUserMessageId: turnMessageId,
         cwd: this.activeCwd(),
         ...codexEffortOption(this.effort),
         ...(override ? { model: override } : {}),
@@ -358,6 +414,7 @@ export class CodexSession implements AttributedAgentSession {
       if (this.busy && id) {
         this.activeTurnId = id;
         if (this.interruptRequested) void this.requestInterruptForTurn(id);
+        this.flushEarlySteers();
         const pendingError = this.takePendingTerminalError();
         if (pendingError && stringValue(pendingError.turnId) === id) this.onErrorNotification(pendingError);
       }
@@ -367,8 +424,10 @@ export class CodexSession implements AttributedAgentSession {
       }
       this.busy = false;
       this.activeTurnId = null;
+      this.turnMessageId = null;
       this.pendingTerminalError = null;
       if (!this.closed) {
+        this.returnSteers();
         if (!(err instanceof CodexTurnCancelledError)) {
           this.sendTurnError(errorMessage(err), err);
         }
@@ -788,6 +847,7 @@ export class CodexSession implements AttributedAgentSession {
         if (this.busy && turnId) {
           this.activeTurnId = turnId;
           if (this.interruptRequested) void this.requestInterruptForTurn(turnId);
+          this.flushEarlySteers();
         }
         break;
       }
@@ -837,6 +897,21 @@ export class CodexSession implements AttributedAgentSession {
 
   private onItemStarted(item: unknown): void {
     if (!item || typeof item !== 'object') return;
+    const recorded = item as ThreadItem & { clientId?: unknown };
+    if (recorded.type === 'userMessage') {
+      const clientId = typeof recorded.clientId === 'string' ? recorded.clientId : '';
+      // The turn's own prompt is recorded first; whether it kept its id says
+      // how follow-ups held for that are confirmed.
+      if (this.turnMessageId) {
+        this.recordsClientIds = clientId === this.turnMessageId;
+        this.turnMessageId = null;
+        this.flushEarlySteers();
+        return;
+      }
+      const steer = this.steers.get(clientId);
+      if (steer && this.steers.delete(clientId)) this.send({ t: 'steer-result', id: steer, ok: true });
+      return;
+    }
     const tool = toolStartFromItem(item as ThreadItem);
     if (tool) this.send({ t: 'tool', id: tool.id, name: tool.name, input: tool.input });
   }
@@ -911,9 +986,11 @@ export class CodexSession implements AttributedAgentSession {
     if (!this.isActiveTurn(turnId)) return false;
     this.busy = false;
     this.activeTurnId = null;
+    this.turnMessageId = null;
     this.pendingTerminalError = null;
     this.interruptRequested = false;
     this.interruptingTurnId = null;
+    this.returnSteers();
     this.send({ t: 'turn-end', isError });
     return true;
   }
@@ -974,8 +1051,12 @@ export class CodexSession implements AttributedAgentSession {
 
   private handleAppServerExit(error: Error): void {
     this.appServerReady = false;
+    // The renderer returns follow-ups to its queue when the session exits.
+    this.steers.clear();
+    this.earlySteers = [];
     this.busy = false;
     this.activeTurnId = null;
+    this.turnMessageId = null;
     this.pendingTerminalError = null;
     this.interruptRequested = false;
     this.interruptingTurnId = null;

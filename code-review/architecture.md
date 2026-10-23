@@ -442,6 +442,15 @@ stable status without download, retry, or a new durable demand latch.
   Process death settles pending RPCs/turns, and generation guards reject late
   messages. An ambiguous timed-out start retires its generation before retry.
   Claude replacement waits for native iterator/query cleanup after verifying scope.
+- Codex accepts a follow-up through `turn/steer` at once but reads it at the
+  turn's next step, recording a `userMessage` item whose `clientId` is the
+  `clientUserMessageId` sent with it. The turn's own prompt is sent with a
+  client id too, and its recorded item shows whether the app-server keeps ids.
+  A follow-up waits until `turn/start` or `turn/started` names the turn and that
+  item arrives. Where ids are kept, only the follow-up's item confirms it, and
+  one still unread when the turn ends or stops is returned, since Codex drops
+  it; an app-server that drops ids confirms it on acceptance. A timed-out
+  `turn/steer` is left for that item or the turn's end to decide.
 - Each Antigravity chat owns one `agy` stream-json process, started by its
   first prompt with the chat's mode, model, and effort as launch flags. A change
   to any of them, Stop, or process exit retires it, and the next prompt resumes
@@ -457,9 +466,11 @@ stable status without download, retry, or a new durable demand latch.
   agents run do not release the turn or its queue. Native runtimes that emit no
   state events retain the result boundary. Stop still requires native completion
   and interrupt acknowledgement; process death remains a failed session exit.
-  A follow-up joins the running turn as a uuid-tagged `priority: 'next'` input
-  only while the CLI reports session state; its `command_lifecycle` `started`
-  confirms it. Claude reads it at a tool boundary or runs it after the reply,
+  The turn's prompt carries a uuid. A follow-up joins the running turn as a
+  uuid-tagged `priority: 'next'` input only once the CLI has reported session
+  state and a `command_lifecycle` frame, held until then; its `started` frame
+  confirms it. A CLI that never reports reading input returns held follow-ups
+  at the turn's end, so one it read unannounced is never sent twice. Claude reads it at a tool boundary or runs it after the reply,
   both inside the turn that ends at idle. One a Stop or the turn's end overtook
   is interrupted as it starts and returned. Replay restores follow-ups read
   mid-turn, stored as `queued_command` attachments the SDK reader omits.
@@ -579,7 +590,9 @@ stable status without download, retry, or a new durable demand latch.
   context blocks it. The queue captures prompt, context, skill, and id, and Retry
   uses that exact submission after checking locally available context. Sessions,
   not mounted composers, hold follow-ups sent into a running turn as pending
-  `steers` until the runtime's `steer-result`: a taken one becomes a user block
+  `steers` until the runtime's `steer-result`. One sent while the prompt that
+  starts the turn is still preparing or connecting is held until that prompt
+  submits, and returned if it never does. A taken one becomes a user block
   at that point, and a refused one, or one a turn or connection ended without,
   goes to the head of the queue. Sessions advance queues after a completed or confirmed-stopped
   turn; failure and connection loss hold them until a later turn completes or an

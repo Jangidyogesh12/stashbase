@@ -1006,6 +1006,8 @@ test('Claude takes a follow-up into the running turn once it starts reading it',
   const turnRef: { inputs?: Array<{ uuid?: string }> } = {};
   async function* messages(): AsyncIterable<SDKMessage> {
     yield claudeSessionState('running');
+    // The prompt's own report shows this CLI confirms what it reads.
+    yield claudeLifecycle(turnRef.inputs?.[0]?.uuid ?? '', 'started');
     await pushedGate;
     steerUuid = turnRef.inputs?.at(-1)?.uuid ?? '';
     yield claudeLifecycle(steerUuid, 'queued');
@@ -1036,6 +1038,53 @@ test('Claude takes a follow-up into the running turn once it starts reading it',
   });
 });
 
+test('Claude holds a follow-up sent before its first state event, then pushes it', async (t) => {
+  const turnRef: { inputs?: Array<{ uuid?: string }> } = {};
+  async function* messages(): AsyncIterable<SDKMessage> {
+    yield claudeSessionState('running');
+    yield claudeLifecycle(turnRef.inputs?.[0]?.uuid ?? '', 'started');
+    yield claudeSuccessResult();
+    yield claudeSessionState('idle');
+  }
+  const turn = await startScriptedClaudeTurn(t, 'claude-steer-early-window', messages());
+  turnRef.inputs = turn.inputs;
+  turn.ws.emit('message', JSON.stringify({ t: 'steer', id: 'city', text: 'Shanghai' }));
+  await settle();
+  assert.equal(turn.inputs.length, 1, 'only the prompt is in before Claude reports its state');
+  turn.releaseMessages();
+  await settle();
+  assert.equal(turn.inputs.at(1)?.message.content, 'Shanghai');
+  // The script never starts it, so the turn's end hands it back.
+  assert.deepEqual(steerResults(turn.ws), [{
+    t: 'steer-result', id: 'city', ok: false, message: 'Claude did not read this before the turn ended.',
+  }]);
+});
+
+test('Claude never pushes a follow-up into a CLI that does not report reading input', async (t) => {
+  let steered!: () => void;
+  const steerGate = new Promise<void>((resolve) => { steered = resolve; });
+  async function* messages(): AsyncIterable<SDKMessage> {
+    // An older CLI reports its state but not when it reads the prompt.
+    yield claudeSessionState('running');
+    await steerGate;
+    yield claudeSuccessResult();
+    yield claudeSessionState('idle');
+  }
+  const turn = await startScriptedClaudeTurn(t, 'claude-steer-unconfirmed-window', messages());
+  assert.ok(turn.inputs[0]?.uuid, 'the prompt carries a uuid the CLI can report');
+  turn.releaseMessages();
+  await settle();
+  turn.ws.emit('message', JSON.stringify({ t: 'steer', id: 'city', text: 'Shanghai' }));
+  await settle();
+  steered();
+  await settle();
+  assert.equal(turn.inputs.length, 1, 'a follow-up Claude could read unannounced would be sent twice');
+  assert.deepEqual(steerResults(turn.ws), [{
+    t: 'steer-result', id: 'city', ok: false, message: 'Claude did not read this before the turn ended.',
+  }]);
+  assert.deepEqual(turn.turnEvents(), [{ t: 'turn-start' }, { t: 'turn-end', isError: false }]);
+});
+
 test('Claude hands back a follow-up that a Stop overtook, interrupting it as it starts', async (t) => {
   let stopped!: () => void;
   const stopGate = new Promise<void>((resolve) => { stopped = resolve; });
@@ -1043,6 +1092,7 @@ test('Claude hands back a follow-up that a Stop overtook, interrupting it as it 
   const turnRef: { inputs?: Array<{ uuid?: string }> } = {};
   async function* messages(): AsyncIterable<SDKMessage> {
     yield claudeSessionState('running');
+    yield claudeLifecycle(turnRef.inputs?.[0]?.uuid ?? '', 'started');
     await stopGate;
     const steerUuid = turnRef.inputs?.at(-1)?.uuid ?? '';
     yield claudeErrorResult('error_during_execution', []);

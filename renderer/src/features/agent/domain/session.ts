@@ -29,7 +29,6 @@ export {
  *  the only way anything outside the domain asks a question about a session,
  *  so the union's shape stays an implementation detail of this module. */
 import {
-  MAX_QUEUED_PROMPTS,
   type AgentActiveTurn,
   type AgentConnection,
   type AgentSessionAction,
@@ -64,7 +63,7 @@ export {
   type AgentSkillCatalog,
 } from './session-state';
 
-import { returnSteers, transitionFollowUp } from './session-follow-ups';
+import { boundedQueue, returnSteers, transitionFollowUp } from './session-follow-ups';
 import type { AgentTranscriptBlock } from './session-transcript';
 
 export {
@@ -184,7 +183,7 @@ export function transitionAgentSession(
     case 'request-composer-focus':
       return { ...state, composerFocusRequested: action.requested };
     case 'set-queue':
-      return { ...state, queuedPrompts: action.queue.slice(0, MAX_QUEUED_PROMPTS) };
+      return { ...state, queuedPrompts: boundedQueue(state, action.queue) };
     case 'steer-sent':
     case 'steer-taken':
     case 'steer-returned':
@@ -385,12 +384,12 @@ function sameTranscript(
   return transcript === state.transcript ? state : { ...state, transcript };
 }
 
-/** Retirement cancels whatever was running and says how many queued messages
- *  went with the folder, so the transcript explains its own ending. */
+/** Retirement cancels whatever was running and says how many queued or waiting
+ *  messages went with the folder, so the transcript explains its own ending. */
 function retiredTranscript(state: AgentSessionState) {
   const cancelled = settlePendingTools(state.transcript, 'cancelled');
-  if (state.queuedPrompts.length === 0) return cancelled;
-  const count = state.queuedPrompts.length;
+  const count = state.queuedPrompts.length + state.steers.length;
+  if (count === 0) return cancelled;
   return appendBlock(cancelled, {
     id: `${state.id}-retired-queue`,
     kind: 'notice',

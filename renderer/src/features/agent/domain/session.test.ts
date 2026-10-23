@@ -234,6 +234,57 @@ describe('Agent session domain', () => {
     expect(queued.queuedPrompts.at(-1)?.id).toBe('queued-19');
   });
 
+  it('keeps a follow-up the turn handed back to a full queue when the queue is reordered', () => {
+    const entries = Array.from({ length: 20 }, (_, index) => ({
+      context: [],
+      id: `queued-${index}`,
+      skill: null,
+      text: 'Next',
+    }));
+    const full = transitionAgentSession(
+      createAgentSessionState({
+        agent: 'claude',
+        id: 'chat-1',
+        scope: { kind: 'folder', path: '/project/Research' },
+      }),
+      { queue: entries, kind: 'set-queue' },
+    );
+    const steer = { context: [], id: 'steer-1', skill: null, text: 'Also the dates' };
+    const returned = transitionAgentSession(
+      transitionAgentSession(full, { kind: 'steer-sent', prompt: steer }),
+      { id: 'steer-1', kind: 'steer-returned' },
+    );
+    expect(returned.queuedPrompts).toHaveLength(21);
+
+    const reordered = transitionAgentSession(returned, {
+      queue: returned.queuedPrompts.toReversed(),
+      kind: 'set-queue',
+    });
+    expect(reordered.queuedPrompts.map((prompt) => prompt.id)).toContain('steer-1');
+    expect(reordered.queuedPrompts).toHaveLength(21);
+  });
+
+  it('counts follow-ups still waiting for the turn among the messages a retired folder cancels', () => {
+    const initial = createAgentSessionState({
+      agent: 'claude',
+      id: 'chat-1',
+      scope: { kind: 'folder', path: '/Library/Research' },
+    });
+    const waiting = transitionAgentSession(initial, {
+      kind: 'steer-sent',
+      prompt: { context: [], id: 'steer-1', skill: null, text: 'Also the dates' },
+    });
+    const retired = transitionAgentSession(waiting, { kind: 'retire' });
+
+    expect(retired.steers).toEqual([]);
+    expect(retired.transcript.at(-1)).toEqual(
+      expect.objectContaining({
+        kind: 'notice',
+        text: '1 queued message was cancelled when this folder was removed.',
+      }),
+    );
+  });
+
   it('records a native file diff once as settled work', () => {
     const live = transitionAgentSession(
       createAgentSessionState({

@@ -2580,8 +2580,18 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   re-interrupt, and replay of follow-ups read mid-turn. A live Haiku probe
   (2026-10-23) confirmed mid-turn absorption at a tool boundary, a follow-on
   turn inside one idle when no tool remains, and that a Stop leaves a queued
-  follow-up to run unless interrupted again; Codex `turn/steer` has no live
-  probe. `FollowUpWaiting` is the composition fixture. Focused runtime tests
+  follow-up to run unless interrupted again. A live Codex 0.160 app-server
+  probe (2026-10-24) confirmed `turn/steer` returns before the input is read,
+  records it under the sent client id after the running tool or reply, and
+  drops it on interrupt without carrying it into the next turn; server tests
+  cover confirmation on that record, confirmation on acceptance for an
+  app-server that drops client ids, a timed-out steer left to the turn, return
+  at turn end, and holding one sent before the turn has its id; no live probe
+  covers the echo of the turn's own `clientUserMessageId`, though the 0.160
+  schema accepts it on `turn/start`. Runtime and Claude server tests cover
+  holding a follow-up sent while the first prompt connects and never pushing
+  one into a CLI without `command_lifecycle`.
+  `FollowUpWaiting` is the composition fixture. Focused runtime tests
   cover refusal, retained drafts and context, unknown outcomes, restored
   identity, and protected titles. Sidebar title search includes drafts; arrows follow
   project visits. Thinking/routine tools fold per turn, with approvals, failures,

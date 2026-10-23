@@ -94,6 +94,7 @@ export function createAgentSessionRuntime({
     if (action.kind === 'fail' || action.kind === 'close' || action.kind === 'schedule-reconnect')
       ledger.takeHeld();
     if (action.kind === 'settle-turn') controls.dispose();
+    if (action.kind === 'submit-prompt' || action.kind === 'delivery') dispatcher.settleHeld();
     // A follow-up the runtime handed back after its turn ended goes next too.
     if (action.kind === 'settle-turn' || action.kind === 'steer-returned') controls.advanceQueue();
   };

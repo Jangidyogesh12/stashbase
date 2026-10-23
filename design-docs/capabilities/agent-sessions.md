@@ -63,8 +63,11 @@ permissions, with current model and tool choices checked before use.
   loss, or a refused send holds the queue until a later turn completes or the
   reader reviews an uncertain outcome.
 - A runtime that can take a follow-up into the running turn (Claude, Codex)
-  gets one there unless the reader asks to queue it. It joins the transcript
-  where the runtime reads it. One the turn ends without reading, including
+  gets one there unless the reader asks to queue it, including while the
+  prompt that starts the turn is still connecting. It joins the transcript
+  where the runtime reads it. An installed Claude that cannot report reading a
+  follow-up keeps it for after the turn, and a Codex that cannot name it places
+  it when it accepts it, so neither sends one twice. One the turn ends without reading, including
   after Stop, goes next, ahead of the queue. A follow-up that arms a skill
   always queues, since a skill starts a turn.
   Waiting for a background subagent and processing its result remain part of

@@ -74,6 +74,37 @@ describe('conversation recovery and pending work', () => {
     expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
   });
 
+  it('holds a follow-up sent while the first prompt connects for the turn that prompt starts', async () => {
+    const fake = agentSessionPort();
+    const session = createAgentSessionRuntime({
+      agent: 'codex',
+      autostart: false,
+      id: 'chat',
+      port: fake.port,
+      scope: { kind: 'folder', path: '/project' },
+      scheduler: heldScheduler().scheduler,
+    });
+    sessions.push(session);
+    const wire = () =>
+      fake.sent.flatMap((command) =>
+        command.kind === 'prompt' || command.kind === 'steer' ? [[command.kind, command.text]] : [],
+      );
+    expect(await session.sendPrompt('What is the weather today?')).toEqual({ ok: true });
+    session.steer('Shanghai');
+    await vi.waitFor(() =>
+      expect(session.store.getState().steers).toMatchObject([{ text: 'Shanghai' }]),
+    );
+    expect(session.store.getState().queuedPrompts).toEqual([]);
+    expect(wire()).toEqual([]);
+    fake.listeners[0]?.onEvent({ kind: 'ready' });
+    await vi.waitFor(() =>
+      expect(wire()).toEqual([
+        ['prompt', 'What is the weather today?'],
+        ['steer', 'Shanghai'],
+      ]),
+    );
+  });
+
   it('sends a follow-up next when the turn ends before the runtime reads it', async () => {
     const { session, emit, sent } = live();
     const prompts = () => sent.filter((command) => command.kind === 'prompt');
