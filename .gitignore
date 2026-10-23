@@ -56,3 +56,6 @@ profiling.nosync/
 
 # Local transcription build outputs.
 native/transcription/build.nosync/
+
+# Local PostHog operator credentials and private query results.
+.local/posthog/
