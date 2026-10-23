@@ -87,7 +87,7 @@ describe('Agent workspace', () => {
       listAgents: vi.fn(() => answered),
     });
 
-    expect(await screen.findByText('Checking runtimes…')).not.toBeNull();
+    expect(await screen.findByText('Checking agents…')).not.toBeNull();
     // An unanswered catalog is not the same as nothing being ready: offering
     // setup here shows it for a moment and then withdraws it.
     expect(screen.queryByText('No Agent is ready yet.')).toBeNull();

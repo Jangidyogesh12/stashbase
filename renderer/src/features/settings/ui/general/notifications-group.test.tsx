@@ -43,13 +43,13 @@ it('saves opt out, receives peer window changes and preserves the confirmed valu
     name: 'Enable desktop notifications',
   });
   await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
-  const completion = screen.getByRole('switch', { name: 'Task completed' });
+  const completion = screen.getByRole('switch', { name: 'Chat finished' });
   await userEvent.click(completion);
   await waitFor(() => expect(completion.getAttribute('aria-checked')).toBe('false'));
   expect(port.setCategory).toHaveBeenCalledWith('agent-completed', false);
-  expect(screen.getByRole('switch', { name: 'Task failed' }).getAttribute('aria-checked')).toBe(
-    'true',
-  );
+  expect(
+    screen.getByRole('switch', { name: 'Chat did not finish' }).getAttribute('aria-checked'),
+  ).toBe('true');
   await userEvent.click(toggle);
   await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
   expect(port.setEnabled).toHaveBeenCalledWith(false);

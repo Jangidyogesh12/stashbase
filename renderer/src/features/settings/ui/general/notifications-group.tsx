@@ -15,18 +15,18 @@ import { NotificationSystemSettings } from './notification-system-settings';
 const categories: { kind: NotificationKind; title: string; detail: string }[] = [
   {
     kind: 'agent-confirmation',
-    title: 'Needs confirmation',
+    title: 'Waiting for approval',
     detail: 'When an agent needs approval or an answer.',
   },
   {
     kind: 'agent-completed',
-    title: 'Task completed',
-    detail: 'When an agent finishes a task.',
+    title: 'Chat finished',
+    detail: 'When a chat finishes.',
   },
   {
     kind: 'agent-failed',
-    title: 'Task failed',
-    detail: 'When a task cannot finish. Stopped tasks stay quiet.',
+    title: 'Chat did not finish',
+    detail: 'When a chat cannot finish. Stopped chats stay quiet.',
   },
 ];
 type Change = { enabled: boolean; kind?: NotificationKind };

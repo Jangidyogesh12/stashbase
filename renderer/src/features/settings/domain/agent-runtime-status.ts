@@ -20,12 +20,38 @@ export interface AgentRuntimeAction {
   readonly label: string;
 }
 
+/** Something running for a row, named after the action that started it so
+ *  its button keeps that name beside its spinner; what it waits for is the
+ *  row's description. */
+interface AgentRuntimeWork {
+  readonly label: string;
+  /** The step waits on the reader's browser, and they may stop waiting. */
+  readonly stoppable: boolean;
+}
+
 export interface AgentRuntimeStatus {
   readonly description: string;
   /** Where preparation stands. `null` only while the catalog hasn't loaded
    *  this agent row at all. */
   readonly stage: AgentRuntimeStage | null;
+  /** The one action the reader can take now; withheld while one runs. */
   readonly action: AgentRuntimeAction | null;
+  /** What is running for this row, or null when nothing it shows is. */
+  readonly working: AgentRuntimeWork | null;
+}
+
+/** The action a row offers, and while a command of its own is in flight, the
+ *  same action as the work that is running. */
+function offering(
+  base: Omit<AgentRuntimeStatus, 'action' | 'working'>,
+  offered: AgentRuntimeAction | null,
+  busy: boolean,
+): AgentRuntimeStatus {
+  return {
+    ...base,
+    action: busy ? null : offered,
+    working: busy && offered ? { label: offered.label, stoppable: false } : null,
+  };
 }
 
 /**
@@ -38,7 +64,7 @@ export function describeRuntime(
   busy: boolean,
 ): AgentRuntimeStatus {
   if (!runtime) {
-    return { description: 'Checking…', stage: null, action: null };
+    return { description: 'Checking…', stage: null, action: null, working: null };
   }
 
   const preparation = runtime.preparation;
@@ -47,38 +73,42 @@ export function describeRuntime(
     // Only the bundled runtime needs the StashBase account, and its group's
     // Account row owns that sign-in, so the row only says what it waits on.
     if (failure.refusal === 'account-required') {
-      return { description: 'Needs sign-in', stage: failure.stage, action: null };
+      return { description: 'Needs sign-in', stage: failure.stage, action: null, working: null };
     }
-    // A refused account is already signed in; another sign-in changes nothing.
-    const action: AgentRuntimeAction | null = busy
-      ? null
-      : failure.stage === 'authenticate' && failure.refusal !== 'account-refused'
+    // A refused account is already signed in; another sign-in changes
+    // nothing. Every other failure is recovered by Retry, whatever it reruns.
+    const offered: AgentRuntimeAction =
+      failure.stage === 'authenticate' && failure.refusal !== 'account-refused'
         ? { kind: 'login', label: 'Sign in' }
         : {
             kind: failure.stage === 'configure' ? 'retry' : (failure.retryAction ?? 'retry'),
-            label: failure.stage === 'configure' ? 'Retry connection' : 'Retry',
+            label: 'Retry',
           };
-    return {
-      description: failure.note ?? PREPARATION_FAILED,
-      stage: failure.stage,
-      action,
-    };
+    return offering(
+      { description: failure.note ?? PREPARATION_FAILED, stage: failure.stage },
+      offered,
+      busy,
+    );
   }
 
   if (preparation.kind === 'running') {
+    // Only the sign-in step waits on the reader; every other step is
+    // StashBase's own work, narrated in the description.
+    const signingIn = preparation.stage === 'authenticate';
     return {
       description: preparation.note ?? PREPARING,
       stage: preparation.stage,
       action: null,
+      working: signingIn ? { label: 'Sign in', stoppable: !busy } : null,
     };
   }
 
   if (!runtime.installed) {
-    return {
-      description: 'Not installed',
-      stage: 'discover',
-      action: busy ? null : { kind: 'install', label: 'Install' },
-    };
+    return offering(
+      { description: 'Not installed', stage: 'discover' },
+      { kind: 'install', label: 'Install' },
+      busy,
+    );
   }
 
   // A model the runtime is too old to run is the one thing worth saying
@@ -99,9 +129,9 @@ export function describeRuntime(
     runtime.version,
     runtime.availableVersion ? `${runtime.availableVersion} available` : null,
   ];
-  return {
-    description: parts.filter(Boolean).join(' · '),
-    stage: 'ready',
-    action: !busy && runtime.updatable ? { kind: 'update', label: 'Update' } : null,
-  };
+  return offering(
+    { description: parts.filter(Boolean).join(' · '), stage: 'ready' },
+    runtime.updatable ? { kind: 'update', label: 'Update' } : null,
+    busy,
+  );
 }

@@ -17,6 +17,7 @@ import {
   beginAgentBootstrap,
   loginAgentBootstrap,
   recheckAgentBootstrap,
+  stopAgentBootstrap,
   updateAgentBootstrap,
 } from '../agent-runtime-installer.ts';
 import type { AgentId } from '../../shared/agent-protocol.ts';
@@ -108,6 +109,24 @@ export function mount(app: express.Express): void {
     try {
       loginAgentBootstrap(id);
       res.status(202).json(await agentCatalogResponse());
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  /** Stop waiting on a preparation the reader started, such as a browser
+   * sign-in that may never come back. Answers once the run has released its
+   * processes, so a Sign in that follows starts a new attempt instead of
+   * joining the stopped one. Authorization given in the browser stays. */
+  app.post('/api/terminal/clis/:id/stop', async (req, res) => {
+    const id = nativeAgentId(req.params.id);
+    if (!id) {
+      res.status(404).json({ error: 'Unsupported agent runtime.' });
+      return;
+    }
+    try {
+      await stopAgentBootstrap(id);
+      res.json(await agentCatalogResponse());
     } catch (error) {
       sendError(res, error);
     }

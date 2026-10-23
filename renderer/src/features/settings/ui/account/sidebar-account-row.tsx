@@ -1,17 +1,27 @@
 /**
  * The sidebar's account row, at the foot of the window's left column.
  *
- * Signed out it is one button that starts the browser sign-in; what the
- * account is worth (the bundled Agent's free credits) is stated in
- * Settings → Agents rather than inside this row. It is the same sign-in the
- * Agents section runs, through the same port, so the two entries can never
- * disagree. Signed in, the row leads with the same person glyph as every
- * other sidebar row, and its menu opens on the initials disc, then the
- * credits, Plans and billing (the plan in Settings → Agents), Settings, and
- * sign-out.
+ * Signed out it is one button that opens the sign-in dialog, where the
+ * reader chooses email or Google; what the account is worth (the bundled
+ * Agent's free credits) is stated in Settings → Agents rather than inside
+ * this row. It is the same dialog the Agents section opens, through the same
+ * account, so the two entries can never disagree. While a browser sign-in
+ * waits, the row keeps its name and turns its glyph into a spinner, and
+ * opens the dialog on that wait. Signed in, the row leads with the same
+ * person glyph as every other sidebar row, and its menu opens on the
+ * initials disc, then the credits, Plans and billing (the plan in
+ * Settings → Agents), Sign-in methods, Settings, and sign-out.
  */
 import { useQuery } from '@tanstack/react-query';
-import { CreditCard, Gauge, LogOut, Settings as SettingsIcon, UserRound, X } from 'lucide-react';
+import {
+  CreditCard,
+  Gauge,
+  KeyRound,
+  LoaderCircle,
+  LogOut,
+  Settings as SettingsIcon,
+  UserRound,
+} from 'lucide-react';
 
 import {
   DropdownContent,
@@ -21,17 +31,14 @@ import {
   DropdownTrigger,
 } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
-import {
-  SidebarMenuAction,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from '@/components/ui/sidebar-menu';
+import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
 import type { AgentRuntimePort } from '@/features/settings/application/ports';
 import { agentAllowanceQuery } from '@/features/settings/application/queries';
 import { accountLabel } from '@/features/settings/domain/account';
 import { reservedCreditsDetail } from '@/features/settings/domain/agent-allowance';
 import { useAccountView } from '@/features/settings/hooks/account-context';
 import { ProgressBar } from '@/features/settings/ui/rows';
+import type { IconComponentProps } from '@/lib/icon-context';
 import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 import { useWindowFocus } from '@/shared/runtime/use-window-focus';
@@ -54,6 +61,12 @@ export interface SidebarAccountRowProps {
  *  sidebar-menu-button writes, around the same 14px glyph. Without it a menu
  *  row's label sat 6px left of the sidebar label directly beneath it. */
 const SIDEBAR_ROW = 'gap-2 px-2';
+
+/** The row's glyph while a browser sign-in waits: ongoing work is a spinner,
+ *  never a dot, and the label keeps the action's name. */
+function SignInWaiting({ className, ...props }: IconComponentProps) {
+  return <LoaderCircle {...props} className={cn(className, 'motion-safe:animate-spin')} />;
+}
 
 export function SidebarAccountRow({
   agentRuntimeApi,
@@ -82,38 +95,20 @@ export function SidebarAccountRow({
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
-            disabled={account.busy || account.loading || (!person && !account.loadFailed)}
-            icon={UserRound}
+            // A browser wait leaves the row live: it opens the dialog on
+            // that wait, which has the page again and Stop waiting.
+            disabled={account.loading || (!person && !account.loadFailed)}
+            icon={account.signInPending ? SignInWaiting : UserRound}
             // The row is the action and nothing else, the length of Gallery
             // and Settings above it. It used to carry the reason inline in a
             // second tone, which made the one row in the column that reads as
             // a sentence; the offer belongs where it is acted on, so Settings
-            // → Agents states it and the pointer gets it here.
-            label={
-              account.loadFailed
-                ? 'Retry account'
-                : account.signInPending
-                  ? 'Waiting for browser…'
-                  : 'Sign in'
-            }
+            // → Agents states it. The label is the row's name, so it needs no
+            // hover hint repeating it; the failure under a Retry says what
+            // failed.
+            label={account.loadFailed ? 'Retry' : 'Sign in'}
             onClick={account.loadFailed ? account.retryAccount : account.signIn}
-            title={
-              account.loadFailed
-                ? 'Retry loading your account'
-                : account.signInPending
-                  ? undefined
-                  : 'Sign in for free agent credits'
-            }
           />
-          {account.canStopWaiting && (
-            <SidebarMenuAction
-              aria-label="Stop waiting"
-              onClick={account.stopWaiting}
-              title="Stop waiting"
-            >
-              <X aria-hidden="true" />
-            </SidebarMenuAction>
-          )}
           {account.failure && <FailureNotice className="px-2 pb-1" failure={account.failure} />}
         </SidebarMenuItem>
       </>
@@ -197,7 +192,7 @@ export function SidebarAccountRow({
           <DropdownSeparator />
           <MenuItem
             className={SIDEBAR_ROW}
-            icon={SettingsIcon}
+            icon={KeyRound}
             label="Sign-in methods"
             onSelect={account.manageSignIn}
           />

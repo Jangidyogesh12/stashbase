@@ -76,6 +76,65 @@ describe('agent catalog adapter', () => {
     });
   });
 
+  it('reads a signed-out account as a sign-in the Default Agent needs, as an expired runtime is', async () => {
+    const signedOut = (id: string, code: string) =>
+      runtime({
+        id,
+        state: 'failed',
+        bootstrap: {
+          phase: 'failed',
+          failure: { stage: 'authentication', code, retryable: true, message: 'Sign in.' },
+        },
+      });
+    const adapter = createAgentCatalogAdapter(
+      httpClient({
+        clis: [
+          signedOut('stashbase', 'account-required'),
+          signedOut('codex', 'authentication-required'),
+          signedOut('claude', 'authentication-check-failed'),
+        ],
+      }),
+    );
+    const { agents } = await adapter.listAgents(signal);
+    expect(agents.map((agent) => agent.needsSignIn)).toEqual([true, true, false]);
+  });
+
+  it('reads a running phase as the step the first-send dialog reports', async () => {
+    const adapter = createAgentCatalogAdapter(
+      httpClient({
+        clis: [
+          runtime({
+            bootstrap: {
+              phase: 'authenticating',
+              message: 'Finish signing in to Codex in your browser.',
+              signInUrl: 'https://auth.openai.com/oauth/authorize',
+            },
+          }),
+          runtime({
+            id: 'claude',
+            label: 'Claude',
+            bootstrap: {
+              phase: 'installing',
+              message: 'Downloading the official Claude installer…',
+            },
+          }),
+        ],
+      }),
+    );
+    const { agents } = await adapter.listAgents(signal);
+    expect(agents.map((agent) => [agent.ready, agent.preparation])).toEqual([
+      [
+        false,
+        {
+          step: 'sign-in',
+          note: 'Finish signing in to Codex in your browser.',
+          signInUrl: 'https://auth.openai.com/oauth/authorize',
+        },
+      ],
+      [false, { step: 'install', note: 'Downloading the official Claude installer…' }],
+    ]);
+  });
+
   it('hands a fresh chat the catalog the service remembers, flags and all', async () => {
     const adapter = createAgentCatalogAdapter(
       httpClient({

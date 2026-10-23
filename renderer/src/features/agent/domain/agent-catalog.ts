@@ -44,7 +44,8 @@ export interface Agent {
   readonly ready: boolean;
   /** Whether the one thing between it and ready is the user signing in. */
   readonly needsSignIn: boolean;
-  readonly preparing?: boolean;
+  /** Where the service's preparation stands while it runs; absent otherwise. */
+  readonly preparation?: AgentPreparation;
   /** Whether the host can update this runtime. */
   readonly updatable?: boolean;
   /** A newer release the host found for this runtime, when it found one. */
@@ -59,6 +60,15 @@ export interface Agent {
    *  conversation reads it to offer the update once; absence is the normal
    *  state and says nothing. */
   readonly upgrade?: AgentUpgradeOffer;
+}
+
+/** The step the service is running to make a runtime ready. */
+export interface AgentPreparation {
+  readonly step: 'check' | 'install' | 'sign-in';
+  /** The service's sentence about the step, when it wrote one. */
+  readonly note?: string;
+  /** The provider's sign-in page, for a browser that did not open by itself. */
+  readonly signInUrl?: string;
 }
 
 /** The step that stopped preparation and the service's explanation. */

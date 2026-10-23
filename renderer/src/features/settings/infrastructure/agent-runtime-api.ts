@@ -108,7 +108,14 @@ function toPreparation(wire: AgentBootstrapStatusWire | undefined): AgentPrepara
     };
   }
   const stage = runningStage(wire.phase);
-  if (stage) return { kind: 'running', note: wire.message ?? null, stage };
+  if (stage) {
+    return {
+      kind: 'running',
+      note: wire.message ?? null,
+      stage,
+      ...(wire.phase === 'authenticating' && wire.signInUrl ? { signInUrl: wire.signInUrl } : {}),
+    };
+  }
   return wire.phase === 'ready' ? { kind: 'ready' } : { kind: 'idle' };
 }
 

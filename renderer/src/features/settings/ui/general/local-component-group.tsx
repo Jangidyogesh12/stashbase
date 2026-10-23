@@ -13,7 +13,7 @@ export function LocalComponentGroup({ model }: { model: LocalComponentViewModel 
           trail={
             model.canRetry ? (
               <Button disabled={model.busy} onClick={model.retry} size="compact" variant="tertiary">
-                Retry download
+                Retry
               </Button>
             ) : undefined
           }

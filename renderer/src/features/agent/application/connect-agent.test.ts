@@ -14,13 +14,76 @@ it('continues a fresh Claude installation through provider sign-in before readin
     .mockResolvedValueOnce({ agents: [signedOut] })
     .mockResolvedValueOnce({ agents: [{ ...CLAUDE_AGENT, ready: true }] });
   const port = agentCatalogPort([], { prepareAgent });
-  await connectAgent(port, 'claude', undefined, new AbortController().signal, immediately);
+  await connectAgent(port, 'claude', undefined, new AbortController().signal, {
+    wait: immediately,
+  });
   expect(prepareAgent.mock.calls.map(([, action]) => action)).toEqual(['bootstrap', 'login']);
 });
 
+it('follows a sign-in already running instead of asking for a second one', async () => {
+  const signingIn = {
+    step: 'sign-in' as const,
+    note: 'Finish signing in to Claude in your browser.',
+  };
+  const running = { ...CLAUDE_AGENT, ready: false, preparation: signingIn };
+  const prepareAgent = vi.fn();
+  const port = agentCatalogPort([], {
+    prepareAgent,
+    listAgents: vi
+      .fn()
+      .mockResolvedValueOnce({ agents: [running] })
+      .mockResolvedValueOnce({ agents: [{ ...CLAUDE_AGENT, ready: true }] }),
+  });
+  await connectAgent(port, 'claude', running, new AbortController().signal, { wait: immediately });
+  expect(prepareAgent).not.toHaveBeenCalled();
+
+  // One that ended signed out goes on to a sign-in of the reader's own.
+  const signedOut = { ...CLAUDE_AGENT, ready: false, needsSignIn: true };
+  const login = vi.fn(async (_agent: string, _action: string) => ({
+    agents: [{ ...CLAUDE_AGENT, ready: true }],
+  }));
+  await connectAgent(
+    agentCatalogPort([], {
+      prepareAgent: login,
+      listAgents: vi.fn(async () => ({ agents: [signedOut] })),
+    }),
+    'claude',
+    running,
+    new AbortController().signal,
+    { wait: immediately },
+  );
+  expect(login.mock.calls.map(([, action]) => action)).toEqual(['login']);
+});
+
+it('reports each step the service reaches until the runtime is ready', async () => {
+  const installing = { step: 'install' as const, note: 'Downloading Codex CLI…' };
+  const signingIn = {
+    step: 'sign-in' as const,
+    note: 'Finish signing in to Codex in your browser.',
+    signInUrl: 'https://auth.example.com/oauth/authorize',
+  };
+  const port = agentCatalogPort([], {
+    prepareAgent: vi.fn(async () => ({
+      agents: [{ ...CLAUDE_AGENT, ready: false, preparation: installing }],
+    })),
+    listAgents: vi
+      .fn()
+      .mockResolvedValueOnce({
+        agents: [{ ...CLAUDE_AGENT, ready: false, preparation: signingIn }],
+      })
+      .mockResolvedValueOnce({ agents: [{ ...CLAUDE_AGENT, ready: true }] }),
+  });
+  const onStep = vi.fn();
+  await connectAgent(port, 'claude', undefined, new AbortController().signal, {
+    onStep,
+    wait: immediately,
+  });
+  expect(onStep.mock.calls.map(([step]) => step)).toEqual([installing, signingIn]);
+});
+
 it('follows the update acknowledgement until the runtime is ready again', async () => {
-  const preparing = { ...CLAUDE_AGENT, preparing: true, ready: false };
-  const ready = { ...CLAUDE_AGENT, preparing: false, ready: true };
+  const preparing = { ...CLAUDE_AGENT, preparation: { step: 'install' as const }, ready: false };
+  const ready = { ...CLAUDE_AGENT, ready: true };
   const port = agentCatalogPort([ready], {
     prepareAgent: vi.fn(async () => ({ agents: [preparing] })),
   });
@@ -36,7 +99,6 @@ it('follows the update acknowledgement until the runtime is ready again', async 
 it("reports the service's own sentence when the update does not end ready", async () => {
   const failed = {
     ...CLAUDE_AGENT,
-    preparing: false,
     ready: false,
     setupFailure: { stage: 'installation' as const, message: 'npm global folder is not writable' },
   };

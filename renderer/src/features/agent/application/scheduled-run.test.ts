@@ -124,4 +124,20 @@ describe('startScheduledRun', () => {
     expect(session.port.connect).not.toHaveBeenCalled();
     expect(runtime.store.getState().tabs).toHaveLength(1);
   });
+
+  it('asks for sign-in, not setup, when the Default Agent is signed out', async () => {
+    const { runtime } = setup();
+    const catalog = agentCatalogPort([{ ...BUILT_IN_AGENT, needsSignIn: true, ready: false }]);
+    await expect(
+      startScheduledRun(
+        runtime,
+        catalog,
+        { ...request, agent: 'stashbase' },
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({
+      reason: 'Sign in to use the Default Agent, then run this task again.',
+      status: 'failed',
+    });
+  });
 });

@@ -26,15 +26,19 @@ function renderRow(
   options: { busy?: boolean; failure?: FailureView | null } = {},
 ) {
   const onAction = vi.fn();
+  const onOpenSignIn = vi.fn();
+  const onStop = vi.fn();
   render(
     <RuntimeRow
       busy={options.busy ?? false}
       failure={options.failure ?? null}
       onAction={onAction}
+      onOpenSignIn={onOpenSignIn}
+      onStop={onStop}
       runtime={subject}
     />,
   );
-  return { onAction };
+  return { onAction, onOpenSignIn, onStop };
 }
 
 describe('RuntimeRow', () => {
@@ -48,11 +52,11 @@ describe('RuntimeRow', () => {
     expect(onAction).toHaveBeenCalledWith({ kind: 'install', label: 'Install' }, subject);
   });
 
-  it('replaces the action with a preparing button while the runtime is busy', () => {
+  it('keeps the action name on its spinner while the runtime is busy', () => {
     renderRow(codex(), { busy: true });
 
-    expect(screen.getByRole('button', { name: 'Preparing…' })).toHaveProperty('disabled', true);
-    expect(screen.queryByRole('button', { name: 'Install' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Install' })).toHaveProperty('disabled', true);
+    expect(screen.queryByRole('button', { name: 'Preparing…' })).toBeNull();
   });
 
   it('says where preparation stands in one sentence, with no progress ornament', () => {
@@ -68,6 +72,28 @@ describe('RuntimeRow', () => {
     cleanup();
     renderRow(codex({ installed: true, ownership: 'system', preparation: { kind: 'ready' } }));
     expect(screen.getByText('Ready')).not.toBeNull();
+  });
+
+  it('waits on the browser with the page again and a way to stop waiting', async () => {
+    const url = 'https://auth.openai.com/oauth/authorize?state=1';
+    const subject = codex({
+      installed: true,
+      preparation: {
+        kind: 'running',
+        note: 'Finish signing in to Codex in your browser.',
+        signInUrl: url,
+        stage: 'authenticate',
+      },
+    });
+    const { onOpenSignIn, onStop } = renderRow(subject);
+    const user = userEvent.setup();
+    // The wait is said in the detail line; the button keeps its action's name.
+    expect(screen.getByText('Finish signing in to Codex in your browser.')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toHaveProperty('disabled', true);
+    await user.click(screen.getByRole('button', { name: 'Open sign-in page' }));
+    expect(onOpenSignIn).toHaveBeenCalledWith(url);
+    await user.click(screen.getByRole('button', { name: 'Stop waiting' }));
+    expect(onStop).toHaveBeenCalledWith(subject);
   });
 
   it('keeps a command failure on the row it belongs to', () => {

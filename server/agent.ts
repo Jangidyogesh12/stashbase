@@ -56,7 +56,8 @@ import {
 import { logger, errorMessage } from './log.ts';
 import { getCurrentFolder, normalizeWindowId, registeredRootForAbs, runWithWindowId } from './folder.ts';
 import { resolveAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
-import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
+import { agentCliEnv, commandDir, resolveAgentCli } from './agent-cli.ts';
+import { agentCliLaunch } from './agent-cli-launch.ts';
 import { ensureClaudeFolderTrust } from './agent-rules.ts';
 import { isAgentAccessMode, resolveSessionBinding, type AgentAccessMode, type AgentSessionTermination } from './agent-contract.ts';
 import { rememberAgentDefaultModel, rememberAgentModels } from './agent-model-catalog.ts';
@@ -172,12 +173,13 @@ function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
   if (command !== options.command) {
     log.info(`spawning Claude via ${command}`);
   }
-  return spawn(command, options.args, {
+  const launch = agentCliLaunch(command, options.args);
+  return spawn(launch.command, launch.args, {
     cwd: options.cwd,
     env: agentCliEnv(options.env as NodeJS.ProcessEnv, [commandDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
     signal: options.signal,
-    shell: agentCliNeedsShell(command),
+    windowsVerbatimArguments: launch.windowsVerbatimArguments,
   });
 }
 

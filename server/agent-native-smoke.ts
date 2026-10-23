@@ -2,7 +2,8 @@
  * protocol entry point required by its Shared Agent Contract adapter. */
 import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import readline from 'node:readline';
-import { agentCliEnv, agentCliNeedsShell, commandDir } from './agent-cli.ts';
+import { agentCliEnv, commandDir } from './agent-cli.ts';
+import { agentCliLaunch } from './agent-cli-launch.ts';
 import type { AgentId } from './agent-contract.ts';
 
 export interface NativeAgentSmokeResult {
@@ -14,19 +15,21 @@ export interface NativeAgentSmokeResult {
 
 type NativeSmokeRunner = (command: string, args: string[]) => Pick<SpawnSyncReturns<string>, 'status' | 'stdout' | 'stderr' | 'error'>;
 
-function nativeCliSpawnOptions(executable: string): { env: NodeJS.ProcessEnv; shell: boolean } {
-  return {
+function runNativeCli(executable: string, args: string[]): SpawnSyncReturns<string> {
+  const launch = agentCliLaunch(executable, args);
+  return spawnSync(launch.command, launch.args, {
+    encoding: 'utf8',
+    timeout: 10_000,
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: agentCliEnv({}, [commandDir(executable)]),
-    shell: agentCliNeedsShell(executable),
-  };
+    windowsVerbatimArguments: launch.windowsVerbatimArguments,
+  });
 }
 
 export function smokeNativeAgentCli(
   id: AgentId,
   executable: string,
-  run: NativeSmokeRunner = (command, args) => spawnSync(command, args, {
-    encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'], ...nativeCliSpawnOptions(command),
-  }),
+  run: NativeSmokeRunner = runNativeCli,
 ): NativeAgentSmokeResult {
   const args = id === 'codex' ? ['app-server', '--help'] : ['--version'];
   const result = run(executable, args);
@@ -49,9 +52,7 @@ export function smokeNativeAgentCli(
  * initialization RPC. */
 export async function smokeNativeAgentProtocol(id: AgentId, executable: string): Promise<NativeAgentSmokeResult> {
   if (id === 'antigravity') {
-    const probe = spawnSync(executable, ['--help'], {
-      encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'], ...nativeCliSpawnOptions(executable),
-    });
+    const probe = runNativeCli(executable, ['--help']);
     const output = `${probe.stdout ?? ''}\n${probe.stderr ?? ''}`;
     if (probe.error || probe.status !== 0) {
       return { id, executable, ok: false, message: `Antigravity CLI help probe failed: ${probe.error?.message ?? `exit code ${probe.status ?? 'unknown'}`}` };
@@ -62,9 +63,7 @@ export async function smokeNativeAgentProtocol(id: AgentId, executable: string):
     return { id, executable, ok: true, message: `antigravity native protocol smoke passed (${executable}).` };
   }
   if (id === 'claude') {
-    const probe = spawnSync(executable, ['--help'], {
-      encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'], ...nativeCliSpawnOptions(executable),
-    });
+    const probe = runNativeCli(executable, ['--help']);
     const output = `${probe.stdout ?? ''}\n${probe.stderr ?? ''}`;
     if (probe.error || probe.status !== 0) {
       return { id, executable, ok: false, message: `Claude CLI help probe failed: ${probe.error?.message ?? `exit code ${probe.status ?? 'unknown'}`}` };
@@ -76,8 +75,11 @@ export async function smokeNativeAgentProtocol(id: AgentId, executable: string):
   }
 
   return new Promise((resolve) => {
-    const proc = spawn(executable, ['app-server', '--listen', 'stdio://'], {
-      stdio: ['pipe', 'pipe', 'pipe'], ...nativeCliSpawnOptions(executable),
+    const launch = agentCliLaunch(executable, ['app-server', '--listen', 'stdio://']);
+    const proc = spawn(launch.command, launch.args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: agentCliEnv({}, [commandDir(executable)]),
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
     });
     let settled = false;
     const finish = async (result: NativeAgentSmokeResult) => {

@@ -27,9 +27,11 @@ import {
 
 export interface AgentRuntimePort {
   listAgents(signal: AbortSignal): Promise<AgentCatalog>;
+  /** Starts a preparation step, or `stop`s waiting on one the reader started,
+   *  such as a browser sign-in; the answer is the catalog that follows. */
   prepareAgent(
     id: AgentId,
-    action: 'check' | 'bootstrap' | 'login' | 'update',
+    action: 'check' | 'bootstrap' | 'login' | 'stop' | 'update',
     signal: AbortSignal,
   ): Promise<AgentCatalog>;
   updateDebug(patch: AgentDebugPatch, signal: AbortSignal): Promise<AgentCatalog>;

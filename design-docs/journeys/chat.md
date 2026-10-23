@@ -49,20 +49,34 @@ If the selected agent is unavailable, Send presents its access prompt before
 starting login, installation, or a session:
 
 - Default offers Sign in for free agent credits.
-- A native agent offers Connect Codex, Connect Claude, or Connect Antigravity.
-- Not now keeps the request. Another agent can be selected from the draft.
+- A native agent offers Connect Codex, Connect Claude, or Connect Antigravity
+  when it may need installing, and Sign in when only its own sign-in is
+  missing, such as an expired one.
+- Not now drops only the held send; the draft stays, and a sign-in or setup
+  already started carries on. Another agent can be selected from the draft.
 
 The prompt is about the selected agent. On explicit confirmation, keep the request
 while access is prepared. Readiness may continue only this same submission once.
 Changing the request, project, conversation, or agent, or cancelling the prompt,
 retires that continuation. Standalone Settings setup never sends a draft.
-If preparation fails, the same prompt shows the failed step and the service's
-specific explanation, including any supplied error code or file location. Keep
-the diagnostic visible as wrapping plain text alongside draft retention and
-retry guidance; users do not need to visit Settings to explain the failure.
+Only one dialog is open at a time: Default's Sign in hands over to the
+account's sign-in dialog instead of staying open beneath it, still holding the
+send, which goes once the account is signed in. If the reader leaves that
+dialog without signing in, the prompt returns saying the message was kept,
+with Retry.
+If preparation fails, the same prompt stays open with the failed step and the
+service's own explanation, including any supplied error code or file location.
+Keep the diagnostic visible as wrapping plain text, followed once by "Your
+message was kept." and the prompt's Retry; users do not need to visit Settings
+to explain the failure.
 Claude, Codex, and Antigravity continue from installation into their provider's
 browser sign-in when needed, and resume the retained submission only after
-readiness.
+readiness. While preparation runs, the prompt names the step the service is on
+in its own words and how long the wait has lasted, so a slow download or a
+pending browser sign-in never reads as a failure. During sign-in it offers the
+provider page the runtime printed, for a browser that did not open, and Stop
+waiting, which ends the runtime's login and returns the prompt to its question
+with the send still held.
 
 ## Failure and Return
 

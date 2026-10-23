@@ -47,6 +47,9 @@ export interface AgentBootstrapStatus {
   phase: AgentBootstrapPhase;
   progress?: number;
   message?: string;
+  /** While signing in: the provider page the runtime's own login printed,
+   * for a browser that did not open by itself. */
+  signInUrl?: string;
   failure?: AgentBootstrapFailure;
 }
 

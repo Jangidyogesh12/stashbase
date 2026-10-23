@@ -186,7 +186,7 @@ function ChatWorkspace({
       <div
         aria-busy={activeTurn}
         aria-live="polite"
-        aria-label="Conversation transcript"
+        aria-label="Chat transcript"
         className={cn('min-h-0 overflow-y-auto', empty ? 'flex-initial' : 'flex-1')}
         ref={logRef}
         role="log"
@@ -338,23 +338,28 @@ function ChatWorkspace({
       )}
       <AgentAccessDialog
         agent={access.agent}
+        needsSignIn={access.needsSignIn}
         open={access.open}
         working={access.working}
+        startedAt={access.startedAt}
+        preparation={access.preparation}
         failure={access.failure}
         onConfirm={() => {
           void access.confirm();
         }}
         onCancel={access.cancel}
+        onOpenSignIn={onOpenExternal}
+        onStopWaiting={access.stopWaiting}
       />
       {(catalog.loading || catalog.error || preferences.failure) && (
         <div className="mx-auto flex w-full max-w-[46rem] items-center gap-2 px-4 pb-3 text-caption text-muted-foreground">
           <span>
             {preferences.failure ??
-              (catalog.error ? 'Agent runtime status is unavailable.' : 'Checking runtimes…')}
+              (catalog.error ? 'Agent runtime status is unavailable.' : 'Checking agents…')}
           </span>
           {(preferences.failure || catalog.error) && (
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="compact"
               onClick={
                 preferences.failure

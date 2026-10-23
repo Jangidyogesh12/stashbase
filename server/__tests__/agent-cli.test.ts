@@ -11,6 +11,7 @@ import {
   resolveAgentCli,
   resolveNativeAgentCli,
 } from '../agent-cli.ts';
+import { agentCliLaunch } from '../agent-cli-launch.ts';
 
 test('native installations win over npm copies, while explicit executable overrides still win', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-cli-choice-'));
@@ -111,4 +112,29 @@ test('agent CLI version is read once per executable change and never for a missi
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('a Windows npm launcher under a profile path with a space starts through cmd.exe intact', () => {
+  const shim = 'C:\\Users\\Jane Doe\\AppData\\Roaming\\npm\\codex.cmd';
+  assert.deepEqual(agentCliLaunch(shim, ['login', 'status'], 'win32', 'C:\\Windows\\system32\\cmd.exe'), {
+    command: 'C:\\Windows\\system32\\cmd.exe',
+    args: ['/d', '/s', '/c', '"C:\\Users\\Jane^ Doe\\AppData\\Roaming\\npm\\codex.cmd ^^^"login^^^" ^^^"status^^^""'],
+    windowsVerbatimArguments: true,
+  });
+  // Quotes and cmd metacharacters in an argument survive both cmd passes.
+  assert.equal(
+    agentCliLaunch('C:\\npm\\claude.CMD', ['{"a":"b & c"}'], 'win32', 'cmd.exe').args[3],
+    '"C:\\npm\\claude.CMD ^^^"{\\^^^"a\\^^^":\\^^^"b^^^ ^^^&^^^ c\\^^^"}^^^""',
+  );
+});
+
+test('executables and POSIX commands start directly with their own arguments', () => {
+  assert.deepEqual(agentCliLaunch('C:\\Users\\Jane Doe\\.local\\bin\\claude.exe', ['auth', 'status'], 'win32'), {
+    command: 'C:\\Users\\Jane Doe\\.local\\bin\\claude.exe',
+    args: ['auth', 'status'],
+  });
+  assert.deepEqual(agentCliLaunch('/Users/jane doe/.local/bin/codex.cmd', ['login'], 'darwin'), {
+    command: '/Users/jane doe/.local/bin/codex.cmd',
+    args: ['login'],
+  });
 });

@@ -33,7 +33,7 @@ describe('agent failure messages', () => {
   });
 
   it('keeps recovery readable when no detail was supplied, without repeating a mapped sentence', () => {
-    const fallback = 'Could not connect.\n\nYour message was kept. Try again.';
+    const fallback = 'Could not connect.\n\nYour message was kept.';
     expect(agentAccessFailure(null)).toBe(fallback);
     expect(agentAccessFailure(new AgentSetupRefused(undefined))).toBe(fallback);
     const summary = failureMessage('unavailable');
@@ -41,11 +41,23 @@ describe('agent failure messages', () => {
       agentAccessFailure(
         new AgentSessionError('unavailable', summary, { cause: new Error(summary) }),
       ),
-    ).toBe(`${summary}\n\nYour message was kept. Try again.`);
+    ).toBe(`${summary}\n\nYour message was kept.`);
+  });
+
+  it('says the message was kept once, after the sentence the service wrote', () => {
+    const text = agentAccessFailure(
+      new AgentSessionError('unavailable', 'Request failed', {
+        cause: new Error('Codex is already signing in.'),
+      }),
+    );
+    expect(text).toBe('Codex is already signing in.\n\nYour message was kept.');
+    expect(agentAccessFailure(new Error('Sign-in was not completed.'))).toBe(
+      'Sign-in was not completed.\n\nYour message was kept.',
+    );
   });
 
   it('names every kind either Agent ladder can report', () => {
-    expect(failureMessage('not-found')).toBe('That file is no longer in this folder.');
+    expect(failureMessage('not-found')).toBe('That file is no longer in this project.');
     expect(failureMessage('unsupported')).toContain('cannot be given to the agent');
     expect(failureMessage('scope-lost')).toContain('no longer available');
     expect(failureMessage('unauthorized')).toContain('no longer');

@@ -24,8 +24,8 @@ export type AgentContextErrorKind = FeatureFailureKind<AgentContextExtra>;
 
 const MESSAGES: Readonly<Record<AgentContextErrorKind, string>> = {
   'invalid-response': 'The agent service returned an unexpected response.',
-  'not-found': 'That file is no longer in this folder.',
-  'scope-lost': 'That folder is no longer available in this window.',
+  'not-found': 'That file is no longer in this project.',
+  'scope-lost': 'That project is no longer available in this window.',
   unauthorized: 'This window can no longer perform that action.',
   unsupported: 'This file type cannot be given to the agent.',
   unavailable: 'StashBase could not reach the agent service.',
@@ -51,7 +51,7 @@ export function failureKind(error: unknown): AgentContextErrorKind {
 /** What a replay that could not be read leaves on the conversation. The
  *  transport's own kind decides the rest of the ladder; a replay that arrives
  *  malformed is the one outcome none of those kinds names. */
-export const RESTORE_FAILED = 'That conversation could not be restored.';
+export const RESTORE_FAILED = 'That chat could not be restored.';
 
 /** What the Agent panel shows in its own region when its chunk never arrives
  *  or its render throws, neither of which is a refusal on the ladder above. */
@@ -73,27 +73,39 @@ const SETUP_FAILURE_MESSAGES: Readonly<Record<AgentSetupFailure['stage'], string
 /** The account signed in, and the provider still will not serve it. */
 const ACCOUNT_REFUSED = 'Account not accepted.';
 
-/** Keep the failed step and diagnostic visible where setup was requested.
- * Error messages are plain text; stack traces and error objects are not rendered. */
+/** What the gate says when nothing more specific reached it. */
+const NOT_CONNECTED = 'Could not connect.';
+
+/** The held send survives every refusal the gate shows, so the gate says so
+ *  once, last. Its Retry button is the way forward, so no sentence repeats
+ *  that. */
+const MESSAGE_KEPT = 'Your message was kept.';
+
+/** The step that stopped, then the service's own explanation of it. */
+function accessFailureLines(error: unknown): readonly string[] {
+  if (error instanceof AgentSetupRefused) {
+    const setup = error.setup;
+    if (!setup) return [NOT_CONNECTED];
+    return [
+      setup.accountRefused ? ACCOUNT_REFUSED : SETUP_FAILURE_MESSAGES[setup.stage],
+      setup.message.trim(),
+    ];
+  }
+  // A service that answered wrote the sentence naming what stopped, such as a
+  // sign-in already running; the mapped line stands only where it could not
+  // be reached at all.
+  if (isFeatureError<AgentContextExtra>(error)) {
+    return [readFailure(error, MESSAGES, { serverSentenceFor: [error.kind] }).message];
+  }
+  return [error instanceof Error && error.message.trim() ? error.message.trim() : NOT_CONNECTED];
+}
+
+/** Keep the failed step and the service's diagnostic visible where setup was
+ * requested. Error messages are plain text; stack traces and error objects
+ * are not rendered. */
 export function agentAccessFailure(error: unknown): string {
-  const setup = error instanceof AgentSetupRefused ? error.setup : undefined;
-  const summary =
-    error instanceof AgentSetupRefused
-      ? setup
-        ? setup.accountRefused
-          ? ACCOUNT_REFUSED
-          : SETUP_FAILURE_MESSAGES[setup.stage]
-        : 'Could not connect.'
-      : isFeatureError(error)
-        ? agentFailure(error).message
-        : 'Could not connect.';
-  const cause = isFeatureError(error) ? error.cause : error;
-  const detail = setup?.message.trim() ?? (cause instanceof Error ? cause.message.trim() : '');
-  return [
-    summary,
-    ...(detail && detail !== summary ? [detail] : []),
-    'Your message was kept. Try again.',
-  ].join('\n\n');
+  const lines = accessFailureLines(error).filter((line) => line !== '');
+  return [...new Set(lines), MESSAGE_KEPT].join('\n\n');
 }
 
 /** What an update that did not finish reads as: the service's own sentence
@@ -118,8 +130,8 @@ const UPDATE_FAILED = 'The update did not finish. Check agent settings and try a
 /** Why a hosted model list could not be refreshed by reconnecting. */
 export function agentModelRefreshFailure(outcome: 'settled' | 'timeout'): string {
   return outcome === 'timeout'
-    ? 'This conversation did not reconnect in time, so the models were not refreshed. Try again.'
-    : 'This conversation could not reconnect, so the models were not refreshed. Try again.';
+    ? 'This chat did not reconnect in time, so the models were not refreshed. Try again.'
+    : 'This chat could not reconnect, so the models were not refreshed. Try again.';
 }
 
 export function agentReconnectAfterUpdateFailure(
@@ -127,6 +139,6 @@ export function agentReconnectAfterUpdateFailure(
   outcome: 'settled' | 'timeout',
 ): string {
   return outcome === 'timeout'
-    ? `${label} is updated, but this conversation did not reconnect in time. Reconnect and try again.`
-    : `${label} is updated, but this conversation could not reconnect. Reconnect and try again.`;
+    ? `${label} is updated, but this chat did not reconnect in time. Reconnect and try again.`
+    : `${label} is updated, but this chat could not reconnect. Reconnect and try again.`;
 }

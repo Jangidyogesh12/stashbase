@@ -1,17 +1,19 @@
 import { spawn } from 'node:child_process';
+import { agentCliLaunch } from './agent-cli-launch.ts';
 import { terminateExtractorTree, waitForExtractorTree } from './extractor-process.ts';
 
 /** Bounded, cancellable CLI probes must never block the shared HTTP server. */
 export async function probeAgentCommand(
   command: string,
   args: string[],
-  options: { env: NodeJS.ProcessEnv; timeoutMs: number; signal?: AbortSignal; shell?: boolean },
+  options: { env: NodeJS.ProcessEnv; timeoutMs: number; signal?: AbortSignal },
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
   options.signal?.throwIfAborted();
+  const launch = agentCliLaunch(command, args);
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(launch.command, launch.args, {
       env: options.env,
-      shell: options.shell,
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
       detached: process.platform !== 'win32',
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -195,8 +195,10 @@ export function SettingsMessage({
       }
       titleTone="muted"
       trail={
+        // A recovery is outlined like every other one, never a quiet text
+        // button: those only dismiss or cancel.
         onRetry && (
-          <Button onClick={onRetry} size="compact" variant="ghost">
+          <Button onClick={onRetry} size="compact" variant="tertiary">
             Retry
           </Button>
         )
@@ -205,7 +207,9 @@ export function SettingsMessage({
   );
 }
 
-/** State as form: a dot and a word, never a colored sentence. */
+/** State as form: a word, never a coloured sentence. Only `warn` carries a
+ *  dot, because a small solid dot in the app means something needs a look;
+ *  a state that is simply on, or work still under way, says so in its word. */
 export function StatusChip({
   children,
   tone = 'on',
@@ -224,13 +228,7 @@ export function StatusChip({
             : 'text-muted-foreground',
       )}
     >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'size-1.5 rounded-full',
-          tone === 'warn' ? 'bg-decision' : tone === 'on' ? 'bg-working' : 'bg-muted-foreground',
-        )}
-      />
+      {tone === 'warn' && <span aria-hidden="true" className="size-1.5 rounded-full bg-decision" />}
       {children}
     </span>
   );

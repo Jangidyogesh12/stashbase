@@ -48,6 +48,7 @@ const agentBootstrapStatusSchema = z
     phase: agentBootstrapPhaseSchema,
     progress: z.number().finite().optional(),
     message: z.string().max(2000).optional(),
+    signInUrl: z.string().max(4000).regex(/^https:\/\//).optional(),
     failure: agentBootstrapFailureSchema.optional(),
   })
   .strict();

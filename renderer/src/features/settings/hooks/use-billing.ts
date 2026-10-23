@@ -33,6 +33,12 @@ const CONFIRM_WINDOW_MS = 120_000;
 
 type BillingConfirmation = 'waiting' | 'slow';
 
+/** The Stripe page being requested: the portal, or Checkout for one plan's
+ *  price, so only the button the reader pressed shows the wait. */
+type BillingOpening =
+  | { readonly page: 'portal' }
+  | { readonly page: 'checkout'; readonly priceId: string };
+
 export interface BillingViewModel {
   readonly plans: readonly BillingPlan[];
   readonly plansFailed: boolean;
@@ -44,7 +50,7 @@ export interface BillingViewModel {
   readonly confirming: BillingConfirmation | null;
   /** A Stripe page is being requested. */
   readonly busy: boolean;
-  readonly opening: 'checkout' | 'portal' | null;
+  readonly opening: BillingOpening | null;
   readonly browserPage: 'checkout' | 'portal' | null;
   readonly failure: FailureView | null;
   subscribe(priceId: string): void;
@@ -65,6 +71,9 @@ export function useBilling(
   const [slow, setSlow] = useState(false);
   const [browserPage, setBrowserPage] = useState<'checkout' | 'portal' | null>(null);
   const [flow, setFlow] = useState<'checkout' | 'portal' | null>(null);
+  // Asking again aborts the Checkout already in flight, so the price the
+  // latest request named is the one still open.
+  const [checkoutPrice, setCheckoutPrice] = useState<string | null>(null);
   const waiting = confirmingSince !== null && !slow;
 
   const plans = useQuery({ ...billingPlansQuery(port), enabled: signedIn });
@@ -118,7 +127,10 @@ export function useBilling(
     'billingCheckout',
     (priceId: string, signal) => port.startCheckout(priceId, signal),
     {
-      onStart: () => setBrowserPage('checkout'),
+      onStart: (priceId) => {
+        setBrowserPage('checkout');
+        setCheckoutPrice(priceId);
+      },
       onDone: (url) => openPage(url, 'checkout'),
       // A refusal such as an existing subscription changes what the panel
       // should offer, so the rights are read again.
@@ -139,7 +151,12 @@ export function useBilling(
 
   return {
     busy: anyBusy(checkout, portal, change) || Boolean(status.data?.changePending),
-    opening: checkout.busy ? 'checkout' : portal.busy ? 'portal' : null,
+    opening:
+      checkout.busy && checkoutPrice !== null
+        ? { page: 'checkout', priceId: checkoutPrice }
+        : portal.busy
+          ? { page: 'portal' }
+          : null,
     browserPage,
     confirming: flow !== 'checkout' || confirmingSince === null ? null : slow ? 'slow' : 'waiting',
     // Each page names what did not open; a refusal such as an existing

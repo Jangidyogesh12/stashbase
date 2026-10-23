@@ -80,10 +80,19 @@ export interface AntigravityLoginDependencies {
 
 const LOGIN_TIMEOUT_MS = 10 * 60_000;
 
+/** `agy` opens its OAuth page itself from the interactive run and prints no
+ * address StashBase could offer again (on Windows its console is not even
+ * piped), so the only signal is that the run, and with it the browser, has
+ * started. */
+export interface AntigravityLoginOptions {
+  onBrowserSignIn?(): void;
+}
+
 export async function loginToAntigravity(
   executable: string,
   signal: AbortSignal,
   overrides: Partial<AntigravityLoginDependencies> = {},
+  options: AntigravityLoginOptions = {},
 ): Promise<void> {
   const isAuthenticated = overrides.isAuthenticated ?? antigravityIsAuthenticated;
   const pollMs = overrides.pollMs ?? 4_000;
@@ -94,6 +103,7 @@ export async function loginToAntigravity(
   const authenticated = await isAuthenticated(executable, signal);
   signal.throwIfAborted();
   if (authenticated) return;
+  options.onBrowserSignIn?.();
   const child = (overrides.spawnSignIn ?? spawnAntigravitySignIn)(executable);
   let output = '';
   const append = (chunk: Buffer | string) => { output = (output + chunk.toString()).slice(-4000); };
@@ -124,7 +134,7 @@ export async function loginToAntigravity(
         throw new Error(`Antigravity closed before sign-in finished.${detail ? ` ${detail}` : ''}`);
       }
       if (Date.now() >= deadline) {
-        throw new Error('Antigravity sign-in timed out after 10 minutes. Retry to open sign-in again.');
+        throw new Error('Antigravity sign-in timed out after 10 minutes.');
       }
     }
   } catch (error) {

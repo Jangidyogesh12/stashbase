@@ -45,6 +45,7 @@ function fakeDependencies(overrides: Partial<AgentBootstrapDependencies> = {}) {
       await Promise.resolve();
       installed = true;
     },
+    verifyExecutable: async () => {},
     isAuthenticated: () => authenticated,
     login: async () => { authenticated = true; },
     configureMcp: () => { configured += 1; },
@@ -231,7 +232,7 @@ test('a failed native update retries installation instead of silently reconnecti
   }
 });
 
-test('retrying a failed first install reruns verification even when a partial executable remains', async () => {
+test('retrying a failed first install reruns the installer when the partial executable cannot run', async () => {
   let executable: string | null = null;
   let installs = 0;
   let configured = 0;
@@ -242,6 +243,9 @@ test('retrying a failed first install reruns verification even when a partial ex
       executable = '/native/claude';
       if (++installs === 1) throw new Error('Downloaded executable did not pass verification');
     },
+    verifyExecutable: async () => {
+      if (installs === 1) throw new Error('partial copy');
+    },
     configureMcp: () => { configured++; },
   }).dependencies);
   coordinator.begin('claude');
@@ -251,6 +255,29 @@ test('retrying a failed first install reruns verification even when a partial ex
   assert.equal((await coordinator.wait('claude')).phase, 'ready');
   assert.equal(installs, 2);
   assert.equal(configured, 1);
+});
+
+test('retrying a failed install uses an executable that runs instead of downloading again', async () => {
+  let executable: string | null = null;
+  let installs = 0;
+  const verified: string[] = [];
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => executable,
+    resolveNativeExecutable: () => null,
+    installRuntime: async () => {
+      installs++;
+      throw new Error('installation timed out after 8 minutes');
+    },
+    verifyExecutable: async (_id, candidate) => { verified.push(candidate); },
+  }).dependencies);
+  coordinator.begin('codex');
+  assert.equal((await coordinator.wait('codex')).failure?.stage, 'installation');
+  // Installed meanwhile through npm, outside StashBase.
+  executable = '/npm/codex';
+  coordinator.begin('codex');
+  assert.equal((await coordinator.wait('codex')).phase, 'ready');
+  assert.equal(installs, 1);
+  assert.deepEqual(verified, ['/npm/codex']);
 });
 
 test('native installation cannot report success while discovery still selects the npm copy', async () => {
@@ -376,7 +403,8 @@ test('Codex browser login uses the discovered executable and resumes MCP prepara
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
   assert.equal((await prepare(coordinator, 'codex')).failure?.stage, 'authentication');
 
-  assert.equal(coordinator.login('codex').phase, 'authenticating');
+  // StashBase's own check comes first; only the browser step is the reader's.
+  assert.equal(coordinator.login('codex').phase, 'configuring');
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(loginExecutable, '/managed/codex');
   completeLogin();
@@ -403,6 +431,184 @@ test('Codex authentication commands use the selected executable', { skip: proces
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+/** A POSIX stand-in for a CLI whose `login status` reads a marker file and
+ * whose `login` runs the given body. */
+function fakeLoginCli(t: { after(fn: () => void): void }, login: string) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-login-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const executable = path.join(root, 'codex');
+  fs.writeFileSync(executable, [
+    '#!/bin/sh',
+    `if [ "$1 $2" = "login status" ]; then [ -f '${root}/signed-in' ] && exit 0; echo "Not logged in" >&2; exit 1; fi`,
+    `if [ "$1" = "login" ]; then touch '${root}/login-ran'; ${login}; fi`,
+    'exit 9',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  return {
+    executable,
+    signIn: () => fs.writeFileSync(path.join(root, 'signed-in'), ''),
+    loginRan: () => fs.existsSync(path.join(root, 'login-ran')),
+  };
+}
+
+test('sign-in finishes when the CLI reads signed in although its login keeps waiting',
+  { skip: process.platform === 'win32' }, async (t) => {
+    const cli = fakeLoginCli(t, `touch "$(dirname "$0")/signed-in"; sleep 30`);
+    const started = Date.now();
+    await loginToAgent('codex', cli.executable, new AbortController().signal, {}, { pollMs: 20 });
+    assert.ok(cli.loginRan());
+    assert.ok(Date.now() - started < 10_000);
+  });
+
+test('sign-in opens no browser for a CLI that is already signed in, unless the provider refused it',
+  { skip: process.platform === 'win32' }, async (t) => {
+    const cli = fakeLoginCli(t, 'exit 0');
+    cli.signIn();
+    await loginToAgent('codex', cli.executable, new AbortController().signal);
+    assert.equal(cli.loginRan(), false);
+    await loginToAgent('codex', cli.executable, new AbortController().signal, { reauthenticate: true });
+    assert.equal(cli.loginRan(), true);
+  });
+
+test('a timed out sign-in offers the printed page and keeps its output without the attempt state',
+  { skip: process.platform === 'win32' }, async (t) => {
+    const cli = fakeLoginCli(t, `echo 'If your browser did not open, visit: https://auth.example.com/oauth/authorize?state=secret-state'; sleep 30`);
+    const urls: string[] = [];
+    await assert.rejects(
+      loginToAgent('codex', cli.executable, new AbortController().signal, {
+        onSignInUrl: (url) => urls.push(url),
+      }, { pollMs: 20, timeoutMs: 400 }),
+      (error: Error & { stderr?: string }) => {
+        assert.match(error.message, /timed out.*auth\.example\.com/s);
+        assert.match(error.message, /Last output: .*visit: https:\/\/auth\.example\.com\/oauth\/authorize/);
+        assert.doesNotMatch(`${error.message}${error.stderr}`, /secret-state/);
+        return true;
+      },
+    );
+    assert.deepEqual(urls, ['https://auth.example.com/oauth/authorize?state=secret-state']);
+  });
+
+test('a provider refusal makes the next sign-in reauthenticate until the runtime is ready again', async () => {
+  const requests: boolean[] = [];
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => '/managed/codex',
+    login: async (_id, _executable, _signal, options) => { requests.push(options.reauthenticate === true); },
+  }).dependencies);
+  coordinator.requireSignIn('codex', 'Your access token could not be refreshed.');
+  coordinator.login('codex');
+  assert.equal((await coordinator.wait('codex')).phase, 'ready');
+  coordinator.login('codex');
+  await coordinator.wait('codex');
+  assert.deepEqual(requests, [true, false]);
+});
+
+test('the printed sign-in page reaches the status while the browser step runs', async () => {
+  let finish!: () => void;
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => '/managed/codex',
+    login: async (_id, _executable, _signal, options) => {
+      options.onSignInUrl?.('https://auth.example.com/oauth/authorize?state=1');
+      await new Promise<void>((resolve) => { finish = resolve; });
+    },
+  }).dependencies);
+  coordinator.login('codex');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(coordinator.status('codex'), {
+    phase: 'authenticating',
+    message: 'Finish signing in to Codex in your browser.',
+    signInUrl: 'https://auth.example.com/oauth/authorize?state=1',
+  });
+  finish();
+  assert.equal((await coordinator.wait('codex')).phase, 'ready');
+});
+
+test('sign-in asks for the browser only once the runtime opens it', async () => {
+  let open!: () => void;
+  let finish!: () => void;
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => '/managed/codex',
+    login: async (_id, _executable, _signal, options) => {
+      await new Promise<void>((resolve) => { open = resolve; });
+      options.onBrowserSignIn?.();
+      await new Promise<void>((resolve) => { finish = resolve; });
+    },
+  }).dependencies);
+  coordinator.login('codex');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  // The login is still looking for a sign-in already in place: StashBase's
+  // own check, which offers no Stop.
+  assert.deepEqual(coordinator.status('codex'), { phase: 'configuring', message: 'Checking Codex sign-in…' });
+  open();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(coordinator.status('codex'), {
+    phase: 'authenticating',
+    message: 'Finish signing in to Codex in your browser.',
+  });
+  finish();
+  assert.equal((await coordinator.wait('codex')).phase, 'ready');
+});
+
+test('stopping a browser sign-in retires the login and leaves the runtime signed out', async () => {
+  let retired = false;
+  let logins = 0;
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => '/managed/codex',
+    isAuthenticated: () => false,
+    login: async (_id, _executable, signal, options) => {
+      if (++logins > 1) return;
+      options.onBrowserSignIn?.();
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      retired = true;
+      throw new Error('Codex sign-in was cancelled.');
+    },
+  }).dependencies);
+  coordinator.login('codex');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const stopped = await coordinator.stop('codex');
+  assert.equal(retired, true, 'the login process is retired before the stop answers');
+  assert.equal(stopped.phase, 'failed');
+  // Signed out, so the next step is Sign in rather than a failed step's Retry.
+  assert.equal(stopped.failure?.code, 'authentication-required');
+  assert.equal(stopped.failure?.retryAction, 'login');
+  assert.match(stopped.failure?.message ?? '', /Codex sign-in was stopped\.$/);
+  // A new Sign in starts its own attempt instead of joining the stopped one.
+  coordinator.login('codex');
+  assert.equal((await coordinator.wait('codex')).failure?.code, 'authentication-required');
+  assert.equal(logins, 2);
+});
+
+test('a stop that lands in the sign-in check reads as stopped, not as a failed check', async () => {
+  let checking!: () => void;
+  const started = new Promise<void>((resolve) => { checking = resolve; });
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => '/managed/codex',
+    login: async () => undefined,
+    isAuthenticated: async (_id, _executable, signal) => {
+      checking();
+      await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve(), { once: true }));
+      throw new Error('Agent probe was cancelled.');
+    },
+  }).dependencies);
+  coordinator.login('codex');
+  await started;
+  const stopped = await coordinator.stop('codex');
+  assert.equal(stopped.failure?.code, 'authentication-required');
+  assert.match(stopped.failure?.message ?? '', /Codex sign-in was stopped\.$/);
+});
+
+test('stopping leaves a background connection and an idle runtime alone', async () => {
+  let release!: () => void;
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => new Promise<string>((resolve) => { release = () => resolve('/managed/codex'); }),
+  }).dependencies);
+  assert.equal((await coordinator.stop('codex')).phase, 'idle');
+  coordinator.connectIfInstalled('codex');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const stopping = coordinator.stop('codex');
+  release();
+  assert.equal((await stopping).phase, 'ready');
 });
 
 test('startup connects MCP for discovered runtimes without installing missing ones', async () => {
@@ -568,7 +774,7 @@ test('the signed-out simulation never arms Claude and is not consumed by login v
     },
   });
   const coordinator = new AgentBootstrapCoordinator(codex.dependencies);
-  assert.equal(coordinator.login('codex').phase, 'authenticating');
+  assert.equal(coordinator.login('codex').phase, 'configuring');
   assert.equal((await coordinator.wait('codex')).phase, 'ready');
   assert.equal(consumed, 0);
 });
@@ -844,7 +1050,7 @@ test('Windows PowerShell architecture failures explain the PowerShell 7 recovery
           throw new Error("The property 'OSArchitecture' cannot be found on this object.");
         },
       }),
-      /PowerShell 7.*pwsh\.exe.*retry/i,
+      /PowerShell 7 \(pwsh\.exe\)\.$/,
     );
   } finally {
     mock.restoreAll();

@@ -24,23 +24,26 @@ describe('describeRuntime', () => {
       description: 'Checking…',
       stage: null,
       action: null,
+      working: null,
     });
   });
 
-  it('offers Install for a not-yet-installed idle runtime, and withholds it while busy', () => {
+  it('offers Install for a not-yet-installed idle runtime, and names it as the work while busy', () => {
     expect(describeRuntime(codex({ installed: false }), false)).toEqual({
       description: 'Not installed',
       stage: 'discover',
       action: { kind: 'install', label: 'Install' },
+      working: null,
     });
     expect(describeRuntime(codex({ installed: false }), true)).toEqual({
       description: 'Not installed',
       stage: 'discover',
       action: null,
+      working: { label: 'Install', stoppable: false },
     });
   });
 
-  it.each(['install', 'authenticate', 'configure'] as const)(
+  it.each(['install', 'configure'] as const)(
     'reads a running %s preparation as its own note with no action',
     (stage) => {
       const display = describeRuntime(
@@ -54,9 +57,32 @@ describe('describeRuntime', () => {
         description: 'Setting things up…',
         stage,
         action: null,
+        working: null,
       });
     },
   );
+
+  it('reads a running sign-in as a wait the reader can stop, under Sign in', () => {
+    const signingIn = codex({
+      installed: true,
+      preparation: {
+        kind: 'running',
+        note: 'Finish signing in to Codex in your browser.',
+        stage: 'authenticate',
+      },
+    });
+    expect(describeRuntime(signingIn, false)).toEqual({
+      description: 'Finish signing in to Codex in your browser.',
+      stage: 'authenticate',
+      action: null,
+      working: { label: 'Sign in', stoppable: true },
+    });
+    // A stop already on its way is not offered twice.
+    expect(describeRuntime(signingIn, true).working).toEqual({
+      label: 'Sign in',
+      stoppable: false,
+    });
+  });
 
   it('leaves an account-required failure to the Account row, whatever its stage', () => {
     const display = describeRuntime(
@@ -73,7 +99,12 @@ describe('describeRuntime', () => {
       }),
       false,
     );
-    expect(display).toEqual({ description: 'Needs sign-in', stage: 'install', action: null });
+    expect(display).toEqual({
+      description: 'Needs sign-in',
+      stage: 'install',
+      action: null,
+      working: null,
+    });
   });
 
   it('offers sign-in for an authenticate-stage failure without an account-required refusal', () => {
@@ -115,7 +146,7 @@ describe('describeRuntime', () => {
     expect(display.description).toBe('Signed in, but the provider refused this account.');
   });
 
-  it('labels a configure-stage failure as a connection retry', () => {
+  it('labels a configure-stage failure as a plain retry too', () => {
     const display = describeRuntime(
       codex({
         installed: true,
@@ -126,7 +157,7 @@ describe('describeRuntime', () => {
       }),
       false,
     );
-    expect(display.action).toEqual({ kind: 'retry', label: 'Retry connection' });
+    expect(display.action).toEqual({ kind: 'retry', label: 'Retry' });
     expect(display.stage).toBe('configure');
   });
 
@@ -169,6 +200,7 @@ describe('describeRuntime', () => {
       description: 'Installed',
       stage: 'ready',
       action: null,
+      working: null,
     });
   });
 
@@ -190,6 +222,7 @@ describe('describeRuntime', () => {
       description: 'Ready · 2.1.220 · 2.1.302 available',
       stage: 'ready',
       action: { kind: 'update', label: 'Update' },
+      working: null,
     });
   });
 
@@ -211,6 +244,7 @@ describe('describeRuntime', () => {
       description: 'Opus 5.5 needs a newer Claude · 2.1.276',
       stage: 'ready',
       action: { kind: 'update', label: 'Update' },
+      working: null,
     });
   });
 
@@ -241,6 +275,7 @@ describe('describeRuntime', () => {
         description: label,
         stage: 'ready',
         action: null,
+        working: null,
       });
     },
   );

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { AGENT_ICONS } from '@/shared/brand/agent-icons';
 import type { FailureView } from '@/shared/domain/feature-error';
 import { FailureNotice } from '@/shared/ui/failure-notice';
+import { SignInPageLink } from '@/shared/ui/sign-in-page-link';
 
 export interface RuntimeRowProps {
   runtime: AgentRuntime;
@@ -20,19 +21,34 @@ export interface RuntimeRowProps {
    *  panel owns. */
   failure: FailureView | null;
   onAction: (action: AgentRuntimeAction, runtime: AgentRuntime) => void;
+  /** Opens the provider's sign-in page in the reader's browser. */
+  onOpenSignIn: (url: string) => void;
+  /** Stops waiting on this runtime's browser sign-in. */
+  onStop: (runtime: AgentRuntime) => void;
 }
 
 /** One agent runtime: what it is, where its preparation stands, and the single
- *  action that applies right now. */
-export function RuntimeRow({ runtime, busy, failure, onAction }: RuntimeRowProps) {
+ *  action that applies right now. Work that is running keeps the name of the
+ *  action that started it beside its spinner; what it waits for is the detail
+ *  line, never the button. */
+export function RuntimeRow({
+  runtime,
+  busy,
+  failure,
+  onAction,
+  onOpenSignIn,
+  onStop,
+}: RuntimeRowProps) {
   const display = describeRuntime(runtime, busy);
   const shape = useShape();
   const Icon = AGENT_ICONS[runtime.id];
-  const { action, description } = display;
+  const { action, description, working } = display;
   /** Nothing here is usable until preparation reaches `ready`. An unusable row
    *  recedes; it does not turn red. A failure the reader can act on says so in
    *  its own sentence and offers the action that clears it. */
   const ready = display.stage === 'ready';
+  const signInUrl =
+    runtime.preparation.kind === 'running' ? runtime.preparation.signInUrl : undefined;
 
   return (
     <SettingsRow
@@ -52,22 +68,25 @@ export function RuntimeRow({ runtime, busy, failure, onAction }: RuntimeRowProps
       title={runtime.label}
       titleTone={ready ? 'default' : 'muted'}
       trail={
-        busy || action ? (
-          <>
-            {busy && (
-              <Button disabled loading size="compact" variant="tertiary">
-                Preparing…
+        working ? (
+          <div className="flex items-center gap-2">
+            <Button loading size="compact" variant="tertiary">
+              {working.label}
+            </Button>
+            {working.stoppable && (
+              <Button onClick={() => onStop(runtime)} size="compact" variant="ghost">
+                Stop waiting
               </Button>
             )}
-            {!busy && action && (
-              <Button onClick={() => onAction(action, runtime)} size="compact" variant="tertiary">
-                {action.label}
-              </Button>
-            )}
-          </>
+          </div>
+        ) : action ? (
+          <Button onClick={() => onAction(action, runtime)} size="compact" variant="tertiary">
+            {action.label}
+          </Button>
         ) : null
       }
     >
+      {signInUrl && <SignInPageLink className="mt-1" url={signInUrl} onOpen={onOpenSignIn} />}
       {failure && (
         <FailureNotice className="mt-1 wrap-anywhere whitespace-pre-wrap" failure={failure} />
       )}

@@ -86,9 +86,18 @@ describe('AgentRuntimesPanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
     expect(rendered.onOpenExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
-    expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
+    // Leaving the dialog leaves the browser wait running, said once, on the
+    // Account row: Sign in keeps its name on the spinner and the Default row
+    // does not spin a second time.
+    await user.click(await screen.findByRole('button', { name: 'Not now' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText('Finish signing in to StashBase in your browser.')).not.toBeNull();
+    const waiting = screen.getAllByRole<HTMLButtonElement>('button', { name: 'Sign in' });
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]?.disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Open sign-in page' })).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Stop waiting' }));
-    expect(screen.queryByRole('button', { name: 'Waiting for browser…' })).toBeNull();
+    expect(screen.queryByText('Finish signing in to StashBase in your browser.')).toBeNull();
     await user.click(screen.getAllByRole('button', { name: 'Sign in' })[0] as HTMLElement);
     await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledTimes(2));
@@ -237,7 +246,7 @@ describe('AgentRuntimesPanel', () => {
       expect(
         await screen.findByText(
           cancelAtPeriodEnd
-            ? /^Plus · Renewal canceled. Access until/
+            ? /^Plus · Renewal cancelled. Access until/
             : /^Plus · Free trial until.*Then \$5 a month/,
         ),
       ).not.toBeNull();

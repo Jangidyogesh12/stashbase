@@ -7,7 +7,7 @@
  * picker offers, so the reader chooses a model and a level the way the other
  * runtimes present them.
  */
-import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
+import { agentCliEnv, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { probeAgentCommand } from './agent-probe.ts';
 import { nativeAgentCliSpec } from './native-agents.ts';
 import type { AgentModel } from '../shared/agent-protocol.ts';
@@ -121,7 +121,6 @@ export async function readAntigravityModelCatalog(timeoutMs = 60_000): Promise<{
   if (!executable) throw new Error('Antigravity CLI not found.');
   const run = (args: string[]) => probeAgentCommand(executable, args, {
     timeoutMs,
-    shell: agentCliNeedsShell(executable),
     env: agentCliEnv({}, [commandDir(executable)]),
   });
   // Each `agy` run starts its own backend, so the two reads go side by side.

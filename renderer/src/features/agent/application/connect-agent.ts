@@ -1,4 +1,9 @@
-import type { Agent, AgentCatalog, AgentSetupFailure } from '@/features/agent/domain/agent-catalog';
+import type {
+  Agent,
+  AgentCatalog,
+  AgentPreparation,
+  AgentSetupFailure,
+} from '@/features/agent/domain/agent-catalog';
 import type { AgentId } from '@/features/agent/domain/session';
 import { FeatureError } from '@/shared/domain/feature-error';
 
@@ -24,16 +29,19 @@ function pause(signal: AbortSignal): Promise<void> {
 const PREPARATION_LIMIT_MS = 20 * 60_000;
 
 /** The runtime's entry once the service has stopped preparing it: the
- *  acknowledgement a setup route answers with is followed until it settles. */
+ *  acknowledgement a setup route answers with is followed until it settles,
+ *  and each step it reaches on the way is reported. */
 async function settledAgent(
   port: AgentCatalogPort,
   agent: AgentId,
   catalog: AgentCatalog,
   signal: AbortSignal,
   wait: typeof pause,
+  onStep: (preparation: AgentPreparation) => void = () => undefined,
 ): Promise<Agent | undefined> {
   let entry = catalog.agents.find((candidate) => candidate.id === agent);
-  while (entry?.preparing) {
+  while (entry?.preparation) {
+    onStep(entry.preparation);
     await wait(signal);
     signal.throwIfAborted();
     entry = (await port.listAgents(signal)).agents.find((candidate) => candidate.id === agent);
@@ -47,11 +55,23 @@ export async function connectAgent(
   agent: AgentId,
   known: Agent | undefined,
   signal: AbortSignal,
-  wait = pause,
+  {
+    onStep,
+    wait = pause,
+  }: { onStep?: (preparation: AgentPreparation) => void; wait?: typeof pause } = {},
 ): Promise<void> {
   const bounded = AbortSignal.any([signal, AbortSignal.timeout(PREPARATION_LIMIT_MS)]);
-  const settled = (catalog: AgentCatalog) => settledAgent(port, agent, catalog, bounded, wait);
-  const loginFirst = known?.needsSignIn;
+  const settled = (catalog: AgentCatalog) =>
+    settledAgent(port, agent, catalog, bounded, wait, onStep);
+  let current = known;
+  if (current?.preparation) {
+    // A preparation already running, such as a sign-in started in Settings or
+    // one left going behind Not now, is followed: the service refuses a second.
+    current = await settled(await port.listAgents(bounded));
+    bounded.throwIfAborted();
+    if (current?.ready) return;
+  }
+  const loginFirst = current?.needsSignIn;
   let entry = await settled(
     await port.prepareAgent(agent, loginFirst ? 'login' : 'bootstrap', bounded),
   );

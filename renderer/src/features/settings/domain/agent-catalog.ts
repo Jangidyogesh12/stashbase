@@ -63,6 +63,8 @@ export type AgentPreparation =
       readonly stage: AgentPreparationStage;
       /** What the service is narrating, or null when it narrates nothing. */
       readonly note: string | null;
+      /** While signing in: the provider page the runtime's login printed. */
+      readonly signInUrl?: string;
     }
   | { readonly kind: 'ready' }
   | { readonly kind: 'failed'; readonly failure: AgentPreparationFailure };

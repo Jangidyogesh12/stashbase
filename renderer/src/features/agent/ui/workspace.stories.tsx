@@ -9,7 +9,11 @@ import type {
   AgentToolsPort,
 } from '@/features/agent/application/ports';
 import { createAgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
-import type { Agent, AgentSetupFailure } from '@/features/agent/domain/agent-catalog';
+import type {
+  Agent,
+  AgentPreparation,
+  AgentSetupFailure,
+} from '@/features/agent/domain/agent-catalog';
 import { cn } from '@/lib/utils';
 
 import ManagedAgentWorkspace from './workspace';
@@ -156,7 +160,7 @@ const SKILLS = [
  *  conversation has to wait for the setup gate to lift. Without it the canvas
  *  is scored mid-check, and the composer's controls are never looked at. */
 const readyWorkspace = async () => {
-  await waitFor(() => expect(screen.queryByText('Checking runtimes…')).toBeNull());
+  await waitFor(() => expect(screen.queryByText('Checking agents…')).toBeNull());
   await screen.findByRole('button', { name: /^Provider: / });
 };
 
@@ -165,6 +169,7 @@ function WorkspacePreview({
   docked = false,
   empty = false,
   interrupted = false,
+  preparation,
   ready = true,
   setupFailure,
   skills = false,
@@ -173,6 +178,8 @@ function WorkspacePreview({
   docked?: boolean;
   empty?: boolean;
   interrupted?: boolean;
+  /** The step Codex's preparation stays on once the reader connects it. */
+  preparation?: AgentPreparation;
   /** False draws the window a reader meets before any runtime is set up. */
   ready?: boolean;
   setupFailure?: AgentSetupFailure;
@@ -339,6 +346,9 @@ function WorkspacePreview({
               listAgents: async () => ({ agents: ready ? agents : pendingAgents }),
               prepareAgent: async (id) => {
                 const selected = agents.find((agent) => agent.id === id);
+                if (preparation && selected) {
+                  return { agents: [{ ...selected, ready: false, preparation }] };
+                }
                 return {
                   agents:
                     setupFailure && selected
@@ -415,17 +425,38 @@ export const Docked: Story = {
 };
 
 /** Access is offered only after an explicit Send, while keeping the draft. It
- *  asks about the Agent this chat is on, which here is Codex. */
+ *  asks about the Agent this chat is on, which here is Codex, whose own
+ *  sign-in is all it is missing. */
 async function requestSetup() {
   const input = await screen.findByRole('textbox', { name: 'Message' });
   await userEvent.type(input, 'Help me write');
   await userEvent.click(screen.getByRole('button', { name: 'Send' }));
-  await screen.findByRole('dialog', { name: 'Connect Codex' });
+  await screen.findByRole('dialog', { name: 'Sign in to use Codex' });
 }
 
 export const SetupOffer: Story = {
   args: { empty: true, ready: false },
   play: requestSetup,
+};
+
+/** Connecting waits on the provider's sign-in in the browser; the panel names
+ *  that step, how long it has run, and the page for a browser that did not
+ *  open. */
+export const SetupProgress: Story = {
+  args: {
+    empty: true,
+    preparation: {
+      note: 'Finish signing in to Codex in your browser.',
+      signInUrl: 'https://auth.openai.com/oauth/authorize',
+      step: 'sign-in',
+    },
+    ready: false,
+  },
+  play: async () => {
+    await requestSetup();
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await screen.findByRole('button', { name: 'Open sign-in page' });
+  },
 };
 
 export const SetupFailure: Story = {
@@ -440,7 +471,7 @@ export const SetupFailure: Story = {
   },
   play: async () => {
     await requestSetup();
-    await userEvent.click(screen.getByRole('button', { name: 'Connect Codex' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     await screen.findByText(/Invalid TOML at line 12/);
   },
 };

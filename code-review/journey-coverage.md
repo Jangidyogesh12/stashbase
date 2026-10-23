@@ -1531,6 +1531,40 @@ executable: its login failure displayed the step, auth host, and ECONNREFUSED
 in the same prompt; Not now preserved the draft. This proves error propagation
 and UI recovery, not the original reporter's underlying Codex failure.
 
+**Native connect progress and sign-in recovery (2026-10-23):** reports from
+2026-10-16 to 10-22 showed a first-send prompt that said only Connecting for
+minutes, Windows Codex npm shims under a profile path with a space failing
+their sign-in check, Claude sign-ins waiting out ten minutes on Windows, and
+runtimes that read ready only after restart. `server/agent-cli-launch.ts` now
+starts the agent CLIs (Antigravity's sign-in aside); `agent-cli.test.ts` pins the cmd.exe command line for a
+spaced `codex.cmd` path and double-escaped metacharacters. `loginToAgent`
+skips the browser for a signed-in runtime, polls status beside the login and
+retires a login that keeps waiting, captures the printed sign-in page, and
+keeps query-stripped output on timeout; a refusal from a running conversation
+makes the next sign-in wait for the login itself. A failed first install
+reuses an executable that passes `--version`. Installer tests drive POSIX fake
+CLIs through each login path and the coordinator through refusal and retry.
+The renderer maps the running phase to `Agent.preparation`; `connectAgent`
+reports each polled step, and `access-dialog.test.tsx` mounts the workspace
+through a sign-in step to the resumed send. Settings rows offer the same page.
+The `SetupProgress` Story covers composition. A built macOS Electron pass with
+an isolated home and a fake `codex` whose login signs in after eight seconds
+and never exits showed Checking, then the sign-in step with elapsed time and
+the page link within one second, closed at nine seconds with Codex ready, retired
+the login process, and continued the retained send. Not proven: the escaping on
+a real Windows cmd.exe, real Codex/Claude login output and callbacks, and a
+packaged pass.
+Sign-in reports `authenticating` only for the browser step; StashBase's own
+checks before it are `configuring`, so Stop is offered only while the reader
+is waited on, and a stop that lands in a check reads as stopped. A send while a
+sign-in already runs follows it (`connectAgent`) instead of being refused, and
+Stop waiting keeps the answer busy until the service has retired the login
+(`connect-agent.test.ts`, `access-dialog.test.tsx`, installer tests).
+**Gap:** signing in again after a refused credential disables status polling
+and the after-exit check, so a CLI that keeps waiting after a successful
+browser sign-in still waits out the 10-minute limit. Antigravity's sign-in
+launch does not yet go through `agent-cli-launch.ts`.
+
 **Default Auto and connection latency (2026-10-13):** Default now exposes all
 four access modes. `default-agent-permissions.ts` owns the bounded hosted review
 for Auto; `opencode-agent.test.ts` covers exact-action grants, manual fallback

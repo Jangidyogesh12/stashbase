@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vite-plus/test';
 
@@ -87,7 +87,7 @@ it('opens Google only after the email proof and refreshes the connected method a
 });
 
 it.each(['false', 'reject'])(
-  'recovers when opening the linking browser returns %s',
+  'keeps the Google page to open again when the linking browser returns %s',
   async (failure) => {
     const port = accountPort(SIGNED_IN_ACCOUNT, {
       methods: vi.fn(async () => ({ email: 'ada@example.com', google: false })),
@@ -100,8 +100,32 @@ it.each(['false', 'reject'])(
     await user.click(screen.getByRole('button', { name: 'Send email code' }));
     await user.type(await screen.findByRole('textbox', { name: 'Six-digit code' }), '123456');
     await user.click(screen.getByRole('button', { name: 'Verify and connect Google' }));
-    await screen.findByText('Could not open your browser. Request a new email code and try again.');
-    expect(port.linkStatus).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Close' }).hasAttribute('disabled')).toBe(false);
+    await screen.findByText('Finish signing in to StashBase in your browser.');
+    await waitFor(() => expect(port.linkStatus).toHaveBeenCalled());
+    open.mockResolvedValue(true);
+    await user.click(screen.getByRole('button', { name: 'Open sign-in page' }));
+    expect(open).toHaveBeenLastCalledWith('https://accounts.example/link');
+    // The code is spent, so stopping starts over from a new one, once the
+    // resend cooldown allows.
+    await user.click(screen.getByRole('button', { name: 'Stop waiting' }));
+    expect(await screen.findByRole('button', { name: /^Send code in \d+s$/ })).not.toBeNull();
+    expect(screen.queryByText('Finish signing in to StashBase in your browser.')).toBeNull();
   },
 );
+
+it('opens on the email field and keeps the Google sign-in wait in the dialog', async () => {
+  const { user, open } = mount();
+  await user.click(screen.getByText('Open sign-in'));
+  const email = await screen.findByRole('textbox', { name: 'Email' });
+  await waitFor(() => expect(document.activeElement).toBe(email));
+  await user.click(screen.getByRole('button', { name: 'Continue with Google' }));
+  await waitFor(() => expect(open).toHaveBeenCalledWith('https://accounts.example/sign-in'));
+  const dialog = within(screen.getByRole('dialog', { name: 'Sign in to StashBase' }));
+  expect(dialog.getByRole('status').textContent).toBe(
+    'Finish signing in to StashBase in your browser.',
+  );
+  expect(dialog.getByRole('button', { name: 'Open sign-in page' })).not.toBeNull();
+  await user.click(dialog.getByRole('button', { name: 'Stop waiting' }));
+  expect(await dialog.findByRole('textbox', { name: 'Email' })).not.toBeNull();
+  expect(dialog.queryByRole('button', { name: 'Stop waiting' })).toBeNull();
+});

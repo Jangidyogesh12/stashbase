@@ -16,7 +16,7 @@ export function SubscriptionChanges({ billing }: { billing: BillingViewModel }) 
       'Switch to Plus at the next renewal? Keep Pro and its remaining credits until then. There is no refund or credit for this period.',
     keep: 'Withdraw the scheduled downgrade and keep your current plan renewing at its listed price?',
     cancel:
-      'Cancel automatic renewal? Keep your current allowance until this period ends. Any scheduled downgrade will be removed.',
+      'Cancel automatic renewal? Keep your current credits until this period ends. Any scheduled downgrade will be removed.',
     resume: 'Resume automatic renewal of your current plan at its listed price?',
   };
   return (
@@ -94,7 +94,7 @@ export function SubscriptionChanges({ billing }: { billing: BillingViewModel }) 
       <p className="text-caption text-muted-foreground">
         Paid upgrades add a proportional share of the extra plan credits based on your payment and
         keep your current usage. A trial upgrade ends the trial and starts a paid Pro month with its
-        full allowance.
+        full credits.
       </p>
     </div>
   );

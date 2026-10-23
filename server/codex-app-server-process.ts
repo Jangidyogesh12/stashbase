@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   agentCliEnv,
-  agentCliNeedsShell,
   commandDir,
   resolveAgentCli,
 } from './agent-cli.ts';
+import { agentCliLaunch } from './agent-cli-launch.ts';
 import { ownAgentProcess, type AgentProcessContext } from './agent-process.ts';
 import { logger } from './log.ts';
 
@@ -32,13 +32,14 @@ export function spawnCodexAppServerProcess(
     });
   }
   log.info(`spawning Codex app-server via ${command}`);
-  return ownAgentProcess(spawn(command, ['app-server', '--listen', 'stdio://'], {
+  const launch = agentCliLaunch(command, ['app-server', '--listen', 'stdio://']);
+  return ownAgentProcess(spawn(launch.command, launch.args, {
     cwd,
     detached: process.platform !== 'win32',
     windowsHide: true,
     env: agentCliEnv(extraEnv, [commandDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: agentCliNeedsShell(command),
+    windowsVerbatimArguments: launch.windowsVerbatimArguments,
   }), { runtime: 'codex', ...context });
 }
 

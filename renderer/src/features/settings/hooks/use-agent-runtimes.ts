@@ -34,7 +34,7 @@ import { useWindowFocus } from '@/shared/runtime/use-window-focus';
 
 /** The commands a reader can aim at one runtime. Each opens a lane of its own
  *  per agent id, so two rows never share an abort. */
-type RuntimeCommand = 'install' | 'login' | 'update';
+type RuntimeCommand = 'install' | 'login' | 'stop' | 'update';
 
 /** One command in flight, or one that refused, for a single runtime. */
 interface RuntimeCommandState {
@@ -76,6 +76,9 @@ export interface AgentRuntimesViewModel {
   failure(id: AgentId): FailureView | null;
   install(id: AgentId): void;
   login(id: AgentId): void;
+  /** Stops waiting on a browser sign-in; the service retires the runtime's
+   *  login and leaves it signed out, so Sign in is offered again. */
+  stop(id: AgentId): void;
   /** Updates through the provider's official native installer. */
   update(id: AgentId): void;
   refreshAllowance(): void;
@@ -188,6 +191,7 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
     login: (id) => void run(id, 'login', (signal) => port.prepareAgent(id, 'login', signal)),
     refreshAllowance: () => void allowance.refetch(),
     refreshCatalog: () => void catalog.refetch(),
+    stop: (id) => void run(id, 'stop', (signal) => port.prepareAgent(id, 'stop', signal)),
     update: (id) => void run(id, 'update', (signal) => port.prepareAgent(id, 'update', signal)),
     updateDebug: (patch) => updateDebug.run(patch),
   };

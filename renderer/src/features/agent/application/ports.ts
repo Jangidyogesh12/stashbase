@@ -104,9 +104,11 @@ export interface AgentPersonaPort {
 
 export interface AgentCatalogPort {
   listAgents(signal: AbortSignal): Promise<AgentCatalog>;
+  /** Starts a preparation step, or `stop`s waiting on one the reader started,
+   *  such as a browser sign-in; the answer is the catalog that follows. */
   prepareAgent(
     id: AgentId,
-    action: 'bootstrap' | 'login' | 'update',
+    action: 'bootstrap' | 'login' | 'stop' | 'update',
     signal: AbortSignal,
   ): Promise<AgentCatalog>;
 }

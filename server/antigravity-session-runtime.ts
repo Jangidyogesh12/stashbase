@@ -34,7 +34,8 @@ import {
   type AgentServerEvent,
   type AgentSessionTermination,
 } from './agent-contract.ts';
-import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
+import { agentCliEnv, commandDir, resolveAgentCli } from './agent-cli.ts';
+import { agentCliLaunch } from './agent-cli-launch.ts';
 import { ensureAgentModelCatalog, recallAgentModels, rememberAgentDefaultModel } from './agent-model-catalog.ts';
 import {
   ANTIGRAVITY_ACCESS_MODES,
@@ -114,13 +115,14 @@ function spawnAntigravityProcess(cwd: string, args: string[], env: NodeJS.Proces
     });
   }
   log.info(`spawning Antigravity via ${command}`);
-  return ownAgentProcess(spawn(command, args, {
+  const launch = agentCliLaunch(command, args);
+  return ownAgentProcess(spawn(launch.command, launch.args, {
     cwd,
     detached: process.platform !== 'win32',
     windowsHide: true,
     env: agentCliEnv(env, [commandDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: agentCliNeedsShell(command),
+    windowsVerbatimArguments: launch.windowsVerbatimArguments,
   }), { runtime: 'antigravity', purpose: 'chat' });
 }
 

@@ -48,8 +48,8 @@ Settings owns lasting preferences and connection configuration:
   Custom colors, custom CSS, imported editor themes, and per-project
   appearance are out of scope.
   Notifications has a persisted "Enable desktop notifications" switch
-  shared across desktop windows, enabled by default. Separate "Needs confirmation",
-  "Task completed" and "Task failed" switches also default on. The master switch
+  shared across desktop windows, enabled by default. Separate "Waiting for approval",
+  "Chat finished" and "Chat did not finish" switches also default on. The master switch
   preserves these choices when turned off. Changing one category preserves other
   windows' category changes. Notifications cover pending agent approvals/questions
   and submitted task outcomes while the app is in the background; user-requested
@@ -69,10 +69,10 @@ Settings owns lasting preferences and connection configuration:
   action, a Running section and Quit. Running shows only sessions with work still
   in progress, including startup, pending confirmation and stopping. Completed,
   failed and stopped work leaves the list. Rows show conversation titles; duplicate
-  titles include the project. Selecting a session opens its window and chat;
-  a pending confirmation receives focus but is never approved. Counts live in
+  titles include the project. Selecting a chat opens its window and chat;
+  a pending approval receives focus but is never approved. Counts live in
   the tray tooltip, keeping the menu quiet. Empty sections are omitted; without
-  work the menu says No running sessions. Notification opt-out does not hide work.
+  work the menu says No running chats. Notification opt-out does not hide work.
   The menu does not change the platform's existing last-window-close behavior.
   Upcoming scheduled tasks belong in a separate Upcoming section, ordered by
   next execution time and labelled with that time. This is an agreed presentation
@@ -94,10 +94,17 @@ Settings owns lasting preferences and connection configuration:
   Explicit executable overrides remain authoritative; an override outside the
   native installation must be removed before updating through StashBase.
   Each native agent checks its own sign-in status before readiness and offers
-  its provider's browser sign-in when needed. Antigravity has no separate
+  its provider's browser sign-in when needed. An agent already signed in opens
+  no browser, and sign-in completes as soon as the agent reports a signed-in
+  account, even if its login command keeps waiting. The reader is asked for the
+  browser only once the agent opens it; until then the row says StashBase is
+  checking the agent's sign-in. While the browser step runs, its row offers the
+  sign-in page the agent printed and Stop waiting, which ends the agent's login
+  and leaves it signed out, offering Sign in again. Antigravity has no separate
   sign-in command: its sign-in opens the browser from a terminal session
   StashBase starts, a pseudo-terminal on macOS and Linux and a console window on
-  Windows, and closes it once Antigravity reports a signed-in account.
+  Windows, and closes it once Antigravity reports a signed-in account. It prints
+  no sign-in page, so its wait offers none.
   A signed-in account the provider refuses, for example outside its available
   regions, reads as Account not accepted with the provider's own sentence. It
   offers a recheck, not another sign-in. An expired sign-in reported by
@@ -130,6 +137,17 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
 - One browser sign-in wait serves each window's surfaces and survives closing
   Settings. Cancelling the local wait does not revoke browser authorization;
   new attempts and sign-out retire prior local continuations across windows.
+- Every browser wait, for the account, connecting Google, or a native agent,
+  reads "Finish signing in to {Name} in your browser.", where {Name} is the
+  agent or StashBase. It offers the page it opened again, for a browser that
+  did not open, and one Stop waiting. A browser that does not open never
+  leaves a wait without a way on, and it does not spend a Google connection's
+  email code.
+- The account's sign-in dialog stays open through its own browser wait.
+  Leaving it leaves the wait running for the window, where the sign-in banner
+  and Settings show it; opening sign-in again returns to the dialog on that
+  wait. A first send waiting on the account is let go when the reader leaves
+  the dialog, as [First Send](../journeys/chat.md#first-send) describes.
 - Network/provider failure preserves credentials. Clear a session only on explicit
   sign-out or confirmed invalidation; repair does not implicitly send or replay work.
 - Account sign-in offers Google or a six-digit email code through Better Auth.
@@ -162,8 +180,11 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   runtime, and the refused request is sent again. Settings offers the same
   update without a conversation. A failed installation or update retries that
   operation; reconnecting an existing copy alone does not count as an update.
+  Retrying a failed first installation uses a copy that now runs, including
+  one the user installed another way, instead of downloading again.
   Identical setup requests share progress. A different request during setup is
-  explicitly refused with the running operation and retry guidance. Downloads,
+  explicitly refused, naming the running operation. Service sentences state the
+  cause only; the surface showing them offers Retry. Downloads,
   installation, and sign-in have bounded waits; timeout releases their process
   ownership before retry becomes available.
 - A persona applies from its Chat's next message; a running turn keeps its

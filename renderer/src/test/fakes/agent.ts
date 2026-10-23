@@ -229,5 +229,5 @@ export function pendingAgentContextPort(): AgentContextPort {
  *  a runtime waits for the setup gate to lift rather than for the heading:
  *  the heading is drawn either way now. */
 export async function agentGateLifted(): Promise<void> {
-  await waitFor(() => expect(screen.queryByText('Checking runtimes…')).toBeNull());
+  await waitFor(() => expect(screen.queryByText('Checking agents…')).toBeNull());
 }

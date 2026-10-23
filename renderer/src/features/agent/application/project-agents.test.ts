@@ -237,20 +237,20 @@ describe('project Agent preferences', () => {
     const port = agentCatalogPort([], {
       prepareAgent: vi
         .fn()
-        .mockResolvedValueOnce({ agents: [{ ...CODEX_AGENT, ready: false, preparing: true }] })
-        .mockResolvedValueOnce({ agents: [{ ...CODEX_AGENT, ready: false, preparing: true }] }),
+        .mockResolvedValueOnce({
+          agents: [{ ...CODEX_AGENT, ready: false, preparation: { step: 'install' } }],
+        })
+        .mockResolvedValueOnce({
+          agents: [{ ...CODEX_AGENT, ready: false, preparation: { step: 'install' } }],
+        }),
       listAgents: vi
         .fn()
         .mockResolvedValueOnce({ agents: [{ ...CODEX_AGENT, ready: false, needsSignIn: true }] })
         .mockResolvedValueOnce({ agents: [CODEX_AGENT] }),
     });
-    await connectAgent(
-      port,
-      'codex',
-      undefined,
-      new AbortController().signal,
-      async () => undefined,
-    );
+    await connectAgent(port, 'codex', undefined, new AbortController().signal, {
+      wait: async () => undefined,
+    });
     expect(vi.mocked(port.prepareAgent).mock.calls.map((call) => call[1])).toEqual([
       'bootstrap',
       'login',

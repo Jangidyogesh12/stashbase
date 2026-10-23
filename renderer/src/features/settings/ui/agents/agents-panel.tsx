@@ -17,6 +17,7 @@ import {
   SettingsRow,
 } from '@/features/settings/ui/rows';
 import { FailureNotice } from '@/shared/ui/failure-notice';
+import { SignInPageLink } from '@/shared/ui/sign-in-page-link';
 
 import { AllowanceRow } from './allowance-row';
 import { RuntimeRow } from './runtime-row';
@@ -26,6 +27,9 @@ export interface AgentRuntimesPanelProps {
   agentRuntimeApi: AgentRuntimePort;
 }
 
+/** The account the Default Agent runs on. A browser sign-in that waits keeps
+ *  Sign in's name on its spinner and says what it waits for in the detail
+ *  line, with the page again and Stop waiting, as every browser wait does. */
 function AccountRow({ account }: { account: AccountViewModel }) {
   const signedIn = account.account?.signedIn ?? false;
   return (
@@ -40,7 +44,9 @@ function AccountRow({ account }: { account: AccountViewModel }) {
             ? [account.account.displayName, account.account.email]
                 .filter((part): part is string => part !== null)
                 .join(' · ') || accountLabel(account.account)
-            : 'Sign in for free agent credits every month.'
+            : account.signInPending
+              ? 'Finish signing in to StashBase in your browser.'
+              : 'Sign in for free agent credits every month.'
       }
       title="Account"
       trail={
@@ -51,7 +57,7 @@ function AccountRow({ account }: { account: AccountViewModel }) {
             size="compact"
             variant="tertiary"
           >
-            Retry account
+            Retry
           </Button>
         ) : signedIn ? (
           <div className="flex items-center gap-2">
@@ -81,7 +87,7 @@ function AccountRow({ account }: { account: AccountViewModel }) {
               size="compact"
               variant="tertiary"
             >
-              {account.signInPending ? 'Waiting for browser…' : 'Sign in'}
+              Sign in
             </Button>
             {account.canStopWaiting && (
               <Button onClick={account.stopWaiting} size="compact" variant="ghost">
@@ -92,6 +98,13 @@ function AccountRow({ account }: { account: AccountViewModel }) {
         )
       }
     >
+      {!signedIn && account.signInUrl && (
+        <SignInPageLink
+          className="mt-1"
+          url={account.signInUrl}
+          onOpen={(url) => void account.openExternal(url)}
+        />
+      )}
       {account.failure && <FailureNotice className="mt-1" failure={account.failure} />}
     </SettingsRow>
   );
@@ -108,6 +121,8 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
     else if (action.kind === 'update') runtimes.update(runtime.id);
     else runtimes.install(runtime.id);
   };
+  const onStop = (runtime: AgentRuntime) => runtimes.stop(runtime.id);
+  const onOpenSignIn = (url: string) => void account.openExternal(url);
 
   const { allowance, catalog } = runtimes;
 
@@ -118,12 +133,16 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
           {catalog.runtimes
             .filter((runtime) => runtime.id === 'stashbase')
             .map((runtime) => (
+              // The account's own wait shows on the Account row below; the
+              // runtime row does not spin a second time for it.
               <RuntimeRow
                 key={runtime.id}
                 runtime={runtime}
-                busy={runtimes.busy(runtime.id) || account.busy}
+                busy={runtimes.busy(runtime.id)}
                 failure={runtimes.failure(runtime.id)}
                 onAction={onAction}
+                onOpenSignIn={onOpenSignIn}
+                onStop={onStop}
               />
             ))}
           <AccountRow account={account} />
@@ -162,6 +181,8 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
                 failure={runtimes.failure(runtime.id)}
                 key={runtime.id}
                 onAction={onAction}
+                onOpenSignIn={onOpenSignIn}
+                onStop={onStop}
                 runtime={runtime}
               />
             ))}

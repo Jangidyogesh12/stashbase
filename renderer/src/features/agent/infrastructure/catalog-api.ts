@@ -10,7 +10,12 @@
  */
 import { AgentSessionError, type AgentCatalogPort } from '@/features/agent/application/ports';
 import { AGENT_ACCESS_MODES } from '@/features/agent/domain/access';
-import type { Agent, AgentAbilities, AgentCatalog } from '@/features/agent/domain/agent-catalog';
+import type {
+  Agent,
+  AgentAbilities,
+  AgentCatalog,
+  AgentPreparation,
+} from '@/features/agent/domain/agent-catalog';
 import type { AgentModel } from '@/features/agent/domain/runtime-catalog';
 import { toModel } from '@/features/agent/infrastructure/model-wire';
 import { request, type TransportRequest } from '@/platform/http/classify';
@@ -18,6 +23,7 @@ import type { HttpClient } from '@/platform/http/client';
 import {
   agentRuntimeFailureSchema,
   agentsResponseSchema,
+  type AgentBootstrapStatusWire,
   type AgentsResponseWire,
   type AgentWire,
 } from '@/protocols/http/agent-runtime';
@@ -57,16 +63,38 @@ function toRememberedModels(remembered: AgentWire['catalog']): readonly AgentMod
   );
 }
 
+const PREPARATION_STEPS: Partial<
+  Record<AgentBootstrapStatusWire['phase'], AgentPreparation['step']>
+> = { authenticating: 'sign-in', configuring: 'check', installing: 'install' };
+
+/** The service's running phase, as the step a reader waits on. */
+function toPreparation(wire: AgentWire['bootstrap']): AgentPreparation | undefined {
+  const step = wire && PREPARATION_STEPS[wire.phase];
+  if (!wire || !step) return undefined;
+  return {
+    step,
+    ...(wire.message ? { note: wire.message } : {}),
+    ...(step === 'sign-in' && wire.signInUrl ? { signInUrl: wire.signInUrl } : {}),
+  };
+}
+
+/** The refusals a sign-in clears: a native runtime's own, and the StashBase
+ *  account the Default Agent runs on. Only the Default Agent is refused for
+ *  the account, so a native runtime's login-first path is unchanged. */
+const SIGN_IN_REFUSALS: ReadonlySet<string> = new Set([
+  'authentication-required',
+  'account-required',
+]);
+
 function toAgent(wire: AgentWire): Agent {
+  const preparation = toPreparation(wire.bootstrap);
   return {
     id: wire.id,
     abilities: toAbilities(wire.capabilities),
     label: wire.label,
     models: toRememberedModels(wire.catalog),
-    needsSignIn: wire.bootstrap?.failure?.code === 'authentication-required',
-    preparing: ['installing', 'authenticating', 'configuring'].includes(
-      wire.bootstrap?.phase ?? '',
-    ),
+    needsSignIn: SIGN_IN_REFUSALS.has(wire.bootstrap?.failure?.code ?? ''),
+    ...(preparation ? { preparation } : {}),
     ...(wire.bootstrap?.failure
       ? {
           setupFailure: {

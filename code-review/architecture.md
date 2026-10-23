@@ -288,7 +288,13 @@ stable status without download, retry, or a new durable demand latch.
   as plain text at the failure site; generic transport wording must not replace
   an available setup or service error.
   A failed operation carries its retry action so Update cannot degrade to a
-  readiness check of the old executable.
+  readiness check of the old executable. Retrying a failed first installation
+  reuses a discovered executable only after the same `--version` verification
+  the installer requires, including one installed outside StashBase meanwhile;
+  otherwise it reruns the installer. While a flight runs, its status carries
+  the step sentence the service wrote and, during browser sign-in, the
+  `https` page the login command printed; the first-send prompt and Settings
+  both present them.
   Only identical explicit actions share a flight; a conflicting action receives
   an HTTP 409 and never observes another operation as its own success. Startup
   discovery may observe an existing flight without changing its intent.
@@ -299,8 +305,15 @@ stable status without download, retry, or a new durable demand latch.
   verification use asynchronous bounded probes; concurrent version readers
   share the per-executable/file-version result.
   Both providers' status commands gate readiness and their login commands own
-  browser sign-in. Native authentication refusals restore the sign-in action;
-  they never delete credentials. A provider that refuses a signed-in account
+  browser sign-in. A runtime whose status reads signed in starts no login.
+  During login the status check runs beside it; the first signed-in reading
+  completes sign-in and retires the login process, so a login command that
+  keeps waiting after the browser step cannot hold setup to its deadline.
+  Native authentication refusals restore the sign-in action;
+  they never delete credentials. Local status still reads a refused credential
+  as signed in, so the next sign-in after a refusal waits for the login command
+  itself. Sign-in failures keep the login's last output with URL query strings
+  removed. A provider that refuses a signed-in account
   (`AgentAccountRefusedError`, code `account-refused`) offers a recheck
   instead, because signing in again cannot change its answer. Setup errors retain bounded stdout/stderr and
   nested network causes, with agent/action/stage context. Settings and chat
@@ -344,6 +357,11 @@ stable status without download, retry, or a new durable demand latch.
   no StashBase session id is in its environment, which leaves that run's own
   permission rules in charge. Inside a StashBase chat it asks the generating
   host and denies when the host cannot answer.
+- `server/agent-cli-launch.ts` owns how agent CLI processes start: probes,
+  login, installer verification, and every session runtime. Windows `.cmd` and
+  `.bat` launchers, such as npm shims, run through cmd.exe with cross-spawn's
+  escaping; Node's `shell: true` joins an unquoted command line and splits a
+  profile path with a space.
 - `server/native-agents.ts` owns each bring-your-own CLI's names, executable
   overrides, npm package, official installer, and Windows bin directory.
   Discovery, installation, readiness, and the CLI listing read them there.

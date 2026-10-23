@@ -18,12 +18,12 @@ import {
   type NativeAgentId,
 } from './agent-runtime-paths.ts';
 import { probeAgentCommand } from './agent-probe.ts';
+import { agentCliLaunch } from './agent-cli-launch.ts';
 import { AgentAccountRefusedError, agentSetupDiagnostic } from './agent-setup-diagnostic.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import {
   agentCliEnv,
   agentCliOverride,
-  agentCliNeedsShell,
   commandDir,
   resolveAgentCli,
   resolveAgentCliWithLoginShell,
@@ -56,12 +56,26 @@ export type {
 
 type ProgressUpdate = Pick<AgentBootstrapStatus, 'progress' | 'message'>;
 
+export interface AgentLoginOptions {
+  /** The provider refused the stored sign-in. The CLI's own status check
+   * still reads the stored credential as signed in, so only the login's
+   * own completion can show that a new sign-in happened. */
+  reauthenticate?: boolean;
+  /** No stored sign-in was found and the runtime is opening its provider's
+   * page: from here on the wait is the reader's, not StashBase's. */
+  onBrowserSignIn?(): void;
+  /** The provider page the CLI printed, for a browser that did not open. */
+  onSignInUrl?(url: string): void;
+}
+
 export interface AgentBootstrapDependencies {
   resolveExecutable(id: NativeAgentId, options?: { probeLoginShell?: boolean; signal?: AbortSignal }): string | null | Promise<string | null>;
   resolveNativeExecutable(id: NativeAgentId): string | null;
   installRuntime(id: NativeAgentId, update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void>;
+  /** Run the installed executable once; throws when it cannot start. */
+  verifyExecutable(id: NativeAgentId, executable: string, signal: AbortSignal): Promise<void>;
   isAuthenticated(id: NativeAgentId, executable: string, signal?: AbortSignal): boolean | Promise<boolean>;
-  login(id: NativeAgentId, executable: string, signal: AbortSignal): Promise<void>;
+  login(id: NativeAgentId, executable: string, signal: AbortSignal, options: AgentLoginOptions): Promise<void>;
   configureMcp(id: NativeAgentId): void;
   consumeFailure(stage: 'installation' | 'authentication' | 'mcp'): boolean;
 }
@@ -81,6 +95,10 @@ export class AgentBootstrapCoordinator {
   private readonly actions = new Map<NativeAgentId, AgentBootstrapAction | 'connect'>();
   private readonly attempts = new Map<NativeAgentId, string>();
   private readonly diagnostics = new Map<NativeAgentId, ErrorDiagnostic>();
+  /** Runtimes whose provider refused the stored sign-in since it last became ready. */
+  private readonly refusedSignIns = new Set<NativeAgentId>();
+  /** Runtimes whose running preparation the reader stopped. */
+  private readonly stopped = new Set<NativeAgentId>();
 
   constructor(
     private readonly dependencies: AgentBootstrapDependencies,
@@ -102,6 +120,7 @@ export class AgentBootstrapCoordinator {
   /** A provider refusal invalidates readiness without deleting its credentials. */
   requireSignIn(id: NativeAgentId, message: string): void {
     if (this.runs.has(id)) return;
+    this.refusedSignIns.add(id);
     this.fail(id, 'login', 'authentication', 'authentication-required', new Error(message));
   }
 
@@ -124,12 +143,13 @@ export class AgentBootstrapCoordinator {
     if (this.runs.has(id)) {
       if (action !== 'connect' && action !== this.actions.get(id)) {
         const running = this.actions.get(id)!;
-        throw new AgentSetupBusyError(`${agentLabel(id)} is already ${ACTION_PROGRESS[running]}. Wait for it to finish, then retry ${ACTION_LABELS[action]}.`);
+        throw new AgentSetupBusyError(`${agentLabel(id)} is already ${ACTION_PROGRESS[running]}.`);
       }
       return this.status(id);
     }
-    // A failed first install can leave an executable behind. Retry must rerun
-    // the installer and its verification instead of accepting that partial copy.
+    // A failed first install can leave an executable behind, and the user may
+    // have installed the runtime another way since. Retry accepts what it finds
+    // only once that executable runs; otherwise it reruns the installer.
     const retryInstallation = action === 'bootstrap' && this.status(id).failure?.stage === 'installation';
     const retryOf = this.status(id).phase === 'failed' ? this.attempts.get(id) : undefined;
     const attemptId = randomUUID();
@@ -145,8 +165,10 @@ export class AgentBootstrapCoordinator {
     this.controllers.set(id, controller);
     this.diagnostics.delete(id);
     this.actions.set(id, action);
+    // `authenticating` is the browser step alone, the one place the reader can
+    // stop a wait; every check before it is StashBase's own, and configuring.
     this.statuses.set(id, {
-      phase: action === 'login' ? 'authenticating' : action === 'update' ? 'installing' : 'configuring',
+      phase: action === 'update' ? 'installing' : 'configuring',
       message: `Checking ${agentLabel(id)}…`,
     });
     // Register ownership before calling any injected dependency. Discovery,
@@ -159,7 +181,8 @@ export class AgentBootstrapCoordinator {
         let executable = await this.dependencies.resolveExecutable(id, { ...options, signal });
         signal.throwIfAborted();
         reportStage(stage, 'success');
-        if (!executable || action === 'update' || retryInstallation) {
+        const reinstall = retryInstallation && !(executable && await this.installationRuns(id, executable, signal));
+        if (!executable || action === 'update' || reinstall) {
           if (action === 'connect') {
             this.statuses.set(id, IDLE_STATUS);
             return;
@@ -176,7 +199,7 @@ export class AgentBootstrapCoordinator {
           }
           this.statuses.set(id, { phase: 'installing', progress: 0, message: `${action === 'update' ? 'Updating' : 'Preparing'} ${agentLabel(id)}…` });
           const timer = setTimeout(() => controller.abort(new Error(
-            `${agentLabel(id)} installation timed out after ${Math.ceil(this.limits.installationTimeoutMs / 60_000)} minutes. Retry to download and install again.`,
+            `${agentLabel(id)} installation timed out after ${Math.ceil(this.limits.installationTimeoutMs / 60_000)} minutes.`,
           )), this.limits.installationTimeoutMs);
           try {
             await this.dependencies.installRuntime(id, (next) => {
@@ -194,15 +217,27 @@ export class AgentBootstrapCoordinator {
             return;
           }
           if (executable !== this.dependencies.resolveNativeExecutable(id)) {
-            throw new Error(`${agentLabel(id)} native installation is not the selected executable. Check your executable override, then retry.`);
+            throw new Error(`${agentLabel(id)} native installation is not the selected executable. Check your executable override.`);
           }
         }
         if (stage === 'installation') reportStage(stage, 'success');
         stage = 'authentication';
         reportStage(stage, 'started');
+        this.statuses.set(id, { phase: 'configuring', message: `Checking ${agentLabel(id)} sign-in…` });
         if (action === 'login') {
-          this.statuses.set(id, { phase: 'authenticating', message: `Finish signing in to ${agentLabel(id)} in your browser…` });
-          await this.dependencies.login(id, executable, signal);
+          const browser = `Finish signing in to ${agentLabel(id)} in your browser.`;
+          await this.dependencies.login(id, executable, signal, {
+            reauthenticate: this.refusedSignIns.has(id),
+            // The login checks for a sign-in already in place first, and that
+            // check is still StashBase's own step: the reader is asked for the
+            // browser only once the runtime opens it.
+            onBrowserSignIn: () => {
+              if (!signal.aborted) this.statuses.set(id, { phase: 'authenticating', message: browser });
+            },
+            onSignInUrl: (signInUrl) => {
+              if (!signal.aborted) this.statuses.set(id, { phase: 'authenticating', message: browser, signInUrl });
+            },
+          });
           signal.throwIfAborted();
         }
         if (!await this.checkAuthentication(id, executable, action, signal)) return;
@@ -214,6 +249,15 @@ export class AgentBootstrapCoordinator {
         this.configure(id, action);
         if (this.status(id).phase === 'ready') reportStage(stage, 'success');
       } catch (error) {
+        if (this.stopped.has(id)) {
+          // Stopping is the reader's answer, not a failed step. A sign-in
+          // stopped short leaves the runtime signed out, which offers Sign in
+          // again rather than a failed step's Retry.
+          const signIn = stage === 'authentication';
+          this.fail(id, action, stage, signIn ? 'authentication-required' : 'operation-failed',
+            new Error(`${agentLabel(id)} ${signIn ? 'sign-in' : 'setup'} was stopped.`));
+          return;
+        }
         const code = !signal.aborted && error instanceof AgentAccountRefusedError ? 'account-refused' : 'operation-failed';
         this.fail(id, action, stage, code, signal.aborted ? signal.reason : error, stage === 'installation' ? 'install-command' : undefined);
       }
@@ -228,10 +272,22 @@ export class AgentBootstrapCoordinator {
       this.diagnostics.delete(id);
       this.controllers.delete(id);
       this.actions.delete(id);
+      this.stopped.delete(id);
       this.runs.delete(id);
     });
     this.runs.set(id, run);
     return this.status(id);
+  }
+
+  private async installationRuns(id: NativeAgentId, executable: string, signal: AbortSignal): Promise<boolean> {
+    this.statuses.set(id, { phase: 'configuring', message: `Checking the ${agentLabel(id)} installation…` });
+    try {
+      await this.dependencies.verifyExecutable(id, executable, signal);
+      return true;
+    } catch {
+      signal.throwIfAborted();
+      return false;
+    }
   }
 
   private async checkAuthentication(
@@ -248,6 +304,8 @@ export class AgentBootstrapCoordinator {
       this.fail(id, action, 'authentication', 'authentication-required',
         new Error(`${agentLabel(id)} is installed, but it is not signed in.`));
     } catch (error) {
+      // A stop or timeout is the run's to report, not a failed check.
+      if (signal.aborted) throw error;
       this.fail(id, action, 'authentication',
         error instanceof AgentAccountRefusedError ? 'account-refused' : 'authentication-check-failed', error);
     }
@@ -261,6 +319,7 @@ export class AgentBootstrapCoordinator {
     }
     try {
       this.dependencies.configureMcp(id);
+      this.refusedSignIns.delete(id);
       this.statuses.set(id, { phase: 'ready', progress: 1, message: `${agentLabel(id)} is ready.` });
     } catch (error) {
       this.fail(id, action, 'mcp', 'operation-failed', error, 'mcp-settings');
@@ -270,6 +329,19 @@ export class AgentBootstrapCoordinator {
   async wait(id: NativeAgentId): Promise<AgentBootstrapStatus> {
     await this.runs.get(id);
     return this.status(id);
+  }
+
+  /** The reader stopped waiting on a preparation they started, such as a
+   * browser sign-in that may never come back. The run's own cancellation
+   * retires its processes, and the answer is the status it settles on. A
+   * background connection is not the reader's to stop. */
+  async stop(id: NativeAgentId): Promise<AgentBootstrapStatus> {
+    const controller = this.controllers.get(id);
+    if (controller && this.actions.get(id) !== 'connect') {
+      this.stopped.add(id);
+      controller.abort();
+    }
+    return this.wait(id);
   }
 
   async cancelAll(): Promise<NativeAgentId[]> {
@@ -329,7 +401,6 @@ export async function agentIsAuthenticated(
   const result = await probeAgentCommand(executable, id === 'claude' ? ['auth', 'status'] : ['login', 'status'], {
     timeoutMs: 10_000,
     signal,
-    shell: agentCliNeedsShell(executable),
     env: agentCliEnv({}, [commandDir(executable)]),
   });
   const output = `${result.stdout}\n${result.stderr}`.replace(/\s+/g, ' ').trim().slice(-800);
@@ -339,61 +410,129 @@ export async function agentIsAuthenticated(
 }
 
 const AGENT_LOGIN_TIMEOUT_MS = 10 * 60_000;
+const AGENT_LOGIN_POLL_MS = 3_000;
+
+/** The provider page a CLI prints for a browser that did not open. */
+export function agentSignInUrl(output: string): string | undefined {
+  return /https:\/\/[^\s"'<>]+/.exec(output)?.[0];
+}
+
+/** Login output kept for a failure: one line, without the query strings that
+ * carry a sign-in attempt's own state. */
+function loginOutputDetail(output: string): string {
+  return output
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/(https?:\/\/[^\s?#"'<>]+)[?#][^\s"'<>]*/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(-800);
+}
+
+export interface AgentLoginLimits {
+  isAuthenticated: (id: NativeAgentId, executable: string, signal: AbortSignal) => Promise<boolean>;
+  pollMs: number;
+  timeoutMs: number;
+}
 
 /** Run the Agent's own browser-based login. The selected CLI opens the provider
  * page and writes credentials to its normal home; no token passes through
- * StashBase. */
+ * StashBase.
+ *
+ * A CLI that is already signed in opens nothing. Otherwise its status check
+ * runs beside the login, and the first check that reads signed in finishes
+ * sign-in: some CLIs keep waiting after the browser reports success, which
+ * left setup waiting out the full timeout although sign-in had worked. A
+ * refused credential still reads signed in, so a reauthentication waits for
+ * the login itself. */
 export async function loginToAgent(
   id: NativeAgentId,
   executable: string,
   signal: AbortSignal,
+  options: AgentLoginOptions = {},
+  overrides: Partial<AgentLoginLimits> = {},
 ): Promise<void> {
   signal.throwIfAborted();
-  if (id === 'antigravity') return loginToAntigravity(executable, signal);
+  if (id === 'antigravity') {
+    return loginToAntigravity(executable, signal, {}, { onBrowserSignIn: options.onBrowserSignIn });
+  }
   const label = agentLabel(id);
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(executable, id === 'claude' ? ['auth', 'login'] : ['login'], {
-      env: agentCliEnv({}, [commandDir(executable)]),
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      shell: agentCliNeedsShell(executable),
-    });
-    const completion = waitForExtractorTree(child);
-    let output = '';
-    let settled = false;
-    let timedOut = false;
-    const append = (chunk: Buffer | string) => {
-      output = (output + chunk.toString()).slice(-4000);
-    };
-    const cleanup = () => {
-      clearTimeout(timeout);
-      signal.removeEventListener('abort', abort);
-    };
-    const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (error) reject(error);
-      else resolve();
-    };
-    const abort = () => terminateInstallerTree(child);
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      terminateInstallerTree(child);
-    }, AGENT_LOGIN_TIMEOUT_MS);
-    timeout.unref?.();
-    signal.addEventListener('abort', abort, { once: true });
-    child.stdout.on('data', append);
-    child.stderr.on('data', append);
-    void completion.then((code) => {
-      const detail = output.replace(/\s+/g, ' ').trim().slice(-800);
-      if (signal.aborted) finish(new Error(`${label} sign-in was cancelled.`));
-      else if (code === 0) finish();
-      else if (timedOut) finish(new Error(`${label} sign-in timed out after 10 minutes. Retry to open sign-in again.`));
-      else finish(Object.assign(new Error(detail || `${label} sign-in exited with code ${code ?? 'unknown'}.`), { exitCode: code, stderr: output }));
-    }, (error) => finish(error));
+  const isAuthenticated = overrides.isAuthenticated ?? agentIsAuthenticated;
+  const signedIn = async () => {
+    try {
+      return await isAuthenticated(id, executable, signal);
+    } catch {
+      signal.throwIfAborted();
+      return false;
+    }
+  };
+  const watch = !options.reauthenticate;
+  if (watch && await signedIn()) return;
+  signal.throwIfAborted();
+  options.onBrowserSignIn?.();
+  const launch = agentCliLaunch(executable, id === 'claude' ? ['auth', 'login'] : ['login']);
+  const child = spawn(launch.command, launch.args, {
+    env: agentCliEnv({}, [commandDir(executable)]),
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+    windowsVerbatimArguments: launch.windowsVerbatimArguments,
   });
+  let exited = false;
+  const completion = waitForExtractorTree(child).finally(() => { exited = true; });
+  let output = '';
+  let signInUrl: string | undefined;
+  const append = (chunk: Buffer | string) => {
+    output = (output + chunk.toString()).slice(-4000);
+    if (signInUrl) return;
+    signInUrl = agentSignInUrl(output);
+    if (signInUrl) options.onSignInUrl?.(signInUrl);
+  };
+  child.stdout.on('data', append);
+  child.stderr.on('data', append);
+  const abort = () => terminateInstallerTree(child);
+  signal.addEventListener('abort', abort, { once: true });
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    terminateInstallerTree(child);
+  }, overrides.timeoutMs ?? AGENT_LOGIN_TIMEOUT_MS);
+  timeout.unref?.();
+  let confirmed = false;
+  const closed = completion.then(() => {}, () => {});
+  const poll = async () => {
+    const pollMs = overrides.pollMs ?? AGENT_LOGIN_POLL_MS;
+    while (watch && !exited && !signal.aborted) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([closed, new Promise<void>((resolve) => { timer = setTimeout(resolve, pollMs); })]);
+      clearTimeout(timer);
+      if (exited || signal.aborted) return;
+      if (await signedIn()) {
+        confirmed = true;
+        terminateInstallerTree(child);
+        return;
+      }
+    }
+  };
+  try {
+    const [code] = await Promise.all([completion, poll().catch(() => {})]);
+    if (signal.aborted) throw new Error(`${label} sign-in was cancelled.`);
+    if (confirmed || code === 0) return;
+    // The browser step may have finished although the CLI did not exit cleanly.
+    if (!timedOut && watch && await signedIn()) return;
+    const detail = loginOutputDetail(output);
+    const host = signInUrl && /^https:\/\/([^/?#]+)/.exec(signInUrl)?.[1];
+    const opened = host ? ` It printed its sign-in page (${host}), but sign-in did not finish.` : '';
+    const message = timedOut
+      ? `${label} sign-in timed out after ${Math.round((overrides.timeoutMs ?? AGENT_LOGIN_TIMEOUT_MS) / 60_000)} minutes.${opened}`
+      : `${label} sign-in exited with code ${code ?? 'unknown'}.`;
+    throw Object.assign(new Error(detail ? `${message}\nLast output: ${detail}` : message), {
+      exitCode: code,
+      stderr: detail,
+    });
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener('abort', abort);
+  }
 }
 
 export const agentBootstrapCoordinator = new AgentBootstrapCoordinator({
@@ -402,8 +541,10 @@ export const agentBootstrapCoordinator = new AgentBootstrapCoordinator({
     : resolveInstalledExecutable(id),
   resolveNativeExecutable,
   installRuntime: installNativeRuntime,
+  verifyExecutable: (id, executable, signal) =>
+    verifyAgentExecutable(executable, agentLabel(id), agentCliEnv({}, [commandDir(executable)]), 20_000, signal),
   isAuthenticated: agentIsAuthenticated,
-  login: loginToAgent,
+  login: (id, executable, signal, options) => loginToAgent(id, executable, signal, options),
   configureMcp: (id) => { ensureAgentMcp(id); },
   consumeFailure: consumeAgentSetupFailure,
 });
@@ -418,6 +559,12 @@ export function beginAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
 
 export function loginAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
   return agentBootstrapCoordinator.login(id);
+}
+
+/** Stop waiting on a preparation the reader started, such as a browser
+ * sign-in. Authorization already given in the browser is not revoked. */
+export function stopAgentBootstrap(id: NativeAgentId): Promise<AgentBootstrapStatus> {
+  return agentBootstrapCoordinator.stop(id);
 }
 
 /** Updates use each provider's standalone installer. Explicit executable
@@ -503,7 +650,7 @@ export async function installClaude(
     throw new Error(
       "The official Claude installer exited successfully but no 'claude' executable "
       + 'was found in its standard install locations (such as ~/.local/bin). '
-      + 'Check whether security software quarantined Claude, then retry the installation.',
+      + 'Check whether security software quarantined Claude.',
     );
   }
   await verifyExecutable(executable, 'Claude', agentCliEnv(), 20_000, signal);
@@ -554,7 +701,7 @@ function ensureWindowsClaudeOnUserPath(update: (next: ProgressUpdate) => void): 
     { encoding: 'utf8', timeout: 15_000, windowsHide: true },
   );
   if (result.status === 0) {
-    update({ message: 'Added %USERPROFILE%\\.local\\bin to your PATH — open a new terminal to use claude.' });
+    update({ message: 'Added %USERPROFILE%\\.local\\bin to your PATH. Open a new terminal to use claude.' });
   } else {
     // The install itself succeeded and StashBase can use it either way;
     // terminal visibility falls back to the manual step.
@@ -606,7 +753,7 @@ export async function installAntigravity(
     throw new Error(
       "The official Antigravity installer exited successfully but no 'agy' executable "
       + 'was found in its standard install locations (such as ~/.local/bin). '
-      + 'Check whether security software quarantined Antigravity, then retry the installation.',
+      + 'Check whether security software quarantined Antigravity.',
     );
   }
   await verifyExecutable(executable, 'Antigravity', agentCliEnv(), 20_000, signal);
@@ -721,7 +868,7 @@ function codexInstallerFailure(error: unknown, shell: CodexInstallerShell): Erro
   ) {
     return new Error(
       'The official Codex installer is incompatible with Windows PowerShell 5.1 on this PC. '
-      + 'Install PowerShell 7 (pwsh.exe), then retry.',
+      + 'Install PowerShell 7 (pwsh.exe).',
     );
   }
   return failure;
@@ -768,7 +915,7 @@ export async function installCodex(
     throw new Error(
       "The official Codex installer exited successfully but no 'codex' executable "
       + 'was found in its standard install locations (such as ~/.local/bin). '
-      + 'Check whether security software quarantined Codex, then retry the installation.',
+      + 'Check whether security software quarantined Codex.',
     );
   }
   await verifyExecutable(executable, 'Codex', agentCliEnv(), 20_000, signal);
@@ -822,9 +969,7 @@ export async function verifyAgentExecutable(
   signal?: AbortSignal,
 ): Promise<void> {
   try {
-    const result = await probeAgentCommand(executable, ['--version'], {
-      env, timeoutMs, signal, shell: agentCliNeedsShell(executable),
-    });
+    const result = await probeAgentCommand(executable, ['--version'], { env, timeoutMs, signal });
     if (result.status !== 0) {
       throw Object.assign(new Error(`exited with code ${result.status ?? 'unknown'}: ${[result.stderr, result.stdout].filter(Boolean).join('\n').trim()}`), { exitCode: result.status, stdout: result.stdout, stderr: result.stderr });
     }

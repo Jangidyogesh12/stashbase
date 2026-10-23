@@ -21,7 +21,7 @@ function subscriptionDetail(status: BillingStatus): string {
   if (billingPaid(status) && status.paidThrough) {
     const plan = status.planName ?? 'Paid plan';
     return status.cancelAtPeriodEnd
-      ? `${plan} · Renewal canceled. Access until ${paidDate(status.paidThrough)}`
+      ? `${plan} · Renewal cancelled. Access until ${paidDate(status.paidThrough)}`
       : status.status === 'trialing'
         ? `${plan} · Free trial until ${paidDate(status.paidThrough)}. Then $5 a month.`
         : `${plan} · Credits until ${paidDate(status.paidThrough)}`;
@@ -41,6 +41,14 @@ function manageLabel(billing: BillingViewModel): string {
   return renewing ? 'Manage or cancel' : 'Manage billing';
 }
 
+/** The Plan row's detail, or what its Manage button is waiting for while it
+ *  is: a working button keeps its name, and the row says what it awaits. */
+function planDetail(billing: BillingViewModel, detail: string): string {
+  return billing.opening?.page === 'portal'
+    ? 'Opening subscription management in your browser.'
+    : detail;
+}
+
 export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
   const { status } = billing;
   const failure = billing.failure && <FailureNotice className="mt-1" failure={billing.failure} />;
@@ -48,12 +56,12 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
   const manage = status?.canManage && (
     <Button
       disabled={billing.busy}
-      loading={billing.opening === 'portal'}
+      loading={billing.opening?.page === 'portal'}
       onClick={billing.manage}
       size="compact"
       variant="tertiary"
     >
-      {billing.opening === 'portal' ? 'Opening browser…' : manageLabel(billing)}
+      {manageLabel(billing)}
     </Button>
   );
   const browserHelp = billing.browserPage === 'portal' && !billing.busy && !billing.failure && (
@@ -66,11 +74,12 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
     return (
       <SettingsRow
         as="li"
-        detail={
+        detail={planDetail(
+          billing,
           billing.confirming === 'waiting'
             ? 'Waiting for payment in your browser.'
-            : 'Payment is not confirmed yet. Refresh or check your subscription in the browser.'
-        }
+            : 'Payment is not confirmed yet. Refresh or check your subscription in the browser.',
+        )}
         title="Plan"
         trail={manage}
       >
@@ -104,7 +113,12 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
 
   if (billingSubscribed(status)) {
     return (
-      <SettingsRow as="li" detail={subscriptionDetail(status)} title="Plan" trail={manage}>
+      <SettingsRow
+        as="li"
+        detail={planDetail(billing, subscriptionDetail(status))}
+        title="Plan"
+        trail={manage}
+      >
         <SubscriptionChanges billing={billing} />
         {failure}
         {browserHelp}
@@ -114,7 +128,12 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
 
   return (
     <>
-      <SettingsRow as="li" detail="Free · Credits refresh each month." title="Plan" trail={manage}>
+      <SettingsRow
+        as="li"
+        detail={planDetail(billing, 'Free · Credits refresh each month.')}
+        title="Plan"
+        trail={manage}
+      >
         {failure}
         {browserHelp}
       </SettingsRow>
@@ -125,36 +144,42 @@ export function SubscriptionRows({ billing }: { billing: BillingViewModel }) {
           onRetry={billing.refresh}
         />
       )}
-      {billing.plans.map((plan) => (
-        <SettingsRow
-          as="li"
-          detail={`${billingPrice(plan)}${plan.planKey === 'pro' ? ' · 10× the Plus allowance' : ''}`}
-          key={plan.priceId}
-          title={plan.name}
-          titleTone={plan.available ? 'default' : 'muted'}
-          trail={
-            <Button
-              disabled={billing.busy || !plan.available}
-              onClick={() => billing.subscribe(plan.priceId)}
-              size="compact"
-              variant="tertiary"
-            >
-              {billing.opening === 'checkout'
-                ? 'Opening payment…'
-                : plan.available
-                  ? 'Subscribe'
-                  : 'Coming soon'}
-            </Button>
-          }
-        >
-          {plan.planKey === 'plus' && (
-            <p className="text-caption text-muted-foreground">
-              First subscription: first month free with a card and automatic renewal. Then{' '}
-              {billingPrice(plan)}. Cancel anytime.
-            </p>
-          )}
-        </SettingsRow>
-      ))}
+      {billing.plans.map((plan) => {
+        // Only the plan the reader pressed waits; the others stay still.
+        const opening =
+          billing.opening?.page === 'checkout' && billing.opening.priceId === plan.priceId;
+        return (
+          <SettingsRow
+            as="li"
+            detail={
+              opening
+                ? 'Opening the payment page in your browser.'
+                : `${billingPrice(plan)}${plan.planKey === 'pro' ? ' · 10× the Plus credits' : ''}`
+            }
+            key={plan.priceId}
+            title={plan.name}
+            titleTone={plan.available ? 'default' : 'muted'}
+            trail={
+              <Button
+                disabled={billing.busy || !plan.available}
+                loading={opening}
+                onClick={() => billing.subscribe(plan.priceId)}
+                size="compact"
+                variant="tertiary"
+              >
+                {plan.available ? 'Subscribe' : 'Coming soon'}
+              </Button>
+            }
+          >
+            {plan.planKey === 'plus' && (
+              <p className="text-caption text-muted-foreground">
+                First subscription: first month free with a card and automatic renewal. Then{' '}
+                {billingPrice(plan)}. Cancel anytime.
+              </p>
+            )}
+          </SettingsRow>
+        );
+      })}
     </>
   );
 }

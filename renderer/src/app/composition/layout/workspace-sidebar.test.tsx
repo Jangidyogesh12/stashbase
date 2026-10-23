@@ -50,12 +50,16 @@ describe('account row', () => {
 
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
     expect(openExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
-    expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Stop waiting' }));
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Sign in' }));
+    // The dialog stays on its browser wait, so stopping it there offers the
+    // choices again without leaving.
+    const dialog = within(screen.getByRole('dialog', { name: 'Sign in to StashBase' }));
+    expect(
+      await dialog.findByText('Finish signing in to StashBase in your browser.'),
+    ).not.toBeNull();
+    await userEvent.setup().click(dialog.getByRole('button', { name: 'Stop waiting' }));
     await userEvent
       .setup()
-      .click(await screen.findByRole('button', { name: 'Continue with Google' }));
+      .click(await dialog.findByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledTimes(2));
   });
 
@@ -77,17 +81,20 @@ describe('account row', () => {
         </Providers>,
       );
       const user = userEvent.setup();
-      await user.click(await screen.findByRole('button', { name: 'Retry account' }));
+      await user.click(await screen.findByRole('button', { name: 'Retry' }));
       await user.click(await screen.findByRole('button', { name: 'Sign in' }));
       await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
-      await screen.findByRole('button', { name: 'Waiting for browser…' });
+      await screen.findByText('Finish signing in to StashBase in your browser.');
+      // Leaving the dialog leaves the browser wait running for the window.
+      await user.click(screen.getByRole('button', { name: 'Not now' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       await user.click(screen.getByRole('button', { name: 'Settings' }));
       await user.click(await screen.findByRole('button', { name: 'Agents' }, LAZY));
       let dialog = within(screen.getByRole('dialog', { name: 'Settings' }));
-      expect(
-        dialog.getByRole<HTMLButtonElement>('button', { name: 'Waiting for browser…' }).disabled,
-      ).toBe(true);
-      expect(dialog.queryByRole('button', { name: 'Sign in' })).toBeNull();
+      expect(dialog.getByText('Finish signing in to StashBase in your browser.')).not.toBeNull();
+      expect(dialog.getByRole<HTMLButtonElement>('button', { name: 'Sign in' }).disabled).toBe(
+        true,
+      );
       await user.keyboard('{Escape}');
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       await user.click(screen.getByRole('button', { name: 'Settings' }));

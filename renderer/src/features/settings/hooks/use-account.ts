@@ -6,6 +6,12 @@
  * reports the flow finished. Either way the account changes, everything that
  * depends on it is re-read: the bundled Agent's readiness, credits, and
  * subscription.
+ *
+ * The sign-in dialog stays open through its own browser wait and shows it,
+ * with the page again for a browser that did not open. A send waiting on the
+ * account is held for as long as that dialog is open, whatever happens inside
+ * it, and is let go only when the reader leaves it; the browser wait itself
+ * carries on in the window until it finishes or is stopped.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -44,18 +50,28 @@ export interface AccountViewModel {
   openExternal(href: string): Promise<boolean> | void;
   /** The browser round trip is open: started, and not yet reported finished. */
   readonly signInPending: boolean;
+  /** The page the open browser flow started on, for a browser that did not
+   *  open by itself. Null when no flow is open. */
+  readonly signInUrl: string | null;
   /** A browser flow is open and its local wait can be stopped. */
   readonly canStopWaiting: boolean;
   /** Stops local polling; it does not revoke authorization in the browser. */
   stopWaiting(): void;
-  /** Starts the flow and hands the URL to the browser. */
+  /** Opens the sign-in dialog, which shows the browser wait while one is
+   *  open. */
   signIn(): void;
   readonly accessOpen: boolean;
+  /** The reader left the dialog. A send waiting on it is let go; a browser
+   *  wait carries on in the window. */
   closeAccess(): void;
   manageSignIn(): void;
+  /** Starts the flow and hands its page to the browser, keeping the dialog
+   *  open on the wait. */
   signInWithGoogle(): void;
   emailSignedIn(next: HostedAccount): void;
-  /** Waits for this explicit sign-in; aborting the caller never revokes browser authorization. */
+  /** Opens the sign-in dialog and waits for it: true once signed in, false
+   *  once the reader leaves it. Aborting the caller never revokes browser
+   *  authorization. */
   signInAndWait(signal: AbortSignal): Promise<boolean>;
   signOut(): void;
   /** Records an account banner as taken up or declined. */
@@ -71,6 +87,7 @@ export function useAccount(
   const queryClient = useQueryClient();
   const account = useQuery(accountQuery(port));
   const [signInFlow, setSignInFlow] = useState<string | null>(null);
+  const [signInUrl, setSignInUrl] = useState<string | null>(null);
   const [signInError, setSignInError] = useState<FailureView | null>(null);
   const [accessOpen, setAccessOpen] = useState(false);
   const command = useRef<'sign-in' | 'sign-out' | null>(null);
@@ -93,9 +110,10 @@ export function useAccount(
     for (const queryKey of DEPENDENT_KEYS) void queryClient.invalidateQueries({ queryKey });
   }, [queryClient]);
 
+  // A flow that fails leaves the dialog, when it is open, saying why and
+  // offering the choices again, so a send waiting on it keeps waiting.
   useEffect(() => {
     if (signInFlow && flow.isError) {
-      finishWaiters(false);
       command.current = null;
       setSignInFlow(null);
       setSignInError(settingsFailure(flow.error));
@@ -105,10 +123,10 @@ export function useAccount(
     command.current = null;
     setSignInFlow(null);
     if (flow.data.state === 'error') {
-      finishWaiters(false);
       setSignInError({ message: flow.data.error, tone: 'input' });
       return;
     }
+    setAccessOpen(false);
     void queryClient.invalidateQueries({ queryKey: settingsQueryKeys.account });
     invalidateDependents();
     finishWaiters(true);
@@ -123,7 +141,6 @@ export function useAccount(
   ]);
 
   const stopWaiting = () => {
-    finishWaiters(false);
     if (!signInFlow) return;
     void queryClient.cancelQueries({
       queryKey: [...settingsQueryKeys.account, 'sign-in', signInFlow],
@@ -144,12 +161,14 @@ export function useAccount(
     {
       onStart: () => setSignInError(null),
       onFailed: () => {
-        finishWaiters(false);
         command.current = null;
       },
       onDone: (started) => {
-        openExternal(started.url);
+        // The page is kept whatever the browser answers: a browser that did
+        // not open leaves the reader the link, not a wait with no way on.
+        setSignInUrl(started.url);
         setSignInFlow(started.flowId);
+        void Promise.resolve(openExternal(started.url)).catch(() => false);
       },
     },
   );
@@ -187,14 +206,15 @@ export function useAccount(
   );
 
   const signInWithGoogle = () => {
-    setAccessOpen(false);
     if (command.current || !account.data) return;
     command.current = 'sign-in';
     startSignIn.run();
   };
 
+  // While a browser wait is open this reopens the dialog on it, so every
+  // entry that offers sign-in leads to the one place the wait is shown.
   const signIn = () => {
-    if (command.current || !account.data) return;
+    if (command.current === 'sign-out' || !account.data) return;
     setAccessOpen(true);
   };
 
@@ -234,6 +254,9 @@ export function useAccount(
     signInAndWait: (signal) => {
       if (signal.aborted || !account.data || command.current === 'sign-out')
         return Promise.resolve(false);
+      // Signed in elsewhere already, such as in another window or by a
+      // browser wait the reader left running.
+      if (account.data.signedIn) return Promise.resolve(true);
       return new Promise<boolean>((resolve) => {
         const finish = (success: boolean) => {
           signal.removeEventListener('abort', abort);
@@ -247,6 +270,7 @@ export function useAccount(
       });
     },
     signInPending,
+    signInUrl: signInFlow !== null ? signInUrl : null,
     canStopWaiting: signInFlow !== null,
     stopWaiting,
     markOfferSeen: (offer) => markOfferSeen.run(offer),

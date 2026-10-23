@@ -39,11 +39,12 @@ export function NotificationSystemSettings({
               variant="tertiary"
               size="compact"
               disabled={opening}
+              loading={opening}
               onClick={() => {
                 void open();
               }}
             >
-              {opening ? 'Opening…' : 'Open system settings'}
+              Open system settings
             </Button>
           )
         }

@@ -202,10 +202,6 @@ export async function resolveAgentCliWithLoginShell(
   return resolveAgentCli(spec, warn);
 }
 
-export function agentCliNeedsShell(command: string): boolean {
-  return process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
-}
-
 /** The version a CLI prints for `--version`, as a bare release number:
  * `2.1.220 (Claude Code)` and `codex-cli 0.104.0` both read as their
  * dotted number. Null when the output names none. */
@@ -241,7 +237,6 @@ async function readAgentCliVersion(executable: string): Promise<string | null> {
   try {
     const result = await probeAgentCommand(executable, ['--version'], {
       timeoutMs: 10_000,
-      shell: agentCliNeedsShell(executable),
       env: agentCliEnv({}, [path.dirname(executable)]),
     });
     if (result.status !== 0) return null;

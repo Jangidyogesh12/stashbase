@@ -46,7 +46,7 @@ describe('useAccount', () => {
     act(() => hook.result.current.signInWithGoogle());
     expect(port.startSignIn).toHaveBeenCalledTimes(1);
   });
-  it('lets a pending send wait for sign-in and cancel without cancelling other observers', async () => {
+  it('holds a waiting send while the dialog is open, and lets it go only when the reader leaves', async () => {
     const { hook, port } = mount();
     await waitFor(() => expect(hook.result.current.account).not.toBeNull());
     const cancelled = new AbortController();
@@ -59,11 +59,25 @@ describe('useAccount', () => {
     expect(hook.result.current.accessOpen).toBe(true);
     act(() => hook.result.current.signInWithGoogle());
     await waitFor(() => expect(hook.result.current.canStopWaiting).toBe(true));
+    // The dialog stays on its own browser wait, with the page to open again.
+    expect(hook.result.current.accessOpen).toBe(true);
+    expect(hook.result.current.signInUrl).toBe('https://accounts.example/sign-in');
     act(() => cancelled.abort());
     expect(await first).toBe(false);
     expect(hook.result.current.signInPending).toBe(true);
     expect(port.startSignIn).toHaveBeenCalledOnce();
+    // Stopping the wait leaves the dialog offering the choices again, so the
+    // send keeps waiting for one of them.
+    let released = false;
+    void second.then(() => {
+      released = true;
+    });
     act(() => hook.result.current.stopWaiting());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(released).toBe(false);
+    act(() => hook.result.current.closeAccess());
     expect(await second).toBe(false);
     vi.mocked(port.signInStatus).mockResolvedValue({ state: 'complete' });
     let completed!: Promise<boolean>;
@@ -72,6 +86,20 @@ describe('useAccount', () => {
     });
     act(() => hook.result.current.signInWithGoogle());
     await expect(completed).resolves.toBe(true);
+    await waitFor(() => expect(hook.result.current.accessOpen).toBe(false));
+  });
+
+  it('keeps the sign-in page to open when the browser does not open by itself', async () => {
+    const { hook } = mount(
+      accountPort(SIGNED_OUT_ACCOUNT),
+      vi.fn(async () => false),
+    );
+    await waitFor(() => expect(hook.result.current.account).not.toBeNull());
+    act(() => hook.result.current.signInWithGoogle());
+    await waitFor(() =>
+      expect(hook.result.current.signInUrl).toBe('https://accounts.example/sign-in'),
+    );
+    expect(hook.result.current.canStopWaiting).toBe(true);
   });
 
   it('opens the browser for a sign-in and holds one pending flag across the whole round trip', async () => {

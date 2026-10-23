@@ -11,15 +11,21 @@ export function useAccountOffers(): readonly WorkspaceNotice[] {
   const account = useAccountView();
   const person = account.account;
   if (!person || person.signedIn || !person.offers.includes('sign-in')) return [];
+  // The wait is the same banner in the same place, so the strip does not jump
+  // from centred to a row while the browser is out. Like every browser wait it
+  // offers the sign-in page, in case the browser never appeared, and stopping
+  // is its way out.
   if (account.signInPending) {
+    const page = account.signInUrl;
     return [
       {
-        action: account.canStopWaiting
-          ? { label: 'Stop waiting', onAct: account.stopWaiting }
+        action: page
+          ? { label: 'Open sign-in page', onAct: () => void account.openExternal(page) }
           : null,
-        dismissLabel: 'Not now',
-        message: 'Finish signing in in your browser.',
-        onDismiss: null,
+        dismissLabel: 'Stop waiting',
+        message: 'Finish signing in to StashBase in your browser.',
+        offer: 'wait',
+        onDismiss: account.canStopWaiting ? account.stopWaiting : null,
         tone: 'capability',
       },
     ];
@@ -31,7 +37,6 @@ export function useAccountOffers(): readonly WorkspaceNotice[] {
       // What signing in gives, not a commitment to the Default Agent nor the
       // allowance's terms, which Settings → Agents shows.
       message: 'Sign in for free agent credits every month.',
-      // The offer itself is drawn as a banner; the waiting line is a row.
       offer: 'invitation',
       onDismiss: () => account.markOfferSeen('sign-in'),
       tone: 'capability',
