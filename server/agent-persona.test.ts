@@ -45,7 +45,9 @@ test('a reader can keep adding personas, edit them, and delete them', (t) => {
   assert.match(second.id, /^persona-[0-9a-f]{6}$/u);
   assert.equal(first.prompt, 'Write short.\n\nNo emoji.');
   assert.equal(first.gallery, null);
-  assert.deepEqual(library.list().slice(-2).map((persona) => persona.id), [first.id, second.id]);
+  // Linux files can share a birth timestamp with the seeded Gallery copies.
+  // This CRUD check requires both saved personas, not a strict filesystem order.
+  assert.deepEqual(library.list().filter((persona) => persona.gallery === null).map((persona) => persona.id).sort(), [first.id, second.id].sort());
 
   const edited = library.update(first.id, { name: 'Twitter', description: '', icon: 'mic', prompt: 'Shorter.' });
   assert.equal(edited.prompt, 'Shorter.');
