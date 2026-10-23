@@ -21,14 +21,20 @@ export interface DocumentSearchTarget extends FindOptions {
   /** Absent means a search result's match. */
   purpose?: DocumentSearchPurpose;
   query: string;
+  /** Ask Agent snapshots contain Markdown, unlike a reply's text citation. */
+  quoteFormat?: 'markdown';
 }
 
 /** A cited passage: its first occurrence, found as the reader would type it. */
-export function passageSearchTarget(phrase: string): DocumentSearchTarget {
+export function passageSearchTarget(
+  phrase: string,
+  quoteFormat?: 'markdown',
+): DocumentSearchTarget {
   return {
     caseSensitive: false,
     occurrenceIndex: 0,
     purpose: 'passage',
+    ...(quoteFormat ? { quoteFormat } : {}),
     query: phrase,
     wholeWord: false,
   };

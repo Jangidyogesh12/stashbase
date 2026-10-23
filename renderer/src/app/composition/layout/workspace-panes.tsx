@@ -13,7 +13,11 @@ import type {
 import { useDependencies } from '@/app/composition/dependency-context';
 import type { DocumentSources } from '@/app/composition/folder/use-document-sources';
 import { useExternalFiles } from '@/app/composition/folder/use-external-files';
-import { AgentWorkspace, type AgentWorkspaceRuntime } from '@/features/agent/public';
+import {
+  AgentWorkspace,
+  useReferencedPassages,
+  type AgentWorkspaceRuntime,
+} from '@/features/agent/public';
 import {
   DocumentDropZone,
   DocumentWorkspace,
@@ -81,6 +85,7 @@ export function WorkspacePanes({
   status,
   workspace,
 }: WorkspacePanesProps) {
+  const referencedPassages = useReferencedPassages(agent.runtime);
   const dependencies = useDependencies();
   // Files dropped on the workspace open in place and go to the chat beside
   // them; Files keeps the copy.
@@ -114,8 +119,8 @@ export function WorkspacePanes({
             onBrowsePersonas={onBrowsePersonas}
             onOpenAgentSettings={() => settings.openSettings('agents')}
             onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
-            onOpenSource={(source, phrase) => {
-              if (phrase) void sources.locatePassage(source, phrase);
+            onOpenSource={(source, phrase, quoteFormat) => {
+              if (phrase) void sources.locatePassage(source, phrase, quoteFormat);
               else sources.open(source);
               onShowDocuments();
             }}
@@ -146,6 +151,7 @@ export function WorkspacePanes({
                   genericPreviewApi={dependencies.documents.adapters.genericPreview}
                   recordUsage={dependencies.recordUsage}
                   onAskAgent={onAskAgent}
+                  referencedPassages={referencedPassages}
                   onNavigate={sources.navigate}
                   onOpenExternal={dependencies.documents.openExternal}
                   onOpenPrepared={onPrepare}

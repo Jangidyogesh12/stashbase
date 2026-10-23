@@ -91,6 +91,17 @@ permissions, with current model and tool choices checked before use.
   leaves the project or it exceeds 6,000 characters. A passage of an external
   file goes to the chat beside it and carries the file's absolute path. Reloaded history shows it
   as the same passage chip.
+  Ask agent closes the selection toolbar and focuses the composer. Clicking a
+  passage chip in the draft or sent chat opens its source, scrolls to the exact
+  passage, and highlights it without selecting editable text. Current-chat
+  passages in the draft, queue, unread follow-ups, and sent history retain a light background and
+  dashed underline in the document, so they remain recognizable during ordinary
+  scrolling. Clicking or editing the document clears the stronger navigation
+  highlight; removing a reference or switching chats updates the persistent
+  marks. Marks never enter the saved file. Live anchors follow edits around a
+  passage; changed words invalidate the anchor. Reopened passages locate only
+  an unambiguous exact match; unavailable or ambiguous text reports that the
+  passage could not be located instead of guessing.
 - Antigravity offers Auto, Ask, Edit, and Plan. Running for StashBase, it
   cannot ask the reader itself, so StashBase reviews each tool call before it
   runs. Reads pass. Edit passes ordinary changes inside the project. Auto is

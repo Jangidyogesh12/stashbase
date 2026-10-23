@@ -115,3 +115,27 @@ describe('document navigation runtime', () => {
     await vi.waitFor(() => expect(notice()).toBe(SEARCH_NOTICES.passage.failed));
   });
 });
+
+it('routes passage navigation to editor anchors and reports changed source without running Find', async () => {
+  const runtime = createDocumentNavigationRuntime('essay');
+  const controller = {
+    close: vi.fn(),
+    next: vi.fn(() => ({ current: 0, total: 0 })),
+    previous: vi.fn(() => ({ current: 0, total: 0 })),
+    setQuery: vi.fn(() => ({ current: 0, total: 0 })),
+    locatePassage: vi
+      .fn()
+      .mockReturnValueOnce({ current: 1, total: 1 })
+      .mockReturnValueOnce({ current: 0, total: 0 }),
+  };
+  runtime.requestSearch('essay', passageSearchTarget('**selected words**', 'markdown'));
+  runtime.claimFind('essay', Symbol('editor'), controller);
+  await vi.waitFor(() => expect(runtime.store.getState().find.total).toBe(1));
+  expect(controller.locatePassage).toHaveBeenCalledWith('**selected words**');
+  expect(controller.setQuery).not.toHaveBeenCalled();
+  runtime.requestSearch('essay', passageSearchTarget('changed words', 'markdown'));
+  await vi.waitFor(() =>
+    expect(runtime.store.getState().searchNotice).toBe(SEARCH_NOTICES.passage.missing),
+  );
+  runtime.dispose();
+});

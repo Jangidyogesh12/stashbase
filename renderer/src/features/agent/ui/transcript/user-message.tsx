@@ -9,6 +9,7 @@ import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
 import { CollapsibleUserText } from '@/features/agent/ui/transcript/collapsible-user-text';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import type { SourceReference } from '@/shared/domain/source-reference';
 import { basePathName } from '@/shared/utils/file-path';
 
 import { CopyAction } from './copy-action';
@@ -33,6 +34,7 @@ export function UserMessage({
   editable,
   now,
   onEditPrompt,
+  onOpenSource,
   transientFile,
 }: {
   block: Extract<AgentTranscriptBlock, { kind: 'user' }>;
@@ -41,6 +43,9 @@ export function UserMessage({
   editable: boolean;
   now: number;
   onEditPrompt?: ((blockId: string) => void) | undefined;
+  onOpenSource?:
+    | ((source: SourceReference, phrase: string | null, quoteFormat?: 'markdown') => void)
+    | undefined;
   transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
   const shape = useShape();
@@ -57,7 +62,7 @@ export function UserMessage({
   );
   return (
     <div className="flex max-w-[72%] flex-col items-end gap-1.5 self-end not-first:mt-4">
-      <SentContextTiles fileFor={transientFile} items={tiles} />
+      <SentContextTiles fileFor={transientFile} items={tiles} onOpenSource={onOpenSource} />
       <ChatMessage
         actions={
           <>

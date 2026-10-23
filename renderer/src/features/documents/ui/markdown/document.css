@@ -821,3 +821,17 @@ html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-
 .markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-reject:hover {
   background: var(--diff-add-line);
 }
+
+/* Passage references are editor decorations, independent of Find and selection. */
+.markdown-surface .markdown-passage-reference {
+  background-color: color-mix(in oklab, var(--focus-ring) 8%, transparent);
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: color-mix(in oklab, var(--focus-ring) 45%, transparent);
+  text-underline-offset: 0.2em;
+}
+
+.markdown-surface .markdown-passage-active {
+  background-color: color-mix(in oklab, var(--focus-ring) 22%, transparent);
+  text-decoration-style: solid;
+}

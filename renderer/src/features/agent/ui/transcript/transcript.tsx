@@ -66,7 +66,9 @@ const TranscriptBlock = memo(function TranscriptBlock({
   now: number;
   onEditPrompt?: ((blockId: string) => void) | undefined;
   onOpenExternal(href: string): void;
-  onOpenSource?: ((source: SourceReference, phrase: string | null) => void) | undefined;
+  onOpenSource?:
+    | ((source: SourceReference, phrase: string | null, quoteFormat?: 'markdown') => void)
+    | undefined;
   onReviewTurnChange?: ((review: AgentTurnChangeReview) => void) | undefined;
   sourceFor?: ((path: string) => SourceReference | null) | undefined;
   onPermission(
@@ -88,6 +90,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
         editable={editable}
         now={now}
         onEditPrompt={onEditPrompt}
+        onOpenSource={onOpenSource}
         transientFile={transientFile}
       />
     );
@@ -183,7 +186,9 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenExternal(href: string): void;
   /** Opens a file the Agent changed beside the chat, without selecting it
    *  on the Agent's behalf. */
-  onOpenSource?: ((source: SourceReference, phrase: string | null) => void) | undefined;
+  onOpenSource?:
+    | ((source: SourceReference, phrase: string | null, quoteFormat?: 'markdown') => void)
+    | undefined;
   onPermission(
     toolUseId: string,
     permissionId: string,
@@ -309,6 +314,7 @@ export const AgentTranscript = memo(function AgentTranscript({
             }}
             editable={false}
             now={now}
+            onOpenSource={onOpenSource}
             transientFile={transientFile}
           />
         </div>

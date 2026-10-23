@@ -2584,8 +2584,8 @@ in the main process) opened a Markdown file beside the agent pane: the pane
 offered it as a dashed suggestion; a selection showed Ask agent on the
 toolbar; Ask agent bound "tide rises twice" as a passage chip and moved the
 caret into the composer; clicking the suggestion turned it into an inline
-mention and removed it. The formatting toolbar stays drawn after Ask agent
-moves focus, until the next selection change. Not proven at runtime: a real
+mention and removed it. The original pass left the formatting toolbar drawn after Ask agent moved
+focus; the passage-navigation change below now collapses that selection. Not proven at runtime: a real
 turn receiving the passage, and a reloaded chat restoring its chip.
 A real Default turn (2026-09-25) received the passage and replied with a
 `#:~:text=` citation, but showed the reader's own prompt, context block
@@ -2597,6 +2597,37 @@ A table selection (2026-10-23) is the same passage kind: Documents builds its
 text (`domain/table.ts`) and binds it through the same `askAbout` path, so
 validation, prompt rendering and history replay are unchanged; replay now
 recognizes CSV, TSV and XLSX paths.
+
+**Passage navigation and reference marks (2026-10-23):**
+`use-referenced-passages.ts` derives current-chat references from draft, queue,
+unread follow-ups, and sent context. App composition passes their source/Markdown identity into
+Documents; `passage-chip.tsx` routes both draft and sent clicks through document
+navigation. `use-markdown-highlights.ts` binds Find and passage navigation to the
+active viewer; `passage-highlights.ts` owns ProseMirror decorations and exact
+live-selection anchors. Ask agent collapses the selection before moving focus,
+which hides Crepe's toolbar. Edits before a passage map its position; edits to
+its text invalidate it without relocating to a duplicate. Reopened quotes are
+parsed with the editor's schema and require one exact match. References do not
+modify the source or native selection.
+Focused tests cover live duplicate occurrences, source preservation, changed
+text, formatted/multi-block quotes, ambiguous recovery, active-chat switching,
+queue/follow-up/history membership, sent and unread message navigation,
+independent remove and locate actions, and navigation
+failure notices. A local Electron pass over a production-built harness with
+the real Markdown editor, session
+runtime, and composer selected a passage, clicked Ask agent, confirmed toolbar
+closure and composer focus, scrolled away, located the passage from its chip,
+cleared the stronger highlight while retaining the reference mark, and removed
+the reference. Provider execution and packaged delivery are not established
+by this UI pass.
+Integration with the 2026-10-23 remote changes retains references while Claude
+follow-ups wait to be read, and routes both sent and unread message chips through
+the extracted `user-message.tsx`. Five focused renderer files passed 43 tests;
+all renderer gate checks passed after removing a duplicate catalog type to meet
+the file-size limit. Host types, documentation checks, Electron tests and the
+built-output Electron smoke passed, as did 98 broker/translator tests and three
+native OpenCode tests against controlled gateways. The integration pass did not
+repeat the passage-specific visual harness or exercise a live model provider.
 
 **Composer context shrink (2026-10-23):** the preview and queue regions now
 measure their inner content with `useMeasuredSize`; the animated parent's

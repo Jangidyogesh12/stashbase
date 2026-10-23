@@ -13,6 +13,8 @@ import { useCallback, useRef } from 'react';
 import type { DocumentSelection } from '@/features/documents/domain/selection';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
+import { capturePassage } from './passage-highlights';
+
 /** The selected passage as Markdown, or null when nothing but whitespace is
  *  selected. */
 export function selectedMarkdown(ctx: Ctx): string | null {
@@ -47,7 +49,9 @@ export function useAskAgent(
   latest.current = { onAskAgent, source };
   const ask = useCallback((ctx: Ctx) => {
     const markdown = selectedMarkdown(ctx);
-    if (markdown !== null) latest.current.onAskAgent?.({ markdown, source: latest.current.source });
+    if (markdown === null || !latest.current.onAskAgent) return;
+    capturePassage(ctx, markdown);
+    latest.current.onAskAgent({ markdown, source: latest.current.source });
   }, []);
   return onAskAgent ? ask : null;
 }

@@ -44,6 +44,7 @@ export interface DocumentViewerServices {
   /** Absent where no Agent sits beside the document; the surfaces that
    *  select text or cells then offer no Ask agent control. */
   onAskAgent?: ((selection: DocumentSelection) => void) | undefined;
+  referencedPassages?: readonly DocumentSelection[] | undefined;
   onNavigate(target: DocumentNavigationTarget): void;
   onOpenExternal(href: string): Promise<boolean>;
   onOpenPrepared?: ((source: SourceReference, format: PreparedOnOpenFormat) => void) | undefined;

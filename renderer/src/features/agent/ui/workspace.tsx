@@ -12,7 +12,6 @@ import {
   agentGate,
   offersRuntimeUpdate,
   undescribedAgent,
-  type Agent,
 } from '@/features/agent/domain/agent-catalog';
 import {
   agentSkills,
@@ -50,13 +49,6 @@ import { AgentUpgradeOfferCard } from './upgrade-offer';
 import { AgentWorkStatus } from './work-status';
 import type { AgentWorkspaceProps } from './workspace-lazy';
 
-interface WorkspaceCatalog {
-  agents: Agent[];
-  error: boolean;
-  loading: boolean;
-  refresh(): void;
-}
-
 /** Draft first; request account or native runtime access only on Send. */
 function ChatWorkspace({
   catalog,
@@ -76,7 +68,7 @@ function ChatWorkspace({
   active,
 }: Omit<AgentWorkspaceProps, 'catalog'> & {
   active: AgentSessionRuntime;
-  catalog: WorkspaceCatalog;
+  catalog: ReturnType<typeof useAgentCatalog>;
   /** The catalog as a Port, for the new-chat control that reads it itself. */
   catalogPort: AgentCatalogPort;
 }) {
@@ -250,6 +242,7 @@ function ChatWorkspace({
           <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-surface-2 to-transparent" />
           <div className="@container relative mx-auto w-full max-w-[46rem]" ref={composerRef}>
             <AgentContextComposer
+              onOpenSource={onOpenSource}
               attachments={selectedAgent.abilities.attachments}
               environment={scopeEnvironment}
               maxRows={6}

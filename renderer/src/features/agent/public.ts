@@ -38,3 +38,5 @@ export {
 } from './infrastructure/scheduled-tasks-api';
 export { useScheduledRunReceiver } from './hooks/use-scheduled-run-receiver';
 export type { ScheduledRunsPort, ScheduledTasksPort } from './application/ports';
+
+export { useReferencedPassages } from './hooks/use-referenced-passages';

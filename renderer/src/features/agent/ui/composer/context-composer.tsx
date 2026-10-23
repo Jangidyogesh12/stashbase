@@ -57,6 +57,9 @@ export interface AgentContextComposerProps {
   maxRows?: number;
   minRows?: number;
   onQueueChange: (queue: QueuedMessage[]) => void;
+  onOpenSource?:
+    | ((source: SourceReference, phrase: string | null, quoteFormat?: 'markdown') => void)
+    | undefined;
   onReprocess?: ((source: SourceReference) => void) | undefined;
   onRefreshSkills: () => void;
   onSkillChange: (skill: string | null) => void;
@@ -113,6 +116,7 @@ export function AgentContextComposer({
   maxRows = 6,
   minRows = 3,
   onQueueChange,
+  onOpenSource,
   onRefreshSkills,
   onReprocess,
   onSkillChange,
@@ -360,6 +364,7 @@ export function AgentContextComposer({
               {tileValidations.length > 0 && (
                 <div aria-label="Attached context" className="contents" role="list">
                   <DraftSourceTiles
+                    onOpenSource={onOpenSource}
                     onRemove={removeTile}
                     onReprocess={onReprocess}
                     size={80}

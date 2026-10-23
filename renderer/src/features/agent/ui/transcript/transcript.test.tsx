@@ -454,3 +454,28 @@ it('leaves a short prompt open with no fold control', () => {
   renderTranscript([{ id: 'u1', kind: 'user', text: 'Map the repo' }], false);
   expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
 });
+
+it('locates passage references in sent messages and unread follow-ups', async () => {
+  const user = userEvent.setup();
+  const onOpenSource = vi.fn();
+  const source = { folderPath: '/project', path: 'essay.md' };
+  const context = [{ kind: 'passage' as const, source, quote: 'Opening words' }];
+  render(
+    <AgentTranscript
+      activeTurn
+      blocks={[{ id: 'u', kind: 'user', text: 'Revise', context }]}
+      pending={[{ id: 'p', text: 'Also revise', context }]}
+      onOpenExternal={vi.fn()}
+      onOpenSource={onOpenSource}
+      onPermission={vi.fn(() => true)}
+      onRetry={vi.fn(() => true)}
+    />,
+  );
+  const references = screen.getAllByRole('button', {
+    name: 'Locate passage in essay.md: Opening words',
+  });
+  expect(references).toHaveLength(2);
+  for (const reference of references) await user.click(reference);
+  expect(onOpenSource).toHaveBeenCalledTimes(2);
+  expect(onOpenSource).toHaveBeenLastCalledWith(source, 'Opening words', 'markdown');
+});

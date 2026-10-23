@@ -29,7 +29,11 @@ export interface DocumentSources {
   navigateToMatch(intent: SearchNavigationIntent): Promise<boolean>;
   /** Opens the document a reply cited and lands on the quoted phrase. Answers
    *  whether the document opened; a phrase it no longer holds is said there. */
-  locatePassage(source: SourceReference, phrase: string): Promise<boolean>;
+  locatePassage(
+    source: SourceReference,
+    phrase: string,
+    quoteFormat?: 'markdown',
+  ): Promise<boolean>;
   /** Opens a source. Browsing is the default and opens a preview, the one
    *  tab the next browse reuses; `keep` asks for a tab that stays. */
   open(source: SourceReference, options?: { keep?: boolean }): void;
@@ -106,11 +110,11 @@ export function useDocumentSources(
   );
 
   const locatePassage = useCallback(
-    async (source: SourceReference, phrase: string) => {
+    async (source: SourceReference, phrase: string, quoteFormat?: 'markdown') => {
       if (!workspace || !documents) return false;
       const opened = await openDocument(workspace, documents, source, {
         preview: true,
-        search: passageSearchTarget(phrase),
+        search: passageSearchTarget(phrase, quoteFormat),
       });
       return opened !== null;
     },

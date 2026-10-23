@@ -68,6 +68,7 @@ const markdown = viewerEntry({
   services: [
     'navigation',
     'onAskAgent',
+    'referencedPassages',
     'onNavigate',
     'onOpenExternal',
     'renderReadingControl',

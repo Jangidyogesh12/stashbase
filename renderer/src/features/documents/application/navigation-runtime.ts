@@ -22,6 +22,8 @@ export interface FindMatchInfo {
 }
 
 export interface DocumentFindController {
+  /** Locate a quoted passage without changing the editor selection. */
+  locatePassage?(quote: string): FindMatchInfo | Promise<FindMatchInfo>;
   close(): void;
   next(): FindMatchInfo | Promise<FindMatchInfo>;
   previous(): FindMatchInfo | Promise<FindMatchInfo>;
@@ -196,7 +198,11 @@ export function createDocumentNavigationRuntime(
       total: 0,
       wholeWord,
     });
-    void Promise.resolve(controller.setQuery(query, { caseSensitive, wholeWord }))
+    const pendingMatch =
+      pending.target.quoteFormat === 'markdown' && controller.locatePassage
+        ? controller.locatePassage(query)
+        : controller.setQuery(query, { caseSensitive, wholeWord });
+    void Promise.resolve(pendingMatch)
       .then(async (initial) => {
         if (disposed || sequence !== requestSequence || findController !== controller) return;
         if (initial.total === 0 || occurrenceIndex >= initial.total) {

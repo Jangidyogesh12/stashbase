@@ -10,14 +10,12 @@
  * source turns red.
  */
 import { AnimatePresence, motion } from 'framer-motion';
-import { TextQuote } from 'lucide-react';
 
 import { FileThumbnail } from '@/components/ui/file-thumbnail';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import {
   contextItemKey,
   contextItemName,
-  passageExcerpt,
   type AgentContextItem,
   type ContextStatus,
   type ContextValidation,
@@ -30,11 +28,16 @@ import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { CHIP_FRAME, ChipRemove } from './chip';
+import { PassageChip } from './passage-chip';
 import { RemoveBadge, StatusLine, TileBox } from './tile-parts';
 
 type SourceItem = Extract<AgentContextItem, { kind: 'source' }>;
-type PassageItem = Extract<AgentContextItem, { kind: 'passage' }>;
 type TransientItem = Extract<AgentContextItem, { kind: 'transient' }>;
+type OpenSource = (
+  source: SourceReference,
+  phrase: string | null,
+  quoteFormat?: 'markdown',
+) => void;
 
 /** What a source or passage is told: the item, why it is unavailable, and
  *  its state. */
@@ -176,31 +179,6 @@ function SourceChip({
   );
 }
 
-/** A selected passage: the source chip's frame with a quote glyph, the file
- *  name, and the passage's first words; the whole quote is its tooltip. In a
- *  draft it carries its own remove. */
-function PassageChip({
-  item,
-  onRemove,
-  reason,
-  status = 'ready',
-}: ItemProps<PassageItem> & { onRemove?: (() => void) | undefined }) {
-  const shape = useShape();
-  const name = contextItemName(item);
-  return (
-    <div
-      className={cn(CHIP_FRAME, 'max-w-72 gap-1.5 pl-2', onRemove ? 'pr-0' : 'pr-2.5', shape.bg)}
-      title={reason ?? `${item.source.path}\n\n${item.quote}`}
-    >
-      <TextQuote aria-hidden="true" className="shrink-0 text-muted-foreground" size={14} />
-      <span className="max-w-32 shrink-0 truncate text-foreground">{name}</span>
-      <span className="min-w-0 truncate text-muted-foreground">{passageExcerpt(item.quote)}</span>
-      {status !== 'ready' && <StatusLine status={status} />}
-      <ChipRemove name={name} onRemove={onRemove} />
-    </div>
-  );
-}
-
 /** A sent upload whose File is gone, which is every replayed history record:
  *  the same box over a server preview or a type glyph. */
 function RemoteTile({ item, size }: { item: TransientItem; size: number }) {
@@ -228,11 +206,13 @@ function RemoteTile({ item, size }: { item: TransientItem; size: number }) {
 /** The draft's tiles and passage chips, rendered inside the composer's preview row
  *  ahead of its file thumbnails with the thumbnails' own enter and exit. */
 export function DraftSourceTiles({
+  onOpenSource,
   onRemove,
   onReprocess,
   size,
   validations,
 }: {
+  onOpenSource?: OpenSource | undefined;
   onRemove: (item: AgentContextItem) => void;
   onReprocess?: ((source: SourceReference) => void) | undefined;
   size: number;
@@ -272,9 +252,12 @@ export function DraftSourceTiles({
             ) : item.kind === 'passage' ? (
               <PassageChip
                 item={item}
+                onOpenSource={onOpenSource}
                 onRemove={() => onRemove(item)}
                 reason={validation.reason}
-                status={validation.status}
+                status={
+                  validation.status !== 'ready' ? <StatusLine status={validation.status} /> : null
+                }
               />
             ) : (
               <div
@@ -300,11 +283,13 @@ export function DraftSourceTiles({
  *  the way the chat message shows its own files. */
 export function SentContextTiles({
   align = 'end',
+  onOpenSource,
   fileFor,
   items,
   size = 64,
 }: {
   align?: 'start' | 'end';
+  onOpenSource?: OpenSource | undefined;
   fileFor?: ((path: string) => File | undefined) | undefined;
   items: readonly AgentContextItem[];
   size?: number;
@@ -327,7 +312,8 @@ export function SentContextTiles({
             <SourceChip item={item} key={contextItemKey(item)} />
           );
         }
-        if (item.kind === 'passage') return <PassageChip item={item} key={contextItemKey(item)} />;
+        if (item.kind === 'passage')
+          return <PassageChip item={item} key={contextItemKey(item)} onOpenSource={onOpenSource} />;
         const file = fileFor?.(item.path);
         return file ? (
           <FileThumbnail file={file} key={item.path} size={size} />

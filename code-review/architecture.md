@@ -1184,6 +1184,14 @@ registered host boundaries; renderer shared types are a different layer.
   files. Copy and Ask agent read the selection's rows asynchronously, refuse
   before reading when the selection cannot fit, and check Ask agent's text against
   `shared/domain/passage.ts`, the limit the agent feature validates at send.
+- Chat passage membership comes from the active session's draft, queue, unread
+  follow-ups, and user-message context; app composition passes source-scoped snapshots into
+  Documents. Markdown owns transient passage anchors and decorations, mapping
+  positions through editor transactions and invalidating changed text. These
+  decorations never serialize into user files. Reference clicks use the active
+  viewer's navigation claim with an explicit Markdown quote format; ordinary
+  text citations and Find keep their own search path. Removing references and
+  switching chats update marks without recreating the editor or its undo state.
 - Surface recovery remounts the smallest boundary. Shell remount loses live buffers
   and reloads only saved source files. HTTP loss must not reload the app.
   Raw failures are mapped to feature-owned messages and recovery kinds.

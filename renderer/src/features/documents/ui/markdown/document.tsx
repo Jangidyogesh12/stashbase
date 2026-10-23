@@ -33,7 +33,6 @@ import { prefersReducedMotion } from '@/shared/runtime/appearance-surface';
 import { writeToClipboard } from '@/shared/ui/clipboard';
 
 import { watchMarkdownChanges } from './changes';
-import { createMarkdownFindController } from './find-controller';
 import { math } from './math';
 import { MarkdownOpenFailure } from './open-failure';
 
@@ -53,6 +52,7 @@ import {
 } from './outline-adapter';
 import { useAskAgent } from './selection-markdown';
 import { selectionToolbar } from './selection-toolbar';
+import { useMarkdownHighlights } from './use-markdown-highlights';
 import { useRevisionReview, type RevisionBinding } from './use-revision-review';
 import { attachWritingAids, createWordCounter, WordCount } from './writing-aids';
 
@@ -69,6 +69,7 @@ export interface MarkdownDocumentProps {
   /** Ask Agent on the selection toolbar, with the exact selection. Absent
    *  where no Agent sits beside the document. */
   onAskAgent?: ((selection: DocumentSelection) => void) | undefined;
+  referencedPassages?: readonly DocumentSelection[] | undefined;
   onChange(value: string): void;
   onNavigate(target: { anchor?: string | undefined; source: SourceReference }): void;
   onModeChange(mode: MarkdownViewMode): void;
@@ -93,6 +94,7 @@ export function MarkdownDocument({
   mode,
   name,
   onAskAgent,
+  referencedPassages,
   onChange,
   onNavigate,
   onModeChange,
@@ -138,6 +140,15 @@ export function MarkdownDocument({
     reversed: reviewReversed,
   } = useRevisionReview({ creationState, revision });
   const askAgentRun = useAskAgent(onAskAgent, source);
+  const attachHighlights = useMarkdownHighlights({
+    active,
+    creationState,
+    hostRef,
+    navigation,
+    referencedPassages,
+    source,
+    tabId,
+  });
   const pendingAnchor = useStore(navigation.store, (state) =>
     state.pendingAnchor?.tabId === tabId ? state.pendingAnchor.id : null,
   );
@@ -180,6 +191,7 @@ export function MarkdownDocument({
       .addFeature(codeMirror, { copyText: 'Copy code', languages })
       .addFeature(math);
     attachHeadingAnchors(editor);
+    const releaseHighlights = attachHighlights(editor);
     const releaseReview = attachReview(editor);
     const updateHeadings = () => {
       const view = currentEditorView(editor);
@@ -229,13 +241,14 @@ export function MarkdownDocument({
     return () => {
       if (editorRef.current === editor) editorRef.current = null;
       releaseReview();
+      releaseHighlights();
       if (refreshHeadingsRef.current === updateHeadings) {
         refreshHeadingsRef.current = () => undefined;
       }
       stopCreation();
       releaseHeldEdits();
     };
-  }, [askAgentRun, attachReview, attempt, navigation, tabId, wordCounter]);
+  }, [askAgentRun, attachHighlights, attachReview, attempt, navigation, tabId, wordCounter]);
 
   useEffect(() => {
     editorRef.current?.setReadonly(readOnly);
@@ -307,19 +320,6 @@ export function MarkdownDocument({
         ),
     );
   }, [active, activeHeading, creationState, headings, navigation, tabId]);
-
-  useEffect(() => {
-    if (!active || creationState !== 'ready') return;
-    const host = hostRef.current;
-    const proseMirror = host?.querySelector<HTMLElement>('.ProseMirror');
-    if (!host || !proseMirror) return;
-    const controller = createMarkdownFindController(proseMirror, documentScroller(host));
-    const release = navigation.claimFind(tabId, registrationOwnerRef.current, controller);
-    return () => {
-      release();
-      controller.dispose();
-    };
-  }, [active, creationState, navigation, tabId]);
 
   useEffect(() => {
     if (!active || creationState !== 'ready' || headings.length === 0) return;

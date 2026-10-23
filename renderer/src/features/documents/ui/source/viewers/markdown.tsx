@@ -7,6 +7,7 @@ export default function MarkdownViewer({
   name,
   navigation,
   onAskAgent,
+  referencedPassages,
   onNavigate,
   onOpenExternal,
   renderReadingControl,
@@ -16,6 +17,7 @@ export default function MarkdownViewer({
 }: DocumentViewerProps<
   | 'navigation'
   | 'onAskAgent'
+  | 'referencedPassages'
   | 'onNavigate'
   | 'onOpenExternal'
   | 'renderReadingControl'
@@ -42,6 +44,7 @@ export default function MarkdownViewer({
           name={name}
           navigation={navigation}
           onAskAgent={onAskAgent}
+          referencedPassages={referencedPassages}
           onChange={onChange}
           onModeChange={(mode) => runtime.setMarkdownMode(mode)}
           onNavigate={onNavigate}

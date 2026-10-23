@@ -38,7 +38,9 @@ export interface AgentWorkspaceProps {
   onSignIn(signal?: AbortSignal): void | Promise<boolean>;
   /** Opens a file the Agent changed or cited beside the chat; the user chose
    *  it. A cited phrase is the passage to locate, null for the whole file. */
-  onOpenSource?: ((source: SourceReference, phrase: string | null) => void) | undefined;
+  onOpenSource?:
+    | ((source: SourceReference, phrase: string | null, quoteFormat?: 'markdown') => void)
+    | undefined;
   /** Opens what an Agent turn changed in one file as a review inside that
    *  document. The documents feature owns the review, so the composition
    *  layer supplies this. */

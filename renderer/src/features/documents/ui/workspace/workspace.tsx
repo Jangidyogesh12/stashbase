@@ -47,6 +47,7 @@ export interface DocumentWorkspaceProps {
   genericPreviewApi: GenericFilePreviewPort;
   /** Binds a selected Markdown passage to the Agent beside the document. */
   onAskAgent?: ((selection: DocumentSelection) => void) | undefined;
+  referencedPassages?: readonly DocumentSelection[] | undefined;
   onNavigate?: ((target: DocumentNavigationTarget) => void) | undefined;
   onOpenExternal?: ((href: string) => Promise<boolean>) | undefined;
   /** Fired once when a DOCX or media document mounts so preparation can be
@@ -72,6 +73,7 @@ export function DocumentWorkspace({
   docxPreviewApi,
   genericPreviewApi,
   onAskAgent,
+  referencedPassages,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
   onOpenPrepared,
@@ -156,6 +158,7 @@ export function DocumentWorkspace({
             genericPreviewApi={genericPreviewApi}
             navigation={runtime.navigation}
             onAskAgent={onAskAgent}
+            referencedPassages={referencedPassages}
             onNavigate={onNavigate}
             onOpenExternal={onOpenExternal}
             onOpenPrepared={onOpenPrepared}

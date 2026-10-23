@@ -165,3 +165,31 @@ describe('bound context tiles', () => {
     expect(container.firstChild).toBeNull();
   });
 });
+
+it('locates draft and sent passages without triggering their remove action', async () => {
+  const item: AgentContextItem = {
+    kind: 'passage',
+    quote: '**Selected words**',
+    source: { folderPath: '/project', path: 'essay.md' },
+  };
+  const onOpenSource = vi.fn();
+  const onRemove = vi.fn();
+  const view = render(
+    <DraftSourceTiles
+      validations={[validation(item)]}
+      size={80}
+      onRemove={onRemove}
+      onOpenSource={onOpenSource}
+    />,
+  );
+  await userEvent.click(screen.getByRole('button', { name: /^Locate passage in essay.md/ }));
+  expect(onOpenSource).toHaveBeenLastCalledWith(item.source, item.quote, 'markdown');
+  expect(onRemove).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Remove essay.md' }));
+  expect(onRemove).toHaveBeenCalledWith(item);
+  expect(onOpenSource).toHaveBeenCalledTimes(1);
+  view.rerender(<SentContextTiles items={[item]} onOpenSource={onOpenSource} />);
+  await userEvent.click(screen.getByRole('button', { name: /^Locate passage in essay.md/ }));
+  expect(onOpenSource).toHaveBeenCalledTimes(2);
+  await expectNoA11yViolations(view.container);
+});
