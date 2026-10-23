@@ -76,9 +76,13 @@ export function describeRuntime(
       return { description: 'Needs sign-in', stage: failure.stage, action: null, working: null };
     }
     // A refused account is already signed in; another sign-in changes
-    // nothing. Every other failure is recovered by Retry, whatever it reruns.
+    // nothing. A sign-in check that could not answer may come from a copy
+    // that does not run, which connecting again replaces. Every other
+    // failure is recovered by Retry, whatever it reruns.
     const offered: AgentRuntimeAction =
-      failure.stage === 'authenticate' && failure.refusal !== 'account-refused'
+      failure.stage === 'authenticate' &&
+      failure.refusal !== 'account-refused' &&
+      failure.refusal !== 'authentication-check-failed'
         ? { kind: 'login', label: 'Sign in' }
         : {
             kind: failure.stage === 'configure' ? 'retry' : (failure.retryAction ?? 'retry'),

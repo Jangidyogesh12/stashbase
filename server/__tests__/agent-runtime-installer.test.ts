@@ -9,6 +9,7 @@ import {
   AgentBootstrapCoordinator,
   agentIsAuthenticated,
   agentPowerShellInstallerScript,
+  agentSignInUrl,
   CLAUDE_PS1_BOOTSTRAP,
   CODEX_PS1_BOOTSTRAP,
   installClaude,
@@ -280,6 +281,35 @@ test('retrying a failed install uses an executable that runs instead of download
   assert.deepEqual(verified, ['/npm/codex']);
 });
 
+test('connecting a copy that cannot answer its sign-in check installs the native one when that copy does not run', async () => {
+  // An npm or Homebrew Codex whose platform binary is missing: found, but every command fails.
+  let native: string | null = null;
+  let installs = 0;
+  const verified: string[] = [];
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => native ?? '/opt/homebrew/bin/codex',
+    resolveNativeExecutable: () => native,
+    installRuntime: async () => {
+      installs++;
+      native = '/home/.local/bin/codex';
+    },
+    verifyExecutable: async (_id, candidate) => {
+      verified.push(candidate);
+      if (candidate !== native) throw new Error('spawn …/vendor/codex ENOENT');
+    },
+    isAuthenticated: (_id, candidate) => {
+      if (candidate !== native) throw new Error('Could not check Codex sign-in (exit 1: spawn ENOENT).');
+      return true;
+    },
+  }).dependencies);
+  assert.equal((await connect(coordinator, 'codex')).failure?.code, 'authentication-check-failed');
+  assert.equal(installs, 0);
+
+  assert.equal((await prepare(coordinator, 'codex')).phase, 'ready');
+  assert.equal(installs, 1);
+  assert.deepEqual(verified, ['/opt/homebrew/bin/codex']);
+});
+
 test('native installation cannot report success while discovery still selects the npm copy', async () => {
   let configured = 0;
   const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
@@ -489,6 +519,18 @@ test('a timed out sign-in offers the printed page and keeps its output without t
     );
     assert.deepEqual(urls, ['https://auth.example.com/oauth/authorize?state=secret-state']);
   });
+
+test('only a printed page that finishes sign-in on this machine is offered, once it has fully arrived', () => {
+  // Shapes the real CLIs print (Claude 2.1.280, Codex 0.160.0), attempt state elided.
+  const claude = 'Opening browser to sign in…\nIf the browser didn\'t open, visit: https://claude.com/cai/oauth/authorize?code=true&client_id=c&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&state=s\nPaste code here if prompted > ';
+  const codex = 'Starting local login server on http://localhost:1455.\nIf your browser did not open, navigate to this URL to authenticate:\n\nhttps://auth.openai.com/oauth/authorize?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&state=s\n';
+  assert.equal(agentSignInUrl(claude), undefined);
+  assert.equal(
+    agentSignInUrl(codex),
+    'https://auth.openai.com/oauth/authorize?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&state=s',
+  );
+  assert.equal(agentSignInUrl(codex.slice(0, codex.indexOf('&redirect_uri'))), undefined);
+});
 
 test('a provider refusal makes the next sign-in reauthenticate until the runtime is ready again', async () => {
   const requests: boolean[] = [];

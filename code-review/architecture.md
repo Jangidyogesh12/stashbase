@@ -313,10 +313,14 @@ stable status without download, retry, or a new durable demand latch.
   readiness check of the old executable. Retrying a failed first installation
   reuses a discovered executable only after the same `--version` verification
   the installer requires, including one installed outside StashBase meanwhile;
-  otherwise it reruns the installer. While a flight runs, its status carries
-  the step sentence the service wrote and, during browser sign-in, the
-  `https` page the login command printed; the first-send prompt and Settings
-  both present them.
+  otherwise it reruns the installer. Connecting after a sign-in check that
+  could not answer applies the same verification, so a discovered copy that
+  does not run is replaced by the native installation rather than retried.
+  While a flight runs, its status carries the step sentence the service wrote
+  and, during browser sign-in, the complete `https` page the login command
+  printed when its OAuth redirect stays on loopback; the first-send prompt and
+  Settings both present them. Claude prints a page that redirects to its
+  provider for a pasted code, and login stdin is not relayed, so it carries none.
   Only identical explicit actions share a flight; a conflicting action receives
   an HTTP 409 and never observes another operation as its own success. Startup
   discovery may observe an existing flight without changing its intent.

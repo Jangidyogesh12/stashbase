@@ -98,16 +98,20 @@ Settings owns lasting preferences and connection configuration:
   no browser, and sign-in completes as soon as the agent reports a signed-in
   account, even if its login command keeps waiting. The reader is asked for the
   browser only once the agent opens it; until then the row says StashBase is
-  checking the agent's sign-in. While the browser step runs, its row offers the
-  sign-in page the agent printed and Stop waiting, which ends the agent's login
-  and leaves it signed out, offering Sign in again. Antigravity has no separate
+  checking the agent's sign-in. While the browser step runs, its row offers Stop
+  waiting, which ends the agent's login and leaves it signed out, offering Sign
+  in again. It also offers the sign-in page the agent printed when that page
+  finishes sign-in by itself, as Codex's does. Claude's printed page asks for a
+  code to paste into its terminal, so Claude offers none. Antigravity has no separate
   sign-in command: its sign-in opens the browser from a terminal session
   StashBase starts, a pseudo-terminal on macOS and Linux and a console window on
   Windows, and closes it once Antigravity reports a signed-in account. It prints
   no sign-in page, so its wait offers none.
   A signed-in account the provider refuses, for example outside its available
   regions, reads as Account not accepted with the provider's own sentence. It
-  offers a recheck, not another sign-in. An expired sign-in reported by
+  offers a recheck, not another sign-in. So does a sign-in check the agent
+  could not answer, which can come from an installed copy that does not run.
+  An expired sign-in reported by
   a running conversation restores that action without clearing credentials.
   Setup and update failures show the failed operation, stage, and available
   diagnostic in place, including service refusals and download errors.
@@ -142,7 +146,10 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   agent or StashBase. It offers the page it opened again, for a browser that
   did not open, and one Stop waiting. A browser that does not open never
   leaves a wait without a way on, and it does not spend a Google connection's
-  email code.
+  email code. Claude is the exception: the page its login prints ends with a
+  code to paste into its terminal, which StashBase does not relay, so its wait
+  offers Stop waiting alone. A Claude sign-in finished in a terminal still
+  completes the wait.
 - The account's sign-in dialog stays open through its own browser wait.
   Leaving it leaves the wait running for the window, where the sign-in banner
   and Settings show it; opening sign-in again returns to the dialog on that
@@ -182,6 +189,9 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   operation; reconnecting an existing copy alone does not count as an update.
   Retrying a failed first installation uses a copy that now runs, including
   one the user installed another way, instead of downloading again.
+  Connecting a copy whose sign-in check could not answer checks the same way
+  that it runs, and installs the official native copy when it does not, such
+  as an npm or Homebrew copy missing its platform binary. The other copy stays.
   Identical setup requests share progress. A different request during setup is
   explicitly refused, naming the running operation. Service sentences state the
   cause only; the surface showing them offers Retry. Downloads,

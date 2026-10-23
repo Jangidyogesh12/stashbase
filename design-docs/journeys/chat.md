@@ -76,10 +76,12 @@ Claude, Codex, and Antigravity continue from installation into their provider's
 browser sign-in when needed, and resume the retained submission only after
 readiness. While preparation runs, the prompt names the step the service is on
 in its own words and how long the wait has lasted, so a slow download or a
-pending browser sign-in never reads as a failure. During sign-in it offers the
-provider page the runtime printed, for a browser that did not open, and Stop
+pending browser sign-in never reads as a failure. During sign-in it offers Stop
 waiting, which ends the runtime's login and returns the prompt to its question
-with the send still held.
+with the send still held. For a browser that did not open, it also offers the
+provider page the runtime printed when that page finishes sign-in by itself, as
+Codex's does. Claude's printed page ends with a code to paste into its terminal,
+so Claude's wait offers none.
 
 ## Failure and Return
 

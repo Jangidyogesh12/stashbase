@@ -148,9 +148,13 @@ export class AgentBootstrapCoordinator {
       return this.status(id);
     }
     // A failed first install can leave an executable behind, and the user may
-    // have installed the runtime another way since. Retry accepts what it finds
-    // only once that executable runs; otherwise it reruns the installer.
-    const retryInstallation = action === 'bootstrap' && this.status(id).failure?.stage === 'installation';
+    // have installed the runtime another way since. A copy that could not
+    // answer its sign-in check may not run at all, as an npm or Homebrew copy
+    // missing its platform binary does. Connecting again accepts what it finds
+    // only once that executable runs; otherwise it runs the installer.
+    const previous = this.status(id).failure;
+    const retryInstallation = action === 'bootstrap'
+      && (previous?.stage === 'installation' || previous?.code === 'authentication-check-failed');
     const retryOf = this.status(id).phase === 'failed' ? this.attempts.get(id) : undefined;
     const attemptId = randomUUID();
     this.attempts.set(id, attemptId);
@@ -412,9 +416,28 @@ export async function agentIsAuthenticated(
 const AGENT_LOGIN_TIMEOUT_MS = 10 * 60_000;
 const AGENT_LOGIN_POLL_MS = 3_000;
 
-/** The provider page a CLI prints for a browser that did not open. */
+/** The provider page a CLI prints for a browser that did not open, once the
+ * whole address has arrived. Only a page that finishes sign-in by itself is
+ * offered: one whose OAuth redirect stays on this machine, as Codex's does.
+ * Claude prints a page that redirects to its provider and ends by showing a
+ * code to paste into the CLI, and the login runs here without input, so that
+ * page could never finish. */
 export function agentSignInUrl(output: string): string | undefined {
-  return /https:\/\/[^\s"'<>]+/.exec(output)?.[0];
+  for (const [page] of output.matchAll(/https:\/\/[^\s"'<>]+(?=[\s"'<>])/g)) {
+    if (redirectsToThisMachine(page)) return page;
+  }
+  return undefined;
+}
+
+function redirectsToThisMachine(page: string): boolean {
+  try {
+    const redirect = new URL(page).searchParams.get('redirect_uri');
+    if (redirect === null) return true;
+    const { hostname, protocol } = new URL(redirect);
+    return protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
+  } catch {
+    return false;
+  }
 }
 
 /** Login output kept for a failure: one line, without the query strings that

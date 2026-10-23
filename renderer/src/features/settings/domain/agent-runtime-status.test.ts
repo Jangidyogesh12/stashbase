@@ -126,24 +126,25 @@ describe('describeRuntime', () => {
     expect(display.stage).toBe('authenticate');
   });
 
-  it('offers a recheck, not sign-in, for an account the provider refused', () => {
+  // A refused account is signed in already, and a sign-in check that could
+  // not answer may be a copy that does not run: connecting again, not
+  // another sign-in, is what can change either.
+  it.each([
+    ['account-refused', 'Signed in, but the provider refused this account.'],
+    ['authentication-check-failed', 'Could not check Codex sign-in (exit 1: spawn ENOENT).'],
+  ] as const)('offers a recheck, not sign-in, for %s', (refusal, note) => {
     const display = describeRuntime(
       codex({
         installed: true,
         preparation: {
           kind: 'failed',
-          failure: {
-            note: 'Signed in, but the provider refused this account.',
-            refusal: 'account-refused',
-            retryAction: 'install',
-            stage: 'authenticate',
-          },
+          failure: { note, refusal, retryAction: 'install', stage: 'authenticate' },
         },
       }),
       false,
     );
     expect(display.action).toEqual({ kind: 'install', label: 'Retry' });
-    expect(display.description).toBe('Signed in, but the provider refused this account.');
+    expect(display.description).toBe(note);
   });
 
   it('labels a configure-stage failure as a plain retry too', () => {

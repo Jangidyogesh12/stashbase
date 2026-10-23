@@ -1687,6 +1687,31 @@ and the after-exit check, so a CLI that keeps waiting after a successful
 browser sign-in still waits out the 10-minute limit. Antigravity's sign-in
 launch does not yet go through `agent-cli-launch.ts`.
 
+**Real CLI connect pass (2026-10-23):** a source host with an isolated home and
+real CLIs, its browser launch intercepted, exercised the new-user path over
+HTTP. Signed-out `claude auth status` (2.1.280) and `codex login status`
+(0.160.0) exit 1 with the output `agentIsAuthenticated` expects; startup read
+both as installed and signed out. Real `claude auth login` opens a loopback
+callback page but prints its provider-redirect page, which ends by asking for a
+pasted code that the stdin-less login can never receive. The prompt had offered
+that page as its sign-in link. `agentSignInUrl` now offers only a complete
+printed page whose `redirect_uri` is loopback or absent. Codex's printed page
+redirects to `localhost:1455`; this is established from the binary's
+strings, not from a login run. The corrected host showed Claude's browser step
+without a link, opened the loopback page, and Stop retired the login. In a
+fresh home, the bootstrap route ran the official Claude installer (2.1.309,
+27 s) to `authentication-required`. On this Mac, a Homebrew npm Codex without
+its platform binary is discovered first. Its sign-in check fails, and Retry
+had repeated that check. Connect now verifies such a copy and installed native
+Codex 0.164.0 (16 s); Settings offers Retry instead of a failing Sign in
+(installer and `agent-runtime-status` tests). No browser sign-in was completed,
+no session was started, and Windows/Linux were not exercised.
+**Gap:** a Claude browser that does not open has no in-app way on; relaying
+Claude's pasted code to its login would provide one. The Claude installer's
+PATH advice line can briefly show as the install step, and a runtime-level
+model read refused by a broken copy is not repeated for five minutes after
+native installation.
+
 **Default Auto and connection latency (2026-10-13):** Default now exposes all
 four access modes. `default-agent-permissions.ts` owns the bounded hosted review
 for Auto; `opencode-agent.test.ts` covers exact-action grants, manual fallback
