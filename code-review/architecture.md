@@ -1219,8 +1219,10 @@ registered host boundaries; renderer shared types are a different layer.
   `shared/domain/passage.ts`, the limit the agent feature validates at send.
 - Chat passage membership comes from the active session's draft, queue, unread
   follow-ups, and user-message context; app composition passes source-scoped snapshots into
-  Documents. Markdown owns transient passage anchors and decorations, mapping
-  positions through editor transactions and invalidating changed text. These
+  Documents. Membership is selected by item identity, so a streamed reply
+  re-renders neither app composition nor the transcript's memoized messages. Markdown owns transient passage anchors and decorations, mapping
+  positions through editor transactions, mapping a whole-document reload by the
+  span that changed, and invalidating changed text. These
   decorations never serialize into user files. Reference clicks use the active
   viewer's navigation claim with an explicit Markdown quote format; ordinary
   text citations and Find keep their own search path. Removing references and

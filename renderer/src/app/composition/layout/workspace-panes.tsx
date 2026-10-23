@@ -6,6 +6,8 @@
  * so the split row itself only owns the seam between them.
  */
 
+import { useCallback } from 'react';
+
 import type {
   SettingsCommand,
   SidebarMode,
@@ -97,6 +99,29 @@ export function WorkspacePanes({
     workspace,
   });
   const account = useAccountView();
+  // The transcript memoizes each message on these callbacks, so they change
+  // only with what they close over, never with a streamed reply.
+  const { locatePassage, open: openSource } = sources;
+  const documentPorts = dependencies.documents;
+  const openExternal = useCallback(
+    (href: string) => void documentPorts.openExternal(href),
+    [documentPorts],
+  );
+  const openAgentSource = useCallback(
+    (source: SourceReference, phrase: string | null, quoteFormat?: 'markdown') => {
+      if (phrase) void locatePassage(source, phrase, quoteFormat);
+      else openSource(source);
+      onShowDocuments();
+    },
+    [locatePassage, onShowDocuments, openSource],
+  );
+  const reviewTurnChange = useCallback(
+    (request: { source: SourceReference; turnId: string }) => {
+      onReviewTurnChange(request);
+      onShowDocuments();
+    },
+    [onReviewTurnChange, onShowDocuments],
+  );
   return (
     // The whole row opens a dropped desktop file, so it works before any
     // document is open; the message box inside keeps attaching.
@@ -118,17 +143,10 @@ export function WorkspacePanes({
             tools={dependencies.agent.tools}
             onBrowsePersonas={onBrowsePersonas}
             onOpenAgentSettings={() => settings.openSettings('agents')}
-            onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
-            onOpenSource={(source, phrase, quoteFormat) => {
-              if (phrase) void sources.locatePassage(source, phrase, quoteFormat);
-              else sources.open(source);
-              onShowDocuments();
-            }}
+            onOpenExternal={openExternal}
+            onOpenSource={openAgentSource}
             onReprocess={onReprocess}
-            onReviewTurnChange={(request) => {
-              onReviewTurnChange(request);
-              onShowDocuments();
-            }}
+            onReviewTurnChange={reviewTurnChange}
             // The bundled runtime's only gate is the account, so the picker's
             // row starts the same browser sign-in the sidebar's footer row does.
             onSignIn={(signal) => (signal ? account.signInAndWait(signal) : account.signIn())}

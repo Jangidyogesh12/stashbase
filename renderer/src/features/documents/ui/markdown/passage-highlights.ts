@@ -29,7 +29,11 @@ function textAt(doc: Node, from: number, to: number): string {
 function resolve(ctx: Ctx, doc: Node, quote: string): Anchor | null {
   const parsed = ctx.get(parserCtx)(quote);
   const text = parsed ? textAt(parsed, 0, parsed.content.size).trim() : '';
-  if (!text) return null;
+  return text ? locateText(doc, text) : null;
+}
+
+/** The one place `text` stands in `doc`, or null when it is absent or repeated. */
+function locateText(doc: Node, text: string): Anchor | null {
   let corpus = '';
   const positions: number[] = [];
   doc.descendants((node, pos) => {
@@ -49,6 +53,36 @@ function resolve(ctx: Ctx, doc: Node, quote: string): Anchor | null {
   const last = positions[start + text.length - 1];
   if (from === undefined || last === undefined) return null;
   return { from, to: last + 1, text };
+}
+
+/** A reload from disk replaces the whole document in one step, which maps
+ * every anchor into the replaced range. Comparing the two documents instead
+ * finds the span that actually changed: an anchor outside it keeps its exact
+ * occurrence. Inside it the words may still stand, between two changes; they
+ * are followed only when they were and remain the document's one copy, so a
+ * passage among duplicates never jumps to another copy. */
+function mapAcrossChange(before: Node, after: Node): (anchor: Anchor) => Anchor | null {
+  const start = before.content.findDiffStart(after.content) ?? before.content.size;
+  const end = before.content.findDiffEnd(after.content) ?? {
+    a: before.content.size,
+    b: after.content.size,
+  };
+  // Repeated text at the change can make the two scans cross.
+  const overlap = Math.max(0, start - Math.min(end.a, end.b));
+  const changedEnd = end.a + overlap;
+  const shift = end.b - end.a;
+  return (anchor) => {
+    const moved =
+      anchor.to <= start
+        ? anchor
+        : anchor.from >= changedEnd
+          ? { ...anchor, from: anchor.from + shift, to: anchor.to + shift }
+          : null;
+    if (moved) return textAt(after, moved.from, moved.to) === anchor.text ? moved : null;
+    return locateText(before, anchor.text)?.from === anchor.from
+      ? locateText(after, anchor.text)
+      : null;
+  };
 }
 
 /** Snapshot the exact selected occurrence before collapsing the selection.
@@ -82,6 +116,7 @@ export function attachPassageHighlights(editor: CrepeBuilder) {
               let references = previous.references;
               let active = tr.docChanged || tr.selectionSet ? null : previous.active;
               if (tr.docChanged) {
+                let acrossChange: ((anchor: Anchor) => Anchor | null) | undefined;
                 for (const [quote, anchor] of anchors) {
                   if (!anchor) continue;
                   const from = tr.mapping.map(anchor.from, 1);
@@ -92,7 +127,7 @@ export function attachPassageHighlights(editor: CrepeBuilder) {
                     quote,
                     from < to && textAt(tr.doc, from, to) === anchor.text
                       ? { ...anchor, from, to }
-                      : null,
+                      : (acrossChange ??= mapAcrossChange(tr.before, tr.doc))(anchor),
                   );
                 }
               }

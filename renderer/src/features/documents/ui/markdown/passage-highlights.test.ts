@@ -1,6 +1,7 @@
 import { CrepeBuilder } from '@milkdown/crepe/builder';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { TextSelection } from '@milkdown/kit/prose/state';
+import { replaceAll } from '@milkdown/kit/utils';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { attachPassageHighlights, capturePassage } from './passage-highlights';
@@ -78,6 +79,37 @@ describe('passage decorations', () => {
     probe.view.dispatch(probe.view.state.tr.insertText('changed', start, start + 4));
     expect(probe.marks()).toHaveLength(0);
     expect(probe.passages.reveal(quote)).toEqual({ current: 0, total: 0 });
+  });
+
+  // The disk reconcile replaces the whole document, which is how an agent's
+  // edit to the open file arrives.
+  it('keeps the selected occurrence through a reload from disk unless its words changed', async () => {
+    const probe = await open('Intro.\n\nSame words.\n\nSame words.\n');
+    const from = probe.select('Same words', 1);
+    const quote = probe.capture();
+    const revised = 'Intro, revised by the agent.';
+    probe.editor.editor.action(replaceAll(`${revised}\n\nSame words.\n\nSame words.\n`));
+    const mark = probe.marks()[0];
+    if (!mark) throw new Error('Missing reference decoration');
+    expect(probe.marks()).toHaveLength(1);
+    expect(probe.view.posAtDOM(mark, 0)).toBe(from + revised.length - 'Intro.'.length);
+    expect(probe.passages.reveal(quote)).toEqual({ current: 1, total: 1 });
+
+    // Its own words changed: the remaining copy is not taken for it.
+    probe.editor.editor.action(replaceAll('Intro.\n\nSame words.\n\nOther words.\n'));
+    expect(probe.marks()).toHaveLength(0);
+    expect(probe.passages.reveal(quote)).toEqual({ current: 0, total: 0 });
+  });
+
+  it('follows a unique passage that stands between two changes of one reload', async () => {
+    const probe = await open('Intro.\n\nUnique words here.\n\nOutro.\n');
+    probe.select('Unique words');
+    const quote = probe.capture();
+    probe.editor.editor.action(
+      replaceAll('Intro, revised.\n\nUnique words here.\n\nOutro, revised.\n'),
+    );
+    expect(probe.marks().map((mark) => mark.textContent)).toEqual(['Unique words']);
+    expect(probe.passages.reveal(quote)).toEqual({ current: 1, total: 1 });
   });
 
   it('restores formatted and multi-block references from their Markdown', async () => {

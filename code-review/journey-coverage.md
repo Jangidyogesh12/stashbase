@@ -2720,8 +2720,13 @@ active viewer; `passage-highlights.ts` owns ProseMirror decorations and exact
 live-selection anchors. Ask agent collapses the selection before moving focus,
 which hides Crepe's toolbar. Edits before a passage map its position; edits to
 its text invalidate it without relocating to a duplicate. Reopened quotes are
-parsed with the editor's schema and require one exact match. References do not
-modify the source or native selection.
+parsed with the editor's schema and require one exact match. A reload from disk
+(Milkdown `replaceAll`) maps anchors by the changed span; inside it only a
+passage that was and remains the file's one copy is followed. Table passage
+chips open their file. `passage-highlights.test.ts` covers reloads with
+duplicates, changed words, and a unique passage between two changes;
+`use-referenced-passages.test.tsx` shows streamed deltas do not re-render the
+hook's host. References do not modify the source or native selection.
 Focused tests cover live duplicate occurrences, source preservation, changed
 text, formatted/multi-block quotes, ambiguous recovery, active-chat switching,
 queue/follow-up/history membership, sent and unread message navigation,

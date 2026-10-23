@@ -194,6 +194,19 @@ it('locates draft and sent passages without triggering their remove action', asy
   await expectNoA11yViolations(view.container);
 });
 
+it('opens a table passage at its file, since only Markdown can locate a quote', async () => {
+  const item: AgentContextItem = {
+    kind: 'passage',
+    quote: '| Region | Total |\n| --- | --- |\n| North | 12 |',
+    source: { folderPath: '/project', path: 'sales.csv' },
+  };
+  const onOpenSource = vi.fn();
+  render(<SentContextTiles items={[item]} onOpenSource={onOpenSource} />);
+  expect(screen.queryByRole('button', { name: /^Locate passage/ })).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: /^Open sales.csv/ }));
+  expect(onOpenSource).toHaveBeenCalledWith(item.source, null);
+});
+
 it('keeps an expired history preview as a named file card and retries only a new URL', () => {
   const item: AgentContextItem = {
     kind: 'transient',

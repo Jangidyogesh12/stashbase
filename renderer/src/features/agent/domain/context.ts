@@ -7,6 +7,7 @@
 import {
   isRetrievableViewerFormat,
   VIEWABLE_FILE_EXTENSION_ALTERNATION,
+  viewerFormatOfPath,
   type ViewerFormat,
 } from '@/contracts/file-formats';
 import type { AgentScope } from '@/features/agent/domain/session';
@@ -87,6 +88,12 @@ export function contextItemName(item: AgentContextItem): string {
   return item.kind === 'transient'
     ? item.name || basePathName(item.path)
     : basePathName(item.source.path);
+}
+
+/** Only the Markdown editor can land on a quoted passage; rows quoted from a
+ *  table open their file instead of waiting on a search the grid cannot run. */
+export function passageLocatable(source: SourceReference): boolean {
+  return viewerFormatOfPath(source.path) === 'md';
 }
 
 const PASSAGE_EXCERPT_WORDS = 6;

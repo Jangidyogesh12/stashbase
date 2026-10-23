@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vite-plus/test';
 
 import { askAbout } from '@/features/agent/application/ask-about';
 import { createAgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
+import { appendStreamingBlock } from '@/features/agent/domain/session-transcript';
 import { idleAgentSessionPort } from '@/test/fakes/agent';
 
 import { useReferencedPassages } from './use-referenced-passages';
@@ -56,6 +57,46 @@ it('follows the active chat and keeps references through queueing, pending follo
   act(() => runtime.close(session.id));
   act(() => askAbout(runtime, source, 'New reference'));
   expect(result.current).toEqual([{ source, markdown: 'New reference' }]);
+  unmount();
+  runtime.dispose();
+});
+
+it('renders its host again only when the references change, not for each streamed delta', () => {
+  const runtime = createAgentWorkspaceRuntime({
+    autostart: false,
+    createId: () => 'chat',
+    folderPath: null,
+    port: idleAgentSessionPort(),
+  });
+  const source = { folderPath: '/project', path: 'essay.md' };
+  act(() => runtime.setWindowFolder('/project'));
+  act(() => askAbout(runtime, source, 'Opening words'));
+  const session = runtime.activeSession();
+  const { context } = session.store.getState();
+  act(() =>
+    session.store.setState({
+      context: [],
+      transcript: [{ kind: 'user', id: 'u', at: 1, text: 'Revise', context }],
+    }),
+  );
+  let renders = 0;
+  const { result, unmount } = renderHook(() => {
+    renders += 1;
+    return useReferencedPassages(runtime);
+  });
+  const first = result.current;
+  for (const delta of ['The ', 'opening ', 'reads well.']) {
+    act(() =>
+      session.store.setState((state) => ({
+        transcript: appendStreamingBlock(state.transcript, 'assistant', 'reply', delta),
+      })),
+    );
+  }
+  expect(renders).toBe(1);
+  expect(result.current).toBe(first);
+  act(() => askAbout(runtime, source, 'Closing words'));
+  expect(renders).toBe(2);
+  expect(result.current).toHaveLength(2);
   unmount();
   runtime.dispose();
 });

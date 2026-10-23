@@ -5,6 +5,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import {
   contextItemName,
   passageExcerpt,
+  passageLocatable,
   type AgentContextItem,
 } from '@/features/agent/domain/context';
 import { focusRing } from '@/lib/focus-ring';
@@ -34,6 +35,7 @@ export function PassageChip({
 }) {
   const shape = useShape();
   const name = contextItemName(item);
+  const locatable = passageLocatable(item.source);
   const content = (
     <>
       <TextQuote aria-hidden="true" className="shrink-0 text-muted-foreground" size={14} />
@@ -49,13 +51,17 @@ export function PassageChip({
     >
       {onOpenSource ? (
         <button
-          aria-label={`Locate passage in ${name}: ${passageExcerpt(item.quote)}`}
+          aria-label={`${locatable ? 'Locate passage in' : 'Open'} ${name}: ${passageExcerpt(item.quote)}`}
           className={cn(
             'inline-flex h-full min-w-0 cursor-pointer items-center gap-1.5 pl-2 outline-none',
             shape.bg,
             focusRing(),
           )}
-          onClick={() => onOpenSource(item.source, item.quote, 'markdown')}
+          onClick={() =>
+            locatable
+              ? onOpenSource(item.source, item.quote, 'markdown')
+              : onOpenSource(item.source, null)
+          }
           type="button"
         >
           {content}
