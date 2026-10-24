@@ -1291,6 +1291,18 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Idle 1006 investigation (2026-10-24):** two packaged macOS 2.17.0 connections
+(Codex and Claude) closed with 1006 at 02:42 UTC after both preceding turns had
+completed. Their shared window/host identity has no corresponding exit record;
+Codex process retirement followed the socket close. Missing exit records do not
+prove process health, and the affected device is unavailable. An isolated Electron
+pass bundled the production session runtime and WebSocket adapter, completed one
+controlled turn per agent, then abruptly terminated both real loopback sockets.
+Both reported 1006 and automatically resumed their own native session; both drafts
+survived and the server received exactly the two original prompts, with no replay.
+This establishes controlled idle recovery, not the cause or recovery outcome of
+the production incidents. Network, wake and proxy explanations remain unproven.
+
 **1006 lifecycle correlation (2026-10-24):** host socket diagnostics now join
 main-process window/renderer observations through window UUID and host instance
 UUID. `lifecycle-diagnostics.test.cjs` exercises crash, destroyed-window closure
