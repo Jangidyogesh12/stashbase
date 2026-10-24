@@ -243,7 +243,9 @@ reader to current credits rather than claiming all credits are spent.
   Offline, network-change, suspended-network and DNS failures during a check
   remain retryable and report as warnings. Repeated identical check warnings
   are counted in hourly windows; download, installation, certificate and
-  integrity failures remain errors.
+  integrity failures remain errors. Update requests that receive no headers or
+  data for 60 seconds fail and remain retryable; a download that continues to
+  make progress has no fixed total-duration limit.
 - Packaged desktop builds and source runs disclose default-on usage statistics
   and detailed error diagnostics under one opt-out. Reports distinguish source
   from packaged activity without treating source use as necessarily development.

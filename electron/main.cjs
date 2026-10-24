@@ -11,6 +11,7 @@
 
 const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, Tray, nativeImage, nativeTheme, net, powerMonitor, protocol, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const { installUpdateRequestTimeout } = require('./updates/network-timeout.cjs');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -643,6 +644,7 @@ const desktopUpdateWindows = createWindowLifecycleUpdateBarrier({
   onBlocked: () => showUpdateInstallBlocked(),
 });
 
+installUpdateRequestTimeout(autoUpdater.httpExecutor);
 const desktopUpdates = createUpdateManager({
   updater: autoUpdater,
   currentVersion: app.getVersion(),

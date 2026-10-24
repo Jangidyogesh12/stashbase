@@ -104,6 +104,23 @@ weakening spawned-instance ownership. The production Windows 8.5-second listen
 followed by a ten-second readiness timeout remains unexplained; the new evidence
 separates its possible causes on subsequent occurrences.
 
+**Native update timeout (2026-10-24):** the real Electron HTTP executor reproduced
+an indefinitely pending metadata request despite an explicit timeout. Its
+inherited Node socket timeout does not run for Electron requests. Main now
+installs the response-idle deadline in `electron/updates/network-timeout.cjs`.
+The registered `network-timeout-smoke.cjs` runs local HTTP through Electron net:
+header and body stalls time out; a redirected, continuously progressing download
+outlives the idle deadline and keeps its exact bytes; checksum rejection and
+cancellation still settle. The real update manager moves a stalled download to
+error, then a successful retry to ready without installing or receiving a late
+timeout. This verifies native network and state recovery with controlled release
+discovery, not GitHub availability or a signed-package installation. Historical
+`net::ERR_TIMED_OUT` records do not identify the stalled host or network cause.
+Pre-commit verification passed host/renderer type checks, 54 update tests,
+358 protocol/Electron tests, documentation/inventory checks, and the built
+Electron smoke including native download recovery and two-window save/install
+rollback. Renderer source was unchanged.
+
 **Diagnostic follow-up (2026-10-16):** updater regressions cover recognized network
 errors inside GitHub's latest-release/feed wrappers, while certificate, integrity
 and genuine feed errors remain errors; strings inside feed XML cannot downgrade

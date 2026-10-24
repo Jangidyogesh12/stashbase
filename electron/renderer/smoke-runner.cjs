@@ -25,7 +25,7 @@ async function run() {
     detached: process.platform !== 'win32',
   });
   await waitForChildExit(fuses, { launch: 'Electron fuse behavior', timeoutMs: 100_000 });
-  for (const script of ['smoke.cjs', 'lifecycle-diagnostics-smoke.cjs', 'request-authorization-smoke.cjs', 'bug-report-smoke.cjs', '../account/auth-network-smoke.cjs']) {
+  for (const script of ['smoke.cjs', 'lifecycle-diagnostics-smoke.cjs', 'request-authorization-smoke.cjs', 'bug-report-smoke.cjs', '../account/auth-network-smoke.cjs', '../updates/network-timeout-smoke.cjs']) {
     // Chromium keeps cache handles open until Electron exits, especially on
     // Windows. The parent owns fixture cleanup after the child is gone.
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-electron-smoke-'));

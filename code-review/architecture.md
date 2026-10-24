@@ -1381,6 +1381,15 @@ certificate compatibility, and the limits of main-process debug hardening.
   throttled focus does not postpone periodic checks. Manual checks bypass the
   automatic preference, while timers/focus/wake honor it. Disposal prevents new
   requests and retires the timer.
+  `electron/updates/network-timeout.cjs` installs a 60-second response-idle
+  deadline on the native updater's HTTP executor. Electron does not emit the
+  Node socket event used by the dependency's inherited timeout. Response headers
+  and data reset the deadline; response completion, error or explicit abort
+  retires it. Request `close` alone cannot retire it because Electron's writable
+  request can close before its response arrives. The executor retains ownership
+  of redirects, proxy authentication, cancellation, download pipes and checksums.
+  A timeout aborts only its request and reaches the manager's existing error and
+  retry path; the deadline does not bound total download or installation time.
   The update manager classifies only recognized connectivity failures during
   checking as warnings, including GitHubProvider's known latest-release wrappers.
   Feed XML is never classification evidence; all other phases and failures retain error severity.
