@@ -1322,6 +1322,25 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Network-service 1006 evidence (2026-10-25):** an isolated real Electron pass
+killed only Chromium's network service, causing three simultaneous 1006 closes
+while the renderer and host survived. The production session runtime and
+adapter resumed all three native session identities, preserved drafts and sent
+only the three original prompts. Existing recovery needed no change. Main now
+distinguishes network-service exits from generic Utility exits, retaining clean
+exit observations as well as errors. The registered lifecycle smoke verifies
+three real socket closures, the correlated native record and a new connection.
+Unit checks preserve privacy for arbitrary utility names.
+
+Additional production correlation established that the 2026-10-24 15:19 UTC
+trio had no active turn; the last Claude turn completed at 15:10:42 UTC and
+Codex had no pending RPCs. Codex retirement followed socket closure. No matching
+native exit record identifies the original cause. Windows OpenCode's two failed
+history starts emitted no stdout/stderr; later starts on the same installation
+succeeded in 9.5 and 3.7 seconds. The existing bounded startup retry and cleanup
+fixtures remain applicable; the unavailable device's initial stall is unproven,
+so neither timeout budgets nor prompt replay policy changed.
+
 **Allowance deadline and remaining telemetry (2026-10-25):** a real HTTP fixture
 reproduced an allowance request staying pending indefinitely after response
 headers because `server/hosted-account.ts` supplied no request deadline. A

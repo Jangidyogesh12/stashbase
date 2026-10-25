@@ -1121,6 +1121,11 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   observations use `native_lifecycle`, not failure counters. They share consent,
   identity, delivery and the native spool, with admission capped at 25 pending
   observations so errors can use the remaining slots in its 50-record limit.
+  Main identifies Chromium's network service by its fixed service identifier;
+  its exits retain the app/host identity and exit reason separately from generic
+  utilities. Clean network-service exits are lifecycle observations too, since
+  they may close sockets while renderer and host survive. Arbitrary utility
+  names are not collected; socket code alone never establishes that cause.
   Renderer JSON-body failures retain the original cause, status (including 2xx),
   content type and host-issued response request ID. Requested cancellation stays
   cancellation; empty HEAD/204/205 responses are not decode failures. The agent

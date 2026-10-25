@@ -1,7 +1,33 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
-const { attachWindowDiagnostics } = require('./lifecycle-diagnostics.cjs');
+const { attachWindowDiagnostics, attachChildProcessDiagnostics } = require('./lifecycle-diagnostics.cjs');
+
+test('network service exits can be correlated with 1006 even when Electron reports a clean utility exit', () => {
+  const app = new EventEmitter();
+  const rows = [];
+  attachChildProcessDiagnostics(app, { appSessionId: 'app', hostInstanceId: () => 'host', record: (...args) => rows.push(args) });
+  for (const reason of ['killed', 'clean-exit']) app.emit('child-process-gone', {}, {
+    type: 'Utility', serviceName: 'network.mojom.NetworkService', name: 'localized service name', reason, exitCode: reason === 'killed' ? 9 : 0,
+  });
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every(row => row[2].process === 'network-service' && row[2].stage === 'exit'
+    && row[2].host_instance_id === 'host' && row[2].app_session_id === 'app'));
+  assert.deepEqual(rows.map(row => row[3]), ['error', 'info']);
+  assert.equal(rows[0][0].exitCode, 9);
+  assert.doesNotMatch(JSON.stringify(rows), /localized service name/);
+});
+
+test('unrecognized utility names are never collected and existing GPU failures remain errors', () => {
+  const app = new EventEmitter();
+  const rows = [];
+  attachChildProcessDiagnostics(app, { appSessionId: 'app', hostInstanceId: () => undefined, record: (...args) => rows.push(args) });
+  app.emit('child-process-gone', {}, { type: 'Utility', serviceName: '/private/user-path', reason: 'clean-exit', exitCode: 0 });
+  app.emit('child-process-gone', {}, { type: 'GPU', name: '/private/user-path', reason: 'oom', exitCode: 1 });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0][2].process, 'GPU');
+  assert.doesNotMatch(JSON.stringify(rows), /private|user-path/);
+});
 
 test('window crash and close retain the same window, renderer and host identities', () => {
   const webContents = Object.assign(new EventEmitter(), { id: 12, getOSProcessId: () => 456 });

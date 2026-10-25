@@ -4,7 +4,7 @@ const { once } = require('node:events');
 const { randomUUID } = require('node:crypto');
 const { app, BrowserWindow } = require('electron');
 const { WebSocketServer } = require('ws');
-const { attachWindowDiagnostics } = require('./lifecycle-diagnostics.cjs');
+const { attachWindowDiagnostics, attachChildProcessDiagnostics } = require('./lifecycle-diagnostics.cjs');
 const { createNativeDiagnostics } = require('../../dist/electron/diagnostics/native.cjs');
 
 const root = process.env.STASHBASE_SMOKE_ROOT;
@@ -58,6 +58,57 @@ async function run() {
     console.log(JSON.stringify({ scenario: 'renderer-crash-correlation', closeCode: code, reason: details.reason, records: records.length, correlated: true }));
   } finally {
     if (!win.isDestroyed()) win.destroy();
+    for (const socket of sockets.clients) socket.terminate();
+    await new Promise(resolve => sockets.close(resolve));
+    native.clear();
+  }
+  await verifyNetworkExit(native, hostId);
+}
+
+async function verifyNetworkExit(native, hostId) {
+  attachChildProcessDiagnostics(app, { appSessionId: randomUUID(), hostInstanceId: () => hostId,
+    record: (...args) => native.record(...args) });
+  const sockets = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  await once(sockets, 'listening');
+  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  try {
+    await win.loadURL('data:text/html,<title>Network lifecycle verification</title>');
+    const address = `ws://127.0.0.1:${sockets.address().port}`;
+    await win.webContents.executeJavaScript(`Promise.all(Array.from({length:3}, () => new Promise(resolve => {
+      const socket = new WebSocket(${JSON.stringify(address)}); socket.onopen = resolve;
+      (window.fixtureSockets ??= []).push(socket);
+    }))).then(() => undefined)`);
+    const closed = [...sockets.clients].map(socket => once(socket, 'close'));
+    assert.equal(closed.length, 3);
+    const network = app.getAppMetrics().find(metric => metric.serviceName === 'network.mojom.NetworkService');
+    assert.ok(network && network.pid > 0 && network.pid !== process.pid);
+    const gone = new Promise(resolve => {
+      const listener = (_event, details) => {
+        if (details.serviceName !== 'network.mojom.NetworkService') return;
+        app.off('child-process-gone', listener);
+        resolve(details);
+      };
+      app.on('child-process-gone', listener);
+    });
+    process.kill(network.pid, 'SIGKILL');
+    const details = await gone;
+    const closeCodes = (await Promise.all(closed)).map(([code]) => code);
+    assert.deepEqual(closeCodes, [1006, 1006, 1006]);
+    const records = [];
+    native.drain(record => { records.push(record); return true; });
+    const exit = records.find(record => record.context.process === 'network-service');
+    assert.ok(exit, 'network service exit must be distinguishable from other utility exits');
+    assert.equal(exit.context.host_instance_id, hostId);
+    assert.equal(exit.context.reason, details.reason);
+    assert.equal(exit.diagnostic.exit_code, details.exitCode);
+    // The renderer remains responsive, and Chromium recreates its network service.
+    await win.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+      window.recoveredSocket = new WebSocket(${JSON.stringify(address)});
+      recoveredSocket.onopen = () => resolve(); recoveredSocket.onerror = reject;
+    })`);
+    console.log(JSON.stringify({ scenario: 'network-process-exit-correlation', closeCodes, reason: details.reason, reconnected: true }));
+  } finally {
+    win.destroy();
     for (const socket of sockets.clients) socket.terminate();
     await new Promise(resolve => sockets.close(resolve));
     native.clear();

@@ -20,4 +20,16 @@ function attachWindowDiagnostics(win, { windowId, appSessionId, hostInstanceId, 
     record({ message: 'Window closed' }, 'window-lifecycle', context('closed', quitting() ? 'app_shutdown' : 'window_closed'), 'info');
   });
 }
-module.exports = { attachWindowDiagnostics };
+function attachChildProcessDiagnostics(app, { appSessionId, hostInstanceId, record }) {
+  app.on('child-process-gone', (_event, details) => {
+    // The network service owns every renderer's loopback socket. Its exit can
+    // drop all chats while both the renderer and the host remain alive. Only
+    // recognize Chromium's fixed identifier; never collect utility names.
+    const network = details.type === 'Utility' && details.serviceName === 'network.mojom.NetworkService';
+    if (details.reason === 'clean-exit' && !network) return;
+    record({ message: `Child process exited: ${details.reason}`, exitCode: details.exitCode },
+      'native', { process: network ? 'network-service' : details.type, stage: 'exit', reason: details.reason, app_session_id: appSessionId,
+        ...(hostInstanceId() ? { host_instance_id: hostInstanceId() } : {}) }, details.reason === 'clean-exit' ? 'info' : 'error');
+  });
+}
+module.exports = { attachWindowDiagnostics, attachChildProcessDiagnostics };

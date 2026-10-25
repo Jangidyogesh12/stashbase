@@ -135,14 +135,13 @@ const SERVER_ENTRY = app.isPackaged
 const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
 const { createNativeDiagnostics, telemetryAvailable } = require('../dist/electron/diagnostics/native.cjs');
-const { attachWindowDiagnostics } = require('./renderer/lifecycle-diagnostics.cjs');
+const { attachWindowDiagnostics, attachChildProcessDiagnostics } = require('./renderer/lifecycle-diagnostics.cjs');
 const appSessionId = crypto.randomUUID();
 let hostInstanceId;
 const nativeDiagnostics = createNativeDiagnostics({ available: telemetryAvailable(), distribution: app.isPackaged ? 'packaged' : 'source', version: app.getVersion() });
 process.on('uncaughtExceptionMonitor', (error) => nativeDiagnostics.record(error, 'uncaught', { process: 'electron-main', app_session_id: appSessionId }));
-app.on('child-process-gone', (_event, details) => {
-  if (details.reason !== 'clean-exit') nativeDiagnostics.record({ message: `Child process exited: ${details.reason}`, exitCode: details.exitCode }, 'native', { process: details.type, reason: details.reason, app_session_id: appSessionId, ...(hostInstanceId ? { host_instance_id: hostInstanceId } : {}) });
-});
+attachChildProcessDiagnostics(app, { appSessionId, hostInstanceId: () => hostInstanceId,
+  record: (...args) => nativeDiagnostics.record(...args) });
 let serverProc = null;
 let serverStartPromise = null;
 let preparationStorageWarning = null;
