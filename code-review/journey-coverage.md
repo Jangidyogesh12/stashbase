@@ -59,6 +59,28 @@ spawn-failure and child-exit regressions remain enforced. The Windows 2.16.14
 production report had already logged listening and ended with `response_timeout`;
 this is a plausible contributor, not proof of that unavailable device's cause.
 Its later MFS 90-second and OpenCode 15-second startup timeouts remain unproven.
+Follow-up correlation found about 116 seconds between the MFS pre-spawn log and
+its ninety-second watchdog, while the first OpenCode attempt took about 33 seconds
+including retirement. Those totals cannot distinguish process creation from a
+late host callback. The current MFS timeout separates these intervals; OpenCode
+startup results separate preparation, spawn, readiness and retirement. A
+controlled clock verifies late MFS watchdog evidence through error serialization,
+and the pinned native OpenCode smoke verifies a shared failed history startup,
+one successful retry and separate phase timings through protocol validation.
+Local isolated MFS store contention failed promptly, and a held OpenCode SQLite
+write transaction did not prevent its ready announcement. These exclude those
+local scenarios, not Windows-specific initialization or storage failures.
+The follow-up built-host pass used a private project and a local telemetry
+collector that blocked external delivery. A shortened first MFS watchdog returned
+HTTP 500 with the measured phases, then the real Python daemon returned HTTP 200.
+A shortened first native OpenCode deadline produced separate readiness/retirement
+measurements, one linked successful retry and HTTP 200 history. The source draft
+remained unchanged. Host tests (938), native OpenCode checks (3), protocol/Electron
+tests (362), host/renderer types, service/renderer builds, docs/inventory and native
+Electron smoke passed. The smoke again correlated three 1006 closes with an
+injected network-service exit and reconnected; it does not identify the cause of
+the historical macOS incident. No Windows device reproduction or new packaged
+release was performed.
 An isolated source Electron main launched its own host with every health response
 delayed by 450 ms, reached the built Welcome renderer, and opened Settings.
 Validation passed 935 host tests, 360 protocol/Electron tests, host/renderer types,

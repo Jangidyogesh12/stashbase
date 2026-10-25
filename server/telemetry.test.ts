@@ -897,6 +897,7 @@ test('startup attempts retain initiating scope, successful latency and retry lin
   const capture = diagnosticScope.run({ request_id, turn_id, context: { method: 'GET', route: '/api/agents/:agent/sessions' } }, () => f.service.scoped());
   capture({ event: 'agent_runtime_start_result', runtime: 'stashbase', purpose: 'history', outcome: 'failed',
     stage: 'waiting_ready', attempt_id, elapsed_ms: 15_050,
+    timings: { prepare_ms: 10, spawn_ms: 20, ready_wait_ms: 15_000, cleanup_ms: 20 },
     diagnostic: { message: 'timeout', stderr: 'database busy token=PRIVATE_SECRET' } });
   const success = { event: 'agent_runtime_start_result', runtime: 'stashbase', purpose: 'history', outcome: 'success',
     stage: 'ready', attempt_id: crypto.randomUUID(), retry_of: attempt_id, elapsed_ms: 2100, first_output_ms: 2099 } as const;
@@ -905,6 +906,8 @@ test('startup attempts retain initiating scope, successful latency and retry lin
   await f.service.flush();
   const starts = f.sent.filter(({ body }) => body.event === 'agent_runtime_start_result');
   assert.equal(starts.length, 2);
+  assert.deepEqual(starts[0].body.properties.timings,
+    { prepare_ms: 10, spawn_ms: 20, ready_wait_ms: 15_000, cleanup_ms: 20 });
   assert.ok(starts.every(({ body }) => body.properties.request_id === request_id && body.properties.turn_id === turn_id));
   assert.equal(starts[1].body.properties.retry_of, attempt_id);
   assert.equal(starts[1].body.properties.elapsed_ms, 2100);

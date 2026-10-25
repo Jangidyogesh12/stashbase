@@ -124,6 +124,10 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
     stage: z.enum(['prepare', 'spawn', 'waiting_ready', 'ready', 'cleanup']),
     attempt_id: z.string().uuid(), retry_of: z.string().uuid().optional(),
     elapsed_ms: z.number().nonnegative(), first_output_ms: z.number().nonnegative().optional(),
+    timings: z.object({
+      prepare_ms: z.number().nonnegative().optional(), spawn_ms: z.number().nonnegative().optional(),
+      ready_wait_ms: z.number().nonnegative().optional(), cleanup_ms: z.number().nonnegative().optional(),
+    }).strict().optional(),
     diagnostic: diagnostic.optional(), ...correlation,
   }).strict(),
   z.object({ event: z.literal('agent_runtime_stop_result'), runtime,

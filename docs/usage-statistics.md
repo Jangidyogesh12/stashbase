@@ -50,7 +50,7 @@ in provider history; absence is not evidence of source use.
 | `agent_turn_started` | User submission or manual retry begins preparation | `runtime`, random `turn_id` |
 | `agent_turn_stage` | Host observes a significant execution boundary | `runtime`, `turn_id`, `stage`, per-turn `sequence`, bounded correlation context |
 | `agent_turn_finished` | Submission completes, fails, is blocked, cancelled or interrupted | `runtime`, `turn_id`, `outcome`, `source`, optional `reason`, last stage, sequence and observation times; duration only for an observed end |
-| `agent_runtime_start_result` | One Default/OpenCode startup attempt settles, including history and prewarm | `purpose`, `outcome`, `stage`, `attempt_id`, optional `retry_of`, exact `elapsed_ms`/`first_output_ms`, runtime version and optional diagnostic |
+| `agent_runtime_start_result` | One Default/OpenCode startup attempt settles, including history and prewarm | `purpose`, `outcome`, `stage`, `attempt_id`, optional `retry_of`, `elapsed_ms`/`first_output_ms`, phase `timings`, runtime version and optional diagnostic |
 | `agent_runtime_stop_result` | Managed OpenCode/Codex/Antigravity retirement succeeds, times out, or closes after timeout | `purpose`, initiating `reason`, stop `attempt_id`, original process-start ID, elapsed/deadline, exit/pipe observations and bounded termination evidence |
 | `agent_connection_closed` | Host observes socket closure, including idle and intentional closes | `runtime`, shared `context.connection_id`, close code/initiator/reason and available process evidence |
 | `document_write_result` | Versioned editor save settles | `outcome`; success includes `changed` |
@@ -112,7 +112,15 @@ exit diagnostics retain a bounded stderr tail and available exit code/signal.
 OpenCode startup stages are `prepare`, `spawn`, `waiting_ready`, `ready`, and
 `cleanup` (retirement failed). Elapsed time covers preparation through settlement,
 including failed-process retirement; first-output time is absent if no output was
-observed. Successful starts are retained as the latency denominator. A listening
+observed. Optional `timings` separates monotonic, rounded-millisecond
+`prepare_ms` (including private configuration/directories), `spawn_ms`,
+`ready_wait_ms` and `cleanup_ms`. Only entered phases are reported; old builds
+omit these measurements. The ready timeout begins after process creation, so
+total startup latency alone cannot identify a slow child. MFS timeout messages
+likewise retain preparation, spawn and readiness duration, plus `timer_lag_ms`
+for watchdog delivery after its deadline. Callback lateness identifies a delayed
+observation, not its OS-level cause.
+Successful starts are retained as the latency denominator. A listening
 announcement confirms the expected local address, not usable models or completed
 work. Each physical retry has a new attempt ID and points to its failed attempt;
 concurrent callers sharing a startup do not each emit a result. The history-list

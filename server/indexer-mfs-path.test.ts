@@ -24,8 +24,13 @@ test('daemon startup timeout retires descendants before allowing a replacement',
     { if (ms === 90_000) expire = () => fn(...args); return timeout(fn, ms, ...args); });
   let helperPid: number | undefined;
   let healthy = false;
-  const daemon = new MfsDaemon(() => ({ command: process.execPath, cwd: scratch,
-    args: healthy ? ['-e', "process.stdout.write('{\"event\":\"ready\"}\\n'); process.stdin.resume()"] : [fixture, helperPidFile] }));
+  let clock = 0;
+  t.mock.method(performance, 'now', () => clock);
+  const daemon = new MfsDaemon(() => {
+    clock += 40; // Command/environment preparation is outside the ready watchdog.
+    return { command: process.execPath, cwd: scratch,
+      args: healthy ? ['-e', "process.stdout.write('{\"event\":\"ready\"}\\n'); process.stdin.resume()"] : [fixture, helperPidFile] };
+  });
   t.after(async () => {
     if (helperPid) { try { process.kill(helperPid, 'SIGKILL'); } catch { /* already retired */ } }
     await daemon.close();
@@ -36,6 +41,7 @@ test('daemon startup timeout retires descendants before allowing a replacement',
   const concurrent = daemon.ensureReady().then(() => null, error => error);
   await helperStarted;
   helperPid = Number(fs.readFileSync(helperPidFile, 'utf8'));
+  clock += 90_060; // Model a watchdog callback delivered 60 ms late.
   expire();
   const result = await waiting;
   assert.equal(await concurrent, result, 'all startup callers share the failure and its retirement barrier');
@@ -43,6 +49,7 @@ test('daemon startup timeout retires descendants before allowing a replacement',
   try { process.kill(helperPid, 0); } catch { helperAlive = false; }
   assert.equal(helperAlive, false, 'a timed-out daemon must not leave its helper holding resources');
   assert.equal(errorDiagnostic(result).code, 'MFS_START_TIMEOUT');
+  assert.match(errorDiagnostic(result).message!, /prepare_ms=40, spawn_ms=0, ready_wait_ms=90060, timer_lag_ms=60/);
   healthy = true;
   await daemon.ensureReady();
 });

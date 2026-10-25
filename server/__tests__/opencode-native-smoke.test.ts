@@ -889,11 +889,31 @@ test('prewarmed native chats retain attribution, refresh configuration and relea
   assert.equal(fourthConfig.provider!.stashbase!.models!['stashbase-agent-default']!.limit!.output, 4096);
   assert.equal(reads, 4, 'a new chat must revalidate the service catalog before using a spare');
   await assert.rejects(fourth.client(path.dirname(root)), /another project/);
-  const beforeHistory = starts.length;
-  const [historyA, historyB] = await Promise.all([openCodeClient(root, true), openCodeClient(root, true)]);
-  await historyA.session.list({ throwOnError: true });
-  await historyB.session.list({ throwOnError: true });
-  assert.equal(starts.length, beforeHistory + 1, 'concurrent history readers share one physical startup');
+  // Drive the production history owner through a real native startup timeout
+  // and successful retry. Readiness and retirement must have separate timings.
+  const beforeRetry = starts.length;
+  const timeout = globalThis.setTimeout;
+  let forceTimeout = true;
+  const forced = t.mock.method(globalThis, 'setTimeout', (fn: (...args: any[]) => void, ms?: number, ...args: any[]) => {
+    if (ms === 15_000 && forceTimeout) { forceTimeout = false; return timeout(fn, 1, ...args); }
+    return timeout(fn, ms, ...args);
+  });
+  try {
+    const [historyA, historyB] = await Promise.all([openCodeClient(root, true), openCodeClient(root, true)]);
+    await historyA.session.list({ throwOnError: true });
+    await historyB.session.list({ throwOnError: true });
+    const attempts = starts.slice(beforeRetry);
+    assert.deepEqual(attempts.map(event => event.outcome), ['failed', 'success'],
+      'concurrent history readers share the failed startup and its one retry');
+    assert.equal(attempts[1].retry_of, attempts[0].attempt_id);
+    assert.equal(attempts[0].diagnostic?.code, 'OPENCODE_START_TIMEOUT');
+    const measured = attempts[0].timings!;
+    for (const phase of ['prepare_ms', 'spawn_ms', 'ready_wait_ms', 'cleanup_ms'] as const) {
+      assert.ok(measured[phase] !== undefined, `failed startup omitted ${phase}`);
+    }
+    assert.ok(Object.values(measured).reduce((sum, value) => sum + value, 0) <= attempts[0].elapsed_ms + 3);
+    assert.equal(attempts[1].timings?.cleanup_ms, undefined);
+  } finally { forced.mock.restore(); }
   assert.equal(starts.at(-1)?.purpose, 'history');
   assert.ok(starts.some(event => event.purpose === 'chat' && event.outcome === 'success'));
   assert.ok(starts.some(event => event.purpose === 'prewarm' && event.outcome === 'success'));
@@ -902,6 +922,12 @@ test('prewarmed native chats retain attribution, refresh configuration and relea
     assert.equal(event.context?.runtime_version, BUNDLED_OPENCODE_VERSION);
     assert.equal(event.context?.process_start_id, event.attempt_id);
     assert.ok(event.first_output_ms !== undefined && event.first_output_ms <= event.elapsed_ms);
+    assert.ok(event.timings?.prepare_ms !== undefined);
+    assert.ok(event.timings.spawn_ms !== undefined);
+    assert.ok(event.timings.ready_wait_ms !== undefined);
+    assert.equal(event.timings.cleanup_ms, undefined, 'successful starts have no failure retirement');
+    assert.ok(event.first_output_ms >= event.timings.prepare_ms + event.timings.spawn_ms - 2,
+      'first output includes preparation and spawn, not just native readiness');
   }
   assert.equal(new Set(starts.map(event => event.attempt_id)).size, starts.length);
   await second.close();

@@ -275,7 +275,10 @@ source URL and installed package version.
   and frozen launches cannot inherit a Windows ANSI code page.
 - MFS startup has one shared readiness/retirement promise. Its ninety-second
   deadline retains the timeout and last observed startup phase, then retires
-  the whole process tree. Close waits for pipe/group release, using Windows
+  the whole process tree. Timeout evidence separates command preparation,
+  synchronous process creation, readiness waiting and watchdog callback lateness;
+  a late callback does not establish slow Python initialization. Close waits for
+  pipe/group release, using Windows
   taskkill or a dedicated POSIX process group. A 3.5-second close deadline
   rejects without allowing replacement; actual late closure releases the fence.
   A retired or timed-out generation cannot publish late readiness or replies.
@@ -442,6 +445,9 @@ stable status without download, retry, or a new durable demand latch.
   entry requests one startup retry for timeout/early exit, after retirement.
   Preparation failures, cancellation, chat dispatch and history mutations never
   receive this retry. Startup listeners are removed on every outcome;
+  startup telemetry measures preparation (including private environment/config),
+  process creation, readiness waiting and failed-process retirement separately.
+  A phase that was never entered is absent, not a zero-duration observation;
   shutdown also awaits readers and already-retiring processes.
   Detached session and spare cleanup must observe their own rejection, including
   promises created by async wrappers; a handler on the underlying process promise

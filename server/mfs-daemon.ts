@@ -210,6 +210,7 @@ export class MfsDaemon extends EventEmitter {
   }
 
   private async spawnAndWait(): Promise<void> {
+    const started = performance.now();
     // Resolving the command may probe the Python runtime, which is slow on a
     // loaded machine. No child exists yet, so a close() that lands meanwhile
     // finds nothing to retire; the counter lets that close win instead of
@@ -219,6 +220,7 @@ export class MfsDaemon extends EventEmitter {
     if (this.retirements !== retirementsBefore) throw new MfsDaemonRetiringError();
     return new Promise<void>((resolve, reject) => {
       log.info(`spawning ${daemon.command} ${daemon.args.join(' ')}`);
+      const spawnStarted = performance.now();
       const proc = spawn(daemon.command, daemon.args, {
         cwd: daemon.cwd,
         env: {
@@ -237,6 +239,7 @@ export class MfsDaemon extends EventEmitter {
         detached: process.platform !== 'win32',
         windowsHide: true,
       });
+      const spawnReturned = performance.now();
       this.proc = proc;
       this.generation += 1;
       const closed = waitForExtractorTree(proc).then(() => {}, error => {
@@ -261,8 +264,13 @@ export class MfsDaemon extends EventEmitter {
       this.cancelStartup = finish;
       // Reject with the original timeout, then let the shared startup promise
       // retire the entire tree. Killing only the leader can strand MFS helpers.
+      const readyStarted = performance.now();
       const readyTimer = setTimeout(() => {
-        finish(Object.assign(new Error(`MFS daemon did not report ready within ${READY_TIMEOUT_MS}ms (last phase: ${phase}).`), {
+        const waited = performance.now() - readyStarted;
+        // Native spawn can itself block on Windows. Keep that time separate
+        // from a late watchdog callback; neither proves slow Python initialization.
+        const timing = `prepare_ms=${Math.round(spawnStarted - started)}, spawn_ms=${Math.round(spawnReturned - spawnStarted)}, ready_wait_ms=${Math.round(waited)}, timer_lag_ms=${Math.round(Math.max(0, waited - READY_TIMEOUT_MS))}`;
+        finish(Object.assign(new Error(`MFS daemon did not report ready within ${READY_TIMEOUT_MS}ms (last phase: ${phase}; ${timing}).`), {
           code: 'MFS_START_TIMEOUT', ...(stderr ? { stderr: diagnosticText(stderr) } : {}),
         }));
       }, READY_TIMEOUT_MS);

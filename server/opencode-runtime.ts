@@ -463,6 +463,15 @@ class OpenCodeRuntime {
     const capture = telemetry.scoped();
     const started = performance.now();
     let stage: Extract<TelemetryEvent, { event: 'agent_runtime_start_result' }>['stage'] = 'prepare';
+    const timings: NonNullable<Extract<TelemetryEvent, { event: 'agent_runtime_start_result' }>['timings']> = {};
+    let timingPhase: keyof typeof timings | undefined = 'prepare_ms';
+    let phaseStarted = started;
+    const advanceTiming = (next?: keyof typeof timings) => {
+      const now = performance.now();
+      if (timingPhase) timings[timingPhase] = Math.round(now - phaseStarted);
+      phaseStarted = now;
+      timingPhase = next;
+    };
     let firstOutputMs: number | undefined;
     let failure: unknown;
     try {
@@ -480,7 +489,11 @@ class OpenCodeRuntime {
       const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
       const model = hostedAgentRuntime(this.agentSessionId);
       if (!model) throw new Error('The agent model broker is not running.');
+      // Private-directory/config preparation can be slow independently of the
+      // native spawn call. Neither belongs to the ready-announcement deadline.
+      const env = openCodeRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona, this.profiles(), directory, this.tools()), username, password);
       stage = 'spawn';
+      advanceTiming('spawn_ms');
       const child = ownAgentProcess(spawn(executable, [
         'serve',
         '--hostname=127.0.0.1',
@@ -489,11 +502,12 @@ class OpenCodeRuntime {
         '--log-level=WARN',
         '--print-logs',
       ], {
-        env: openCodeRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona, this.profiles(), directory, this.tools()), username, password),
+        env,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
         detached: process.platform !== 'win32',
       }), { runtime: 'stashbase', purpose: this.purpose, processStartId: attemptId, runtimeVersion: BUNDLED_OPENCODE_VERSION });
+      advanceTiming('ready_wait_ms');
       const exitDiagnostic = agentProcessExitDiagnostic(child);
       this.startingProcess = child;
 
@@ -502,6 +516,7 @@ class OpenCodeRuntime {
         const url = await waitForOpenCodeServer(child, port, exitDiagnostic, {
           onFirstOutput: () => { firstOutputMs = Math.round(performance.now() - started); },
         });
+        advanceTiming();
         if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
         this.startingProcess = null;
         const running = { process: child, url, authorization };
@@ -517,20 +532,24 @@ class OpenCodeRuntime {
         });
         return running;
       } catch (error) {
+        advanceTiming('cleanup_ms');
         try { return await retireFailedOpenCode(child, error); }
         catch (retiredError) {
           if (retiredError !== error) { this.retirementFailure = retiredError; stage = 'cleanup'; }
           throw retiredError;
         } finally {
+          advanceTiming();
           if (!this.retirementFailure && this.startingProcess === child) this.startingProcess = null;
         }
       }
     } catch (error) { failure = error; throw error; }
     finally {
+      advanceTiming();
       capture({ event: 'agent_runtime_start_result', runtime: 'stashbase', purpose: this.purpose,
         outcome: generation !== this.generation ? 'cancelled' : failure ? 'failed' : 'success',
         stage, attempt_id: attemptId, ...(retryOf ? { retry_of: retryOf } : {}),
         elapsed_ms: Math.round(performance.now() - started),
+        timings,
         ...(firstOutputMs === undefined ? {} : { first_output_ms: firstOutputMs }),
         context: { runtime_version: BUNDLED_OPENCODE_VERSION, process_start_id: attemptId },
         ...(failure ? { diagnostic: errorDiagnostic(failure) } : {}),
