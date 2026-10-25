@@ -721,3 +721,66 @@ test('email login keeps credentials in the host and a cancelled verification can
   assert.equal(result.status,0,result.stderr);
   assert.equal(result.stdout,'verified');
 });
+
+test('allowance body stalls end at the owned deadline and preserve the signed-in session', () => {
+  const result = runIsolated(`
+    const http = await import('node:http');
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    const session = { userId: 'account-test', email: 'account@example.test', accessToken: 'private-access', sessionToken: 'private-refresh', expiresAt: 4102444800000 };
+    config.setHostedAccountSession(session);
+    const upstream = http.createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.write('{');
+    });
+    await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+    const nativeFetch = globalThis.fetch;
+    globalThis.fetch = (_url, init) => nativeFetch('http://127.0.0.1:' + upstream.address().port, init);
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    AbortSignal.timeout = ms => timeout(Math.min(ms, 100));
+    let watchdog;
+    try {
+      const outcome = await Promise.race([
+        account.fetchHostedAgentAllowance().then(value => ({ kind: 'success', value }), error => ({ kind: 'error', name: error.name })),
+        new Promise(resolve => { watchdog = setTimeout(() => resolve({ kind: 'still_pending' }), 700); }),
+      ]);
+      assert.equal(outcome.kind, 'error', 'the credits request must not remain pending or return a successful null body');
+      assert.match(outcome.name, /TimeoutError|AbortError/);
+      assert.deepEqual(config.getHostedAccountSession(), session);
+    } finally { clearTimeout(watchdog); upstream.closeAllConnections(); upstream.close(); }
+  `);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('allowance auth refresh cannot restart the request deadline or send after it expires', () => {
+  const result = runIsolated(`
+    const http = await import('node:http');
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    config.setHostedAccountSession({ userId: 'user-1', email: 'person@example.com', accessToken: apiToken('old'), sessionToken: 'refresh', expiresAt: 4102444800 });
+    let usageCalls = 0;
+    let profileFinished = false;
+    const upstream = http.createServer((_request, response) => {
+      usageCalls++;
+      if (usageCalls === 1) setTimeout(() => { response.writeHead(401); response.end('{}'); }, 70);
+      else response.end('{}');
+    });
+    await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+    const nativeFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      if (String(url).endsWith('/get-session')) { await new Promise(resolve => setTimeout(resolve, 200)); profileFinished = true; }
+      if (String(url).includes('/api/auth/')) return authReply(url);
+      return nativeFetch('http://127.0.0.1:' + upstream.address().port, init);
+    };
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    AbortSignal.timeout = ms => timeout(ms === 20000 ? 120 : ms);
+    try {
+      await assert.rejects(account.fetchHostedAgentAllowance(), error => /TimeoutError|AbortError/.test(error.name));
+      assert.equal(profileFinished, false, 'this reader must stop without awaiting the shared refresh');
+      await new Promise(resolve => setTimeout(resolve, 250));
+      assert.equal(usageCalls, 1, 'expired requests must not dispatch another allowance read');
+      assert.equal(config.getHostedAccountSession().userId, 'user-1');
+    } finally { upstream.closeAllConnections(); upstream.close(); }
+  `);
+  assert.equal(result.status, 0, result.stderr);
+});

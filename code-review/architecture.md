@@ -858,6 +858,12 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   flows across windows; exchange must recheck flow identity/state after awaiting
   the provider and before persistence. Refresh is single-flight and can update
   only the session it began with; stale work cannot borrow a newer account token.
+  Agent allowance reads own a twenty-second deadline across token acquisition,
+  HTTP headers/body and the one 401-triggered refresh. An expired reader stops
+  waiting for a shared token refresh without cancelling other readers' work;
+  its late continuation cannot send another usage request. Body cancellation is
+  an error, never a successful null allowance. Network failure preserves the
+  saved session and a later explicit/polled read can recover.
   Only an authenticated service rejection (401) or an explicit null session
   may clear matching saved credentials. Malformed successful responses are not
   evidence of revocation. Network, timeout, rate-limit, and server failures preserve them.

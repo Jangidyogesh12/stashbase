@@ -1308,6 +1308,28 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Allowance deadline and remaining telemetry (2026-10-25):** a real HTTP fixture
+reproduced an allowance request staying pending indefinitely after response
+headers because `server/hosted-account.ts` supplied no request deadline. A
+single twenty-second signal now covers token waiting, headers/body and the
+existing 401 refresh. Regression tests preserve credentials, stop a stalled body,
+return before a shared refresh completes, and prevent a late second usage call.
+An isolated actual Electron main/host plus built renderer reached Settings; an
+injected stalled allowance returned 502, a subsequent healthy fixture returned
+200, and the same saved session survived. This establishes bounded recovery,
+not a repair of the production Windows connection timeouts or macOS network changes.
+The J01 validation matrix covers this change too.
+
+The latest 24-hour telemetry review also found three concurrent packaged macOS
+2.17.0 WebSocket 1006 reports at 2026-10-24 15:19:35 UTC, with no matching native
+exit record in the queried window. Three preceding shell-tool errors retain only
+`tool_failure_kind=unknown`. Their original causes remain unproven; no automatic
+prompt replay or speculative runtime change was added. Old-version updater
+network failures cannot verify the later source timeout fix. No fresh backend
+incident followed the model-stream deployment in the reviewed interval, apart
+from its explicitly marked deployment probe; that short interval is not proof
+that upstream model failures are eliminated.
+
 **Idle 1006 investigation (2026-10-24):** two packaged macOS 2.17.0 connections
 (Codex and Claude) closed with 1006 at 02:42 UTC after both preceding turns had
 completed. Their shared window/host identity has no corresponding exit record;

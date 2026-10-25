@@ -493,18 +493,35 @@ export async function hostedAccountAvatar(): Promise<{ contentType: string; byte
 }
 
 export async function fetchHostedAgentAllowance(
-  options: { forceRefreshToken?: boolean } = {},
+  options: { forceRefreshToken?: boolean; signal?: AbortSignal } = {},
 ): Promise<HostedAgentAllowance> {
-  const token = await hostedAccessToken({ forceRefresh: options.forceRefreshToken });
+  // One budget covers headers, body and the existing one-time auth refresh.
+  // A provider that sends headers and stalls must not leave credits pending.
+  const signal = options.signal ?? AbortSignal.timeout(20_000);
+  signal.throwIfAborted();
+  // Refresh is shared with other callers. Stop this reader at its deadline
+  // without cancelling their refresh or dispatching this reader's late request.
+  const token = await new Promise<string>((resolve, reject) => {
+    const abort = () => { signal.removeEventListener('abort', abort); reject(signal.reason); };
+    signal.addEventListener('abort', abort, { once: true });
+    void hostedAccessToken({ forceRefresh: options.forceRefreshToken }).then(
+      value => { signal.removeEventListener('abort', abort); resolve(value); },
+      error => { signal.removeEventListener('abort', abort); reject(error); },
+    );
+  });
   const response = await fetch(`${STASHBASE_API_URL}/v1/agent/usage?include=reservations`, {
+    signal,
     headers: {
       authorization: `Bearer ${token}`,
       'x-stashbase-client-version': CLIENT_VERSION,
     },
   });
   const payload = await jsonBody<HostedAgentAllowance & ErrorPayload>(response);
+  // jsonBody intentionally hides unreadable upstream bodies; cancellation is
+  // not an unreadable success and must reach the route's recovery path.
+  signal.throwIfAborted();
   if (response.status === 401 && !options.forceRefreshToken) {
-    return fetchHostedAgentAllowance({ forceRefreshToken: true });
+    return fetchHostedAgentAllowance({ forceRefreshToken: true, signal });
   }
   if (!response.ok) throw Object.assign(new Error(messageOf(payload, `The agent credits service failed (HTTP ${response.status}).`)), {
     http_status: response.status,
