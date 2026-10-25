@@ -1109,6 +1109,20 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
 
 ## J04: Preparation
 
+**MFS startup retirement (2026-10-25):** a real child/descendant fixture failed
+because the readiness watchdog killed only its leader, leaving the helper
+alive. `mfs-daemon.ts` now retains `MFS_START_TIMEOUT`, shares retirement across
+startup waiters, and retires the whole tree before replacement. A separate
+late-close fixture verifies that a close deadline rejects and fences respawn
+until actual closure. Existing binding replay and explicit retirement checks
+remain. These establish cleanup/recovery, not the original Windows device's
+reason for taking more than ninety seconds to initialize.
+An isolated built-host/built-renderer Electron pass opened a project, observed
+the injected startup failure as HTTP 500, confirmed the helper was gone, then
+received HTTP 200 from the real Python/MFS daemon on retry. The document remained
+visible and its source bytes unchanged. The fixture used a shortened first
+watchdog, a private profile, disabled telemetry and no external provider calls.
+
 **Windows extractor launch recovery (2026-10-24):** the reported stack reaches
 `runExtractor` before a child starts; historical logs contain no native Windows
 error beyond `UNKNOWN`, so its original cause remains unproven. Controlled sync

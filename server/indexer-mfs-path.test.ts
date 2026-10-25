@@ -7,6 +7,46 @@ import { createFilesystemPath } from './filesystem-path.ts';
 import { isMfsDaemonRetiringError, MfsDaemon } from './mfs-daemon.ts';
 import { errorDiagnostic } from './error-diagnostics.ts';
 
+test('daemon startup timeout retires descendants before allowing a replacement', { timeout: 10_000 }, async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-mfs-start-tree-'));
+  const helperPidFile = path.join(scratch, 'helper.pid');
+  const fixture = path.join(scratch, 'daemon.cjs');
+  fs.writeFileSync(fixture, `
+    const { spawn } = require('node:child_process');
+    spawn(process.execPath, ['-e', ${JSON.stringify("require('fs').writeFileSync(process.argv[1], String(process.pid)); process.stdout.write(JSON.stringify({event:'fixture-helper-ready'}) + '\\n'); setInterval(() => {}, 1000)")}, process.argv[2]],
+      { stdio: ['ignore', process.stdout, process.stderr] });
+    setInterval(() => {}, 1000);
+  `);
+  // Fire only the production ready watchdog after the real helper has started.
+  const timeout = globalThis.setTimeout;
+  let expire!: () => void;
+  t.mock.method(globalThis, 'setTimeout', (fn: (...args: any[]) => void, ms?: number, ...args: any[]) =>
+    { if (ms === 90_000) expire = () => fn(...args); return timeout(fn, ms, ...args); });
+  let helperPid: number | undefined;
+  let healthy = false;
+  const daemon = new MfsDaemon(() => ({ command: process.execPath, cwd: scratch,
+    args: healthy ? ['-e', "process.stdout.write('{\"event\":\"ready\"}\\n'); process.stdin.resume()"] : [fixture, helperPidFile] }));
+  t.after(async () => {
+    if (helperPid) { try { process.kill(helperPid, 'SIGKILL'); } catch { /* already retired */ } }
+    await daemon.close();
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+  const helperStarted = new Promise<void>(resolve => daemon.once('daemon:fixture-helper-ready', () => resolve()));
+  const waiting = daemon.ensureReady().then(() => null, error => error);
+  const concurrent = daemon.ensureReady().then(() => null, error => error);
+  await helperStarted;
+  helperPid = Number(fs.readFileSync(helperPidFile, 'utf8'));
+  expire();
+  const result = await waiting;
+  assert.equal(await concurrent, result, 'all startup callers share the failure and its retirement barrier');
+  let helperAlive = true;
+  try { process.kill(helperPid, 0); } catch { helperAlive = false; }
+  assert.equal(helperAlive, false, 'a timed-out daemon must not leave its helper holding resources');
+  assert.equal(errorDiagnostic(result).code, 'MFS_START_TIMEOUT');
+  healthy = true;
+  await daemon.ensureReady();
+});
+
 const windowsPath = createFilesystemPath({ platform: 'win32', cwd: 'C:/' });
 
 test('daemon startup failures retain a bounded credential-filtered stderr tail and can restart', async (t) => {
@@ -25,6 +65,36 @@ test('daemon startup failures retain a bounded credential-filtered stderr tail a
   });
   failures = false;
   await daemon.ensureReady();
+});
+
+test('a daemon close deadline fences replacement until the old process actually closes', async (t) => {
+  const timeout = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', (fn: (...args: any[]) => void, ms?: number, ...args: any[]) =>
+    timeout(fn, ms === 3500 ? 50 : ms, ...args));
+  const daemon = new MfsDaemon(() => ({ command: process.execPath, cwd: os.tmpdir(), args: ['-e', `
+    process.stdout.write(JSON.stringify({event:'ready'}) + '\\n');
+    process.stdin.resume();
+    process.stdin.on('end', () => setTimeout(() => process.exit(0), 200));
+  `] }));
+  t.after(() => daemon.close().catch(() => {}));
+  await daemon.ensureReady();
+  await assert.rejects(daemon.close(), { code: 'MFS_DAEMON_CLOSE_TIMEOUT' });
+  await assert.rejects(daemon.ensureReady(), { code: 'MFS_DAEMON_CLOSE_TIMEOUT' });
+  assert.equal(daemon.currentGeneration(), 1);
+  await new Promise(resolve => timeout(resolve, 300));
+  await daemon.ensureReady();
+  assert.equal(daemon.currentGeneration(), 2);
+});
+
+test('retirement between readiness and dispatch does not write to the closing stdin', async (t) => {
+  const daemon = new MfsDaemon(() => ({ command: process.execPath, cwd: os.tmpdir(), args: ['-e',
+    "process.stdout.write('{\"event\":\"ready\"}\\n'); process.stdin.resume()"] }));
+  t.after(() => daemon.close());
+  await daemon.ensureReady();
+  const call = daemon.call('status', {});
+  const rejected = assert.rejects(call, isMfsDaemonRetiringError);
+  await daemon.close();
+  await rejected;
 });
 
 test('an older Intel Mac rejects native search without starting a daemon', async (t) => {

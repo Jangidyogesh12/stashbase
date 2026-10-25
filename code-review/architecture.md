@@ -273,6 +273,12 @@ source URL and installed package version.
 - Node/Python JSON-RPC is UTF-8 in both directions. The launcher pins the
   process encoding; the daemon also configures its standard streams so direct
   and frozen launches cannot inherit a Windows ANSI code page.
+- MFS startup has one shared readiness/retirement promise. Its ninety-second
+  deadline retains the timeout and last observed startup phase, then retires
+  the whole process tree. Close waits for pipe/group release, using Windows
+  taskkill or a dedicated POSIX process group. A 3.5-second close deadline
+  rejects without allowing replacement; actual late closure releases the fence.
+  A retired or timed-out generation cannot publish late readiness or replies.
 - Resource ceilings must stay finite and aligned across Node/Python. No-op reconcile
   spends no embeddings but still transfers text for MFS revision classification.
   A rename is not a zero-reembedding guarantee. Ranking-quality evidence and

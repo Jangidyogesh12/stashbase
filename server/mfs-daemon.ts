@@ -29,6 +29,7 @@ import { isDevelopmentRuntime } from './development-runtime.ts';
 import { nativeComponentUnavailable } from './native-component-support.ts';
 import type { EmbedderProvider } from '../shared/embedding.ts';
 import { diagnosticText } from '../shared/protocols/diagnostics.ts';
+import { terminateExtractorTree, waitForExtractorTree } from './extractor-process.ts';
 
 const log = logger('mfs');
 
@@ -106,6 +107,8 @@ export class MfsDaemon extends EventEmitter {
    * generation must not spawn until the previous child has actually exited
    * and released the process-wide daemon lock. */
   private closeP: Promise<void> | null = null;
+  private processClosed: Promise<void> | null = null;
+  private cancelStartup: ((error: Error) => void) | null = null;
   /** Bumps every time we (re)spawn the Python process. Callers that
    *  cache "I already configured this daemon" state can compare against
    *  the value at config time — if it changed, re-issue the config op. */
@@ -128,23 +131,23 @@ export class MfsDaemon extends EventEmitter {
    * retained Folder binding. Public operations never race the bootstrap
    * handshake. */
   async ensureReady(): Promise<void> {
-    // `close()` clears `proc`/`readyP` before the child has necessarily
-    // released its flock. A concurrent config reset used to observe that
-    // empty slot and spawn a replacement early; wait through every retirement
-    // that became current before this continuation resumes.
+    // A reset clears readiness before the child releases its store. Wait
+    // through every retirement that became current before this resumes.
     while (this.closeP) await this.closeP;
     if (this.readyP) return this.readyP;
-    const attempt = this.spawnAndConfigure();
-    this.readyP = attempt;
-    try {
-      await attempt;
-    } catch (err) {
+    // Every waiter shares cleanup as well as startup; a failed raw handshake
+    // must not let another caller retry while the old process still owns pipes.
+    const attempt = this.spawnAndConfigure().catch(async (err: unknown) => {
       if (this.readyP === attempt) {
-        this.readyP = null;
-        await this.close();
+        try { await this.close(); }
+        catch (cleanup) {
+          throw new AggregateError([err, cleanup], 'MFS startup failed and its process did not finish closing.', { cause: err });
+        }
       }
       throw err;
-    }
+    });
+    this.readyP = attempt;
+    return attempt;
   }
 
   private async spawnAndConfigure(): Promise<void> {
@@ -231,42 +234,57 @@ export class MfsDaemon extends EventEmitter {
           GRPC_VERBOSITY: process.env.GRPC_VERBOSITY ?? 'ERROR',
         },
         stdio: ['pipe', 'pipe', 'pipe'],
+        detached: process.platform !== 'win32',
+        windowsHide: true,
       });
       this.proc = proc;
       this.generation += 1;
+      const closed = waitForExtractorTree(proc).then(() => {}, error => {
+        if (proc.pid) throw error;
+        // A failed spawn never acquired a process or store lease.
+      });
+      this.processClosed = closed;
+      void closed.catch(() => {});
 
-      // Ready-handshake watchdog — see READY_TIMEOUT_MS. SIGKILL (not
-      // SIGTERM): a child stuck in a native MFS dependency may not run a
-      // signal handler. The exit handler
-      // below turns the kill into a rejection callers can observe.
+      let ready = false;
+      let settled = false;
+      let phase = 'spawn';
+      let stderr = '';
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(readyTimer);
+        if (this.cancelStartup === finish) this.cancelStartup = null;
+        if (error) reject(error);
+        else { ready = true; resolve(); }
+      };
+      this.cancelStartup = finish;
+      // Reject with the original timeout, then let the shared startup promise
+      // retire the entire tree. Killing only the leader can strand MFS helpers.
       const readyTimer = setTimeout(() => {
-        log.warn(`daemon did not report ready within ${READY_TIMEOUT_MS / 1000}s — killing`);
-        try { proc.kill('SIGKILL'); } catch { /* already gone */ }
+        finish(Object.assign(new Error(`MFS daemon did not report ready within ${READY_TIMEOUT_MS}ms (last phase: ${phase}).`), {
+          code: 'MFS_START_TIMEOUT', ...(stderr ? { stderr: diagnosticText(stderr) } : {}),
+        }));
       }, READY_TIMEOUT_MS);
       readyTimer.unref();
-      let ready = false;
       const failAll = (err: Error) => {
         // A retiring generation can report its exit after another lifecycle
-        // continuation has begun. It no longer owns the shared pending map or
-        // readiness latch, so its late event must not invalidate the current
-        // child. The close barrier prevents that overlap in normal operation;
-        // this identity fence keeps the callback safe by construction.
+        // continuation has begun. It must not reject the current child's work.
         if (this.proc !== proc) return;
         for (const slot of this.pending.values()) slot.reject(err);
         this.pending.clear();
-        this.proc = null;
-        this.readyP = null;
       };
       const onReady = () => {
-        ready = true;
-        clearTimeout(readyTimer);
-        resolve();
+        if (this.retirements !== retirementsBefore) finish(new MfsDaemonRetiringError());
+        else finish();
       };
 
       const lines = readline.createInterface({ input: proc.stdout });
-      lines.on('line', (line) => this.onLine(line, onReady));
+      lines.on('line', (line) => {
+        if (this.proc !== proc || this.retirements !== retirementsBefore || (settled && !ready)) return;
+        this.onLine(line, onReady, () => { phase = 'starting'; });
+      });
 
-      let stderr = '';
       proc.stderr.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
         stderr = (stderr + text).slice(-8_000);
@@ -274,10 +292,9 @@ export class MfsDaemon extends EventEmitter {
       });
 
       proc.on('error', (err) => {
-        clearTimeout(readyTimer);
         log.warn(`MFS daemon spawn failed:`, err);
         failAll(err);
-        reject(err);
+        finish(err);
       });
 
       proc.on('exit', (code, signal) => {
@@ -289,17 +306,18 @@ export class MfsDaemon extends EventEmitter {
           ...(signal === null ? {} : { signal }),
           ...(stderr ? { stderr: diagnosticText(stderr) } : {}),
         });
-        // close() detaches its child first; only an exit nobody asked for is a warning.
-        if (this.proc === proc) log.warn(err);
+        // Retain the child until final pipe/tree closure, even after leader exit.
+        if (this.proc === proc && !this.closeP) log.warn(err);
         else log.info(err.message);
         failAll(err);
         // If we never got `ready`, surface the failure to the caller.
-        if (!ready) reject(err);
+        if (!ready) finish(err);
+        else if (this.proc === proc && !this.closeP) void this.close().catch(error => log.warn('daemon retirement failed:', error));
       });
     });
   }
 
-  private onLine(line: string, readyResolve: () => void): void {
+  private onLine(line: string, readyResolve: () => void, onStarting: () => void): void {
     let msg: any;
     try { msg = JSON.parse(line); } catch {
       log.warn(`non-JSON line from daemon: ${line}`);
@@ -314,6 +332,7 @@ export class MfsDaemon extends EventEmitter {
         log.info(`daemon ready: store=${msg.db}`);
         readyResolve();
       } else if (msg.event === 'starting') {
+        onStarting();
         log.info(`daemon starting, pid=${msg.pid}`);
       } else if (msg.event === 'error') {
         const hint = /No module named/i.test(msg.error ?? '')
@@ -343,6 +362,7 @@ export class MfsDaemon extends EventEmitter {
   /** Send one op after the raw process-ready event. Bootstrap uses this
    * directly to avoid awaiting its own configured-ready promise. */
   private async callReadyProcess<T = unknown>(op: string, args: Record<string, unknown>): Promise<T> {
+    if (this.closeP) throw new MfsDaemonRetiringError();
     if (!this.proc) throw new Error('MFS daemon not running');
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
@@ -355,7 +375,7 @@ export class MfsDaemon extends EventEmitter {
             'presuming wedged, restarting daemon',
         );
         reject(new Error(`daemon op ${op} timed out after ${CALL_TIMEOUT_MS / 60_000}min`));
-        void this.close();
+        void this.close().catch(error => log.warn('daemon retirement failed:', error));
       }, CALL_TIMEOUT_MS);
       timer.unref();
       this.pending.set(id, {
@@ -369,7 +389,7 @@ export class MfsDaemon extends EventEmitter {
   async close(): Promise<void> {
     if (this.closeP) return this.closeP;
     const proc = this.proc;
-    this.proc = null;
+    const closed = this.processClosed;
     this.readyP = null;
     this.retirements += 1;
     // Reject any in-flight calls so awaiters don't hang forever once
@@ -377,39 +397,38 @@ export class MfsDaemon extends EventEmitter {
     const inflight = [...this.pending.values()];
     this.pending.clear();
     const closeErr = new MfsDaemonRetiringError();
+    this.cancelStartup?.(closeErr);
     for (const slot of inflight) slot.reject(closeErr);
-    if (!proc) return;
+    if (!proc || !closed) return;
     proc.stdin.end();
-    // Escalation ladder: graceful EOF → SIGTERM → SIGKILL. The Python
-    // signal handler can't run while the main thread is blocked inside
-    // a native MFS dependency, so a stuck daemon won't die
-    // on SIGTERM. SIGKILL can't be caught — guarantees the slot frees
-    // up so the next bind doesn't trip on a stale flock.
-    const retirement = new Promise<void>((resolve) => {
-      let exited = false;
+    // Allow graceful EOF, then retire the full tree using the shared platform
+    // primitive (Windows taskkill /T; POSIX group TERM→KILL). A blocked native
+    // import may ignore TERM; sending a signal alone never proves closure.
+    const retirement = new Promise<void>((resolve, reject) => {
       const termTimer = setTimeout(() => {
-        if (exited) return;
-        try { proc.kill('SIGTERM'); } catch { /* already gone */ }
+        terminateExtractorTree(proc);
       }, 1500);
-      const killTimer = setTimeout(() => {
-        if (exited) return;
-        try { proc.kill('SIGKILL'); } catch { /* already gone */ }
-        const finalTimer = setTimeout(() => { if (!exited) resolve(); }, 500);
-        finalTimer.unref();
-      }, 3000);
-      proc.once('exit', () => {
-        exited = true;
+      const deadline = setTimeout(() => reject(Object.assign(new Error('MFS daemon did not finish closing after termination.'), {
+        code: 'MFS_DAEMON_CLOSE_TIMEOUT',
+      })), 3500);
+      void closed.then(() => {
         clearTimeout(termTimer);
-        clearTimeout(killTimer);
+        clearTimeout(deadline);
+        if (this.proc === proc) {
+          this.proc = null;
+          this.processClosed = null;
+          this.closeP = null;
+        }
         resolve();
+      }, error => {
+        clearTimeout(termTimer);
+        clearTimeout(deadline);
+        reject(error);
       });
     });
     this.closeP = retirement;
-    try {
-      await retirement;
-    } finally {
-      if (this.closeP === retirement) this.closeP = null;
-    }
+    // A deadline rejects callers but fences replacement until actual closure.
+    return retirement;
   }
 }
 
