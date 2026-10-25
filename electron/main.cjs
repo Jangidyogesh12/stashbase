@@ -840,7 +840,7 @@ async function startOrReuseServer() {
     const child = await startServer({
       packaged: app.isPackaged,
       port: SERVER_PORT,
-      probe: (instanceId) => probeServer(SERVER_PORT, 300, instanceId),
+      probe: (instanceId, timeoutMs = 300) => probeServer(SERVER_PORT, timeoutMs, instanceId),
       onReady: (health) => { hostInstanceId = health.instanceId; preparationStorageWarning = health.preparationStorageWarning ?? null; },
       spawn: (instanceId) => { spawnedChild = spawnServer(instanceId); return spawnedChild; },
     });

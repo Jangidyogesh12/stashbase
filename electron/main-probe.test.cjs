@@ -407,3 +407,46 @@ test('main reads a development server\'s registration token only when it is well
     fs.rmSync(home, { force: true, recursive: true });
   }
 });
+
+test('owned startup accepts a healthy response slower than the short port probe', async (t) => {
+  const http = require('node:http');
+  let ownedInstance;
+  let requests = 0;
+  const timers = new Set();
+  const server = http.createServer((_req, res) => {
+    requests++;
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      res.end(JSON.stringify(health(ownedInstance)));
+    }, 450);
+    timers.add(timer);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { for (const timer of timers) clearTimeout(timer); server.closeAllConnections(); server.close(); });
+  const port = server.address().port;
+  const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+  const result = await startServer({
+    packaged: true, port, timeoutMs: 1600,
+    spawn(instanceId) { ownedInstance = instanceId; return child; },
+    probe: (instanceId, timeoutMs = 300) => instanceId
+      ? probeServerHealth(port, timeoutMs, { ...identity, instanceId })
+      : { compatible: false, occupied: false },
+  });
+  assert.equal(result, child);
+  assert.equal(requests, 1, 'a healthy response should not be repeatedly abandoned');
+});
+
+
+test('owned readiness clamps a stalled probe to the remaining startup budget', async () => {
+  const fixture = startupFixture();
+  const budgets = [];
+  fixture.options.probe = async (instanceId, timeoutMs) => {
+    if (!instanceId) return { compatible: false, occupied: false };
+    budgets.push(timeoutMs);
+    await fixture.options.sleep(timeoutMs);
+    return { compatible: false, occupied: true, probe_result: 'response_timeout' };
+  };
+  await assert.rejects(startServer(fixture.options), /did not come up/);
+  assert.deepEqual(budgets, [500]);
+  assert.equal(fixture.elapsed(), 500);
+});

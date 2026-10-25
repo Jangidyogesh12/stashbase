@@ -207,7 +207,10 @@ async function startServer({
   try {
     while (now() < deadline) {
       const probeStartedAt = now();
-      const health = await probe(instanceId);
+      // Port arbitration needs a quick answer, but an owned child may be
+      // contended while booting. Do not repeatedly abandon a healthy response
+      // at the arbitration budget; keep every probe inside the startup deadline.
+      const health = await probe(instanceId, Math.min(1000, Math.max(1, deadline - now())));
       probeCount += 1;
       lastProbe = {
         probe_duration_ms: health.probe_duration_ms ?? Math.max(0, now() - probeStartedAt),

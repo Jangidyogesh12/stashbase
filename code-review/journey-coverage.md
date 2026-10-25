@@ -49,6 +49,23 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Owned startup probe (2026-10-25):** a real loopback fixture reproduced a
+healthy service taking 450 ms per response being repeatedly abandoned by the
+300 ms port probe until startup failed. `electron/main-probe.cjs` now supplies
+an owned probe budget of at most one second, capped by the remaining startup
+deadline; `electron/main.cjs` forwards that budget. The same fixture succeeds
+with one request, while a stalled probe remains bounded and existing wrong-instance,
+spawn-failure and child-exit regressions remain enforced. The Windows 2.16.14
+production report had already logged listening and ended with `response_timeout`;
+this is a plausible contributor, not proof of that unavailable device's cause.
+Its later MFS 90-second and OpenCode 15-second startup timeouts remain unproven.
+An isolated source Electron main launched its own host with every health response
+delayed by 450 ms, reached the built Welcome renderer, and opened Settings.
+Validation passed 935 host tests, 360 protocol/Electron tests, host/renderer types,
+documentation/inventory checks, service/renderer builds and the native smoke suite.
+The local host suite used the current Python daemon explicitly because a stale
+ignored sidecar lacked current operations. Signed Windows execution remains unproven.
+
 **Electron fuse review (2026-10-23, release validation pending):** SHA-256-verified
 2.16.17 macOS arm64/x64, Windows x64, and Linux x64 artifacts all enable
 RunAsNode, Node environment options, and Node CLI inspection. The

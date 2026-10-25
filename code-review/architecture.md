@@ -1340,6 +1340,10 @@ justified and bounded. Stories/axe do not prove painted contrast or composition.
 Main owns launch identity, save barriers, retirement tombstones, and shutdown.
 Readiness must match the spawned instance, not merely a listener or PID.
 Each health probe uses a fresh connection and a bounded whole-response deadline.
+Port arbitration uses a short 300 ms probe; once a child is owned, a health
+response may take up to one second, capped by the remaining startup budget.
+Slow valid responses must not be repeatedly discarded by the arbitration timeout.
+The packaged ten-second and source thirty-second startup budgets remain unchanged.
 Startup failures retain the last probe result/duration/status or mismatched
 identity field, probe count and total elapsed time. Refusal, connect/response
 timeout, transport failure, HTTP failure and invalid JSON remain distinguishable;
