@@ -153,7 +153,14 @@ test('valid login-shell discoveries survive elapsed time and disappear only when
   fs.writeFileSync(binary, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   fs.writeFileSync(shell, `#!/bin/sh\nprintf '%s\\n' '${binary}'\n`, { mode: 0o755 });
   const previous = process.env.SHELL;
-  t.after(() => { if (previous === undefined) delete process.env.SHELL; else process.env.SHELL = previous; fs.rmSync(root, { recursive: true, force: true }); });
+  const previousIsolation = process.env.STASHBASE_ISOLATED_AGENTS;
+  t.after(() => {
+    if (previous === undefined) delete process.env.SHELL; else process.env.SHELL = previous;
+    if (previousIsolation === undefined) delete process.env.STASHBASE_ISOLATED_AGENTS;
+    else process.env.STASHBASE_ISOLATED_AGENTS = previousIsolation;
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  delete process.env.STASHBASE_ISOLATED_AGENTS;
   process.env.SHELL = shell;
   const spec = { name: `stashbase-cache-${process.pid}`, envNames: [], logLabel: 'Fixture' };
   assert.equal(await resolveAgentCliWithLoginShell(spec), binary);

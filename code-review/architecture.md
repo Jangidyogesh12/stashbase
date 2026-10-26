@@ -1494,6 +1494,21 @@ library port and chooses it for no Chat.
 
 ## Validation
 
+J01 is the default local acceptance: project entry, Agent preparation/sign-in,
+a completed reply, applicable native update, and reuse after reopening.
+`pnpm check` owns the core selection; `pnpm check:all` and CI own the complete
+source audit. Extend an existing flow before adding a regression file. Keep
+focused coverage for source loss, scope, permissions, cancellation and duplicate
+delivery when the normal flow cannot establish those rules.
+
+`scripts/testing/environment.ts` owns private validation state and clears
+inherited native CLI overrides. With `STASHBASE_ISOLATED_AGENTS=1`,
+`server/agent-cli.ts` discovers only private-home installations and explicit
+fixture executables, without host PATH/global or login-shell fallback.
+Host tests and profiling use this boundary. Explicit real-provider verification
+uses `scripts/verify-onboarding.mjs` with a persistent profile; controlled tests
+do not establish OAuth or upstream model availability.
+
 Use [Journey Coverage](journey-coverage.md) for concrete front/back-end entry points
 and existing evidence. For a cross-cutting change, start with the owners below.
 Run focused checks while editing and the gates required by [AGENTS.md](../AGENTS.md)

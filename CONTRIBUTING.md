@@ -56,6 +56,17 @@ directory has to be added to the script.
 
 ## Testing
 
+The default acceptance is J01: open an empty folder, prepare/sign in to the
+chosen Agent, receive a completed reply, update when needed, and return without
+another login. Exercise Default, Claude, Codex, and Antigravity.
+
+Run `pnpm check` at the end of a change. It checks types and `pnpm test:core`:
+full-window onboarding scenarios, host setup and file-preservation rules, and
+the bundled OpenCode runtime against a controlled gateway. The window scenarios
+use controlled ports; they do not prove real OAuth, installer delivery, or
+provider availability. Other features use focused checks when affected. Prefer
+extending an existing core scenario over adding a regression file for each bug.
+
 During implementation, run the smallest suite that exercises the changed behavior:
 
 ```bash
@@ -72,7 +83,9 @@ pnpm test:renderer:a11y
 
 `test:renderer` excludes the catalog accessibility sweep and does not build,
 check architecture, or collect coverage. `pnpm check:web` is the complete
-renderer gate, including coverage, accessibility, static checks, and both builds.
+renderer audit for CI and architecture/toolchain changes, including coverage,
+accessibility, static checks, and both builds. Ordinary local UI work uses the
+core gate, formatting/lint, and affected tests.
 Build and lint commands do only their named work.
 
 Host test workers automatically suppress production telemetry, including when
@@ -84,9 +97,12 @@ see [testing and development](docs/usage-statistics.md#testing-and-development).
 `test:server`, `test:agent` and `test:mcp` preload `server/__tests__/isolated-home.ts`,
 which points the home directory, app data and agent settings at a temporary
 folder, so host tests never change your own `~/.stashbase` config or projects.
+They also exclude host PATH/global/login-shell CLI discovery and clear inherited
+provider executable overrides. Tests may install fixtures in their private home
+or inject explicit executables. Profiling uses the same isolation.
 Keep that `--import` when running host test files directly, as above.
 
-Before opening a PR, run `pnpm check` for the complete local source gate.
+For a complete source audit, run `pnpm check:all`.
 It includes `check:web`, documentation validation, host suites, type checks,
 builds, and Electron smoke; do not repeat its constituent commands afterward.
 For a scoped change, follow [AGENTS.md](AGENTS.md) and the affected
@@ -102,6 +118,49 @@ source smoke. Packaged apps and macOS/Windows retain their normal sandbox.
 Real-provider evaluations and packaged verification stay in the
 [release workflow](code-review/release-pipeline.md); a passing source gate does
 not establish model quality or a complete user journey.
+
+### Real Agent Onboarding
+
+Run `pnpm verify:onboarding --agent codex` (or `stashbase`, `claude`,
+`antigravity`) for explicit interactive verification. It builds the app and
+opens a persistent private profile under `profiling.nosync/onboarding/`.
+It excludes the developer's discovered CLIs and home-based credential files. Install
+and sign in through the app's controls; rerunning the same command preserves
+that profile's sign-in and projects. `--fresh` archives the previous profile in
+a dated directory and starts a new one; omit it on the next run to reuse login.
+`--built` reuses outputs only when they were built
+from the same unchanged checkout in this validation run.
+
+Open the printed empty folder, choose the named Agent, connect/sign in, and
+send an idea. Require a visible reply and a completed turn, not merely Ready.
+If an update is needed, update and verify another completed reply. Close and
+reopen to check login reuse. Check each provider separately; Default signs in
+through StashBase and ships its runtime with the app. This explicit pass may
+open the provider's browser; ordinary tests must not start real login.
+Record provider/runtime version, observed steps, substitutions and uncompleted
+steps in [J01](code-review/journey-coverage.md#j01-onboarding). An interrupted
+or unavailable login remains unverified, never passed.
+
+Prioritize first installation and connection over already-signed-in reuse.
+Use this small environment matrix; do not expand every variable into a full
+cross-product or create a regression suite for each machine:
+
+| Starting condition | Required result |
+|---|---|
+| No CLI and no provider sign-in | Install through the app, complete real authorization, and receive a completed first reply. |
+| Working CLI, signed out | Reuse the installation, sign in, and continue the held message once. |
+| Broken npm/Homebrew/native launcher | The first explicit Connect checks executability and repairs through the official installer; preserve unrelated installations/configuration. |
+| Existing account and current CLI | Connect without another browser login or download, including after reopening. |
+| Old runtime | Update when required, reconnect, and complete the refused request once. |
+| Failed download, unavailable browser, or cancelled login | Show the failed step and a usable recovery; retain the draft and never report Ready without verification. |
+
+Run the clean-install path on each supported OS for release acceptance. Check
+affected environment differences where they actually matter: a spaced/non-ASCII
+home path, stale GUI PATH, installer permissions, proxy/network, or provider
+account eligibility. Controlled fixtures establish local decisions only.
+`--fresh` resets app/home state, not the OS keychain or browser account. A true
+new-user pass requires a separate OS user or clean VM with no provider sign-in;
+record reused credentials instead of calling that pass fresh onboarding.
 
 ## Profiling
 

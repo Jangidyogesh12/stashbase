@@ -110,8 +110,9 @@ second specification. All committed docs are English-only.
 
 The renderer under `renderer/` is the frontend. Read
 [the renderer boundary](code-review/architecture.md#renderer-boundaries) before
-changing anything under `renderer/src`, and run `pnpm check:web`, the single
-renderer gate used by CI. Exact rules live in the gate's configurations.
+changing anything under `renderer/src`. Daily validation follows the core-flow
+policy below. `pnpm check:web` remains the complete renderer audit used by CI,
+not a requirement for every local UI change. Exact rules live in its configurations.
 
 ## GitHub access for this repository
 
@@ -151,10 +152,9 @@ When the user reports a bug or asks for a feature, run the full loop:
 2. Implement while preserving these cross-cutting constraints: sync and
    conversion are folder-explicit; hidden derived notes never surface; one
    daemon owns the local index; credentials live only in Settings, never env.
-3. During implementation, run the smallest focused tests that exercise the
-   changed behavior. Do not run the full validation matrix after every edit;
-   reserve broad contract and build verification for the pre-commit gate
-   unless a broader command is needed to diagnose the change.
+3. During implementation, run the smallest check that exercises the changed
+   user outcome. At completion, run the core gate once plus affected checks;
+   do not run the full repository audit after each fix.
 4. Update affected docs in the same change. Run `pnpm test:docs` for changes to
    the documentation structure, links, contracts, or journey mapping as part
    of the pre-commit gate.
@@ -162,36 +162,52 @@ When the user reports a bug or asks for a feature, run the full loop:
 
 ## Test Selection
 
-Test an observable result or a consequential failure: source preservation,
-project isolation, permissions, concurrency, cancellation, and recovery.
-Do not add tests solely to repeat constants, file lists, trivial forwarding,
-or assertions already exercised by a Story. Keep one primary test owner per
-rule; multiple layers need tests only when they introduce distinct risks.
-Mocks prove local decisions, not a complete journey or real-provider quality.
+The primary acceptance flow is J01: open an empty folder, prepare the chosen
+Agent, sign in, receive a completed first reply, update a native runtime when
+needed, and return without repeating login. Exercise Default, Claude, Codex,
+and Antigravity. Ready alone is not acceptance of a conversation.
+Prioritize genuinely uninstalled/signed-out environments and broken existing
+installations. Reusing a developer's established login is returning-user
+evidence only. Follow the small environment matrix in the command guide;
+separate real OS/provider verification from controlled fixture coverage.
 
-Use [focused commands](CONTRIBUTING.md#testing) while editing. Run the complete
-affected gate once after implementation, not after every edit. A completed
-`pnpm check` satisfies its constituent gates; do not run them again without
-new changes or a failed check. Build once and reuse those exact outputs within
-the same validation run. Keep genuine evidence gaps in Journey Coverage.
+Prefer extending that flow over adding a regression file for each small bug.
+Keep focused tests for consequential risks the flow cannot reliably prove:
+lost drafts/files, source conflicts, project isolation, permissions,
+cancellation, and duplicate sends. Do not repeat constants, file lists, trivial
+forwarding, or existing Story assertions. Remove duplicate proof when consolidating;
+keep one primary owner for each rule.
+
+`pnpm check` is the default local gate: types, core onboarding composition,
+host setup/source-preservation checks and the controlled bundled runtime.
+Other features use [focused checks](CONTRIBUTING.md#testing) when affected.
+`pnpm check:all` is the full source audit for CI parity or broad infrastructure
+changes, not the routine response to every small bug. A completed aggregate
+satisfies its constituent checks; do not rerun them without new changes or a
+failure. Build once and reuse those outputs within the validation run.
+
+Automated checks and ordinary visual/profiling runs use isolated Agent
+discovery and cannot launch the developer's installed CLIs. Real-provider
+onboarding uses the explicit persistent profile in the command guide. Reuse
+login for daily first-reply checks; exercise fresh login/install when those
+paths change or during release acceptance. Controlled ports and gateways do
+not prove OAuth or provider availability. Record those gaps in J01.
 
 ## Pre-commit verification
 
-Before creating commits, run the complete validation matrix for the pending
-change:
+Before creating commits, run `pnpm check` once and the focused checks for changed
+boundaries. Documentation/link changes add `pnpm test:docs`; renderer changes
+add formatting/lint and affected behavior tests. Changes to renderer architecture
+or the toolchain add `pnpm check:web`. Electron/process changes add focused
+Electron checks and built-output smoke after a fresh build. Do not add coverage,
+the entire Story catalog and both builds to every local UI fix. CI retains the
+complete source matrix.
 
-- `pnpm typecheck` for host and renderer types; if `check:web` has already
-  checked renderer types for this change, run only `pnpm typecheck:host`;
-- `pnpm check:web` for renderer changes; it includes lint, coverage, Story
-  accessibility, typecheck, architecture checks, and builds;
-- focused commands for every affected engineering boundary;
-- `pnpm test:docs` for documentation structure, links, contracts, or journey
-  mapping changes;
-- `pnpm test:electron` and `pnpm test:electron:smoke` for release-blocking
-  renderer and cross-process paths;
-- a driven runtime pass through the built application for a changed journey,
-  recorded in the change itself. Journey automation and pixel baselines
-  retired with the Playwright suites, so composition is reviewed by eye.
+Review changed visible composition in the running app or the relevant Story.
+Installation/login/update/session transport changes also require the matching
+real-provider onboarding pass, with uncompleted external steps recorded as gaps.
+An unavailable account is not a passing login check. No pixel-baseline suite
+is required.
 
 ## Commit protocol
 

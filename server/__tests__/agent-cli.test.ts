@@ -10,9 +10,41 @@ import {
   isWindowsLaunchableAgentCliPath,
   parseAgentCliVersion,
   resolveAgentCli,
+  resolveAgentCliWithLoginShell,
   resolveNativeAgentCli,
 } from '../agent-cli.ts';
 import { agentCliLaunch } from '../agent-cli-launch.ts';
+
+test('an isolated validation home cannot discover host CLIs or start a login shell', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-isolated-cli-'));
+  const fixtureHome = path.join(root, 'home');
+  const hostBin = path.join(root, 'host-bin');
+  fs.mkdirSync(hostBin, { recursive: true });
+  const name = `stashbase-probe-${process.pid}`;
+  const executable = path.join(hostBin, process.platform === 'win32' ? `${name}.exe` : name);
+  fs.writeFileSync(executable, 'must never run', { mode: 0o755 });
+  t.mock.method(os, 'homedir', () => fixtureHome);
+  const keys = ['PATH', 'SHELL', 'STASHBASE_ISOLATED_AGENTS'];
+  const previous = keys.map((key) => [key, process.env[key]] as const);
+  t.after(() => {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  process.env.PATH = hostBin;
+  process.env.SHELL = executable;
+  delete process.env.STASHBASE_ISOLATED_AGENTS;
+  const spec = { name, envNames: [], logLabel: 'Fixture' };
+  assert.equal(resolveAgentCli(spec), executable, 'the host installation is discoverable normally');
+  process.env.STASHBASE_ISOLATED_AGENTS = '1';
+  assert.equal(resolveAgentCli(spec), null);
+  assert.equal(await resolveAgentCliWithLoginShell(spec), null);
+  const local = path.join(fixtureHome, '.local', 'bin', path.basename(executable));
+  fs.mkdirSync(path.dirname(local), { recursive: true });
+  fs.copyFileSync(executable, local);
+  assert.equal(await resolveAgentCliWithLoginShell(spec), local, 'explicit fixture installations still work');
+});
 
 test('an agent CLI never inherits the token that grants dropped files', (t) => {
   const previous = process.env.STASHBASE_EXTERNAL_FILE_TOKEN;

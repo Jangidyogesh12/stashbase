@@ -11,8 +11,6 @@ import {
   resolveAgentSessionScope,
   resolveSessionBinding,
   runtimeDescriptorFor,
-  type AgentClientEvent,
-  type AgentServerEvent,
 } from '../agent-contract.ts';
 import { smokeNativeAgentCli } from '../agent-native-smoke.ts';
 
@@ -66,33 +64,6 @@ test('Agent effort identifiers stay runtime-owned while the URL boundary remains
   assert.equal(parseAgentEffort(' ultra '), undefined);
   assert.equal(parseAgentEffort('x'.repeat(65)), undefined);
   assert.equal(parseAgentEffort('high\n'), undefined);
-});
-
-test('Shared Agent Contract retains lifecycle, streaming, approval, session, and queue event vocabulary', () => {
-  const clientEvents: AgentClientEvent[] = [
-    { t: 'prompt', text: 'first', titleHint: 'Title' }, { t: 'steer', id: 'queued', text: 'follow-up' },
-    { t: 'permission-reply', id: 'approval', allow: true, always: true },
-    { t: 'permission-reply', id: 'question', allow: true, answers: { 'Which format?': 'Summary' } },
-    { t: 'interrupt' },
-    { t: 'set-model', model: 'native-model' }, { t: 'set-mode', mode: 'plan' },
-    { t: 'close' },
-  ];
-  const events: AgentServerEvent[] = [
-    { t: 'ready' }, { t: 'session-id', id: 'session' }, { t: 'session-title', title: 'Title' },
-    { t: 'models', models: [{ id: 'native-model', label: 'Native model' }], activeModel: 'native-model' },
-    { t: 'turn-start' }, { t: 'text', delta: 'text' }, { t: 'thinking', delta: 'thinking' },
-    { t: 'tool', id: 'tool', name: 'Read', input: {} }, { t: 'tool-delta', id: 'tool', delta: 'input' },
-    { t: 'tool-result', id: 'tool', content: 'done', isError: false },
-    { t: 'file-diff', id: 'diff', file: 'notes.md', before: 'old', after: 'new', additions: 1, deletions: 1 },
-    { t: 'permission', id: 'approval', toolUseId: 'tool', name: 'Write', title: null, input: {} },
-    { t: 'steer-result', id: 'queued', ok: true },
-    { t: 'turn-end', isError: false },
-    { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
-    { t: 'exit', message: 'runtime stopped unexpectedly' },
-    { t: 'exit', reason: 'scope-removed', folder: '/Users/me/Projects/Research' },
-  ];
-  assert.equal(clientEvents.length, 8);
-
 });
 
 test('capability discovery reports installed and unavailable native runtimes without changing adapter metadata', () => {

@@ -86,7 +86,7 @@
     "test:updates": "node --test electron/update-manager.test.cjs electron/update-install-strategy.test.cjs electron/update-window-barrier.test.cjs scripts/github-release-api.test.mjs scripts/update-release-contract.test.mjs scripts/packaging/macos-artifacts.test.mjs scripts/packaging/download-mirror.test.mjs",
     "typecheck:electron-boundary": "tsc --noEmit -p electron/tsconfig.json",
     "typecheck": "pnpm typecheck:host && pnpm typecheck:web",
-    "check": "pnpm test:toolchain && pnpm test:docs && pnpm test:inventory && pnpm test:python && pnpm test:release-gate && pnpm test:package-inputs && pnpm test:icons && pnpm test:macos-signing && pnpm test:windows-signing && pnpm test:updates && pnpm check:web && npm run test:electron && pnpm test:server && pnpm test:opencode:native && pnpm typecheck:host && pnpm build:services && pnpm test:electron:smoke:built",
+    "check": "pnpm typecheck && pnpm test:core",
     "prestart": "pnpm build:web",
     "electron": "pnpm build:electron-boundary && electron .",
     "package:mac": "node scripts/package-desktop.mjs",
@@ -115,7 +115,10 @@
     "typecheck:host": "tsc --noEmit && pnpm typecheck:electron-boundary",
     "test:electron:smoke:built": "node electron/renderer/smoke-runner.cjs",
     "test:electron:fuses": "node --test scripts/packaging/electron-fuses.test.mjs",
-    "profile:default-session": "node --import tsx scripts/profiling/default-session.mjs"
+    "profile:default-session": "node --import tsx scripts/profiling/default-session.mjs",
+    "check:all": "pnpm test:toolchain && pnpm test:docs && pnpm test:inventory && pnpm test:python && pnpm test:release-gate && pnpm test:package-inputs && pnpm test:icons && pnpm test:macos-signing && pnpm test:windows-signing && pnpm test:updates && pnpm check:web && npm run test:electron && pnpm test:server && pnpm test:opencode:native && pnpm typecheck:host && pnpm build:services && pnpm test:electron:smoke:built",
+    "test:core": "node --import tsx --import ./server/__tests__/isolated-home.ts --test server/project-open.test.ts server/text-file-transaction.test.ts server/__tests__/agent-runtime-installer.test.ts server/__tests__/antigravity-setup.test.ts server/__tests__/agent-cli.test.ts && pnpm test:renderer src/app.onboarding.test.tsx src/features/agent/infrastructure/catalog-api.test.ts && pnpm test:opencode:native",
+    "verify:onboarding": "node --import tsx scripts/verify-onboarding.mjs"
   },
   "build": {
     "appId": "com.stashbase.app",

@@ -115,8 +115,10 @@ or asset uploads; source runs on the same ref are also serialized.
   Electron builds; cancellation stops subsequent work.
 - Each platform builds the renderer and Electron boundary once, then reuses
   those outputs for `test:electron:smoke:built`. Host type checks and service
-  builds do not repeat renderer work. Local `pnpm check` follows the same
+  builds do not repeat renderer work. Local `pnpm check:all` follows the same
   build-once rule; standalone smoke builds its own prerequisites.
+  Daily local `pnpm check` is the smaller J01 core gate described in
+  [Testing](../CONTRIBUTING.md#testing), not a replacement for source CI.
 - The native OpenCode smoke reports the active operation when interrupted.
   Its fixture aborts SSE readers and disposes the panel before stopping the
   broker/process, bounds graceful process termination, and closes gateway

@@ -132,7 +132,7 @@ test('source validation builds each target once and reuses it for Electron smoke
     if (step.if === "runner.os != 'Linux'") return os !== 'Linux';
     assert.fail(`Review the CI selection rule: ${step.if}`);
   }).map((step) => step.run ?? '').join('\n')]);
-  commands.push(['local', 'pnpm check']);
+  commands.push(['local', 'pnpm check:all']);
   for (const [platform, command] of commands) {
     const calls = scriptCalls(command);
     for (const name of ['build:web', 'build:electron-boundary', 'build:server', 'build:mcp', 'test:electron:smoke:built']) {

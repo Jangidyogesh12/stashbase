@@ -153,13 +153,19 @@ function resolveSystemAgentCli(
   const native = resolveNativeAgentCli(spec.name);
   if (native) return native;
 
-  for (const dir of agentCliPath().split(path.delimiter)) {
+  // Validation homes must not rediscover the developer's CLIs through PATH
+  // or global install locations. Explicit fixture executables still work.
+  const searchDirs = process.env.STASHBASE_ISOLATED_AGENTS === '1'
+    ? [path.join(os.homedir(), '.local', 'bin'), path.join(os.homedir(), '.npm-global', 'bin')]
+    : agentCliPath().split(path.delimiter);
+  for (const dir of searchDirs) {
     for (const name of agentCliExecutableCandidates(spec.name)) {
       const candidate = path.join(dir, name);
       if (isExecutable(candidate)) return candidate;
     }
   }
 
+  if (process.env.STASHBASE_ISOLATED_AGENTS === '1') return null;
   const cached = loginShellCache.get(spec.name);
   if (cached?.executable && isExecutable(cached.executable)) return cached.executable;
 
@@ -178,6 +184,7 @@ export async function resolveAgentCliWithLoginShell(
 ): Promise<string | null> {
   signal?.throwIfAborted();
   const system = resolveSystemAgentCli(spec, warn);
+  if (process.env.STASHBASE_ISOLATED_AGENTS === '1') return system;
   const cached = loginShellCache.get(spec.name);
   const recentMiss = cached?.executable === null && Date.now() - cached.checkedAt < LOGIN_SHELL_MISS_CACHE_MS;
   if (!system && !recentMiss

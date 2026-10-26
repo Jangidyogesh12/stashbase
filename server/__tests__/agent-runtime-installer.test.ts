@@ -1308,6 +1308,8 @@ test('every turn failure script is bounded prose and only crash is session-fatal
 
 test('explicit readiness finds a version-manager Agent through the login shell', { skip: process.platform === 'win32' }, async () => {
   const previousShell = process.env.SHELL;
+  const previousIsolation = process.env.STASHBASE_ISOLATED_AGENTS;
+  delete process.env.STASHBASE_ISOLATED_AGENTS;
   const previousFakeBin = process.env.STASHBASE_TEST_SHELL_AGENT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agent-shell-test-'));
   const shell = path.join(root, 'fake-shell');
@@ -1326,6 +1328,8 @@ test('explicit readiness finds a version-manager Agent through the login shell',
   } finally {
     if (previousShell === undefined) delete process.env.SHELL;
     else process.env.SHELL = previousShell;
+    if (previousIsolation === undefined) delete process.env.STASHBASE_ISOLATED_AGENTS;
+    else process.env.STASHBASE_ISOLATED_AGENTS = previousIsolation;
     if (previousFakeBin === undefined) delete process.env.STASHBASE_TEST_SHELL_AGENT;
     else process.env.STASHBASE_TEST_SHELL_AGENT = previousFakeBin;
     fs.rmSync(root, { recursive: true, force: true });

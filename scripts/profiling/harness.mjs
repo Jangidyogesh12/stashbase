@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import electronPath from "electron";
 
 import { connectToWindow } from "./cdp.mjs";
+import { isolatedEnvironment } from "../testing/environment.ts";
 
 export const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -120,15 +121,11 @@ export async function launchApp({ workDirectory, hostPort = 8190, debugPort = 93
   }
   fs.mkdirSync(logDirectory, { recursive: true });
 
-  const isolatedEnvironment = {
-    ...process.env,
-    HOME: path.join(profileRoot, "home"),
-    XDG_DATA_HOME: path.join(profileRoot, "data"),
-    XDG_CONFIG_HOME: path.join(profileRoot, "config"),
+  const environment = {
+    ...isolatedEnvironment(profileRoot),
     STASHBASE_DEV_VITE: "1",
-    STASHBASE_TELEMETRY_DISABLED: "1",
   };
-  delete isolatedEnvironment.ELECTRON_RUN_AS_NODE;
+  delete environment.ELECTRON_RUN_AS_NODE;
 
   const children = [];
   const stop = async () => {
@@ -149,7 +146,7 @@ export async function launchApp({ workDirectory, hostPort = 8190, debugPort = 93
     // Run with this Node rather than a version-manager shim. Electron reuses
     // a healthy host on its port instead of starting its own.
     const host = startProcess(process.execPath, ["--import", "tsx", "server/index.ts", `--port=${hostPort}`], {
-      env: isolatedEnvironment,
+      env: environment,
       log: path.join(logDirectory, "host.log"),
     });
     children.push(host);
@@ -164,7 +161,7 @@ export async function launchApp({ workDirectory, hostPort = 8190, debugPort = 93
           `--remote-debugging-port=${debugPort}`,
           `--user-data-dir=${path.join(profileRoot, "config", "stashbase")}`,
         ],
-        { env: isolatedEnvironment, log: path.join(logDirectory, "electron.log") },
+        { env: environment, log: path.join(logDirectory, "electron.log") },
       ),
     );
 
