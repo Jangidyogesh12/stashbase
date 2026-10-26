@@ -16,7 +16,7 @@ import {
   simulatedTurnFailureScript,
   type AgentTurnFailureSimulation,
 } from './agent-runtime-paths.ts';
-import { agentTurnErrorEvent } from './agent-turn-failure.ts';
+import { agentSessionExitEvent, agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { agentBootstrapCoordinator } from './agent-runtime-installer.ts';
 import {
   isAgentAccessMode,
@@ -665,7 +665,7 @@ export class CodexSession implements AttributedAgentSession {
         this.settleActiveTurn(turnId, false);
         return;
       }
-      if (!this.closed) this.send({ t: 'error', message: errorMessage(err) });
+      if (!this.closed) this.sendTurnError(errorMessage(err), err);
     }
   }
 
@@ -1017,7 +1017,9 @@ export class CodexSession implements AttributedAgentSession {
 
   private finish(message?: string, cause?: unknown): void {
     if (this.closed) return;
-    this.send({ t: 'exit', ...(message ? { message } : {}) }, cause);
+    const event = agentSessionExitEvent(message);
+    if (message && event.failure?.kind === 'auth-expired') agentBootstrapCoordinator.requireSignIn('codex', message);
+    this.send(event, cause);
     this.dispose();
   }
 

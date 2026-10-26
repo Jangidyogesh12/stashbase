@@ -96,7 +96,7 @@ export class AgentBootstrapCoordinator {
   private readonly attempts = new Map<NativeAgentId, string>();
   private readonly diagnostics = new Map<NativeAgentId, ErrorDiagnostic>();
   /** Runtimes whose provider refused the stored sign-in since it last became ready. */
-  private readonly refusedSignIns = new Set<NativeAgentId>();
+  private readonly refusedSignIns = new Map<NativeAgentId, string>();
   /** Runtimes whose running preparation the reader stopped. */
   private readonly stopped = new Set<NativeAgentId>();
 
@@ -119,8 +119,10 @@ export class AgentBootstrapCoordinator {
 
   /** A provider refusal invalidates readiness without deleting its credentials. */
   requireSignIn(id: NativeAgentId, message: string): void {
+    this.refusedSignIns.set(id, message);
+    // Keep an in-flight preparation visible until it retires; its auth
+    // check must honor this refusal. An explicit login owns its recovery.
     if (this.runs.has(id)) return;
-    this.refusedSignIns.add(id);
     this.fail(id, 'login', 'authentication', 'authentication-required', new Error(message));
   }
 
@@ -300,9 +302,10 @@ export class AgentBootstrapCoordinator {
     try {
       const authenticated = await this.dependencies.isAuthenticated(id, executable, signal);
       signal.throwIfAborted();
-      if (authenticated) return true;
+      const refusal = this.refusedSignIns.get(id);
+      if (authenticated && (refusal === undefined || action === 'login')) return true;
       this.fail(id, action, 'authentication', 'authentication-required',
-        new Error(`${agentLabel(id)} is installed, but it is not signed in.`));
+        new Error(refusal ?? `${agentLabel(id)} is installed, but it is not signed in.`), undefined, 'login');
     } catch (error) {
       // A stop or timeout is the run's to report, not a failed check.
       if (signal.aborted) throw error;

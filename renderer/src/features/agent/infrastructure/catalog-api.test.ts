@@ -63,6 +63,7 @@ describe('agent catalog adapter', () => {
                 code: 'operation-failed',
                 retryable: true,
                 message: 'Could not read Codex config.toml: permission denied.',
+                retryAction: 'update',
               },
             },
           }),
@@ -74,6 +75,7 @@ describe('agent catalog adapter', () => {
     expect(agents[0]?.setupFailure).toEqual({
       stage: 'mcp',
       message: 'Could not read Codex config.toml: permission denied.',
+      retryAction: 'update',
     });
   });
 

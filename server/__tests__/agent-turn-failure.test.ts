@@ -60,6 +60,23 @@ test('live provider messages classify by their vocabulary', () => {
   );
 });
 
+test('hosted prerequisites and native signed-out messages name the actual repair', () => {
+  for (const message of [
+    'Sign in to StashBase to use the Default Agent and its free credits.',
+    'authentication_required',
+    'Unauthenticated',
+    'Sign-in is required',
+    'No saved credentials',
+    'Please log in',
+    'workspace routing discovery unauthorized (401)',
+  ]) assert.equal(classifyAgentTurnFailure(message), 'auth-expired', message);
+  for (const message of [
+    'client_upgrade_required',
+    'StashBase 2.18.0 or newer is required.',
+    'Update StashBase to keep using the crew.',
+  ]) assert.equal(classifyAgentTurnFailure(message), 'app-outdated', message);
+});
+
 test('a hosted model refusal asks for a model refresh; a chat waiting for a choice does not', () => {
   assert.equal(classifyAgentTurnFailure('The selected model configuration has changed. Refresh the models, then review and send again.'), 'model-changed');
   assert.equal(classifyAgentTurnFailure('The selected model is no longer available. Refresh the models and choose another one.'), 'model-changed');

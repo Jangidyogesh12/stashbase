@@ -39,6 +39,7 @@ function onboarding(provider: Provider) {
   let installed = false;
   let outdated = false;
   let updated = false;
+  let rejectAuthentication = false;
   const prompts: string[] = [];
   const catalog = () => ({
     agents: providers.map((entry) =>
@@ -124,6 +125,17 @@ function onboarding(provider: Provider) {
             if (closed) return;
             listener.onEvent({ kind: 'identified', id: `${provider.id}-conversation` });
             listener.onEvent({ kind: 'turn-started' });
+            if (rejectAuthentication) {
+              rejectAuthentication = false;
+              signedIn = false;
+              signingIn = false;
+              listener.onEvent({
+                kind: 'failed',
+                failure: 'auth-expired',
+                message: 'workspace routing discovery unauthorized (401)',
+              });
+              return;
+            }
             if (outdated && !updated) {
               listener.onEvent({
                 kind: 'failed',
@@ -150,6 +162,9 @@ function onboarding(provider: Provider) {
     requireUpdate: () => {
       outdated = true;
     },
+    refuseAuthentication: () => {
+      rejectAuthentication = true;
+    },
     mount: () =>
       render(
         <Providers>
@@ -157,6 +172,38 @@ function onboarding(provider: Provider) {
         </Providers>,
       ),
   };
+}
+
+async function recoverAuthentication(
+  fixture: ReturnType<typeof onboarding>,
+  provider: Provider,
+  user: ReturnType<typeof userEvent.setup>,
+  request: string,
+  signInRequests: () => readonly unknown[],
+) {
+  fixture.refuseAuthentication();
+  typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Check my introduction');
+  await user.click(screen.getByRole('button', { name: 'Send' }));
+  const refusal = await screen.findByRole('heading', { name: 'Sign in to continue' });
+  expect(screen.getByText('workspace routing discovery unauthorized (401)')).not.toBeNull();
+  expect(fixture.prompts).toEqual([request, 'Check my introduction']);
+  // A refused credential invalidates the mounted catalog. Opening its
+  // recovery must preserve the next draft and never replay the failed turn.
+  typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Keep this next idea');
+  const card = refusal.closest('section');
+  if (!card) throw new Error('The failure has no recovery card.');
+  await user.click(within(card).getByRole('button', { name: 'Sign in' }));
+  await screen.findByText('Your agents');
+  await user.keyboard('{Escape}');
+  expect(screen.getByRole('textbox', { name: 'Message' }).textContent).toBe('Keep this next idea');
+  await user.click(screen.getByRole('button', { name: 'Send' }));
+  const dialog = within(await screen.findByRole('dialog'));
+  expect(dialog.getByRole('heading', { name: `Sign in to use ${provider.label}` })).not.toBeNull();
+  await user.click(dialog.getByRole('button', { name: 'Sign in' }));
+  await waitFor(() => expect(signInRequests()).toHaveLength(2));
+  expect(fixture.prompts).toEqual([request, 'Check my introduction']);
+  await act(async () => fixture.signIn());
+  await screen.findByText(`${provider.label} reply: Keep this next idea`, {}, { timeout: 5000 });
 }
 
 afterEach(() => {
@@ -209,6 +256,8 @@ it.each(providers)(
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
 
     if (provider.id !== 'stashbase') {
+      await recoverAuthentication(fixture, provider, user, request, signInRequests);
+
       fixture.requireUpdate();
       typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Use the newer model');
       await user.click(screen.getByRole('button', { name: 'Send' }));
@@ -217,7 +266,14 @@ it.each(providers)(
     }
     expect(fixture.prompts).toEqual([
       request,
-      ...(provider.id === 'stashbase' ? [] : ['Use the newer model', 'Use the newer model']),
+      ...(provider.id === 'stashbase'
+        ? []
+        : [
+            'Check my introduction',
+            'Keep this next idea',
+            'Use the newer model',
+            'Use the newer model',
+          ]),
     ]);
     expect(
       vi

@@ -40,8 +40,8 @@ export type AgentConnection =
   | { kind: 'connecting'; attempt: number }
   | { kind: 'reconnecting'; attempt: number }
   | { kind: 'live'; turn: AgentActiveTurn | null }
-  | { kind: 'closed'; message: string | null }
-  | { kind: 'failed'; message: string }
+  | { kind: 'closed'; message: string | null; failure?: AgentTurnFailureReason | undefined }
+  | { kind: 'failed'; message: string; failure?: AgentTurnFailureReason | undefined }
   | { kind: 'retired' }
   | { kind: 'disposed' };
 
@@ -234,7 +234,7 @@ type AgentSessionStreamEvent =
   | { kind: 'turn-ended'; isError: boolean }
   /** Whether the runtime took a follow-up into the running turn. */
   | { kind: 'steer-result'; id: string; ok: boolean }
-  | { kind: 'exited'; message: string | null }
+  | { kind: 'exited'; message: string | null; failure?: AgentTurnFailureReason | undefined }
   | { kind: 'scope-retired'; folderPath: string };
 
 export type AgentSessionEvent = AgentSessionStateEvent | AgentSessionStreamEvent;
@@ -298,8 +298,8 @@ type AgentSessionLocalAction =
       retryablePrompt?: string | undefined;
     }
   | { kind: 'settle-error'; id: string }
-  | { kind: 'fail'; message: string }
-  | { kind: 'close'; message: string | null }
+  | { kind: 'fail'; message: string; failure?: AgentTurnFailureReason | undefined }
+  | { kind: 'close'; message: string | null; failure?: AgentTurnFailureReason | undefined }
   | { kind: 'begin-restore'; title: string }
   | {
       kind: 'restore';

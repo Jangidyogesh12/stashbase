@@ -78,6 +78,8 @@ export interface AgentPreparation {
 export interface AgentSetupFailure {
   readonly stage: 'discovery' | 'installation' | 'authentication' | 'mcp';
   readonly message: string;
+  /** Preserve the operation the host says repairs this failure. */
+  readonly retryAction?: 'bootstrap' | 'login' | 'update';
   /** Signed in, but the provider refuses the account, so signing in again
    *  is not the way forward. */
   readonly accountRefused?: boolean;

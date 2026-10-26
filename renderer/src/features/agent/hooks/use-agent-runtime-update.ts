@@ -17,7 +17,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 
-import { updateAgent } from '@/features/agent/application/connect-agent';
+import { AgentUpdateRefused, updateAgent } from '@/features/agent/application/connect-agent';
 import {
   agentReconnectAfterUpdateFailure,
   agentUpdateFailure,
@@ -40,6 +40,8 @@ export interface AgentRuntimeUpdateView {
   readonly progress: string | null;
   /** Why the last update did not finish, or null. */
   readonly failure: string | null;
+  /** Updating reached authentication; the existing sign-in surface repairs it. */
+  readonly signIn?: (() => void) | undefined;
   /** The failed turn an update has already run for, so its block offers a
    *  plain retry instead of another update. */
   readonly completedBlockId: string | null;
@@ -95,32 +97,46 @@ export function useAgentRuntimeUpdate(
   session: AgentSessionRuntime,
   catalog: AgentCatalogPort,
   onRefresh: () => void,
+  onSignIn?: () => void,
 ): AgentRuntimeUpdateView {
   const requestSignal = useRequestSignals<'update'>();
   const agent = useStore(session.store, (state) => state.agent);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const [completedBlockId, setCompletedBlockId] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
   const running = useRef(false);
+  const refusedBlock = useRef<string | undefined>(undefined);
 
   const update = useCallback(
     (errorBlockId?: string) => {
       if (running.current) return;
       running.current = true;
+      if (!needsSignIn) refusedBlock.current = errorBlockId;
+      const retryBlockId = refusedBlock.current;
       const signal = AbortSignal.any([requestSignal('update'), session.signal]);
       const label = agentLabel(agent);
       setBusy(true);
       setFailure(null);
+      setNeedsSignIn(false);
       setProgress(null);
       void (async () => {
         try {
-          await updateAgent(catalog, agent, signal, {
-            onStep: (step) => {
-              if (!signal.aborted) setProgress(step.note ?? null);
-            },
-          });
+          if (needsSignIn) {
+            // The installer already finished. Resume only after Settings has
+            // completed sign-in; never download the same update again.
+            const entry = (await catalog.listAgents(signal)).agents.find(
+              (item) => item.id === agent,
+            );
+            if (!entry?.ready) throw new AgentUpdateRefused(entry);
+          } else
+            await updateAgent(catalog, agent, signal, {
+              onStep: (step) => {
+                if (!signal.aborted) setProgress(step.note ?? null);
+              },
+            });
           signal.throwIfAborted();
           onRefresh();
           // The process behind this conversation still runs the old
@@ -135,11 +151,17 @@ export function useAgentRuntimeUpdate(
             return;
           }
           setCompleted(true);
-          if (errorBlockId === undefined) return;
-          setCompletedBlockId(errorBlockId);
-          session.retry(errorBlockId);
+          if (retryBlockId === undefined) return;
+          setCompletedBlockId(retryBlockId);
+          session.retry(retryBlockId);
         } catch (error) {
-          if (!signal.aborted) setFailure(agentUpdateFailure(error));
+          if (!signal.aborted) {
+            setFailure(agentUpdateFailure(error));
+            setNeedsSignIn(
+              needsSignIn || (error instanceof AgentUpdateRefused && error.needsSignIn),
+            );
+            onRefresh();
+          }
         } finally {
           running.current = false;
           if (!signal.aborted) {
@@ -149,7 +171,7 @@ export function useAgentRuntimeUpdate(
         }
       })();
     },
-    [agent, catalog, onRefresh, requestSignal, session],
+    [agent, catalog, needsSignIn, onRefresh, requestSignal, session],
   );
 
   return useMemo(
@@ -160,8 +182,9 @@ export function useAgentRuntimeUpdate(
       failure,
       label: agentLabel(agent),
       progress,
+      signIn: needsSignIn ? onSignIn : undefined,
       update,
     }),
-    [agent, busy, completed, completedBlockId, failure, progress, update],
+    [agent, busy, completed, completedBlockId, failure, needsSignIn, onSignIn, progress, update],
   );
 }

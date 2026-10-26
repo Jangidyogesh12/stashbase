@@ -25,9 +25,7 @@ export {
 /** The Agent session reducer and the selectors that read its state. Every
  *  action lands in one exhaustive switch: transcript work is delegated to
  *  `session-transcript`, the connection moves as one discriminated union, and
- *  the composer, catalog and scope fields are edited in place. Selectors are
- *  the only way anything outside the domain asks a question about a session,
- *  so the union's shape stays an implementation detail of this module. */
+ *  the composer, catalog and scope fields are edited in place. */
 import {
   type AgentActiveTurn,
   type AgentConnection,
@@ -310,6 +308,20 @@ export function transitionAgentSession(
     case 'settle-error':
       return { ...state, transcript: settleErrorBlock(state.transcript, action.id) };
     case 'fail':
+    case 'close': {
+      const previous =
+        state.connection.kind === 'failed' || state.connection.kind === 'closed'
+          ? state.connection
+          : undefined;
+      const failure = action.failure ?? (action.kind === 'close' ? previous?.failure : undefined);
+      const connection: AgentConnection =
+        action.kind === 'fail'
+          ? { kind: 'failed', message: action.message, ...(failure ? { failure } : {}) }
+          : {
+              kind: 'closed',
+              message: action.message ?? (failure ? (previous?.message ?? null) : null),
+              ...(failure ? { failure } : {}),
+            };
       return {
         ...state,
         ...returnSteers(state),
@@ -317,24 +329,13 @@ export function transitionAgentSession(
         delivery:
           agentTurnIsActive(state.connection) || state.delivery === 'unknown'
             ? 'unknown'
-            : 'failed',
-        connection: { kind: 'failed', message: action.message },
-        transcript: settlePendingTools(state.transcript, 'error'),
-      };
-    case 'close':
-      return {
-        ...state,
-        ...returnSteers(state),
-        queuePaused: true,
-        delivery:
-          agentTurnIsActive(state.connection) || state.delivery === 'unknown'
-            ? 'unknown'
-            : action.message || state.delivery === 'preparing'
+            : action.kind === 'fail' || action.message || state.delivery === 'preparing'
               ? 'failed'
               : state.delivery,
-        connection: { kind: 'closed', message: action.message },
+        connection,
         transcript: settlePendingTools(state.transcript, 'error'),
       };
+    }
     case 'begin-restore':
       return {
         ...state,

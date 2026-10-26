@@ -16,6 +16,7 @@ const agentTurnFailureKindSchema = z.enum([
   "auth-expired",
   "network",
   "runtime-outdated",
+  "app-outdated",
   "model-changed",
 ]);
 
@@ -166,7 +167,7 @@ export const agentServerEventSchema = z.union([
       failure: agentTurnFailureSchema.optional(),
     })
     .strict(),
-  z.object({ t: z.literal("exit"), message: boundedText(2_000).optional() }).strict(),
+  z.object({ t: z.literal("exit"), message: boundedText(2_000).optional(), failure: agentTurnFailureSchema.optional() }).strict(),
   z
     .object({
       t: z.literal("exit"),

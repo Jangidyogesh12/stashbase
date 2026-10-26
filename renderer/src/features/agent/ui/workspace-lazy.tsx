@@ -31,6 +31,8 @@ export interface AgentWorkspaceProps {
   /** Opens the Gallery on its personas. The Gallery is a sibling feature, so
    *  the composition layer supplies this. */
   onBrowsePersonas?: (() => void) | undefined;
+  /** Opens General settings, which own application updates. */
+  onOpenAppSettings(): void;
   onOpenExternal(href: string): void;
   onOpenAgentSettings(): void;
   /** Explicit account choice; a caller signal waits for completion without

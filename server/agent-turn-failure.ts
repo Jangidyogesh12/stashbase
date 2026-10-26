@@ -8,7 +8,8 @@
  * The renderer switches on the kind alone: transient kinds invite resending,
  * `quota` explains the provider-side reset, `auth-expired` routes to each
  * runtime's real sign-in path, `runtime-outdated` offers the runtime's
- * own in-app update before the same request is sent again, and
+ * own in-app update before the same request is sent again, `app-outdated`
+ * opens application updates in General settings, and
  * `model-changed` refreshes a hosted model list that no longer matches the
  * one the reader chose from.
  *
@@ -31,8 +32,10 @@ export type { AgentTurnFailure, AgentTurnFailureKind } from '../shared/agent-pro
  * error instead of wearing the wrong recovery. */
 const RUNTIME_OUTDATED_PATTERN =
   /does not support this model;? version [\d.]+ or newer is required|run ['"`]?(claude|codex|agy) (update|upgrade)|(claude code|codex)( cli)? (version )?[\d.]+ is (too old|out of date|outdated)/i;
+const APP_OUTDATED_PATTERN =
+  /client_upgrade_required|StashBase [\d.]+ or newer is required|update StashBase/i;
 const AUTH_PATTERN =
-  /authentication_error|authentication required|not signed in|invalid api key|api key.{0,20}invalid|please run \/login|not logged in|logged out|login required|unauthorized|\b401\b|token.{0,30}(expired|revoked|invalid)|oauth.{0,20}(expired|error|revoked)|sign in again|re-?authenticate/i;
+  /authentication_error|authentication[_ ]required|unauthenticated|sign[- ]?in (?:is )?required|no saved (?:session|credentials)|please (?:sign|log) in|sign in to StashBase|not signed in|invalid api key|api key.{0,20}invalid|please run \/login|not logged in|logged out|login required|unauthorized|\b401\b|token.{0,30}(expired|revoked|invalid)|oauth.{0,20}(expired|error|revoked)|sign in again|re-?authenticate/i;
 const QUOTA_PATTERN =
   /usage limit|quota|credit balance|out of credits|usage cap|spending (limit|cap|budget)|plan limit|(weekly|monthly|5-hour) limit|insufficient_quota/i;
 const RATE_LIMIT_PATTERN =
@@ -45,6 +48,7 @@ const MODEL_CHANGED_PATTERN =
   /selected model configuration has changed|selected model is no longer available|agent_model_configuration_changed|agent_model_unavailable/i;
 
 export function classifyAgentTurnFailure(message: string): AgentTurnFailureKind | null {
+  if (APP_OUTDATED_PATTERN.test(message)) return 'app-outdated';
   if (RUNTIME_OUTDATED_PATTERN.test(message)) return 'runtime-outdated';
   if (MODEL_CHANGED_PATTERN.test(message)) return 'model-changed';
   if (AUTH_PATTERN.test(message)) return 'auth-expired';
@@ -71,4 +75,14 @@ export function agentTurnErrorEvent(
 ): { t: 'error'; message: string; failure?: AgentTurnFailure } {
   const failure = agentTurnFailureFor(message);
   return { t: 'error', message, ...(failure ? { failure } : {}) };
+}
+
+/** Startup and fatal runtime errors need the same repair as turn errors.
+ * Keep them terminal: classification must not make an interrupted turn safe
+ * to replay or turn an unknown outcome into a completed failure. */
+export function agentSessionExitEvent(
+  message?: string,
+): { t: 'exit'; message?: string; failure?: AgentTurnFailure } {
+  const failure = message ? agentTurnFailureFor(message) : undefined;
+  return { t: 'exit', ...(message ? { message } : {}), ...(failure ? { failure } : {}) };
 }

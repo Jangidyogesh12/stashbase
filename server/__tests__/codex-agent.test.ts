@@ -64,6 +64,7 @@ function catalogProcess(
     pages?: Array<Record<string, unknown>[]>;
     skills?: Array<Record<string, unknown>>;
     skillsListError?: string;
+    initializeError?: string;
     threadModel?: string;
     selectedTurnError?: string;
     interruptError?: string;
@@ -88,7 +89,9 @@ function catalogProcess(
       : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, model: options.threadModel ?? 'runtime-default' }
       : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model' }
         : request.method === 'turn/start' ? { turn: { id: options.turnIds?.[turn++] ?? 'turn-1' } } : {};
-    if (request.method === 'skills/list' && options.skillsListError) {
+    if (request.method === 'initialize' && options.initializeError) {
+      proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.initializeError } })}\n`);
+    } else if (request.method === 'skills/list' && options.skillsListError) {
       proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.skillsListError } })}\n`);
     } else if (request.method === 'turn/start' && options.selectedTurnError && request.params.model && !rejected) {
       rejected = true;
@@ -1829,4 +1832,31 @@ test('Codex forwards which model and level run by default and drops hidden entri
     { id: 'odd', label: 'Odd', supportedEfforts: ['low'] },
   ]);
   session.dispose();
+});
+
+
+test('Codex startup refusals retain actionable classification and invalidate refused sign-in', async (t) => {
+  const { agentBootstrapCoordinator } = await import('../agent-runtime-installer.ts');
+  for (const [message, kind, signIns] of [
+    ['workspace routing discovery unauthorized (401)', 'auth-expired', 1],
+    ['Run codex update', 'runtime-outdated', 0],
+  ] as const) await t.test(kind, async (t) => {
+    const requireSignIn = t.mock.method(agentBootstrapCoordinator, 'requireSignIn', () => undefined);
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-startup-refusal-'));
+    await runWithWindowId('startup-refusal-window', () => openProjectFolder(folder));
+    const native = catalogProcess([], { initializeError: message });
+    const ws = new FakeWebSocket();
+    const session = new CodexSession(ws as unknown as WebSocket, 'startup-refusal-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+    t.after(() => {
+      session.dispose();
+      runWithWindowId('startup-refusal-window', () => clearCurrentFolder());
+      fs.rmSync(folder, { recursive: true, force: true });
+    });
+    session.begin();
+    await settle();
+    const events = ws.sent.map(value => JSON.parse(value));
+    assert.equal(events.some(event => event.t === 'ready'), false);
+    assert.deepEqual(events.filter(event => event.t === 'exit'), [{ t: 'exit', message, failure: { kind } }]);
+    assert.equal(requireSignIn.mock.callCount(), signIns);
+  });
 });

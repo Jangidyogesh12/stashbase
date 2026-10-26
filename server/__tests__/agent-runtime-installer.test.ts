@@ -558,6 +558,29 @@ test('a provider refusal makes the next sign-in reauthenticate until the runtime
   assert.deepEqual(requests, [true, false]);
 });
 
+test('a provider refusal survives an in-flight local status check and later rechecks until sign-in', async () => {
+  let answer!: (authenticated: boolean) => void;
+  let gate = new Promise<boolean>((resolve) => { answer = resolve; });
+  const fixture = fakeDependencies({
+    resolveExecutable: () => '/managed/codex',
+    isAuthenticated: () => gate,
+  });
+  const coordinator = new AgentBootstrapCoordinator(fixture.dependencies);
+  coordinator.connectIfInstalled('codex');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  coordinator.requireSignIn('codex', 'workspace routing discovery unauthorized (401)');
+  assert.equal(coordinator.status('codex').phase, 'configuring', 'keep the running check visible until it settles');
+  answer(true);
+  const refused = await coordinator.wait('codex');
+  assert.equal(refused.failure?.code, 'authentication-required');
+  assert.match(refused.failure?.message ?? '', /unauthorized \(401\)/);
+  assert.equal(fixture.configured(), 0);
+  gate = Promise.resolve(true);
+  assert.equal((await connect(coordinator, 'codex')).failure?.code, 'authentication-required');
+  coordinator.login('codex');
+  assert.equal((await coordinator.wait('codex')).phase, 'ready');
+});
+
 test('the printed sign-in page reaches the status while the browser step runs', async () => {
   let finish!: () => void;
   const coordinator = new AgentBootstrapCoordinator(fakeDependencies({

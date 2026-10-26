@@ -31,7 +31,7 @@ import {
 } from './agent-session-registry.ts';
 import { getCurrentFolder, normalizeWindowId, runWithWindowId } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { agentTurnErrorEvent } from './agent-turn-failure.ts';
+import { agentSessionExitEvent, agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { isTransientAttachmentPath } from './routes/attach.ts';
 import { historyImageAttachment, restoreHistoryAttachments } from './agent-history-attachments.ts';
 import { isStashbaseWorkspaceEdit } from './agent-file-permissions.ts';
@@ -698,7 +698,7 @@ export class OpenCodePanelSession {
     if (this.ws.readyState === this.ws.OPEN) this.ws.send(JSON.stringify(agentTurnErrorEvent(message)));
     this.runtime.endTurn();
     if (terminal) {
-      send(this.ws, { t: 'exit', message });
+      send(this.ws, agentSessionExitEvent(message));
       this.dispose();
     } else {
       for (const event of this.translator.endTurnWithError()) send(this.ws, event);

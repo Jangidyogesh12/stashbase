@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { cn } from '@/lib/utils';
 
@@ -33,5 +34,32 @@ export function RuntimeUpdateNotes({
         </p>
       )}
     </>
+  );
+}
+
+/** Shared across updates started from a turn, startup, or the model menu. */
+export function RuntimeSignInRecovery({
+  runtimeUpdate,
+}: {
+  runtimeUpdate: AgentRuntimeUpdateView;
+}) {
+  if (!runtimeUpdate.signIn) return null;
+  return (
+    <section className="mx-auto w-full max-w-[46rem] px-5 pb-2 text-caption text-muted-foreground">
+      <p>Sign in to finish preparing {runtimeUpdate.label}, then continue here.</p>
+      <div className="mt-2 flex gap-2">
+        <Button onClick={runtimeUpdate.signIn} size="compact" variant="tertiary">
+          Sign in
+        </Button>
+        <Button
+          disabled={runtimeUpdate.busy}
+          onClick={() => runtimeUpdate.update()}
+          size="compact"
+          variant="tertiary"
+        >
+          Continue after sign-in
+        </Button>
+      </div>
+    </section>
   );
 }

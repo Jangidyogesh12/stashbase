@@ -288,6 +288,16 @@ repair, an outdated runtime, provider limits, transport loss, and turn failure s
 recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
+An authentication refusal explicitly asks the reader to sign in and offers an
+entry to the agent's sign-in settings. The next send checks that prerequisite
+again. Opening sign-in keeps the chat and draft and never replays the failed turn.
+The same repair is available when authentication or version refusal prevents
+the session from starting. Updating a runtime may expose a sign-in prerequisite;
+show that next action, then continue after sign-in without reinstalling.
+After signing in for a startup failure, an explicit reconnect makes the held
+draft sendable without submitting it automatically. A service that requires
+a newer StashBase version opens application updates in General settings.
+Application updates never substitute a native Agent update or replay uncertain work.
 An unexpectedly ended native event stream is a visible connection failure even
 when the transport reports no exception. It retires the session and never
 automatically resends an already submitted turn.

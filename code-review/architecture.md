@@ -364,9 +364,13 @@ stable status without download, retry, or a new durable demand latch.
   completes sign-in and retires the login process, so a login command that
   keeps waiting after the browser step cannot hold setup to its deadline.
   Native authentication refusals restore the sign-in action;
-  they never delete credentials. Local status still reads a refused credential
-  as signed in, so the next sign-in after a refusal waits for the login command
-  itself. Sign-in failures keep the login's last output with URL query strings
+  they never delete credentials. The chat workspace refreshes its readiness
+  catalog when a turn or terminal connection reports `auth-expired`; either names the sign-in
+  prerequisite and opens Agents settings through app composition. It preserves
+  the raw diagnostic and draft, and never replays the failed request.
+  A refusal survives concurrent and later local status checks, even when the
+  CLI reports cached credentials as signed in. Only an explicit successful
+  sign-in clears it; that sign-in waits for the login command itself. Sign-in failures keep the login's last output with URL query strings
   removed. A provider that refuses a signed-in account
   (`AgentAccountRefusedError`, code `account-refused`) offers a recheck
   instead, because signing in again cannot change its answer. Setup errors retain bounded stdout/stderr and
@@ -769,8 +773,19 @@ stable status without download, retry, or a new durable demand latch.
   installation or an on-demand runtime download.
 - Turn failure settles once without destroying a live session. Advisory notices
   never become terminal errors. Recover by structured kind: authentication needs
-  process/session refresh, credits/restrictions need account recovery, transient
+  explicit sign-in, outdated native runtimes need their own updater,
+  `app-outdated` opens General settings for the StashBase updater through app
+  composition, credits/restrictions need account recovery, transient
   failures may resend. Raw socket loss has bounded retry then manual recovery.
+  The optional structured failure also travels on terminal `exit` events;
+  pre-ready errors and a following empty exit retain their repair action.
+  Classification never turns interrupted work into a safe automatic resend.
+  A runtime update that reaches authentication refreshes readiness and offers
+  sign-in from every update entry, including the model menu. Continuing after
+  sign-in checks readiness before reconnecting and never reruns the installer.
+  A terminal sign-in failure also retains explicit reconnect after Settings.
+  First-send preserves the host-selected setup retry action, including
+  `update`, instead of silently substituting bootstrap.
   Unknown-outcome presentation retains a closed/failed connection's supplied
   cause with the review action; it never infers a network failure from uncertainty.
   Renderer socket decoding catches only wire validation/translation failures.

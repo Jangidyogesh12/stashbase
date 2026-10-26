@@ -75,7 +75,7 @@ import {
   simulatedTurnFailureScript,
   type AgentTurnFailureSimulation,
 } from './agent-runtime-paths.ts';
-import { agentTurnErrorEvent } from './agent-turn-failure.ts';
+import { agentSessionExitEvent, agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { detectViewerFormat } from './format.ts';
 import { isSpreadsheetFile } from './spreadsheet-preview.ts';
 import { stringifyToolResult } from './claude-history.ts';
@@ -1031,7 +1031,9 @@ export class AgentSession implements AttributedAgentSession {
 
   private finish(message?: string, cause?: unknown): void {
     if (this.closed) return;
-    this.send({ t: 'exit', ...(message ? { message } : {}) }, cause);
+    const event = agentSessionExitEvent(message);
+    if (message && event.failure?.kind === 'auth-expired') agentBootstrapCoordinator.requireSignIn('claude', message);
+    this.send(event, cause);
     this.dispose();
   }
 

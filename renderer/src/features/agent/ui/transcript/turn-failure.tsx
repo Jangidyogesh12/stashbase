@@ -27,15 +27,21 @@ import { cn } from '@/lib/utils';
 export function TurnFailure({
   block,
   modelRefresh,
+  onSignIn,
+  onUpdateApp,
   onRetry,
   runtimeUpdate,
 }: {
   block: Extract<AgentTranscriptBlock, { kind: 'error' }>;
   modelRefresh?: AgentModelRefreshView | undefined;
+  onSignIn?: (() => void) | undefined;
+  onUpdateApp?: (() => void) | undefined;
   onRetry(errorBlockId: string): boolean;
   runtimeUpdate?: AgentRuntimeUpdateView | undefined;
 }) {
   const shape = useShape();
+  const needsSignIn = block.failure === 'auth-expired';
+  const appOutdated = block.failure === 'app-outdated';
   const outdated = block.failure === 'runtime-outdated';
   const updated = outdated && runtimeUpdate?.completedBlockId === block.id;
   const modelChanged = block.failure === 'model-changed';
@@ -53,36 +59,60 @@ export function TurnFailure({
           className="mt-0.5 size-3.5 shrink-0 text-destructive"
           strokeWidth={1.75}
         />
-        <h3 className="text-caption font-medium text-foreground">The agent could not finish</h3>
+        <h3 className="text-caption font-medium text-foreground">
+          {needsSignIn
+            ? 'Sign in to continue'
+            : appOutdated
+              ? 'Update StashBase to continue'
+              : 'The agent could not finish'}
+        </h3>
       </div>
       <p className="mt-1 text-caption text-muted-foreground">{block.text}</p>
       <p className="mt-1 text-caption text-muted-foreground">
-        {modelChanged
-          ? refreshed
-            ? 'The models are refreshed. Check the model below, then send again. Your chat, draft, and queued messages are kept.'
-            : modelRefresh?.busy
-              ? 'Refreshing the models. Your chat, draft, and queued messages are kept.'
-              : 'Refresh the models, check your choice, then send again. Your chat, draft, and queued messages are kept.'
-          : outdated && !updated
-            ? runtimeUpdate
-              ? runtimeUpdate.busy
-                ? `Updating ${runtimeUpdate.label}. The same request is sent again once it is done.`
-                : `Update ${runtimeUpdate.label} here and the same request is sent again. Partial output and completed file changes are kept.`
-              : 'This installation cannot be updated here. Update it externally or remove the executable override, then reconnect. Your chat is kept.'
-            : 'Partial output and completed file changes are kept. Retrying may repeat work.'}
+        {needsSignIn
+          ? 'Sign in to this agent in Settings, then send again. Your chat and draft are kept.'
+          : appOutdated
+            ? 'Install the StashBase update in Settings, then send again. Your chat and draft are kept.'
+            : modelChanged
+              ? refreshed
+                ? 'The models are refreshed. Check the model below, then send again. Your chat, draft, and queued messages are kept.'
+                : modelRefresh?.busy
+                  ? 'Refreshing the models. Your chat, draft, and queued messages are kept.'
+                  : 'Refresh the models, check your choice, then send again. Your chat, draft, and queued messages are kept.'
+              : outdated && !updated
+                ? runtimeUpdate
+                  ? runtimeUpdate.signIn
+                    ? `Sign in to finish preparing ${runtimeUpdate.label}. Your chat and draft are kept.`
+                    : runtimeUpdate.busy
+                      ? `Updating ${runtimeUpdate.label}. The same request is sent again once it is done.`
+                      : `Update ${runtimeUpdate.label} here and the same request is sent again. Partial output and completed file changes are kept.`
+                  : 'This installation cannot be updated here. Update it externally or remove the executable override, then reconnect. Your chat is kept.'
+                : 'Partial output and completed file changes are kept. Retrying may repeat work.'}
       </p>
+      {appOutdated && onUpdateApp && (
+        <Button className="mt-2" onClick={onUpdateApp} size="compact" variant="tertiary">
+          Update StashBase
+        </Button>
+      )}
+      {needsSignIn && onSignIn && (
+        <Button className="mt-2" onClick={onSignIn} size="compact" variant="tertiary">
+          Sign in
+        </Button>
+      )}
       {outdated && !updated && runtimeUpdate && (
         <>
-          <Button
-            className="mt-2"
-            disabled={runtimeUpdate.busy}
-            loading={runtimeUpdate.busy}
-            onClick={() => runtimeUpdate.update(block.id)}
-            size="compact"
-            variant="tertiary"
-          >
-            {`Update ${runtimeUpdate.label}`}
-          </Button>
+          {!runtimeUpdate.signIn && (
+            <Button
+              className="mt-2"
+              disabled={runtimeUpdate.busy}
+              loading={runtimeUpdate.busy}
+              onClick={() => runtimeUpdate.update(block.id)}
+              size="compact"
+              variant="tertiary"
+            >
+              {`Update ${runtimeUpdate.label}`}
+            </Button>
+          )}
           <RuntimeUpdateNotes progressClassName="mt-1" runtimeUpdate={runtimeUpdate} />
         </>
       )}

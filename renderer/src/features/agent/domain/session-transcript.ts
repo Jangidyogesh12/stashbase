@@ -24,6 +24,7 @@ export type AgentTurnFailureReason =
   | 'auth-expired'
   | 'network'
   | 'runtime-outdated'
+  | 'app-outdated'
   | 'model-changed';
 
 /** Whether a failed turn may be sent again as it is: a transient failure, a

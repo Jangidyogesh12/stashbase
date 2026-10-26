@@ -77,20 +77,23 @@ export function renderWorkspace(
   });
   runtimes.push(runtime);
   const catalog = agentCatalogPort(agents, catalogOverrides);
+  const onOpenAgentSettings = vi.fn();
+  const onOpenAppSettings = vi.fn();
   const view = withQueryClient(
     <div>
       <AgentChats
         catalog={catalog}
-        onOpenAgentSettings={vi.fn()}
+        onOpenAgentSettings={onOpenAgentSettings}
         runtime={runtime}
         scope={RESEARCH_SCOPE}
         workspaceName="Research"
       />
       <ManagedAgentWorkspace
+        onOpenAppSettings={onOpenAppSettings}
         catalog={catalog}
         persona={agentPersonaApi()}
         tools={tools}
-        onOpenAgentSettings={vi.fn()}
+        onOpenAgentSettings={onOpenAgentSettings}
         onOpenExternal={vi.fn()}
         onSignIn={onSignIn}
         onReprocess={onReprocess}
@@ -100,5 +103,5 @@ export function renderWorkspace(
     createTestQueryClient(),
     { strict: true },
   );
-  return { runtime, view };
+  return { runtime, view, onOpenAgentSettings, onOpenAppSettings };
 }

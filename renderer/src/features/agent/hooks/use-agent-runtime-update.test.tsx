@@ -58,26 +58,64 @@ it('updates the runtime, reconnects the conversation on it, and resends the refu
   session.dispose();
 });
 
-it('keeps a refused update on the turn and leaves the conversation where it was', async () => {
+it.each([false, true])(
+  'keeps a refused update without replay and offers sign-in only when required (%s)',
+  async (needsSignIn) => {
+    const { failure, session, transport } = await refusedTurn();
+    const stuck = {
+      ...CLAUDE_AGENT,
+      ready: false,
+      needsSignIn,
+      setupFailure: {
+        stage: needsSignIn ? ('authentication' as const) : ('installation' as const),
+        message: needsSignIn
+          ? 'Sign in to finish preparing Claude.'
+          : 'npm global folder is not writable',
+      },
+    };
+    const catalog = agentCatalogPort([stuck], {
+      prepareAgent: vi.fn(async () => ({ agents: [stuck] })),
+    });
+    const onRefresh = vi.fn();
+    const onSignIn = vi.fn();
+    const hook = renderHook(() => useAgentRuntimeUpdate(session, catalog, onRefresh, onSignIn));
+
+    act(() => hook.result.current.update(failure.id));
+
+    await waitFor(() => expect(hook.result.current.failure).toBe(stuck.setupFailure.message));
+    expect(hook.result.current.busy).toBe(false);
+    expect(hook.result.current.completedBlockId).toBeNull();
+    expect(hook.result.current.signIn).toBe(needsSignIn ? onSignIn : undefined);
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(transport.listeners).toHaveLength(1);
+    expect(transport.sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
+    session.dispose();
+  },
+);
+
+it('continues an updated runtime after sign-in without reinstalling, then retries only the refused turn', async () => {
   const { failure, session, transport } = await refusedTurn();
-  const stuck = {
-    ...CLAUDE_AGENT,
-    ready: false,
-    setupFailure: { stage: 'installation' as const, message: 'npm global folder is not writable' },
-  };
-  const catalog = agentCatalogPort([stuck], {
-    prepareAgent: vi.fn(async () => ({ agents: [stuck] })),
+  let entry = { ...CLAUDE_AGENT, ready: false, needsSignIn: true };
+  const catalog = agentCatalogPort([entry], {
+    prepareAgent: vi.fn(async () => ({ agents: [entry] })),
+    listAgents: vi.fn(async () => ({ agents: [entry] })),
   });
-  const hook = renderHook(() => useAgentRuntimeUpdate(session, catalog, vi.fn()));
-
+  const onSignIn = vi.fn();
+  const hook = renderHook(() => useAgentRuntimeUpdate(session, catalog, vi.fn(), onSignIn));
   act(() => hook.result.current.update(failure.id));
-
-  await waitFor(() =>
-    expect(hook.result.current.failure).toBe('npm global folder is not writable'),
-  );
-  expect(hook.result.current.busy).toBe(false);
-  expect(hook.result.current.completedBlockId).toBeNull();
+  await waitFor(() => expect(hook.result.current.signIn).toBe(onSignIn));
+  act(() => hook.result.current.signIn?.());
+  expect(onSignIn).toHaveBeenCalledOnce();
+  // Continuing before Settings completes login keeps the prerequisite.
+  act(() => hook.result.current.update());
+  await waitFor(() => expect(hook.result.current.signIn).toBe(onSignIn));
   expect(transport.listeners).toHaveLength(1);
-  expect(transport.sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
+  entry = { ...entry, ready: true, needsSignIn: false };
+  act(() => hook.result.current.update());
+  await waitFor(() => expect(transport.listeners).toHaveLength(2));
+  act(() => transport.listeners[1]?.onEvent({ kind: 'ready' }));
+  await waitFor(() => expect(hook.result.current.completedBlockId).toBe(failure.id));
+  expect(catalog.prepareAgent).toHaveBeenCalledOnce();
+  expect(transport.sent.filter((command) => command.kind === 'prompt')).toHaveLength(2);
   session.dispose();
 });

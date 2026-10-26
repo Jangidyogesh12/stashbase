@@ -60,6 +60,49 @@ processes. They join focused host setup/source-preservation tests and the pinned
 OpenCode fake-gateway smoke in `pnpm test:core`; `pnpm check` adds types.
 The old vocabulary-array count test was removed; it established no user outcome.
 
+The native scenarios also cover a turn whose authentication is refused after
+the catalog had reported ready: the failure offers sign-in settings, preserves
+the next draft, refreshes readiness, and gates the next send on sign-in. The
+refused turn is never automatically replayed. `ui/work-status.tsx` refreshes the
+catalog and `transcript/turn-failure.tsx` owns the visible sign-in recovery;
+the existing first-send gate still owns connecting before sending. This is
+controlled recovery coverage, not evidence of why a particular fresh install
+passed its initial login check or of a real provider's OAuth exchange.
+The core gate, focused transcript/catalog checks, lint, formatting and build
+passed; the sign-in recovery Story was visually inspected. The isolated macOS
+Codex onboarding app reached Welcome, but desktop automation could not target
+its window for input. Native installation, OAuth and a real completed reply
+remain unverified by this follow-up.
+
+**Recovery audit (2026-10-26):** terminal adapter exits and pre-ready errors now
+retain authentication/version classification through the shared protocol and
+session state. Workspace recovery coverage exercises sign-in, native updates,
+application updates, draft preservation and uncertain-turn queue pausing. The
+existing Codex adapter test exercises a refused startup; installer coverage
+reproduces a provider refusal racing a local auth check and requires explicit
+sign-in before readiness can return. Catalog/first-send coverage preserves the
+host-selected update retry, and update-hook coverage follows an update that
+stops at authentication without reconnecting or resending. Known Default
+sign-in and `client_upgrade_required` messages are classified at the host,
+with application updates routed through composition to General settings.
+These controlled paths do not prove fresh OAuth or official update delivery
+on a real provider/OS, or establish the original reported user's initial bypass.
+The core gate, 183 adapter/protocol checks, final installer checks, renderer
+regressions, types, lint, formatting, docs, fresh builds and built Electron
+smoke passed. Five renderer tests initially timed out during parallel validation;
+all passed on the two-worker recheck. The final recovery/onboarding run passed
+23 checks, including the four whole-window scenarios. Startup sign-in, update
+followed by sign-in, and application-update Stories were visually inspected.
+The repeated isolated Codex launch reached Welcome, but desktop input still
+failed to target its Electron window; real install, OAuth and first reply
+remain unverified. Continuing an update after sign-in checks readiness without
+reinstalling, while startup sign-in retains explicit reconnect and Send.
+Release preparation rebased this evidence onto the current Settings composition:
+the core gate passed, all renderer gates passed after correcting the recovery
+component extraction, and the full two-worker renderer run passed 1,883 tests
+across 370 files plus 190 Story accessibility checks. Fresh application/service
+builds, built Electron smoke and the three recovery Story inspections passed.
+
 `scripts/testing/environment.ts` and isolated CLI discovery prevent host tests
 and ordinary profiling from starting developer-installed providers. The existing
 CLI tests now exercise that isolation. `pnpm verify:onboarding --agent <id>`

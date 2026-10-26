@@ -3,14 +3,13 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/components/ui/input-message';
 import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import { honoredAccessMode } from '@/features/agent/domain/access';
 import {
-  agentGate,
   type Agent,
+  agentGate,
   offersRuntimeUpdate,
   undescribedAgent,
 } from '@/features/agent/domain/agent-catalog';
@@ -41,13 +40,13 @@ import { useAgentComposerFocused } from './composer/focus';
 import { AgentPermissionMode } from './composer/permission-mode';
 import { AgentProviderControl } from './composer/provider';
 import { AgentThinkingControl } from './composer/thinking';
-import { AgentConnectionNotice, connectionNotice } from './connection-notice';
+import { connectionNotice } from './connection-notice';
 import { NewChatButton } from './new-chat-button';
 import { AgentPersonaControl } from './persona/agent-persona-control';
 import { ScheduledTasksButton } from './scheduled/scheduled-tasks-button';
 import { AgentTranscript } from './transcript/transcript';
 import { AgentUpgradeOfferCard } from './upgrade-offer';
-import { AgentWorkStatus } from './work-status';
+import { AgentReadinessNotice, AgentWorkStatus } from './work-status';
 import type { AgentWorkspaceProps } from './workspace-lazy';
 
 /** Draft first; request account or native runtime access only on Send. */
@@ -60,6 +59,7 @@ function ChatWorkspace({
   tools: toolsApi,
   onBrowsePersonas,
   onOpenAgentSettings,
+  onOpenAppSettings,
   onSignIn,
   onOpenExternal,
   onOpenSource,
@@ -69,13 +69,7 @@ function ChatWorkspace({
   active,
 }: Omit<AgentWorkspaceProps, 'catalog'> & {
   active: AgentSessionRuntime;
-  catalog: {
-    agents: Agent[];
-    error: boolean;
-    loading: boolean;
-    refresh: () => void;
-  };
-  /** The catalog as a Port, for the new-chat control that reads it itself. */
+  catalog: { agents: Agent[]; error: boolean; loading: boolean; refresh(): void };
   catalogPort: AgentCatalogPort;
 }) {
   const activeId = active.id;
@@ -120,11 +114,15 @@ function ChatWorkspace({
     onSignIn,
     onRefresh: catalog.refresh,
   });
-  const runtimeUpdate = useAgentRuntimeUpdate(active, catalogPort, catalog.refresh);
+  const runtimeUpdate = useAgentRuntimeUpdate(
+    active,
+    catalogPort,
+    catalog.refresh,
+    onOpenAgentSettings,
+  );
   const modelRefresh = useAgentModelRefresh(active, catalog.refresh);
   const activeTurn = agentTurnIsActive(state.connection);
   const busy = agentSessionIsBusy(active.store.getState());
-  const notice = connectionNotice(state.connection);
   const armedSkill = agentSkills(state.skillCatalog).find((skill) => skill.id === state.skill);
   const empty = state.transcript.length === 0;
   const persona = useAgentPersona(
@@ -205,7 +203,7 @@ function ChatWorkspace({
             empty ? 'px-4 pt-8 pb-7 max-sm:px-3' : 'px-5 pt-4 pb-6 max-sm:px-4',
           )}
         >
-          {empty && !notice && state.connection.kind !== 'restoring' ? (
+          {empty && !connectionNotice(state.connection) && state.connection.kind !== 'restoring' ? (
             <h2 className="text-center text-ui-28 leading-none font-semibold tracking-[-0.03em] text-foreground max-sm:text-ui-24">
               What’s on your mind?
             </h2>
@@ -221,6 +219,8 @@ function ChatWorkspace({
               onOpenSource={onOpenSource}
               onPermission={active.replyPermission}
               onRetry={active.retry}
+              onSignIn={onOpenAgentSettings}
+              onUpdateApp={onOpenAppSettings}
               onReviewTurnChange={onReviewTurnChange}
               pending={state.steers}
               runtimeUpdate={selectedAgent.updatable ? runtimeUpdate : undefined}
@@ -231,11 +231,13 @@ function ChatWorkspace({
         </div>
       </div>
 
-      <AgentWorkStatus session={active} onOpenSettings={onOpenAgentSettings} />
-      {notice && state.delivery !== 'unknown' && (
-        <AgentConnectionNotice connection={state.connection} onReconnect={active.reconnect} />
-      )}
-
+      <AgentWorkStatus
+        session={active}
+        onOpenSettings={onOpenAgentSettings}
+        onUpdateApp={onOpenAppSettings}
+        onRefresh={catalog.refresh}
+        runtimeUpdate={selectedAgent.updatable ? runtimeUpdate : undefined}
+      />
       {composerShown && selectedAgent.updatable && selectedAgent.upgrade && (
         <AgentUpgradeOfferCard offer={selectedAgent.upgrade} runtimeUpdate={runtimeUpdate} />
       )}
@@ -323,6 +325,7 @@ function ChatWorkspace({
                 !catalog.loading &&
                 !catalog.error &&
                 !runtimeUpdate.busy &&
+                !runtimeUpdate.signIn &&
                 !preferencesUnavailable &&
                 state.delivery !== 'unknown' &&
                 state.delivery !== 'stopping' &&
@@ -354,29 +357,25 @@ function ChatWorkspace({
         onOpenSignIn={onOpenExternal}
         onStopWaiting={access.stopWaiting}
       />
-      {(catalog.loading || catalog.error || preferences.failure) && (
-        <div className="mx-auto flex w-full max-w-[46rem] items-center gap-2 px-4 pb-3 text-caption text-muted-foreground">
-          <span>
-            {preferences.failure ??
-              (catalog.error ? 'Agent runtime status is unavailable.' : 'Checking agents…')}
-          </span>
-          {(preferences.failure || catalog.error) && (
-            <Button
-              variant="tertiary"
-              size="compact"
-              onClick={
-                preferences.failure
-                  ? () => {
-                      void runtime.loadPreferences();
-                    }
-                  : catalog.refresh
+      <AgentReadinessNotice
+        message={
+          preferences.failure ??
+          (catalog.error
+            ? 'Agent runtime status is unavailable.'
+            : catalog.loading
+              ? 'Checking agents…'
+              : null)
+        }
+        onRetry={
+          preferences.failure
+            ? () => {
+                void runtime.loadPreferences();
               }
-            >
-              Retry
-            </Button>
-          )}
-        </div>
-      )}
+            : catalog.error
+              ? catalog.refresh
+              : undefined
+        }
+      />
       {empty && <div aria-hidden className="min-h-0 grow-[1.3] basis-0" />}
     </div>
   );

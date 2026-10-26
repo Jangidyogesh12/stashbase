@@ -37,6 +37,18 @@ export interface PendingFollowUp {
   context: AgentContextItem[];
 }
 
+interface TranscriptDecisions {
+  onPermission(
+    toolUseId: string,
+    permissionId: string,
+    allow: boolean,
+    decision?: AgentPermissionDecision,
+  ): boolean;
+  onRetry(errorBlockId: string): boolean;
+  onSignIn?: (() => void) | undefined;
+  onUpdateApp?: (() => void) | undefined;
+}
+
 const NO_PENDING: readonly PendingFollowUp[] = [];
 
 const TranscriptBlock = memo(function TranscriptBlock({
@@ -52,10 +64,12 @@ const TranscriptBlock = memo(function TranscriptBlock({
   sourceFor,
   onPermission,
   onRetry,
+  onSignIn,
+  onUpdateApp,
   promptAt,
   runtimeUpdate,
   transientFile,
-}: {
+}: TranscriptDecisions & {
   block: AgentTranscriptBlock;
   /** This reply closes a settled turn, so it carries the copy and time row. */
   closing: boolean;
@@ -71,13 +85,6 @@ const TranscriptBlock = memo(function TranscriptBlock({
     | undefined;
   onReviewTurnChange?: ((review: AgentTurnChangeReview) => void) | undefined;
   sourceFor?: ((path: string) => SourceReference | null) | undefined;
-  onPermission(
-    toolUseId: string,
-    permissionId: string,
-    allow: boolean,
-    decision?: AgentPermissionDecision,
-  ): boolean;
-  onRetry(errorBlockId: string): boolean;
   /** When the prompt a closing reply answers was sent, for the duration. */
   promptAt: number | undefined;
   runtimeUpdate?: AgentRuntimeUpdateView | undefined;
@@ -139,6 +146,8 @@ const TranscriptBlock = memo(function TranscriptBlock({
         block={block}
         modelRefresh={modelRefresh}
         onRetry={onRetry}
+        onSignIn={onSignIn}
+        onUpdateApp={onUpdateApp}
         runtimeUpdate={runtimeUpdate}
       />
     );
@@ -165,12 +174,14 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenSource,
   onPermission,
   onRetry,
+  onSignIn,
+  onUpdateApp,
   onReviewTurnChange,
   pending = NO_PENDING,
   runtimeUpdate,
   sourceFor,
   transientFile,
-}: {
+}: TranscriptDecisions & {
   activeTurn: boolean;
   blocks: AgentTranscriptBlock[];
   /** Follow-ups sent into the running turn that its runtime has not read
@@ -189,13 +200,6 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenSource?:
     | ((source: SourceReference, phrase: string | null, quoteFormat?: 'markdown') => void)
     | undefined;
-  onPermission(
-    toolUseId: string,
-    permissionId: string,
-    allow: boolean,
-    decision?: AgentPermissionDecision,
-  ): boolean;
-  onRetry(errorBlockId: string): boolean;
   /** Opens what a turn changed in one file as a review inside the document. */
   onReviewTurnChange?: ((review: AgentTurnChangeReview) => void) | undefined;
   /** The in-place update of the conversation's runtime, offered on a turn
@@ -293,6 +297,8 @@ export const AgentTranscript = memo(function AgentTranscript({
                 sourceFor={sourceFor}
                 onPermission={decide}
                 onRetry={onRetry}
+                onSignIn={onSignIn}
+                onUpdateApp={onUpdateApp}
                 promptAt={closing.get(group.id)}
                 runtimeUpdate={runtimeUpdate}
                 transientFile={transientFile}

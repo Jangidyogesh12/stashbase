@@ -58,7 +58,7 @@ function applyFailure(
   const state = context.state();
   if (state.connection.kind !== 'live') {
     context.ledger.takeHeld();
-    context.transition({ kind: 'fail', message: event.message });
+    context.transition({ kind: 'fail', message: event.message, failure: event.failure });
     return;
   }
   const prompt = latestUserBlock(state.transcript);
@@ -153,7 +153,7 @@ export function applyAgentSessionEvent(context: AgentEventContext, event: AgentS
     }
     case 'exited':
       transport.expectClose();
-      transition({ kind: 'close', message: event.message });
+      transition({ kind: 'close', message: event.message, failure: event.failure });
       return;
     case 'scope-retired':
       if (context.state().scope.path !== event.folderPath) return;

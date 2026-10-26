@@ -49,15 +49,17 @@ export function AgentUpgradeOfferCard({
           </p>
           <RuntimeUpdateNotes progressClassName="mt-0.5" runtimeUpdate={runtimeUpdate} />
         </div>
-        <Button
-          disabled={runtimeUpdate.busy}
-          loading={runtimeUpdate.busy}
-          onClick={() => runtimeUpdate.update()}
-          size="compact"
-          variant="primary"
-        >
-          {`Update ${runtimeUpdate.label}`}
-        </Button>
+        {!runtimeUpdate.signIn && (
+          <Button
+            disabled={runtimeUpdate.busy}
+            loading={runtimeUpdate.busy}
+            onClick={() => runtimeUpdate.update()}
+            size="compact"
+            variant="primary"
+          >
+            {`Update ${runtimeUpdate.label}`}
+          </Button>
+        )}
         <Button
           disabled={runtimeUpdate.busy}
           onClick={() => setDismissed(true)}

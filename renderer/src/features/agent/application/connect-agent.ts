@@ -1,3 +1,4 @@
+/** Follow host-owned preparation through installation, sign-in and runtime updates. */
 import type {
   Agent,
   AgentCatalog,
@@ -95,7 +96,11 @@ export async function connectAgent(
   }
   const loginFirst = current?.needsSignIn;
   let entry = await settled(
-    await port.prepareAgent(agent, loginFirst ? 'login' : 'bootstrap', bounded),
+    await port.prepareAgent(
+      agent,
+      loginFirst ? 'login' : (current?.setupFailure?.retryAction ?? 'bootstrap'),
+      bounded,
+    ),
   );
   if (entry?.needsSignIn && !loginFirst) {
     entry = await settled(await port.prepareAgent(agent, 'login', bounded));
@@ -114,13 +119,17 @@ export class AgentSetupRefused extends FeatureError {
 /** The service stopped an update short. Its own sentence about why, where it
  *  wrote one, travels as the cause for the failure-message module to read. */
 export class AgentUpdateRefused extends FeatureError {
-  constructor(sentence: string | undefined) {
+  readonly needsSignIn: boolean;
+
+  constructor(entry: Agent | undefined) {
+    const sentence = entry?.setupFailure?.message;
     super(
       'AgentUpdateRefused',
       'unavailable',
       'The runtime update did not end ready.',
       sentence ? { cause: new Error(sentence) } : undefined,
     );
+    this.needsSignIn = entry?.needsSignIn === true || entry?.preparation?.step === 'sign-in';
   }
 }
 
@@ -144,5 +153,5 @@ export async function updateAgent(
     onStep,
   );
   bounded.throwIfAborted();
-  if (!entry?.ready) throw new AgentUpdateRefused(entry?.setupFailure?.message);
+  if (!entry?.ready) throw new AgentUpdateRefused(entry);
 }

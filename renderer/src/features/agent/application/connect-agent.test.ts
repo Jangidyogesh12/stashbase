@@ -20,6 +20,21 @@ it('continues a fresh Claude installation through provider sign-in before readin
   expect(prepareAgent.mock.calls.map(([, action]) => action)).toEqual(['bootstrap', 'login']);
 });
 
+it('retries the failed update before first-send instead of accepting the still-installed old runtime', async () => {
+  const failed = {
+    ...CLAUDE_AGENT,
+    ready: false,
+    setupFailure: {
+      stage: 'installation' as const,
+      message: 'The update download failed.',
+      retryAction: 'update' as const,
+    },
+  };
+  const port = agentCatalogPort([CLAUDE_AGENT]);
+  await connectAgent(port, 'claude', failed, new AbortController().signal, { wait: immediately });
+  expect(port.prepareAgent).toHaveBeenCalledWith('claude', 'update', expect.anything());
+});
+
 it('follows a sign-in already running instead of asking for a second one', async () => {
   const signingIn = {
     step: 'sign-in' as const,

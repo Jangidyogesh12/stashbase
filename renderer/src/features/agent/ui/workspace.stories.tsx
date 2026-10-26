@@ -166,6 +166,7 @@ const readyWorkspace = async () => {
 };
 
 function WorkspacePreview({
+  authRefused = false,
   context = false,
   docked = false,
   empty = false,
@@ -176,7 +177,9 @@ function WorkspacePreview({
   setupFailure,
   skills = false,
   startupChecking = false,
+  startupFailure,
 }: {
+  authRefused?: boolean;
   context?: boolean;
   docked?: boolean;
   empty?: boolean;
@@ -191,6 +194,7 @@ function WorkspacePreview({
   skills?: boolean;
   /** The first listing precedes the host's background readiness check. */
   startupChecking?: boolean;
+  startupFailure?: 'auth-expired' | 'runtime-outdated' | 'app-outdated';
 }) {
   const openedAt = useMemo(() => Date.now(), []);
   const queryClient = useMemo(
@@ -243,7 +247,10 @@ function WorkspacePreview({
         replay: async () => ({ effort: null, transcript: [] }),
       },
     });
-    next.newChat('codex', { kind: 'folder', path: '/Library/Research' });
+    next.newChat(startupFailure === 'app-outdated' ? 'stashbase' : 'codex', {
+      kind: 'folder',
+      path: '/Library/Research',
+    });
     next.activeSession().store.setState({
       accessMode: 'plan',
       activeModel: 'gpt-5.3-codex',
@@ -347,8 +354,40 @@ function WorkspacePreview({
       // The catalog arrives on the connection, so the armed skill waits for it.
       queueMicrotask(() => session.setSkill('review'));
     }
+    if (authRefused) {
+      next.activeSession().store.setState({
+        delivery: 'failed',
+        transcript: [
+          { id: 'user-auth', kind: 'user', text: 'hi' },
+          {
+            id: 'error-auth',
+            kind: 'error',
+            failure: 'auth-expired',
+            text: 'workspace routing discovery unauthorized (401)',
+            retryablePrompt: 'hi',
+          },
+        ],
+      });
+    }
+    if (startupFailure) {
+      next.activeSession().store.setState({
+        connection: {
+          kind: 'closed',
+          failure: startupFailure,
+          message:
+            startupFailure === 'auth-expired'
+              ? 'workspace routing discovery unauthorized (401)'
+              : startupFailure === 'app-outdated'
+                ? 'StashBase 2.18.0 or newer is required.'
+                : 'Run codex update',
+        },
+        delivery: 'failed',
+        draft: 'Help me write my first article.',
+        transcript: [],
+      });
+    }
     return next;
-  }, [context, empty, followUp, interrupted, skills]);
+  }, [startupFailure, authRefused, context, empty, followUp, interrupted, skills]);
 
   useEffect(() => () => runtime.dispose(), [runtime]);
 
@@ -357,6 +396,7 @@ function WorkspacePreview({
       <div className={cn('h-[46rem]', docked ? 'w-[36rem] border-l border-border' : 'w-[64rem]')}>
         <div className="h-full">
           <ManagedAgentWorkspace
+            onOpenAppSettings={() => undefined}
             catalog={{
               listAgents: async () => ({
                 agents:
@@ -366,9 +406,11 @@ function WorkspacePreview({
                         ready: false,
                         preparation: { step: 'check' as const },
                       }))
-                    : ready
-                      ? agents
-                      : pendingAgents,
+                    : authRefused
+                      ? agents.map((agent) => ({ ...agent, ready: false, needsSignIn: true }))
+                      : ready
+                        ? agents
+                        : pendingAgents,
               }),
               prepareAgent: async (id) => {
                 const selected = agents.find((agent) => agent.id === id);
@@ -378,7 +420,14 @@ function WorkspacePreview({
                 return {
                   agents:
                     setupFailure && selected
-                      ? [{ ...selected, ready: false, needsSignIn: false, setupFailure }]
+                      ? [
+                          {
+                            ...selected,
+                            ready: false,
+                            needsSignIn: setupFailure.retryAction === 'login',
+                            setupFailure,
+                          },
+                        ]
                       : agents,
                 };
               },
@@ -409,6 +458,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const FullWorkspace: Story = { play: readyWorkspace };
+
+export const SignInRequired: Story = { args: { authRefused: true }, play: readyWorkspace };
 
 export const StartupChecking: Story = {
   args: { empty: true, context: true, startupChecking: true },
@@ -515,5 +566,30 @@ export const SetupFailure: Story = {
     await requestSetup();
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     await screen.findByText(/Invalid TOML at line 12/);
+  },
+};
+
+export const StartupSignInRequired: Story = {
+  args: { empty: true, startupFailure: 'auth-expired' },
+};
+export const StartupUpdateRequired: Story = {
+  args: { empty: true, startupFailure: 'runtime-outdated' },
+};
+export const AppUpdateRequired: Story = { args: { empty: true, startupFailure: 'app-outdated' } };
+
+export const StartupUpdateRequiresSignIn: Story = {
+  args: {
+    empty: true,
+    startupFailure: 'runtime-outdated',
+    setupFailure: {
+      stage: 'authentication',
+      message: 'Codex is installed, but it is not signed in.',
+      retryAction: 'login',
+    },
+  },
+  play: async () => {
+    await readyWorkspace();
+    await userEvent.click(await screen.findByRole('button', { name: 'Update Codex' }));
+    await screen.findByRole('button', { name: 'Continue after sign-in' });
   },
 };

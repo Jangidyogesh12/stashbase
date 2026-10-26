@@ -36,6 +36,18 @@ describe('Agent session API', () => {
     expect(invalid).not.toHaveBeenCalled();
     receive({ data: JSON.stringify({ t: 'turn-end', isError: false }) });
     expect(onEvent).toHaveBeenLastCalledWith({ kind: 'turn-ended', isError: false });
+    receive({
+      data: JSON.stringify({
+        t: 'exit',
+        message: 'Not logged in',
+        failure: { kind: 'auth-expired' },
+      }),
+    });
+    expect(onEvent).toHaveBeenLastCalledWith({
+      kind: 'exited',
+      message: 'Not logged in',
+      failure: 'auth-expired',
+    });
   });
 
   it('opens the shared socket without exposing renderer-owned window identity', () => {

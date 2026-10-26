@@ -23,7 +23,7 @@ import {
   simulatedTurnFailureScript,
   type AgentTurnFailureSimulation,
 } from './agent-runtime-paths.ts';
-import { agentTurnErrorEvent } from './agent-turn-failure.ts';
+import { agentSessionExitEvent, agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { agentBootstrapCoordinator } from './agent-runtime-installer.ts';
 import {
   resolveSessionBinding,
@@ -695,7 +695,9 @@ export class AntigravitySession implements AttributedAgentSession {
 
   private finish(message?: string, cause?: unknown): void {
     if (this.closed) return;
-    this.send({ t: 'exit', ...(message ? { message } : {}) }, cause);
+    const event = agentSessionExitEvent(message);
+    if (message && event.failure?.kind === 'auth-expired') agentBootstrapCoordinator.requireSignIn('antigravity', message);
+    this.send(event, cause);
     this.dispose();
   }
 

@@ -194,7 +194,7 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
     case 'exit':
       return 'reason' in event
         ? { folderPath: event.folder, kind: 'scope-retired' }
-        : { kind: 'exited', message: event.message ?? null };
+        : { kind: 'exited', message: event.message ?? null, failure: event.failure?.kind };
     case 'file-diff':
       return {
         additions: event.additions,

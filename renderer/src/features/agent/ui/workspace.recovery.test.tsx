@@ -1,14 +1,172 @@
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vite-plus/test';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { agentGateLifted, agentSessionPort } from '@/test/fakes/agent';
+import { agentGateLifted, agentSessionPort, CODEX_AGENT } from '@/test/fakes/agent';
 
 import { registerWorkspaceCleanup, renderWorkspace } from './workspace.harness';
 
 registerWorkspaceCleanup();
 
 describe('Agent workspace recovery', () => {
+  it.each(['error-then-exit', 'terminal-exit'] as const)(
+    'keeps sign-in recovery for a startup %s and never loses the held draft',
+    async (ending) => {
+      const { port, listeners, sent } = agentSessionPort();
+      const listAgents = vi.fn(async () => ({ agents: [CODEX_AGENT] }));
+      const { runtime, onOpenAgentSettings } = renderWorkspace(
+        port,
+        [CODEX_AGENT],
+        undefined,
+        undefined,
+        { listAgents },
+      );
+      await agentGateLifted();
+      await act(async () => {
+        await runtime.chooseAgent('codex');
+        await runtime.activeSession().sendPrompt('Keep my first message');
+      });
+      const reads = listAgents.mock.calls.length;
+      act(() => {
+        if (ending === 'error-then-exit')
+          listeners[0]?.onEvent({
+            kind: 'failed',
+            failure: 'auth-expired',
+            message: 'Not logged in',
+          });
+        listeners[0]?.onEvent({
+          kind: 'exited',
+          message: ending === 'terminal-exit' ? 'Not logged in' : null,
+          ...(ending === 'terminal-exit' ? { failure: 'auth-expired' as const } : {}),
+        });
+        listeners[0]?.onClose();
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+      expect(onOpenAgentSettings).toHaveBeenCalledOnce();
+      await waitFor(() => expect(listAgents.mock.calls.length).toBeGreaterThan(reads));
+      expect(runtime.activeSession().store.getState().draft).toBe('Keep my first message');
+      expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(0);
+      await userEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+      await waitFor(() => expect(listeners).toHaveLength(2));
+      act(() => listeners[1]?.onEvent({ kind: 'ready' }));
+      expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(0);
+      await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() =>
+        expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(1),
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'updates a runtime refused during startup and handles a sign-in prerequisite (%s) without sending the held draft',
+    async (needsSignIn) => {
+      const { port, listeners, sent } = agentSessionPort();
+      let entry = { ...CODEX_AGENT, updatable: true, ready: !needsSignIn, needsSignIn };
+      const prepareAgent = vi.fn(async () => ({ agents: [entry] }));
+      const listAgents = vi.fn(async () => ({ agents: [entry] }));
+      const { runtime, onOpenAgentSettings } = renderWorkspace(
+        port,
+        [{ ...CODEX_AGENT, updatable: true }],
+        undefined,
+        undefined,
+        { prepareAgent, listAgents },
+      );
+      await agentGateLifted();
+      await act(async () => {
+        await runtime.chooseAgent('codex');
+        await runtime.activeSession().sendPrompt('Keep my first message');
+        listeners[0]?.onEvent({
+          kind: 'exited',
+          failure: 'runtime-outdated',
+          message: 'Run codex update',
+        });
+        listeners[0]?.onClose();
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Update Codex' }));
+      if (needsSignIn) {
+        await userEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+        entry = { ...entry, ready: true, needsSignIn: false };
+        await userEvent.click(screen.getByRole('button', { name: 'Continue after sign-in' }));
+      }
+      await waitFor(() => expect(listeners).toHaveLength(2));
+      expect(onOpenAgentSettings).toHaveBeenCalledTimes(needsSignIn ? 1 : 0);
+      expect(prepareAgent).toHaveBeenCalledOnce();
+      act(() => listeners[1]?.onEvent({ kind: 'ready' }));
+      expect(prepareAgent).toHaveBeenCalledWith('codex', 'update', expect.anything());
+      expect(runtime.activeSession().store.getState().draft).toBe('Keep my first message');
+      expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(0);
+    },
+  );
+
+  it.each(['startup', 'turn'] as const)(
+    'opens application updates for a Default Agent %s refusal',
+    async (phase) => {
+      const { port, listeners, sent } = agentSessionPort();
+      const { runtime, onOpenAppSettings, onOpenAgentSettings } = renderWorkspace(port);
+      await agentGateLifted();
+      const session = runtime.activeSession();
+      await act(async () => {
+        session.start();
+        if (phase === 'turn') {
+          listeners[0]?.onEvent({ kind: 'ready' });
+          await session.sendPrompt('My request');
+          listeners[0]?.onEvent({
+            kind: 'failed',
+            failure: 'app-outdated',
+            message: 'StashBase 2.18.0 or newer is required.',
+          });
+          listeners[0]?.onEvent({ kind: 'turn-ended', isError: true });
+        } else {
+          listeners[0]?.onEvent({
+            kind: 'exited',
+            failure: 'app-outdated',
+            message: 'StashBase 2.18.0 or newer is required.',
+          });
+          listeners[0]?.onClose();
+        }
+        session.setDraft('Keep my draft');
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Update StashBase' }));
+      expect(onOpenAppSettings).toHaveBeenCalledOnce();
+      expect(onOpenAgentSettings).not.toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+      expect(session.store.getState().draft).toBe('Keep my draft');
+      expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(
+        phase === 'turn' ? 1 : 0,
+      );
+    },
+  );
+
+  it('retains an unknown outcome and paused queue when a fatal failure requires sign-in', async () => {
+    const { port, listeners, sent } = agentSessionPort();
+    const { runtime, onOpenAgentSettings } = renderWorkspace(port);
+    await agentGateLifted();
+    const session = runtime.activeSession();
+    await act(async () => {
+      session.start();
+      listeners[0]?.onEvent({ kind: 'ready' });
+      await session.sendPrompt('Write a file');
+      session.setDraft('Unsent draft');
+      session.setQueue([{ id: 'later', text: 'Queued work' }]);
+      listeners[0]?.onEvent({
+        kind: 'exited',
+        failure: 'auth-expired',
+        message: 'Unauthorized (401)',
+      });
+      listeners[0]?.onClose();
+    });
+    expect(await screen.findByText('Outcome unknown')).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(onOpenAgentSettings).toHaveBeenCalledOnce();
+    expect(session.store.getState()).toMatchObject({
+      delivery: 'unknown',
+      draft: 'Unsent draft',
+      queuePaused: true,
+      queuedPrompts: [{ text: 'Queued work' }],
+    });
+    expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
+  });
+
   it('reconnects without resending while retaining history, draft, and paused queue', async () => {
     const { port, listeners, sent } = agentSessionPort();
     const { runtime } = renderWorkspace(port);

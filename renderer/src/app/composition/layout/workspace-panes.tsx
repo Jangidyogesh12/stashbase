@@ -143,6 +143,7 @@ export function WorkspacePanes({
             tools={dependencies.agent.tools}
             onBrowsePersonas={onBrowsePersonas}
             onOpenAgentSettings={() => settings.openSettings('agents')}
+            onOpenAppSettings={() => settings.openSettings('general')}
             onOpenExternal={openExternal}
             onOpenSource={openAgentSource}
             onReprocess={onReprocess}

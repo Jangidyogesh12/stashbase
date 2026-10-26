@@ -12,6 +12,8 @@ test("agent socket schemas accept lifecycle, transcript, and scope-retirement ev
     { t: "ready" },
     { t: "session-id", id: "native-1" },
     { t: "text", delta: "hello" },
+    { t: "exit", message: "Not logged in", failure: { kind: "auth-expired" } },
+    { t: "exit", message: "Update StashBase", failure: { kind: "app-outdated" } },
     { t: "exit", reason: "scope-removed", folder: "/project/project" },
   ]) {
     assert.equal(agentServerEventSchema.safeParse(event).success, true);
