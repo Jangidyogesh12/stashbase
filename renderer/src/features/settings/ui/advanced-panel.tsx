@@ -1,5 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
@@ -9,7 +9,7 @@ import { useEmbedderState } from '@/features/settings/hooks/use-embedder';
 
 import { AiIndexPanel } from './ai-index/ai-index-panel';
 import { McpAccessPanel } from './mcp/mcp-access-panel';
-import { SettingsList, SettingsPane, SettingsRow } from './rows';
+import { Disclosure, SettingsGroup, SettingsList, SettingsPane, SettingsRow } from './rows';
 
 /** Whether search by meaning is on, read from the same query the search page
  *  uses, so this row and the page cannot disagree. */
@@ -23,10 +23,12 @@ export function AdvancedPanel({
   embedderApi,
   mcpAccessApi,
   initialPage = null,
+  revisionPreview,
 }: {
   embedderApi?: EmbedderPort | undefined;
   mcpAccessApi?: McpAccessPort | undefined;
   initialPage?: 'search' | 'mcp' | null;
+  revisionPreview?: ReactNode;
 }) {
   const [page, setPage] = useState(initialPage);
   const content =
@@ -90,6 +92,11 @@ export function AdvancedPanel({
           }
         />
       </SettingsList>
+      {revisionPreview && (
+        <SettingsGroup title="Developer">
+          <Disclosure summary="Document revision review">{revisionPreview}</Disclosure>
+        </SettingsGroup>
+      )}
     </SettingsPane>
   );
 }

@@ -1,14 +1,10 @@
-/** Each Agent owns its connection controls; the Default Agent leads its group,
- *  followed by the account, credits, and plan it runs on. */
+/** Native runtime setup belongs here; account access has its own page. */
 import { Button } from '@/components/ui/button';
 import type { AgentRuntimePort } from '@/features/settings/application/ports';
-import { accountLabel } from '@/features/settings/domain/account';
 import type { AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { AgentRuntimeAction } from '@/features/settings/domain/agent-runtime-status';
 import { useAccountView } from '@/features/settings/hooks/account-context';
-import type { AccountViewModel } from '@/features/settings/hooks/use-account';
 import { useAgentRuntimes } from '@/features/settings/hooks/use-agent-runtimes';
-import { useBilling } from '@/features/settings/hooks/use-billing';
 import {
   SettingsGroup,
   SettingsList,
@@ -16,105 +12,18 @@ import {
   SettingsPane,
   SettingsRow,
 } from '@/features/settings/ui/rows';
-import { FailureNotice } from '@/shared/ui/failure-notice';
-import { SignInPageLink } from '@/shared/ui/sign-in-page-link';
 
-import { AllowanceRow } from './allowance-row';
 import { RuntimeRow } from './runtime-row';
-import { SubscriptionRows } from './subscription-rows';
 
-export interface AgentRuntimesPanelProps {
+export function AgentRuntimesPanel({
+  agentRuntimeApi,
+  onOpenAccount,
+}: {
   agentRuntimeApi: AgentRuntimePort;
-}
-
-/** The account the Default Agent runs on. A browser sign-in that waits keeps
- *  Sign in's name on its spinner and says what it waits for in the detail
- *  line, with the page again and Stop waiting, as every browser wait does. */
-function AccountRow({ account }: { account: AccountViewModel }) {
-  const signedIn = account.account?.signedIn ?? false;
-  return (
-    <SettingsRow
-      as="li"
-      detail={
-        account.account === null
-          ? account.loading
-            ? 'Checking…'
-            : 'Account unavailable.'
-          : signedIn
-            ? [account.account.displayName, account.account.email]
-                .filter((part): part is string => part !== null)
-                .join(' · ') || accountLabel(account.account)
-            : account.signInPending
-              ? 'Finish signing in to StashBase in your browser.'
-              : 'Sign in for free agent credits every month.'
-      }
-      title="Account"
-      trail={
-        account.loadFailed ? (
-          <Button
-            disabled={account.loading || account.busy}
-            onClick={account.retryAccount}
-            size="compact"
-            variant="tertiary"
-          >
-            Retry
-          </Button>
-        ) : signedIn ? (
-          <div className="flex items-center gap-2">
-            <Button
-              disabled={account.busy}
-              onClick={account.manageSignIn}
-              size="compact"
-              variant="tertiary"
-            >
-              Sign-in methods
-            </Button>
-            <Button
-              disabled={account.busy}
-              onClick={() => account.signOut()}
-              size="compact"
-              variant="ghost"
-            >
-              Sign out
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button
-              disabled={account.busy || account.account === null}
-              loading={account.signInPending}
-              onClick={() => account.signIn()}
-              size="compact"
-              variant="tertiary"
-            >
-              Sign in
-            </Button>
-            {account.canStopWaiting && (
-              <Button onClick={account.stopWaiting} size="compact" variant="ghost">
-                Stop waiting
-              </Button>
-            )}
-          </div>
-        )
-      }
-    >
-      {!signedIn && account.signInUrl && (
-        <SignInPageLink
-          className="mt-1"
-          url={account.signInUrl}
-          onOpen={(url) => void account.openExternal(url)}
-        />
-      )}
-      {account.failure && <FailureNotice className="mt-1" failure={account.failure} />}
-    </SettingsRow>
-  );
-}
-
-export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps) {
+  onOpenAccount(): void;
+}) {
   const account = useAccountView();
   const runtimes = useAgentRuntimes(agentRuntimeApi);
-  const signedIn = account.account?.signedIn ?? false;
-  const billing = useBilling(agentRuntimeApi, account.openExternal, signedIn);
 
   const onAction = (action: AgentRuntimeAction, runtime: AgentRuntime) => {
     if (action.kind === 'login') runtimes.login(runtime.id);
@@ -124,7 +33,7 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
   const onStop = (runtime: AgentRuntime) => runtimes.stop(runtime.id);
   const onOpenSignIn = (url: string) => void account.openExternal(url);
 
-  const { allowance, catalog } = runtimes;
+  const { catalog } = runtimes;
 
   return (
     <SettingsPane title="Agents">
@@ -133,8 +42,7 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
           {catalog.runtimes
             .filter((runtime) => runtime.id === 'stashbase')
             .map((runtime) => (
-              // The account's own wait shows on the Account row below; the
-              // runtime row does not spin a second time for it.
+              // Account access is managed on its own page.
               <RuntimeRow
                 key={runtime.id}
                 runtime={runtime}
@@ -145,21 +53,16 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
                 onStop={onStop}
               />
             ))}
-          <AccountRow account={account} />
-          {signedIn && (allowance.allowance || allowance.failed) && (
-            <>
-              {allowance.allowance ? (
-                <AllowanceRow allowance={allowance.allowance} />
-              ) : (
-                <SettingsMessage
-                  as="li"
-                  message="Could not load your credit balance."
-                  onRetry={runtimes.refreshAllowance}
-                />
-              )}
-            </>
-          )}
-          {signedIn && <SubscriptionRows billing={billing} />}
+          <SettingsRow
+            as="li"
+            title="StashBase account"
+            detail="Manage sign-in methods, credits and subscription."
+            trail={
+              <Button size="compact" variant="tertiary" onClick={onOpenAccount}>
+                Open account
+              </Button>
+            }
+          />
         </SettingsList>
       </SettingsGroup>
 

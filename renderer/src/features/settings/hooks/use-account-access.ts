@@ -22,11 +22,17 @@ const LINK_FAILED: FailureView = {
 };
 
 /** Transient proofs only; the host owns durable credentials and login retirement. */
-export function useAccountAccess(port: AccountPort, account: AccountViewModel) {
-  const managing = account.account?.signedIn === true;
-  const [email, setEmail] = useState('');
+export function useAccountAccess(
+  port: AccountPort,
+  account: AccountViewModel,
+  emailVerification?: { email: string; onVerified(): void },
+) {
+  const managing = account.account?.signedIn === true && !emailVerification;
+  const [email, setEmail] = useState(emailVerification?.email ?? '');
   const [otp, setOtp] = useState('');
   const [sent, setSent] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [completed, setCompleted] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [ticket, setTicket] = useState<string | null>(null);
   /** The Google consent page the open connection started on. */
@@ -51,7 +57,12 @@ export function useAccountAccess(port: AccountPort, account: AccountViewModel) {
     if (!ticket || (!link.isError && (!link.data || link.data.state === 'pending'))) return;
     setTicket(null);
     setLinkUrl(null);
-    setLinkFailed(link.isError || link.data?.state !== 'complete');
+    const succeeded = !link.isError && link.data?.state === 'complete';
+    setLinkFailed(!succeeded);
+    if (succeeded) {
+      setEditing(false);
+      setCompleted('Google connected.');
+    }
     setSent(false);
     setOtp('');
     void refreshMethods();
@@ -75,7 +86,8 @@ export function useAccountAccess(port: AccountPort, account: AccountViewModel) {
     async (action, signal) => {
       setLinkFailed(false);
       if (action === 'send') {
-        if (managing) await port.sendLinkCode(signal);
+        if (emailVerification) await port.sendEmailProof(signal);
+        else if (managing) await port.sendLinkCode(signal);
         else {
           const started = await port.sendEmail(email.trim(), signal);
           if (signal.aborted) {
@@ -88,6 +100,10 @@ export function useAccountAccess(port: AccountPort, account: AccountViewModel) {
         setSent(true);
         setRemaining(60);
         setOtp('');
+      } else if (emailVerification) {
+        await port.verifyEmailProof(otp, signal);
+        signal.throwIfAborted();
+        emailVerification.onVerified();
       } else if (!managing) {
         const next = await port.verifyEmail(flow.current ?? '', otp, signal);
         signal.throwIfAborted();
@@ -98,6 +114,8 @@ export function useAccountAccess(port: AccountPort, account: AccountViewModel) {
         signal.throwIfAborted();
         setSent(false);
         setOtp('');
+        setEditing(false);
+        setCompleted('Google disconnected. You can still sign in with email codes.');
         await methods.refetch();
       } else {
         const started = await port.linkGoogle(otp, signal);
@@ -131,8 +149,19 @@ export function useAccountAccess(port: AccountPort, account: AccountViewModel) {
   };
   return {
     managing,
+    editing,
+    completed,
+    clearCompleted: () => setCompleted(null),
+    beginChange: () => {
+      command.cancel();
+      setCompleted(null);
+      setEditing(true);
+    },
     email,
-    setEmail,
+    setEmail: (value: string) => {
+      if (value !== email && sent) changeEmail();
+      setEmail(value);
+    },
     otp,
     setOtp,
     sent,
@@ -148,9 +177,14 @@ export function useAccountAccess(port: AccountPort, account: AccountViewModel) {
     /** The Google consent page while the connection waits on it. */
     signInUrl: ticket !== null ? linkUrl : null,
     stopWaiting,
+    cancelChange: () => {
+      command.cancel();
+      stopWaiting();
+      setEditing(false);
+      setLinkFailed(false);
+    },
     send: () => command.run('send'),
     verify: () => command.run('verify'),
-    changeEmail,
     retryMethods: () => {
       void refreshMethods();
     },

@@ -1,6 +1,6 @@
 import { hostedBillingChangeRequestSchema } from '../../shared/protocols/http/agent-runtime.ts';
 import express from 'express';
-import { emailSendSchema, emailVerifySchema, emailCancelSchema, accountLinkActionSchema } from '../../shared/protocols/http/embedder.ts';
+import { emailProofSchema, emailSendSchema, emailVerifySchema, emailCancelSchema, accountLinkActionSchema } from '../../shared/protocols/http/embedder.ts';
 import { getHostedAccountSession, markAccountOfferSeen, resetAccountOffers } from '../app-config.ts';
 import {
   beginHostedOAuth,
@@ -179,6 +179,12 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
   });
   app.get('/api/account/methods', async (_req, res) => {
     try { res.json(await hostedSignInMethods()); }
+    catch (error) { res.status(400).json({ error: errorMessage(error) }); }
+  });
+  app.post('/api/account/email-proof', async (req, res) => {
+    const input = emailProofSchema.safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: 'Invalid email verification request.' });
+    try { res.json(await accountOperation(`/account/email/${input.data.action}`, input.data)); }
     catch (error) { res.status(400).json({ error: errorMessage(error) }); }
   });
   app.post('/api/account/link', async (req, res) => {

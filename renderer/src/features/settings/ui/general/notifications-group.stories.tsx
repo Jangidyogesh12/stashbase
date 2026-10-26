@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+import { SettingsPane } from '@/features/settings/ui/rows';
 import type {
   NotificationPreferencesPort,
   NotificationStatus,
 } from '@/shared/domain/notifications';
 
-import { GeneralPanel } from './general-panel';
 import { NotificationsGroup } from './notifications-group';
 
 function notificationPort(
@@ -64,21 +64,11 @@ export const LoadFailed: Story = {
     },
   },
 };
-export const InGeneral: Story = {
+export const InSettings: Story = {
   render: ({ port }) => (
-    <GeneralPanel
-      notifications={port}
-      softwareUpdate={{
-        version: '2.16.9',
-        autoCheckEnabled: true,
-        busy: false,
-        failure: null,
-        status: 'StashBase is up to date.',
-        actionLabel: 'Check for updates',
-        act: () => undefined,
-        setAutoCheck: () => undefined,
-      }}
-    />
+    <SettingsPane title="Notifications">
+      <NotificationsGroup port={port} />
+    </SettingsPane>
   ),
 };
 export const ManualSettings: Story = {

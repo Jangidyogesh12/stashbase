@@ -3,14 +3,14 @@
  *
  * Signed out it is one button that opens the sign-in dialog, where the
  * reader chooses email or Google; what the account is worth (the bundled
- * Agent's free credits) is stated in Settings → Agents rather than inside
+ * Agent's free credits) is stated in Settings → Account rather than inside
  * this row. It is the same dialog the Agents section opens, through the same
  * account, so the two entries can never disagree. While a browser sign-in
  * waits, the row keeps its name and turns its glyph into a spinner, and
  * opens the dialog on that wait. Signed in, the row leads with the same
  * person glyph as every other sidebar row, and its menu opens on the
  * initials disc, then the credits, Plans and billing (the plan in
- * Settings → Agents), Sign-in methods, Settings, and sign-out.
+ * Settings → Account), Sign-in methods, Settings, and sign-out.
  */
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -51,8 +51,8 @@ export interface SidebarAccountRowProps {
   agentRuntimeApi: AgentRuntimePort;
   /** Opens Settings — the menu is its sidebar home, not a standing row. */
   onOpenSettings(): void;
-  /** Opens the subscription, which lives with the credits in Settings → Agents. */
-  onOpenPlans(): void;
+  /** Opens the subscription, which lives with the credits in Settings → Account. */
+  onOpenAccount(): void;
 }
 
 /** The menu hangs off the account row and is read as the bottom of the left
@@ -70,7 +70,7 @@ function SignInWaiting({ className, ...props }: IconComponentProps) {
 
 export function SidebarAccountRow({
   agentRuntimeApi,
-  onOpenPlans,
+  onOpenAccount,
   onOpenSettings,
 }: SidebarAccountRowProps) {
   const account = useAccountView();
@@ -103,7 +103,7 @@ export function SidebarAccountRow({
             // and Settings above it. It used to carry the reason inline in a
             // second tone, which made the one row in the column that reads as
             // a sentence; the offer belongs where it is acted on, so Settings
-            // → Agents states it. The label is the row's name, so it needs no
+            // → Account states it. The label is the row's name, so it needs no
             // hover hint repeating it; the failure under a Retry says what
             // failed.
             label={account.loadFailed ? 'Retry' : 'Sign in'}
@@ -187,14 +187,14 @@ export function SidebarAccountRow({
             className={SIDEBAR_ROW}
             icon={CreditCard}
             label="Plans and billing"
-            onSelect={onOpenPlans}
+            onSelect={onOpenAccount}
           />
           <DropdownSeparator />
           <MenuItem
             className={SIDEBAR_ROW}
             icon={KeyRound}
             label="Sign-in methods"
-            onSelect={account.manageSignIn}
+            onSelect={onOpenAccount}
           />
           <MenuItem
             className={SIDEBAR_ROW}

@@ -5,7 +5,7 @@
  * that runs it holds a different sign-in: a flow started from one surface is
  * invisible to the others, and two of them can be open at once. The surfaces
  * that offer sign-in are spread across the window — the sidebar's footer row,
- * the composer's runtime picker, Settings' Agents section — and they are all
+ * the composer's runtime picker, Settings' Account section — and they are all
  * talking about the same account, so the hook runs once here and they read
  * what it publishes.
  */
@@ -13,6 +13,7 @@
 
 import { createContext, useContext } from 'react';
 
+import type { AccountPort } from '@/features/settings/application/ports';
 import { type AccountViewModel } from '@/features/settings/hooks/use-account';
 
 export const AccountContext = createContext<AccountViewModel | null>(null);
@@ -26,4 +27,12 @@ export function useAccountView(): AccountViewModel {
     throw new Error('useAccountView requires an AccountProvider above it');
   }
   return account;
+}
+
+/** The same host adapter used by the window's account owner and method forms. */
+export const AccountPortContext = createContext<AccountPort | null>(null);
+export function useAccountPort(): AccountPort {
+  const port = useContext(AccountPortContext);
+  if (port === null) throw new Error('useAccountPort requires an AccountProvider above it');
+  return port;
 }

@@ -88,6 +88,9 @@ export interface AccountPort {
   verifyEmail(flowId: string, otp: string, signal: AbortSignal): Promise<HostedAccount>;
   cancelEmail(flowId: string): Promise<void>;
   methods(signal: AbortSignal): Promise<{ email: string; google: boolean }>;
+  /** Current mailbox proof; never creates or replaces a login session. */
+  sendEmailProof(signal: AbortSignal): Promise<void>;
+  verifyEmailProof(otp: string, signal: AbortSignal): Promise<void>;
   sendLinkCode(signal: AbortSignal): Promise<void>;
   linkGoogle(otp: string, signal: AbortSignal): Promise<{ ticket: string; url: string }>;
   unlinkGoogle(otp: string, signal: AbortSignal): Promise<void>;

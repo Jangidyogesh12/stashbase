@@ -784,3 +784,25 @@ test('allowance auth refresh cannot restart the request deadline or send after i
   `);
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('signed-in mailbox proof retains the session and the signed-out login guard', () => {
+  const result = runIsolated(`
+    const assert = (await import('node:assert/strict')).default;
+    const account = await import('./server/hosted-account.ts');
+    const config = await import('./server/app-config.ts');
+    const session = {accessToken:'access',sessionToken:'current',expiresAt:4102444800,userId:'owner',email:'owner@example.test'};
+    config.setHostedAccountSession(session);
+    const paths = [];
+    globalThis.fetch = async (url, init) => {
+      paths.push(new URL(url).pathname);
+      assert.equal(new Headers(init.headers).get('authorization'), 'Bearer current');
+      return Response.json({ success: true });
+    };
+    await assert.rejects(account.sendHostedEmail('other@example.test'), /Sign out before/);
+    await account.accountOperation('/account/email/send', { action: 'send' });
+    await account.accountOperation('/account/email/verify', { action: 'verify', otp: '123456' });
+    assert.deepEqual(paths, ['/api/auth/account/email/send', '/api/auth/account/email/verify']);
+    assert.deepEqual(config.getHostedAccountSession(), session);
+  `);
+  assert.equal(result.status, 0, result.stderr);
+});

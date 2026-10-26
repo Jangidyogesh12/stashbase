@@ -14,7 +14,15 @@ import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 /** Every section the Settings shell registers, in nav order. A section id
  *  that is not one of these cannot be registered — the mistake fails to
  *  typecheck instead of quietly rendering an empty pane. */
-const SETTINGS_SECTION_IDS = ['general', 'agents', 'advanced'] as const;
+const SETTINGS_SECTION_IDS = [
+  'account',
+  'appearance',
+  'editor',
+  'agents',
+  'notifications',
+  'general',
+  'advanced',
+] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 

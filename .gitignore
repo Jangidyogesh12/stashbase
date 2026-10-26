@@ -59,3 +59,6 @@ native/transcription/build.nosync/
 
 # Local PostHog operator credentials and private query results.
 .local/posthog/
+
+# Isolated development profiles may contain local account sessions.
+.local/ui-debug/

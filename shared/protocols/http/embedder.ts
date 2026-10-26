@@ -89,3 +89,9 @@ export const accountLinkActionSchema = z.object({ action: z.enum(['send','link',
 export const accountLinkStartSchema = z.object({ ticket: z.string().min(1).max(128), url: z.string().url() });
 export const accountLinkStatusSchema = z.object({ state: z.enum(['pending','complete','error']) });
 export const accountCommandSchema = z.object({ success: z.boolean().optional(), sent: z.boolean().optional() });
+
+/** Authenticated mailbox proof accepts no caller-selected recipient. */
+export const emailProofSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('send') }).strict(),
+  z.object({ action: z.literal('verify'), otp: z.string().regex(/^\d{6}$/) }).strict(),
+]);

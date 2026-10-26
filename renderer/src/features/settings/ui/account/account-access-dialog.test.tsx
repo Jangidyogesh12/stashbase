@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vite-plus/test';
 
 import { useAccountView } from '@/features/settings/hooks/account-context';
 import { AccountProvider } from '@/features/settings/ui/account/account-provider';
-import { accountPort, SIGNED_IN_ACCOUNT } from '@/test/fakes/settings';
+import { accountPort } from '@/test/fakes/settings';
 import { withQueryClient } from '@/test/query';
 
 afterEach(cleanup);
@@ -13,7 +13,6 @@ function Entry() {
   return (
     <>
       <button onClick={account.signIn}>Open sign-in</button>
-      <button onClick={account.manageSignIn}>Manage</button>
       <span>{account.account?.signedIn ? 'Account signed in' : 'Account signed out'}</span>
     </>
   );
@@ -32,7 +31,13 @@ it('completes email login inside the application and updates account state witho
   await user.click(screen.getByText('Open sign-in'));
   await user.type(await screen.findByRole('textbox', { name: 'Email' }), 'ada@example.com');
   await user.click(screen.getByRole('button', { name: 'Send email code' }));
-  await user.type(await screen.findByRole('textbox', { name: 'Six-digit code' }), '123456');
+  const code = await screen.findByRole('textbox', { name: 'Six-digit code' });
+  await waitFor(() => expect(document.activeElement).toBe(code));
+  expect(screen.getByRole('dialog', { name: 'Sign in to StashBase' })).not.toBeNull();
+  expect(screen.getByDisplayValue('ada@example.com')).not.toBeNull();
+  expect(screen.getByRole('textbox', { name: 'Email' }).hasAttribute('readonly')).toBe(false);
+  expect(screen.getByRole('button', { name: 'Continue with Google' })).not.toBeNull();
+  await user.type(code, '123456');
   expect(screen.getByRole('button', { name: 'Resend in 60s' }).hasAttribute('disabled')).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Sign in' }));
   await screen.findByText('Account signed in');
@@ -45,74 +50,21 @@ it('cancels the host flow when the dialog closes and permits correcting the emai
   await user.click(screen.getByText('Open sign-in'));
   await user.type(await screen.findByRole('textbox', { name: 'Email' }), 'wrong@example.com');
   await user.click(screen.getByRole('button', { name: 'Send email code' }));
-  await user.click(await screen.findByRole('button', { name: 'Change email' }));
+  await user.type(await screen.findByRole('textbox', { name: 'Six-digit code' }), '123');
+  expect(screen.queryByRole('button', { name: 'Change email' })).toBeNull();
+  const email = screen.getByRole('textbox', { name: 'Email' });
+  await user.clear(email);
+  await user.type(email, 'correct@example.com');
   expect(port.cancelEmail).toHaveBeenCalledWith('email-flow');
-  expect(screen.getByRole('textbox', { name: 'Email' }).hasAttribute('disabled')).toBe(false);
+  expect(email.hasAttribute('disabled')).toBe(false);
+  await waitFor(() => expect(document.activeElement).toBe(email));
+  expect(screen.getByDisplayValue('correct@example.com')).not.toBeNull();
+  expect(screen.getByRole('button', { name: /^Send code in/ }).hasAttribute('disabled')).toBe(true);
+  expect(screen.queryByRole('textbox', { name: 'Six-digit code' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Continue with Google' })).not.toBeNull();
   await user.click(screen.getByRole('button', { name: 'Close' }));
   expect(port.verifyEmail).not.toHaveBeenCalled();
 });
-it('requires mailbox proof before disconnecting Google and leaves email login available', async () => {
-  const port = accountPort(SIGNED_IN_ACCOUNT, {
-    methods: vi
-      .fn()
-      .mockResolvedValueOnce({ email: 'ada@example.com', google: true })
-      .mockResolvedValue({ email: 'ada@example.com', google: false }),
-  });
-  const { user, open } = mount(port);
-  await user.click(screen.getByText('Manage'));
-  await screen.findByText('Email codes are enabled. Google: Connected');
-  await user.click(screen.getByRole('button', { name: 'Send email code' }));
-  await user.type(await screen.findByRole('textbox', { name: 'Six-digit code' }), '123456');
-  await user.click(screen.getByRole('button', { name: 'Verify and disconnect Google' }));
-  await screen.findByText('Email codes are enabled. Google: Not connected');
-  expect(port.unlinkGoogle).toHaveBeenCalledWith('123456', expect.any(AbortSignal));
-  expect(open).not.toHaveBeenCalled();
-});
-it('opens Google only after the email proof and refreshes the connected method after completion', async () => {
-  const port = accountPort(SIGNED_IN_ACCOUNT, {
-    methods: vi
-      .fn()
-      .mockResolvedValueOnce({ email: 'ada@example.com', google: false })
-      .mockResolvedValue({ email: 'ada@example.com', google: true }),
-    linkStatus: vi.fn(async () => ({ state: 'complete' as const })),
-  });
-  const { user, open } = mount(port);
-  await user.click(screen.getByText('Manage'));
-  await screen.findByText('Email codes are enabled. Google: Not connected');
-  await user.click(screen.getByRole('button', { name: 'Send email code' }));
-  await user.type(await screen.findByRole('textbox', { name: 'Six-digit code' }), '123456');
-  await user.click(screen.getByRole('button', { name: 'Verify and connect Google' }));
-  await waitFor(() => expect(open).toHaveBeenCalledWith('https://accounts.example/link'));
-  await screen.findByText('Email codes are enabled. Google: Connected');
-});
-
-it.each(['false', 'reject'])(
-  'keeps the Google page to open again when the linking browser returns %s',
-  async (failure) => {
-    const port = accountPort(SIGNED_IN_ACCOUNT, {
-      methods: vi.fn(async () => ({ email: 'ada@example.com', google: false })),
-    });
-    const { user, open } = mount(port);
-    if (failure === 'false') open.mockResolvedValue(false);
-    else open.mockRejectedValue(new Error('OS refused'));
-    await user.click(screen.getByText('Manage'));
-    await screen.findByText('Email codes are enabled. Google: Not connected');
-    await user.click(screen.getByRole('button', { name: 'Send email code' }));
-    await user.type(await screen.findByRole('textbox', { name: 'Six-digit code' }), '123456');
-    await user.click(screen.getByRole('button', { name: 'Verify and connect Google' }));
-    await screen.findByText('Finish signing in to StashBase in your browser.');
-    await waitFor(() => expect(port.linkStatus).toHaveBeenCalled());
-    open.mockResolvedValue(true);
-    await user.click(screen.getByRole('button', { name: 'Open sign-in page' }));
-    expect(open).toHaveBeenLastCalledWith('https://accounts.example/link');
-    // The code is spent, so stopping starts over from a new one, once the
-    // resend cooldown allows.
-    await user.click(screen.getByRole('button', { name: 'Stop waiting' }));
-    expect(await screen.findByRole('button', { name: /^Send code in \d+s$/ })).not.toBeNull();
-    expect(screen.queryByText('Finish signing in to StashBase in your browser.')).toBeNull();
-  },
-);
-
 it('opens on the email field and keeps the Google sign-in wait in the dialog', async () => {
   const { user, open } = mount();
   await user.click(screen.getByText('Open sign-in'));

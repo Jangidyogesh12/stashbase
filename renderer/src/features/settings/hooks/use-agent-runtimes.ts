@@ -14,13 +14,8 @@ import { useCallback, useState } from 'react';
 
 import { settingsFailure } from '@/features/settings/application/failure-messages';
 import type { AgentRuntimePort } from '@/features/settings/application/ports';
-import {
-  agentAllowanceQuery,
-  settingsQueryKeys,
-  agentCatalogQuery,
-} from '@/features/settings/application/queries';
+import { settingsQueryKeys, agentCatalogQuery } from '@/features/settings/application/queries';
 import type {
-  AgentAllowance,
   AgentCatalog,
   AgentDebugControls,
   AgentDebugPatch,
@@ -30,7 +25,6 @@ import { pollWhileBusy, useSettingsCommand } from '@/features/settings/hooks/use
 import type { AgentId } from '@/shared/domain/agent-id';
 import type { FailureView } from '@/shared/domain/feature-error';
 import { useRequestSignals } from '@/shared/runtime/use-request-signals';
-import { useWindowFocus } from '@/shared/runtime/use-window-focus';
 
 /** The commands a reader can aim at one runtime. Each opens a lane of its own
  *  per agent id, so two rows never share an abort. */
@@ -59,13 +53,7 @@ interface AgentCatalogView {
   readonly loading: boolean;
 }
 
-interface AgentAllowanceView {
-  readonly allowance: AgentAllowance | null;
-  readonly failed: boolean;
-}
-
 export interface AgentRuntimesViewModel {
-  readonly allowance: AgentAllowanceView;
   readonly catalog: AgentCatalogView;
   /** A debug write is open. */
   readonly debugBusy: boolean;
@@ -81,7 +69,6 @@ export interface AgentRuntimesViewModel {
   stop(id: AgentId): void;
   /** Updates through the provider's official native installer. */
   update(id: AgentId): void;
-  refreshAllowance(): void;
   refreshCatalog(): void;
   updateDebug(patch: AgentDebugPatch): void;
 }
@@ -99,18 +86,6 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
       CATALOG_POLL_MS,
     ),
   });
-
-  const stashbaseReady =
-    catalog.data?.runtimes.some(
-      (runtime) => runtime.id === 'stashbase' && runtime.preparation.kind === 'ready',
-    ) ?? false;
-
-  const allowance = useQuery({
-    ...agentAllowanceQuery(port),
-    enabled: stashbaseReady,
-  });
-  const { refetch: refreshAllowance } = allowance;
-  useWindowFocus(refreshAllowance, stashbaseReady);
 
   /** A command's response is the freshest truth about the catalog, so the poll
    *  that was already in flight is dropped before it is written: otherwise a
@@ -171,10 +146,6 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
   const debug = catalog.data?.debug ?? null;
 
   return {
-    allowance: {
-      allowance: allowance.isSuccess ? allowance.data : null,
-      failed: allowance.isError,
-    },
     busy: (id) => stateFor(id).running !== null,
     catalog: {
       debug,
@@ -189,7 +160,6 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
     install: (id) =>
       void run(id, 'install', (signal) => port.prepareAgent(id, 'bootstrap', signal)),
     login: (id) => void run(id, 'login', (signal) => port.prepareAgent(id, 'login', signal)),
-    refreshAllowance: () => void allowance.refetch(),
     refreshCatalog: () => void catalog.refetch(),
     stop: (id) => void run(id, 'stop', (signal) => port.prepareAgent(id, 'stop', signal)),
     update: (id) => void run(id, 'update', (signal) => port.prepareAgent(id, 'update', signal)),

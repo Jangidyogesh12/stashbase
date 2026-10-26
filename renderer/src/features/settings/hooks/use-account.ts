@@ -64,7 +64,6 @@ export interface AccountViewModel {
   /** The reader left the dialog. A send waiting on it is let go; a browser
    *  wait carries on in the window. */
   closeAccess(): void;
-  manageSignIn(): void;
   /** Starts the flow and hands its page to the browser, keeping the dialog
    *  open on the wait. */
   signInWithGoogle(): void;
@@ -243,7 +242,6 @@ export function useAccount(
       void queryClient.invalidateQueries({ queryKey: settingsQueryKeys.account });
       finishWaiters(false);
     },
-    manageSignIn: () => setAccessOpen(true),
     signInWithGoogle,
     emailSignedIn: (next) => {
       setAccessOpen(false);

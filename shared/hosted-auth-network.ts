@@ -6,6 +6,7 @@ export const AUTH_TIMEOUT_MS = 10_000;
 export const AUTH_PATHS = new Set([
   '/electron/token', '/get-session', '/token', '/sign-out',
   '/email/send', '/desktop/email/verify', '/account/methods', '/account/otp/send',
+  '/account/email/send', '/account/email/verify',
   '/account/google/link', '/account/google/unlink', '/account/link/status',
 ]);
 

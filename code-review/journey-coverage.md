@@ -246,18 +246,46 @@ the saved bytes back while health stays available. Provider CLI execution is
 disabled in this pass; it establishes service isolation, not Intel binary or
 agent compatibility.
 
-**Settings organization (2026-09-16):** General owns preferences, Agents groups
-Default account/credits/connection, and Advanced owns optional connections.
+**Settings organization (2026-10-26):** Account owns identity, Google connection status, modal mailbox proof, credits and billing; Appearance and Editor split the
+same persisted preferences; Agents owns runtime setup; Notifications owns delivery
+preferences; General owns updates/privacy; Advanced owns optional connections.
 `renderer/src/features/settings/ui/managed-settings.tsx` owns routing;
-`managed-settings.test.tsx` exercises navigation and direct search setup.
-Developer controls use a development-only shortcut and separate dialog;
-`sidebar-update-preview.test.tsx` exercises preview dismissal without updater authority.
-Validation: `pnpm check:web` passed all 12 gates, including renderer coverage
-and Story accessibility. Native Help menu tests passed (26). A browser
-pass through built Storybook checked General, the grouped Default account/credits,
-and switching MCP from Standard to HTTP with Docker port settings collapsed.
-These used controlled ports; the native Electron accessibility connection timed
-out, so packaged Settings composition and live-provider setup remain unverified.
+`managed-settings.test.tsx` exercises section navigation, retained editor choices,
+the runtime-to-account shortcut and direct search setup. `account-methods.test.tsx`
+covers mailbox proof, connection results, cancellation and failed status reads.
+`account-email-dialog.tsx` shares the login modal with email sign-in verification
+and Google connection proof, while `account-email-fields.tsx` owns the fields.
+Settings keeps status and entry buttons only. Verification fixes the current email,
+reveals the focused code after sending, and omits the Google login alternative.
+Email verification uses authenticated `/api/account/email-proof` operations without
+an activation flag or session replacement; the API consumes a separate session-bound
+mailbox proof. Google connection proof retains its existing current-account endpoint. Tests cover
+modal closure during requests, ignored late completion, reset errors/results and
+the correct endpoint for each purpose. `use-appearance.test.ts` exercises saves
+across pane disposal, failure rollback and queued preferences.
+`server/hosted-account.test.ts` verifies authenticated proof preserves the session
+and ordinary email login still refuses an already signed-in account.
+`account-panel.test.tsx` covers account recovery and billing independently of
+runtime readiness. `editor-panel.test.tsx` owns font and writing preference checks.
+The sidebar's account-method and billing entries both route to Account. Development
+revision review lives in Advanced; runtime simulators retain their separate entry.
+Validation: all 12 `pnpm check:web` gates and `pnpm test:docs` passed. Focused
+account tests cover the modal and sign-in paths, and sidebar/navigation
+tests cover account entry. A driven built-Storybook pass showed the independent
+email verification dialog above Account, with the fixed email, focused code,
+trailing resend countdown, full-width Verify email action, and no Google alternative.
+A macOS Electron source-development pass opened Account from Sign-in methods and
+inspected Appearance, Editor and Notifications. The refreshed native window showed
+the Email verification entry while the user took over. No real mailbox proof,
+account disconnection or billing mutation was performed. Packaged composition and
+live-provider verification remain unverified; UI proof flows and billing commands
+use controlled ports in tests. Review fixes additionally passed host route and
+session-preservation tests, renderer gates, host types, Electron unit/smoke checks,
+and a built-Storybook mailbox-proof completion followed by a Google operation
+showing its own result. The sibling API's real PostgreSQL integration suite covers
+single-use mailbox proof, session/purpose isolation, throttling and unchanged
+sessions. API migration 31 and its endpoints must deploy before the client;
+these local checks did not deploy production or send real email.
 
 **Settings persistence (2026-09-16):** model catalog caching uses strict
 read-modify-write and remains best-effort without replacing malformed settings.
@@ -478,13 +506,13 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
   holds every theme to WCAG AA text contrast; `server/routes/appearance.test.ts`
   covers persistence, per-field fallback, and refusal of font names that could
   escape CSS; `electron/text-services/text-services.test.cjs` covers font listing,
-  capability refusal, and the spelling menu; `appearance-panel.test.tsx` and
+  capability refusal, and the spelling menu; `appearance-panel.test.tsx`, `editor-panel.test.tsx`, and
   `writing-aids.test.ts` cover the Settings rows, font picker, word count, and
   focus-mode marking. **Gap:** font enumeration on macOS and Windows and native
   spellcheck suggestions are unproven by a driven pass on those platforms.
 - **Sign-in recovery (2026-09-15):** `settings/hooks/account-context.tsx` owns
-  one browser wait shared by sidebar, composer, and Agents Settings.
-  `use-account.test.ts`, `agents-panel.test.tsx`, and
+  one browser wait shared by sidebar, composer, and Account Settings.
+  `use-account.test.ts`, `account-panel.test.tsx`, and
   `app/composition/layout/workspace-sidebar.test.tsx` cover read failure/retry,
   duplicate command suppression, shared waiting across Settings reopening, and
   stopping local polling. `server/hosted-account.test.ts` and
@@ -530,7 +558,19 @@ website logout left the desktop session active. Both dialogs were visually
 inspected. Production email delivery, live provider linking and packaged upgrade
 behavior for this change require release verification. Regression checks also
 cover browser-launch failure recovery, explicit connect/disconnect intent, and
-retired website polling responses.
+retired website polling responses. Desktop dialog regression checks also cover
+returning to a completed overview after Google connect/disconnect, hiding the
+spent-code countdown there while preserving the send limit for a new change,
+and opening sign-in methods without implicitly starting verification. A built
+Storybook browser pass checked the overview and explicit entry to email
+verification; it used fixture account ports, not a live mailbox or Google consent.
+The email-code step has a dedicated Story for accessibility and visual review.
+Dialog tests exercise code focus, the directly editable destination and Google
+alternative, and changing the email with the old attempt retired.
+A browser pass through the email-code Story inspected both light and dark
+layouts and confirmed the expanded fields and inline resend control. Direct
+email-edit regression checks cover retiring the old attempt and preserving the
+resend cooldown.
 
 **Better Auth client integration (2026-10-21, local only):**
 `server/hosted-account.ts` now uses the API's PKCE desktop transfer, opaque host

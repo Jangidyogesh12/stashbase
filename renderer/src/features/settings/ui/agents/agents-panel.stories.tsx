@@ -3,8 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import type { AccountPort, AgentRuntimePort } from '@/features/settings/application/ports';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
-import type { BillingStatus } from '@/features/settings/domain/billing';
 import { AccountProvider } from '@/features/settings/ui/account/account-provider';
+import {
+  accountRuntimePort,
+  signedIn,
+  SIGNED_OUT,
+} from '@/features/settings/ui/account/account-story-fixtures';
 
 import { AgentRuntimesPanel } from './agents-panel';
 
@@ -48,51 +52,11 @@ const stashbase: AgentRuntime = {
   version: null,
 };
 
-const FREE: BillingStatus = {
-  cancelAtPeriodEnd: false,
-  canManage: false,
-  paidThrough: null,
-  planName: null,
-  status: 'free',
-};
-
 function fakePort(): AgentRuntimePort {
   return {
-    getAllowance: async () => ({
-      remainingPercent: 62,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      windowEndsAt: null,
-    }),
-    getBillingPlans: async () => [
-      {
-        amount: 500,
-        planKey: 'plus',
-        monthlyGrantPicodollars: 5e12,
-        available: true,
-        currency: 'usd',
-        interval: 'month',
-        name: 'Plus',
-        priceId: 'price_plus',
-      },
-      {
-        amount: 2000,
-        planKey: 'pro',
-        monthlyGrantPicodollars: 20e12,
-        available: true,
-        currency: 'usd',
-        interval: 'month',
-        name: 'Pro',
-        priceId: 'price_pro',
-      },
-    ],
-    getBillingStatus: async () => FREE,
+    ...accountRuntimePort(),
     listAgents: async () => catalog([codex, claude, stashbase]),
-    openBillingPortal: async () => 'https://billing.stripe.com/p/session/story',
     prepareAgent: async () => catalog([codex, claude, stashbase]),
-    changeBilling: async () => {},
-    startCheckout: async () => 'https://checkout.stripe.com/c/pay/story',
     updateDebug: async () => catalog([codex, claude, stashbase]),
   };
 }
@@ -110,38 +74,6 @@ function subscribedPort(cancelAtPeriodEnd = false): AgentRuntimePort {
     }),
   };
 }
-
-const SIGNED_OUT = {
-  avatarUrl: null,
-  displayName: null,
-  email: null,
-  offers: [],
-  signedIn: false,
-} as const;
-
-const signedIn: AccountPort = {
-  sendEmail: async () => ({ flowId: 'email-flow' }),
-  verifyEmail: async () => ({ ...SIGNED_OUT, signedIn: true, email: 'ada@example.com' }),
-  cancelEmail: async () => {},
-  methods: async () => ({ email: 'ada@example.com', google: true }),
-  sendLinkCode: async () => {},
-  linkGoogle: async () => ({ ticket: 'ticket', url: 'https://accounts.example/link' }),
-  unlinkGoogle: async () => {},
-  linkStatus: async () => ({ state: 'pending' }),
-  avatar: async () => null,
-  load: async () => ({
-    avatarUrl: null,
-    displayName: 'Ada Lovelace',
-    email: 'ada@example.com',
-    offers: [],
-    signedIn: true,
-  }),
-  signInStatus: async () => ({ state: 'pending' }),
-  markOfferSeen: async () => SIGNED_OUT,
-  resetOffers: async () => SIGNED_OUT,
-  signOut: async () => SIGNED_OUT,
-  startSignIn: async () => ({ flowId: 'flow', url: 'https://accounts.example/sign-in' }),
-};
 
 /** Nobody signed in, so the bundled agent cannot run a turn yet: its row
  *  recedes and says it needs sign-in, and the Account row below owns the
@@ -190,7 +122,7 @@ function Harness({ account, port }: { account: AccountPort; port: AgentRuntimePo
   return (
     <QueryClientProvider client={queryClient}>
       <AccountProvider port={account} openExternal={() => undefined}>
-        <AgentRuntimesPanel agentRuntimeApi={port} />
+        <AgentRuntimesPanel agentRuntimeApi={port} onOpenAccount={() => undefined} />
       </AccountProvider>
     </QueryClientProvider>
   );

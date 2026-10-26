@@ -15,7 +15,6 @@ const enabledDebug: AgentDebugControls = {
 
 function viewModel(overrides: Partial<AgentRuntimesViewModel> = {}): AgentRuntimesViewModel {
   return {
-    allowance: { allowance: null, failed: false },
     busy: () => false,
     catalog: { runtimes: [], debug: enabledDebug, failed: false, failure: null, loading: false },
     debugBusy: false,
@@ -25,7 +24,6 @@ function viewModel(overrides: Partial<AgentRuntimesViewModel> = {}): AgentRuntim
     login: vi.fn(),
     stop: vi.fn(),
     update: vi.fn(),
-    refreshAllowance: vi.fn(),
     refreshCatalog: vi.fn(),
     updateDebug: vi.fn(),
     ...overrides,

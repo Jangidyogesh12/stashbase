@@ -52,6 +52,8 @@ export function accountPort(
     verifyEmail: vi.fn(async () => SIGNED_IN_ACCOUNT),
     cancelEmail: vi.fn(async () => {}),
     methods: vi.fn(async () => ({ email: 'ada@example.com', google: true })),
+    sendEmailProof: vi.fn(async () => {}),
+    verifyEmailProof: vi.fn(async () => {}),
     sendLinkCode: vi.fn(async () => {}),
     linkGoogle: vi.fn(async () => ({ ticket: 'ticket', url: 'https://accounts.example/link' })),
     unlinkGoogle: vi.fn(async () => {}),

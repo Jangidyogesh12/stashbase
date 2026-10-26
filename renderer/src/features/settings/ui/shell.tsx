@@ -138,7 +138,7 @@ export function SettingsShell({
                 <SectionsNav activeId={section} onSelect={selectSection} sections={sections} />
               </nav>
             )}
-            <div className="min-h-0 overflow-y-auto px-6 py-5">
+            <div key={section} className="min-h-0 overflow-y-auto px-6 py-5">
               {active?.available && active.render()}
             </div>
           </div>

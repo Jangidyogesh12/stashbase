@@ -114,3 +114,22 @@ describe('account API', () => {
     });
   });
 });
+
+it('uses authenticated proof operations without passing a recipient or accepting a session', async () => {
+  const request = vi.fn(async () => ({ body: { success: true }, status: 200 }));
+  const api = createAccountAdapter({ request }, ORIGIN, noFetch);
+  await api.sendEmailProof(signal);
+  await api.verifyEmailProof('123456', signal);
+  expect(request).toHaveBeenNthCalledWith(1, {
+    method: 'POST',
+    path: '/api/account/email-proof',
+    body: { action: 'send' },
+    signal,
+  });
+  expect(request).toHaveBeenNthCalledWith(2, {
+    method: 'POST',
+    path: '/api/account/email-proof',
+    body: { action: 'verify', otp: '123456' },
+    signal,
+  });
+});

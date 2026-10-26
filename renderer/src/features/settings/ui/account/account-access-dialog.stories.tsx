@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { screen, userEvent } from 'storybook/test';
 
 import type { AccountPort } from '@/features/settings/application/ports';
 import { useAccount } from '@/features/settings/hooks/use-account';
@@ -26,16 +27,16 @@ const port: AccountPort = {
   verifyEmail: async () => person,
   cancelEmail: async () => {},
   methods: async () => ({ email: person.email, google: true }),
+  sendEmailProof: async () => {},
+  verifyEmailProof: async () => {},
   sendLinkCode: async () => {},
   linkGoogle: async () => ({ ticket: 'link', url: 'https://accounts.google.com' }),
   unlinkGoogle: async () => {},
   linkStatus: async () => ({ state: 'pending' }),
 };
-const connected: AccountPort = { ...port, load: async () => person };
-function View({ signedIn = false }: { signedIn?: boolean }) {
-  const selected = signedIn ? connected : port;
-  const account = useAccount(selected, () => undefined);
-  return account.account ? <AccountAccessDialog account={account} port={selected} /> : null;
+function View() {
+  const account = useAccount(port, () => undefined);
+  return account.account ? <AccountAccessDialog account={account} port={port} /> : null;
 }
 const meta = {
   title: 'Settings/Account access',
@@ -53,4 +54,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const EmailLogin: Story = {};
-export const SignInMethods: Story = { args: { signedIn: true } };
+
+export const EmailCode: Story = {
+  play: async () => {
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Email' }),
+      'writer@example.com',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Send email code' }));
+    await screen.findByRole('textbox', { name: 'Six-digit code' });
+  },
+};

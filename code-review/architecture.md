@@ -1027,6 +1027,13 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   user's other connectors grow, leaving the model a tool name with no description. External clients copy their setup manually. No second client-config
   or credentials store belongs in StashBase.
 
+Settings sections are presentation boundaries: Appearance and Editor share one
+appearance query, window-scoped save queue and host record. Accepted preference
+writes survive pane disposal, run in order, and rebase pending field patches on
+the latest confirmed record after success or failure. Account owns sign-in-method interaction and
+billing presentation independently of the runtime catalog; moving a shortcut
+does not create another account session or credential store.
+
 Credit snapshots are shared through Settings' query owner. App composition
 invalidates that query on Default turn completion independently of telemetry
 transport; account-menu opening, focus and bounded polling refresh the same key.

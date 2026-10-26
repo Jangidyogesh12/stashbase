@@ -28,7 +28,7 @@ it('refreshes visible credits when a Default turn fails even if telemetry does n
       <SidebarMenu>
         <SidebarAccountRow
           agentRuntimeApi={port}
-          onOpenPlans={() => {}}
+          onOpenAccount={() => {}}
           onOpenSettings={() => {}}
         />
       </SidebarMenu>

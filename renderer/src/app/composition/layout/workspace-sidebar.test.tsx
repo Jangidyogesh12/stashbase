@@ -41,7 +41,7 @@ describe('account row', () => {
     );
 
     // The row is the action alone; the free-credits offer lives in
-    // Settings → Agents, not in the sidebar's label.
+    // Settings → Account, not in the sidebar's label.
     const signIn = await screen.findByRole('button', { name: 'Sign in' });
     await userEvent.setup().click(signIn);
     await userEvent
@@ -86,10 +86,10 @@ describe('account row', () => {
       await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
       await screen.findByText('Finish signing in to StashBase in your browser.');
       // Leaving the dialog leaves the browser wait running for the window.
-      await user.click(screen.getByRole('button', { name: 'Not now' }));
+      await user.click(screen.getByRole('button', { name: 'Close' }));
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       await user.click(screen.getByRole('button', { name: 'Settings' }));
-      await user.click(await screen.findByRole('button', { name: 'Agents' }, LAZY));
+      await user.click(await screen.findByRole('button', { name: 'Account' }, LAZY));
       let dialog = within(screen.getByRole('dialog', { name: 'Settings' }));
       expect(dialog.getByText('Finish signing in to StashBase in your browser.')).not.toBeNull();
       expect(dialog.getByRole<HTMLButtonElement>('button', { name: 'Sign in' }).disabled).toBe(
@@ -99,7 +99,7 @@ describe('account row', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       await user.click(screen.getByRole('button', { name: 'Settings' }));
       dialog = within(await screen.findByRole('dialog', { name: 'Settings' }));
-      await user.click(dialog.getByRole('button', { name: 'Agents' }));
+      await user.click(dialog.getByRole('button', { name: 'Account' }));
       await user.click(await dialog.findByRole('button', { name: 'Stop waiting' }));
       await user.keyboard('{Escape}');
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -162,7 +162,7 @@ describe('account row', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Account: Ada Lovelace' }));
-    const menu = await screen.findByRole('menu');
+    let menu = await screen.findByRole('menu');
     // The menu opens with the person as the initials disc — never a
     // provider picture — beside the name and email.
     expect(within(menu).getByText('AL')).not.toBeNull();
@@ -172,6 +172,14 @@ describe('account row', () => {
     expect(within(menu).getAllByRole('menuitem')).toHaveLength(4);
     expect(within(menu).getByRole('menuitem', { name: 'Settings' })).not.toBeNull();
     expect(within(menu).getByRole('menuitem', { name: 'Sign out' })).not.toBeNull();
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Sign-in methods' }));
+    const accountSettings = within(await screen.findByRole('dialog', { name: 'Settings' }));
+    await accountSettings.findByRole('button', { name: 'Disconnect Google' });
+    expect(screen.queryByRole('dialog', { name: 'Sign-in methods' })).toBeNull();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Account: Ada Lovelace' }));
+    menu = await screen.findByRole('menu');
 
     // Plans and billing lands on the subscription, beside the credits.
     await user.click(within(menu).getByRole('menuitem', { name: 'Plans and billing' }));

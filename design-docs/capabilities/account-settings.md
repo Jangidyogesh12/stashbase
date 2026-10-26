@@ -21,8 +21,15 @@ agent history; supplied environment variables do not configure BYOK access.
 
 Settings owns lasting preferences and connection configuration:
 
-- **General:** appearance, notifications, updates, and usage statistics, in that order. Appearance is user-wide
-  and grouped as:
+The navigation has seven sections: Account, Appearance, Editor, Agents,
+Notifications, General, and Advanced. Each section opens at its top. Unavailable
+platform capabilities stay named and disabled in navigation.
+
+- **Account:** signed-in identity, primary email and Google connection status,
+  connection/disconnection, credits and subscription, and sign-out. The account
+  menu's Sign-in methods and Plans and billing entries both open this page.
+  Account and billing remain available independently of agent runtime readiness.
+- **Appearance:** user-wide theme and interface preferences:
   - **Theme:** a mode (match system, light, dark) plus a light theme and a dark
     theme chosen separately from published palettes (StashBase, Catppuccin,
     Tokyo Night, Rosé Pine, Gruvbox, Nord). Every theme keeps body and
@@ -30,6 +37,7 @@ Settings owns lasting preferences and connection configuration:
     menus, dialogs, and the window background from launch.
   - **Interface:** interface size, which reaches all chrome text, and reduce
     motion (match system or on).
+- **Editor:** document presentation and writing aids:
   - **Documents:** how document text looks: the document font, chosen from the two included reading fonts
     (Serif, the default, and Sans) or any font installed on the computer; the
     code font, from the bundled monospace or installed monospaced fonts; and
@@ -47,8 +55,8 @@ Settings owns lasting preferences and connection configuration:
   the included default. The installed-font list never leaves the device.
   Custom colors, custom CSS, imported editor themes, and per-project
   appearance are out of scope.
-  Notifications has a persisted "Enable desktop notifications" switch
-  shared across desktop windows, enabled by default. Separate "Waiting for approval",
+- **Notifications:** desktop delivery and system permission recovery. A persisted "Enable desktop notifications" switch is
+  shared across desktop windows and enabled by default. Separate "Waiting for approval",
   "Chat finished" and "Chat did not finish" switches also default on. The master switch
   preserves these choices when turned off. Changing one category preserves other
   windows' category changes. Notifications cover pending agent approvals/questions
@@ -85,8 +93,8 @@ Settings owns lasting preferences and connection configuration:
   application shutdown clear the corresponding marks. System permissions may
   suppress OS badges, and Linux desktops without a tray/launcher host may omit
   these surfaces without interrupting work.
-- **Agents:** group account, credit balance/refill, and connection state under
-  Default, with the account's subscription and the plans it can buy; manage Codex, Claude, and Antigravity individually. An installed runtime shows its
+- **Agents:** runtime installation, connection, and updates for Default, Codex,
+  Claude, and Antigravity. An Open account shortcut leads to account settings. An installed runtime shows its
   version and offers Update when StashBase can select the resulting installation.
   Install and Update both use the provider's official native installer, without
   an installation-method choice. Updating an npm installation selects the
@@ -126,12 +134,13 @@ Settings owns lasting preferences and connection configuration:
   A runtime that reports a model its
   installed version cannot run leads its row with that model instead of its
   readiness; the requirement shown is the runtime's own, never one StashBase
-  worked out. Credits refresh automatically; token accounting is not a
-  user setting.
+  worked out.
+- **General:** software updates and usage statistics/privacy preferences.
 - **Advanced:** search by meaning and external apps (MCP). Search links directly
   to its configuration without discarding the current query. MCP reveals HTTP
   credentials only for that connection method; Docker details follow explicit
-  configuration. Port changes require Docker access to be off.
+  configuration. Port changes require Docker access to be off. Development builds
+  may also expose the document revision review disclosure here; production builds do not.
 
 PDF/OCR setup is automatic. Waiting documents expose failed-download recovery
 through the same shared component owner. Help owns bug reporting; development
@@ -166,13 +175,39 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
 - Network/provider failure preserves credentials. Clear a session only on explicit
   sign-out or confirmed invalidation; repair does not implicitly send or replay work.
 - Account sign-in offers Google or a six-digit email code through Better Auth.
-  Email entry and verification stay inside the desktop application. New emails
+  Email entry and verification stay inside the desktop application. Email entry
+  places its full-width Send email code action before the Google alternative;
+  the close control dismisses login without a separate Not now action. New emails
   create an account; using the original verified email preserves its identity,
   credits and subscription. Codes expire after five minutes; resend shows a
-  cooldown and failed delivery never appears as a successful send.
-- Sign-in methods in the account menu and Settings show the primary email and
-  Google connection. Connecting or disconnecting Google requires a fresh code
-  sent to that email. Connecting then opens Google consent in the browser.
+  cooldown and failed delivery never appears as a successful send. After delivery,
+  the same form retains the destination email and adds a focused six-digit code
+  field below it. Resend and its cooldown sit inside the code field's trailing
+  action. The full-width primary action becomes Sign in, above the Google
+  alternative. The email remains directly editable without a separate change
+  action. Editing it retires the old attempt, clears the code and returns to
+  sending while preserving the cooldown, so a code cannot target another mailbox.
+- Settings → Account directly shows the primary email and Google connection,
+  with explicit Connect Google / Disconnect Google actions. The account menu
+  links to this same status page.
+  The overview does not show a verification form or resend countdown. A successful
+  change closes the verification dialog and shows its result on Account; a new change still
+  respects the existing resend cooldown. Connecting or disconnecting Google requires a fresh code
+  sent to that email. Verification opens a separate modal using the login layout, without the Google
+  login alternative or its separator: a read-only
+  destination email, a full-width Send email code action, then a focused code
+  field with trailing resend/countdown after delivery. The primary action becomes
+  Verify and connect/disconnect Google; the close control dismisses verification.
+  The destination cannot be edited: this proves the current account, rather than
+  changing its email or starting a separate login. Connecting then opens Google
+  consent in the browser. Email codes remain enabled under the existing account
+  rules; no activation flag is introduced. The Email row's Verify email entry
+  opens the same modal for the current mailbox, using an authenticated mailbox
+  proof and closing with an Email verified result. This does not create or replace
+  the login session. Closing either proof aborts local work, clears its error,
+  and prevents late responses from opening consent or changing the result.
+  Starting another action clears the previous success message. Settings never embeds proof
+  inputs or a resend countdown in its rows.
   A Google identity already owned by another account cannot be connected; there
   is no automatic merge. Disconnecting leaves email sign-in available.
 - Account sessions use the StashBase API's Better Auth service.
@@ -299,13 +334,13 @@ reader to current credits rather than claiming all credits are spent.
 A window that is signed out shows a banner in the notice strip, with or
 without a folder open: "Sign in for free agent credits every month." with Sign in
 and Not now. It states what signing in gives, neither a commitment to use the
-Default Agent nor the allowance's terms, which Settings → Agents shows. A completed sign-in or Not now answers it for
+Default Agent nor the allowance's terms, which Settings → Account shows. A completed sign-in or Not now answers it for
 the installation until the next sign-out, which brings it back: signed out, the
 reader is where the banner first found them. The sidebar account row
-remains the account's only home, and the banner starts the same sign-in.
+opens account access, and the banner starts the same sign-in.
 
 Plus and Pro add hosted Default Agent capacity; local files, writing tools,
-Claude, Codex, and Antigravity access, and BYOK search remain independent. Settings → Agents shows
+Claude, Codex, and Antigravity access, and BYOK search remain independent. Settings → Account shows
 the signed-in account's plan, beside its credits; Plans and billing in the
 sidebar account menu opens it there. A Free account sees each tier with its price and
 Subscribe; a subscribed account sees its plan, paid-through or end date, and

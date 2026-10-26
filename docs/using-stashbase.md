@@ -29,7 +29,7 @@ there leaves the conversation in Antigravity.
 
 If you can't use any of them, the built-in **Default Agent** provides a fallback
 with free credits. Sign in to StashBase from the bottom of the sidebar or
-**Settings → Agents**; no separate agent installation or model API key is required.
+**Settings → Account**; no separate agent installation or model API key is required.
 
 After upgrading to 2.16.15, sign in to StashBase again with the **same Google
 account** you used before. This release switches account authentication to
@@ -175,7 +175,7 @@ Agents search the same way: text matching always, including prepared
 document text, plus meaning-based evidence once a key is on.
 
 Default Agent credits don't cover search by meaning. Check the account
-menu at the bottom of the sidebar or **Settings → Agents** for the remaining
+menu at the bottom of the sidebar or **Settings → Account** for the remaining
 percentage and refill date.
 
 ## Preview Recordings

@@ -117,6 +117,22 @@ export function createAccountAdapter(
         schema: accountMethodsSchema,
       });
     },
+    async sendEmailProof(signal) {
+      await request(client, {
+        ...accessRequest('/api/account/email-proof', signal),
+        method: 'POST',
+        body: { action: 'send' },
+        schema: accountCommandSchema,
+      });
+    },
+    async verifyEmailProof(otp, signal) {
+      await request(client, {
+        ...accessRequest('/api/account/email-proof', signal),
+        method: 'POST',
+        body: { action: 'verify', otp },
+        schema: accountCommandSchema,
+      });
+    },
     async sendLinkCode(signal) {
       await request(client, {
         ...accessRequest('/api/account/link', signal),

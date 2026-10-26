@@ -6,7 +6,7 @@ import { AgentRuntimeError, type AgentRuntimePort } from '@/features/settings/ap
 import { settingsQueryKeys } from '@/features/settings/application/queries';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { AgentId } from '@/shared/domain/agent-id';
-import { agentRuntime, agentRuntimePort, IDLE_ALLOWANCE } from '@/test/fakes/settings';
+import { agentRuntime, agentRuntimePort } from '@/test/fakes/settings';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
 import { useAgentRuntimes } from './use-agent-runtimes';
@@ -50,25 +50,6 @@ async function mount(port: AgentRuntimePort) {
 afterEach(cleanup);
 
 describe('useAgentRuntimes', () => {
-  it('refreshes credits when returning from billing and stops after leaving Settings', async () => {
-    let current = IDLE_ALLOWANCE;
-    const getAllowance = vi.fn(async () => current);
-    const { view } = await mount(
-      agentRuntimePort({
-        listAgents: async () => catalog([agentRuntime({ preparation: { kind: 'ready' } })]),
-        getAllowance,
-      }),
-    );
-    await waitFor(() => expect(view.result.current.allowance.allowance).toEqual(IDLE_ALLOWANCE));
-    current = { ...IDLE_ALLOWANCE, remainingPercent: 90 };
-    act(() => window.dispatchEvent(new Event('focus')));
-    await waitFor(() => expect(view.result.current.allowance.allowance).toEqual(current));
-    view.unmount();
-    const calls = getAllowance.mock.calls.length;
-    act(() => window.dispatchEvent(new Event('focus')));
-    expect(getAllowance).toHaveBeenCalledTimes(calls);
-  });
-
   it('polls every 500ms while a runtime is actively preparing, and stops once none are', async () => {
     const installing = catalog([
       codex({ preparation: { kind: 'running', note: null, stage: 'install' } }),
@@ -85,24 +66,6 @@ describe('useAgentRuntimes', () => {
       expect(view.result.current.catalog.runtimes[0]?.preparation.kind).toBe('ready'),
     );
     expect(listAgents).toHaveBeenCalledTimes(2);
-  });
-
-  it('leaves the allowance query disabled until a stashbase agent reports ready, then fires it', async () => {
-    const notReady = catalog([
-      agentRuntime({ preparation: { kind: 'running', note: null, stage: 'install' } }),
-    ]);
-    const ready = catalog([agentRuntime({ preparation: { kind: 'ready' } })]);
-    let calls = 0;
-    const listAgents = vi.fn(async () => (calls++ === 0 ? notReady : ready));
-    const getAllowance = vi.fn(async () => IDLE_ALLOWANCE);
-    const { view } = await mount(agentRuntimePort({ listAgents, getAllowance }));
-
-    await waitFor(() => expect(view.result.current.catalog.runtimes).toHaveLength(1));
-    expect(getAllowance).not.toHaveBeenCalled();
-
-    await waitFor(() => expect(listAgents).toHaveBeenCalledTimes(2), { timeout: 2000 });
-    await waitFor(() => expect(getAllowance).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(view.result.current.allowance.allowance).toEqual(IDLE_ALLOWANCE));
   });
 
   it('installs an agent and writes the response into the shared catalog cache', async () => {

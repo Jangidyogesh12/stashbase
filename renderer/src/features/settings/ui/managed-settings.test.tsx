@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vite-plus/test';
@@ -18,13 +18,15 @@ import type { SettingsTarget } from './settings-types';
 
 afterEach(cleanup);
 
+const appearance = appearancePort();
+
 function Harness({ initial = 'general' }: { initial?: SettingsTarget }) {
   const [section, setSection] = useState<SettingsTarget>(initial);
   return (
     <AccountProvider port={accountPort()} openExternal={vi.fn()}>
       <ManagedSettings
         agentRuntimeApi={agentRuntimePort()}
-        appearanceApi={appearancePort()}
+        appearanceApi={appearance}
         embedderApi={embedderPort()}
         mcpAccessApi={mcpAccessPort()}
         onClose={vi.fn()}
@@ -36,15 +38,43 @@ function Harness({ initial = 'general' }: { initial?: SettingsTarget }) {
   );
 }
 
-it('keeps preferences in General and reaches both optional configurations through Advanced', async () => {
+it('separates preferences and routes account access without losing saved editor choices', async () => {
   withQueryClient(<Harness />);
   const user = userEvent.setup();
-  await screen.findByRole('radiogroup', { name: 'Mode' });
   const nav = screen.getByLabelText('Settings sections');
-  expect(within(nav).getAllByRole('button')).toHaveLength(3);
-  for (const name of ['General', 'Agents', 'Advanced']) {
-    expect(within(nav).getByRole('button', { name })).toBeDefined();
+  expect(within(nav).getAllByRole('button')).toHaveLength(7);
+  for (const name of [
+    'Account',
+    'Appearance',
+    'Editor',
+    'Agents',
+    'Notifications',
+    'General',
+    'Advanced',
+  ]) {
+    expect(within(nav).getByRole('button', { name: new RegExp(name) })).toBeDefined();
   }
+  expect(screen.queryByRole('radiogroup', { name: 'Mode' })).toBeNull();
+  await user.click(within(nav).getByRole('button', { name: 'Appearance' }));
+  await screen.findByRole('radiogroup', { name: 'Mode' });
+  expect(screen.queryByRole('radiogroup', { name: 'Line width' })).toBeNull();
+  await user.click(within(nav).getByRole('button', { name: 'Editor' }));
+  const width = await screen.findByRole('radiogroup', { name: 'Line width' });
+  await user.click(within(width).getByRole('radio', { name: 'Wide' }));
+  await waitFor(() =>
+    expect(appearance.update).toHaveBeenCalledWith({ lineWidth: 'wide' }, expect.any(AbortSignal)),
+  );
+  await user.click(within(nav).getByRole('button', { name: 'Appearance' }));
+  await user.click(within(nav).getByRole('button', { name: 'Editor' }));
+  expect(
+    within(await screen.findByRole('radiogroup', { name: 'Line width' })).getByRole('radio', {
+      name: 'Wide',
+    }),
+  ).toHaveProperty('checked', true);
+  await user.click(within(nav).getByRole('button', { name: 'Agents' }));
+  await user.click(await screen.findByRole('button', { name: 'Open account' }));
+  await screen.findByRole('heading', { name: 'Account' });
+  expect(screen.queryByText('Your agents')).toBeNull();
   await user.click(within(nav).getByRole('button', { name: 'Advanced' }));
   await user.click(screen.getByRole('button', { name: 'Configure search by meaning' }));
   await screen.findByPlaceholderText('Paste your API key');
