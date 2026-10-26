@@ -789,6 +789,12 @@ stable status without download, retry, or a new durable demand latch.
   chat's runtime catalog is read again whenever the model control opens; it
   keeps its own query, separate from Settings', and the app does not refetch
   on window focus.
+  `use-agent-catalog.ts` also follows host-reported preparation until it settles,
+  so the first listing cannot strand a mounted composer before startup checks
+  finish. Only running preparation is polled; ready, missing, signed-out and
+  failed runtimes stop it. A read failure retains the last catalog and stops
+  automatic reads until explicit Retry; unmount cancels outstanding reads.
+  Readiness refreshes never launch a session, send a draft or change its agent.
   Each feed is the one the provider's installer reads (Claude's channel from
   its own user settings). Test runners never reach the feeds. This explicit action shares the failed-turn update owner, but has no request
   to resend. Reconnection reads models from the replacement native process;

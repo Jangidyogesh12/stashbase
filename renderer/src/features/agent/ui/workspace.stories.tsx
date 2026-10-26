@@ -175,6 +175,7 @@ function WorkspacePreview({
   ready = true,
   setupFailure,
   skills = false,
+  startupChecking = false,
 }: {
   context?: boolean;
   docked?: boolean;
@@ -188,7 +189,10 @@ function WorkspacePreview({
   ready?: boolean;
   setupFailure?: AgentSetupFailure;
   skills?: boolean;
+  /** The first listing precedes the host's background readiness check. */
+  startupChecking?: boolean;
 }) {
+  const openedAt = useMemo(() => Date.now(), []);
   const queryClient = useMemo(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
     [],
@@ -354,7 +358,18 @@ function WorkspacePreview({
         <div className="h-full">
           <ManagedAgentWorkspace
             catalog={{
-              listAgents: async () => ({ agents: ready ? agents : pendingAgents }),
+              listAgents: async () => ({
+                agents:
+                  startupChecking && Date.now() - openedAt < 3_000
+                    ? agents.map((agent) => ({
+                        ...agent,
+                        ready: false,
+                        preparation: { step: 'check' as const },
+                      }))
+                    : ready
+                      ? agents
+                      : pendingAgents,
+              }),
               prepareAgent: async (id) => {
                 const selected = agents.find((agent) => agent.id === id);
                 if (preparation && selected) {
@@ -394,6 +409,13 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const FullWorkspace: Story = { play: readyWorkspace };
+
+export const StartupChecking: Story = {
+  args: { empty: true, context: true, startupChecking: true },
+  play: async () => {
+    await screen.findByRole('button', { name: /^Model and thinking:/ }, { timeout: 5_000 });
+  },
+};
 
 export const InterruptedTurn: Story = {
   args: { interrupted: true },

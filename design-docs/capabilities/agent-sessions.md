@@ -35,6 +35,9 @@ The [Chat journey](../journeys/chat.md#first-send) owns the first-send interacti
 Setup acknowledgement is not readiness. Standalone setup never sends a draft.
 Only the still-current submission that explicitly requested access may continue
 once setup succeeds; changed work or cancelled consent rejects late completion.
+An open chat follows a background readiness check until it settles. Supported
+controls appear when the agent becomes ready, preserving the draft and choices
+without starting a session or sending a message. A failed status read offers Retry.
 
 After a Default turn, the app may prepare a local runtime for the next chat to
 reduce connection delay. This creates no conversation, sends no model request,

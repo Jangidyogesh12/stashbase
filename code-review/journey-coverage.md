@@ -1345,6 +1345,23 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Startup readiness in the composer (2026-10-26):**
+`hooks/use-agent-catalog.ts` follows running preparation until the host reports
+a settled state. `use-agent-catalog.test.tsx` covers settlement, failed-read
+Retry and disposal; `workspace.catalog.test.tsx` reproduces the startup race
+and checks restored model/thinking/permission controls, draft and explicit
+choice retention, no automatic session or send, and a newer provider choice
+surviving another runtime's completion. `StartupChecking` provides a delayed
+catalog in the mounted workspace for visual review. A driven built-Storybook
+pass observed only Provider before the three-second check settled, then the
+permission and model/thinking controls appearing without an action. The draft,
+file mentions and attachment remained; the restored panel changed High to
+Medium and GPT-5.3 Codex to GPT-5.2 Codex successfully. Renderer coverage,
+accessibility, types, both builds and structural gates passed; lint passed
+after correcting a shadowed callback parameter. Host types and Electron
+boundary tests passed. These controlled catalogs do not establish native
+provider availability or packaged startup timing.
+
 **Network-service 1006 evidence (2026-10-25):** an isolated real Electron pass
 killed only Chromium's network service, causing three simultaneous 1006 closes
 while the renderer and host survived. The production session runtime and
