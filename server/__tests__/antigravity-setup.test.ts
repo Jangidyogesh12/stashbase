@@ -71,27 +71,32 @@ test('a refused account does not start an interactive login', async () => {
 
 // A signed-out answer in words the check does not read must still leave a way
 // to sign in: Settings offers sign-in as the retry, and the sign-in opens.
-test('a check that cannot answer offers sign-in, and that sign-in opens and finishes', { skip: process.platform === 'win32' }, async () => {
-  let signedIn = false;
+test('a check that cannot answer offers sign-in, and the production terminal opens and finishes it', { skip: process.platform === 'win32' }, async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agy 新用户 '));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const executable = path.join(root, 'agy');
+  const marker = path.join(root, 'signed-in');
+  fs.writeFileSync(executable, `#!/bin/sh
+test -t 0 && test -t 1 || exit 42
+echo $$ > '${marker}'
+while :; do sleep 1; done
+`, { mode: 0o755 });
   let checks = 0;
   const check = async () => {
     checks += 1;
-    if (signedIn) return true;
+    if (fs.existsSync(marker)) return true;
     throw new Error('Could not check Antigravity sign-in using /native/agy (exit 1: Login required).');
   };
   const coordinator = new AgentBootstrapCoordinator({
-    resolveExecutable: () => '/native/agy',
-    resolveNativeExecutable: () => '/native/agy',
+    resolveExecutable: () => executable,
+    resolveNativeExecutable: () => executable,
     installRuntime: async () => { throw new Error('A copy that runs must not be reinstalled.'); },
     verifyExecutable: async () => {},
     isAuthenticated: check,
     login: (_id, executable, signal, options) => loginToAntigravity(executable, signal, {
-      pollMs: 5,
+      pollMs: 20,
+      timeoutMs: 5000,
       isAuthenticated: check,
-      spawnSignIn: () => {
-        signedIn = true;
-        return spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
-      },
     }, { onBrowserSignIn: options.onBrowserSignIn }),
     configureMcp: () => {},
     consumeFailure: () => false,
@@ -102,7 +107,9 @@ test('a check that cannot answer offers sign-in, and that sign-in opens and fini
   assert.equal(failed.failure?.retryAction, 'login');
   coordinator.login('antigravity');
   assert.equal((await coordinator.wait('antigravity')).phase, 'ready');
-  assert.ok(signedIn, 'the sign-in terminal was started');
+  const pid = Number(fs.readFileSync(marker, 'utf8').trim());
+  assert.ok(pid > 0, 'the sign-in ran with a terminal for input and output');
+  assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, 'the login process was retired');
   assert.ok(checks >= 3);
 });
 

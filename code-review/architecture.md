@@ -333,14 +333,16 @@ stable status without download, retry, or a new durable demand latch.
   as plain text at the failure site; generic transport wording must not replace
   an available setup or service error.
   A failed operation carries its retry action so Update cannot degrade to a
-  readiness check of the old executable. Retrying a failed first installation
-  reuses a discovered executable only after the same `--version` verification
-  the installer requires, including one installed outside StashBase meanwhile;
-  otherwise it reruns the installer. Connecting after a sign-in check that
-  could not answer applies the same verification, so a discovered copy that
-  does not run is replaced by the native installation rather than retried.
-  Antigravity's check asks Google, so its unanswered check retries through
-  sign-in instead. Stop ends only a running sign-in; a stop that finds another
+  readiness check of the old executable. Every explicit bootstrap verifies a
+  discovered executable with the same bounded `--version` probe the installer
+  requires, including one installed outside StashBase meanwhile. A broken
+  launcher follows installation in that first attempt, without depending on
+  a prior failed startup/authentication check. Working copies skip installation.
+  Antigravity's check asks Google, so an unanswered check retries through
+  sign-in when its executable runs; a broken launcher offers bootstrap repair.
+  The chat catalog maps the host's `retryAction: login` to its
+  sign-in prerequisite, so first-send and Settings follow the same recovery.
+  Stop ends only a running sign-in; a stop that finds another
   run in its place leaves that run alone and answers at once.
   While a flight runs, its status carries the step sentence the service wrote
   and, during browser sign-in, the complete `https` page the login command

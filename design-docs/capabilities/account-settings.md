@@ -93,6 +93,10 @@ Settings owns lasting preferences and connection configuration:
   verified native copy for subsequent sessions and leaves the npm copy intact.
   Explicit executable overrides remain authoritative; an override outside the
   native installation must be removed before updating through StashBase.
+  The first explicit connection verifies that a discovered executable runs.
+  A broken leftover launcher follows the official installation path in that
+  same attempt, without first asking the reader to diagnose a sign-in failure.
+  Discovery during startup never authorizes installation or repair.
   Each native agent checks its own sign-in status before readiness and offers
   its provider's browser sign-in when needed. An agent already signed in opens
   no browser, and sign-in completes as soon as the agent reports a signed-in
@@ -111,8 +115,10 @@ Settings owns lasting preferences and connection configuration:
   regions, reads as Account not accepted with the provider's own sentence. It
   offers a recheck, not another sign-in. So does a sign-in check the agent
   could not answer, which can come from an installed copy that does not run.
-  Antigravity's check asks Google, so for Antigravity that Retry signs in,
-  opening the browser when the check still cannot answer.
+  Antigravity's check asks Google, so for a working Antigravity installation
+  that Retry signs in, opening the browser when the check still cannot answer.
+  A broken executable instead offers installation repair. The first-send
+  connection follows this same recovery action before continuing its held send.
   An expired sign-in reported by
   a running conversation restores that action without clearing credentials.
   Setup and update failures show the failed operation, stage, and available

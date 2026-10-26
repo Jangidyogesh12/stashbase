@@ -57,8 +57,8 @@ export function mount(app: express.Express): void {
     res.json(await agentCatalogResponse());
   });
 
-  /** New Chat readiness gate. Existing runtimes only receive the idempotent
-   * MCP connection; missing runtimes begin an application-scoped download. */
+  /** Explicit first-send consent. Verify discovered launchers, install a
+   * missing or broken runtime, then establish authentication and MCP readiness. */
   app.post('/api/terminal/clis/:id/bootstrap', async (req, res) => {
     const id = agentId(req.params.id);
     if (!id) {

@@ -168,7 +168,10 @@ function spawnAntigravitySignIn(executable: string): ChildProcess {
   const args = process.platform === 'darwin'
     ? ['-q', '/dev/null', executable]
     : ['-q', '-e', '-c', shellQuote(executable), '/dev/null'];
-  return spawn('script', args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] });
+  // StashBase does not relay terminal input. Node's piped stdin is a socket,
+  // which macOS script rejects during tcgetattr before it starts the CLI.
+  // /dev/null lets script create the CLI's own pseudo-terminal normally.
+  return spawn('script', args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 function shellQuote(value: string): string {

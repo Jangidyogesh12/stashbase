@@ -94,7 +94,9 @@ function toAgent(wire: AgentWire): Agent {
     abilities: toAbilities(wire.capabilities),
     label: wire.label,
     models: toRememberedModels(wire.catalog),
-    needsSignIn: SIGN_IN_REFUSALS.has(wire.bootstrap?.failure?.code ?? ''),
+    needsSignIn:
+      SIGN_IN_REFUSALS.has(wire.bootstrap?.failure?.code ?? '') ||
+      wire.bootstrap?.failure?.retryAction === 'login',
     ...(preparation ? { preparation } : {}),
     ...(wire.bootstrap?.failure
       ? {

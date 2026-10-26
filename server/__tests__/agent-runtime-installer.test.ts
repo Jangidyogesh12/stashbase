@@ -281,35 +281,38 @@ test('retrying a failed install uses an executable that runs instead of download
   assert.deepEqual(verified, ['/npm/codex']);
 });
 
-test('connecting a copy that cannot answer its sign-in check installs the native one when that copy does not run', async () => {
-  // An npm or Homebrew Codex whose platform binary is missing: found, but every command fails.
-  let native: string | null = null;
-  let installs = 0;
-  const verified: string[] = [];
-  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
-    resolveExecutable: () => native ?? '/opt/homebrew/bin/codex',
-    resolveNativeExecutable: () => native,
-    installRuntime: async () => {
-      installs++;
-      native = '/home/.local/bin/codex';
-    },
-    verifyExecutable: async (_id, candidate) => {
-      verified.push(candidate);
-      if (candidate !== native) throw new Error('spawn …/vendor/codex ENOENT');
-    },
-    isAuthenticated: (_id, candidate) => {
-      if (candidate !== native) throw new Error('Could not check Codex sign-in (exit 1: spawn ENOENT).');
-      return true;
-    },
-  }).dependencies);
-  const unanswered = (await connect(coordinator, 'codex')).failure;
-  assert.equal(unanswered?.code, 'authentication-check-failed');
-  assert.equal(unanswered?.retryAction, 'bootstrap', 'connecting again, not another sign-in, is the retry');
-  assert.equal(installs, 0);
-
-  assert.equal((await prepare(coordinator, 'codex')).phase, 'ready');
-  assert.equal(installs, 1);
-  assert.deepEqual(verified, ['/opt/homebrew/bin/codex']);
+test('the first explicit connection repairs a broken discovered CLI, with or without an earlier startup check', async () => {
+  for (const id of ['claude', 'codex', 'antigravity'] as const) {
+    for (const checkedAtStartup of [false, true]) {
+      let native: string | null = null;
+      let installs = 0;
+      const old = `/npm/${id}`;
+      const verified: string[] = [];
+      const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+        resolveExecutable: () => native ?? old,
+        resolveNativeExecutable: () => native,
+        installRuntime: async () => { installs++; native = `/home/.local/bin/${id}`; },
+        verifyExecutable: async (_id, candidate) => {
+          verified.push(candidate);
+          if (candidate !== native) throw new Error('The launcher has no platform binary.');
+        },
+        isAuthenticated: (_id, candidate) => {
+          if (candidate !== native) throw new Error('Cannot run the discovered CLI.');
+          return true;
+        },
+      }).dependencies);
+      if (checkedAtStartup) {
+        coordinator.connectIfInstalled(id);
+        assert.equal((await coordinator.wait(id)).failure?.retryAction, 'bootstrap',
+          'a broken CLI must offer repair, not another login');
+      }
+      assert.equal(installs, 0, 'discovery alone never authorizes installation');
+      coordinator.begin(id);
+      assert.equal((await coordinator.wait(id)).phase, 'ready', `${id}: startup=${checkedAtStartup}`);
+      assert.equal(installs, 1, 'the first explicit Connect repairs the installation');
+      assert.deepEqual(verified, checkedAtStartup && id === 'antigravity' ? [old, old] : [old]);
+    }
+  }
 });
 
 test('native installation cannot report success while discovery still selects the npm copy', async () => {
@@ -347,7 +350,7 @@ test('native update cancellation keeps the old runtime and prevents MCP configur
   assert.equal(configured, false);
 });
 
-test('the production update path runs official installer scripts, selects native output, and preserves npm copies',
+test('production first connection and update run installer scripts, select native output, and preserve broken npm copies',
   { skip: process.platform === 'win32' }, async (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-native-update-'));
     t.mock.method(os, 'homedir', () => root);
@@ -377,19 +380,26 @@ chmod +x "$HOME/.local/bin/${id}"
         fs.mkdirSync(path.dirname(old), { recursive: true });
         const original = '#!/bin/sh\necho "npm copy must not run during update" >&2\nexit 71\n';
         fs.writeFileSync(old, original, { mode: 0o755 });
-        updateAgentBootstrap(id);
-        const status = await agentBootstrapCoordinator.wait(id);
-        assert.equal(status.phase, 'ready', JSON.stringify(status));
-        assert.equal(resolveAgentCli({ name: id, envNames: [], logLabel: id }), path.join(root, '.local/bin', id));
-        assert.equal(fs.readFileSync(old, 'utf8'), original);
+        for (const action of ['bootstrap', 'update']) {
+          fs.rmSync(path.join(root, '.local/bin', id), { force: true });
+          if (action === 'bootstrap') agentBootstrapCoordinator.begin(id);
+          else updateAgentBootstrap(id);
+          const status = await agentBootstrapCoordinator.wait(id);
+          assert.equal(status.phase, 'ready', `${id} ${action}: ${JSON.stringify(status)}`);
+          assert.equal(resolveAgentCli({ name: id, envNames: [], logLabel: id }), path.join(root, '.local/bin', id));
+          assert.equal(fs.readFileSync(old, 'utf8'), original);
+        }
       }
-      assert.deepEqual(requests, ['https://claude.ai/install.sh', 'https://chatgpt.com/codex/install.sh']);
+      assert.deepEqual(requests, [
+        'https://claude.ai/install.sh', 'https://claude.ai/install.sh',
+        'https://chatgpt.com/codex/install.sh', 'https://chatgpt.com/codex/install.sh',
+      ]);
       assert.match(fs.readFileSync(path.join(root, '.claude.json'), 'utf8'), /stashbase/);
       assert.match(fs.readFileSync(path.join(root, '.codex/config.toml'), 'utf8'), /stashbase/);
       process.env.STASHBASE_CLAUDE_BIN = path.join(root, '.npm-global/bin/claude');
       assert.equal(agentSupportsInAppUpdate('claude'), false);
       assert.throws(() => updateAgentBootstrap('claude'), /executable override/);
-      assert.equal(requests.length, 2, 'an explicit override is not silently bypassed by another installation');
+      assert.equal(requests.length, 4, 'an explicit override is not silently bypassed by another installation');
     } finally {
       for (const [key, value] of previous) {
         if (value === undefined) delete process.env[key]; else process.env[key] = value;

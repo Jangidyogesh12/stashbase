@@ -147,14 +147,6 @@ export class AgentBootstrapCoordinator {
       }
       return this.status(id);
     }
-    // A failed first install can leave an executable behind, and the user may
-    // have installed the runtime another way since. A copy that could not
-    // answer its sign-in check may not run at all, as an npm or Homebrew copy
-    // missing its platform binary does. Connecting again accepts what it finds
-    // only once that executable runs; otherwise it runs the installer.
-    const previous = this.status(id).failure;
-    const retryInstallation = action === 'bootstrap'
-      && (previous?.stage === 'installation' || previous?.code === 'authentication-check-failed');
     const retryOf = this.status(id).phase === 'failed' ? this.attempts.get(id) : undefined;
     const attemptId = randomUUID();
     this.attempts.set(id, attemptId);
@@ -185,7 +177,11 @@ export class AgentBootstrapCoordinator {
         let executable = await this.dependencies.resolveExecutable(id, { ...options, signal });
         signal.throwIfAborted();
         reportStage(stage, 'success');
-        const reinstall = retryInstallation && !(executable && await this.installationRuns(id, executable, signal));
+        // Discovery can find a leftover launcher with no working runtime.
+        // The first explicit Connect verifies it before attempting sign-in;
+        // background discovery still never installs or repairs anything.
+        const reinstall = action === 'bootstrap' && executable !== null
+          && !await this.installationRuns(id, executable, signal);
         if (!executable || action === 'update' || reinstall) {
           if (action === 'connect') {
             this.statuses.set(id, IDLE_STATUS);
@@ -314,13 +310,22 @@ export class AgentBootstrapCoordinator {
         this.fail(id, action, 'authentication', 'account-refused', error);
         return false;
       }
-      // Antigravity's check asks Google, so an answer it cannot read may be a
-      // signed-out account in words StashBase does not know; its sign-in, which
-      // polls the same check, is the way on. Claude's and Codex's checks read
-      // their own stored sign-in, where no answer can mean a copy that does
-      // not run, which connecting again replaces.
+      // Antigravity's check asks Google. Offer login for an unanswered check
+      // only if its CLI actually runs; a broken launcher needs bootstrap just
+      // like Claude and Codex, otherwise first-send would keep retrying login.
+      let retryAction: AgentBootstrapAction | undefined;
+      if (id === 'antigravity') {
+        try {
+          await this.dependencies.verifyExecutable(id, executable, signal);
+          signal.throwIfAborted();
+          retryAction = 'login';
+        } catch {
+          signal.throwIfAborted();
+          retryAction = 'bootstrap';
+        }
+      }
       this.fail(id, action, 'authentication', 'authentication-check-failed', error, undefined,
-        id === 'antigravity' ? 'login' : undefined);
+        retryAction);
     }
     return false;
   }

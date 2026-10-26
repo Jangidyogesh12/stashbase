@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
+import { connectAgent } from '@/features/agent/application/connect-agent';
 import { agentUpdateFailure } from '@/features/agent/application/failure-messages';
 import { httpClient } from '@/test/fakes/http';
 
@@ -76,14 +77,20 @@ describe('agent catalog adapter', () => {
     });
   });
 
-  it('reads a signed-out account as a sign-in the Default Agent needs, as an expired runtime is', async () => {
-    const signedOut = (id: string, code: string) =>
+  it('connects through the host-selected sign-in recovery, including an unanswered Antigravity check', async () => {
+    const signedOut = (id: string, code: string, retryAction?: string) =>
       runtime({
         id,
         state: 'failed',
         bootstrap: {
           phase: 'failed',
-          failure: { stage: 'authentication', code, retryable: true, message: 'Sign in.' },
+          failure: {
+            stage: 'authentication',
+            code,
+            retryAction,
+            retryable: true,
+            message: 'Sign in.',
+          },
         },
       });
     const adapter = createAgentCatalogAdapter(
@@ -92,11 +99,22 @@ describe('agent catalog adapter', () => {
           signedOut('stashbase', 'account-required'),
           signedOut('codex', 'authentication-required'),
           signedOut('claude', 'authentication-check-failed'),
+          signedOut('antigravity', 'authentication-check-failed', 'login'),
+          signedOut('antigravity', 'account-refused', 'bootstrap'),
         ],
       }),
     );
     const { agents } = await adapter.listAgents(signal);
-    expect(agents.map((agent) => agent.needsSignIn)).toEqual([true, true, false]);
+    expect(agents.map((agent) => agent.needsSignIn)).toEqual([true, true, false, true, false]);
+    const paths: string[] = [];
+    const connection = createAgentCatalogAdapter({
+      request: async (request) => {
+        paths.push(request.path);
+        return { status: 200, body: { clis: [runtime({ id: 'antigravity' })] } };
+      },
+    });
+    await connectAgent(connection, 'antigravity', agents[3], signal);
+    expect(paths).toEqual(['/api/terminal/clis/antigravity/login']);
   });
 
   it('reads a running phase as the step the first-send dialog reports', async () => {

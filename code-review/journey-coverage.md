@@ -49,6 +49,62 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Core acceptance (2026-10-26):** `renderer/src/app.onboarding.test.tsx` drives
+the whole window from Welcome through opening an empty project, choosing each
+of Default/Claude/Codex/Antigravity, declining access without losing the draft,
+signing in, and displaying one completed reply. Native rows also exercise a
+refused outdated-runtime turn, update, and one resend. Remounting the app reuses
+the fixture's project/preferences/account state and sends without another login.
+These four scenarios use controlled ports, not real HTTP, OAuth or provider
+processes. They join focused host setup/source-preservation tests and the pinned
+OpenCode fake-gateway smoke in `pnpm test:core`; `pnpm check` adds types.
+The old vocabulary-array count test was removed; it established no user outcome.
+
+`scripts/testing/environment.ts` and isolated CLI discovery prevent host tests
+and ordinary profiling from starting developer-installed providers. The existing
+CLI tests now exercise that isolation. `pnpm verify:onboarding --agent <id>`
+opens the built app with a persistent private profile for explicit real-provider
+acceptance; `--fresh` creates a separate app/home profile but does not clear
+OS keychain or browser accounts. The first-install matrix and clean OS-user/VM
+requirement live in [Real Agent Onboarding](../CONTRIBUTING.md#real-agent-onboarding).
+**Unproven:** fresh
+OAuth through all four providers, real model replies and official update delivery
+in this change. The controlled gate cannot close those evidence gaps.
+
+**Validation:** the core gate passed all four window scenarios, 110 focused
+host checks and three bundled-runtime checks. A full renderer audit passed
+after the new scenario's lint fixes; the host audit's login-shell fixture was
+adapted to opt out of isolation and its eight-test suite passed. Documentation,
+test inventory, CI/check runners and built Electron smoke passed. A driven
+macOS built-app pass opened the empty folder via the real project bridge,
+selected Antigravity, reached its connection confirmation, and declined it
+with the draft intact. No native provider was installed or signed in during
+that pass; the native folder picker was bypassed. Relaunching restored the
+project and provider choice; `--fresh` returned to Welcome and retained the
+previous profile in its archive.
+
+**First connection follow-up (2026-10-26):** explicit bootstrap now verifies
+every discovered CLI before authentication and repairs broken launchers in
+that attempt. The existing installer tests exercise all three native agents
+with and without startup discovery; production-path fixtures run Claude/Codex
+installer scripts and preserve the broken npm copies. Antigravity's unanswered
+auth check offers login only when its executable runs; the chat catalog follows
+that recovery action, covered by its existing adapter/connection test in the
+core gate (seven checks in addition to the four window scenarios).
+A driven macOS built-app pass found that Node's piped stdin makes `script`
+exit with `tcgetattr/ioctl: Operation not supported on socket` before launching
+Antigravity. The launcher now supplies null input to `script`, which creates
+the CLI's pseudo-terminal. The existing login test now uses the production
+launcher with a controlled executable, checks terminal input/output, completes
+sign-in and verifies process retirement. It failed before the fix and passed
+afterward. The repeated built-app pass used a private home with spaces and
+non-ASCII characters, opened an empty folder through the project bridge,
+started one controlled login and continued the held message exactly once to
+a completed visible reply. This covers actual host/renderer/terminal wiring,
+not real provider authorization; the native picker was bypassed. Fresh OAuth,
+manual-code entry, real downloads and Windows/Linux runtime behavior remain
+unproven by this pass.
+
 **Owned startup probe (2026-10-25):** a real loopback fixture reproduced a
 healthy service taking 450 ms per response being repeatedly abandoned by the
 300 ms port probe until startup failed. `electron/main-probe.cjs` now supplies
@@ -1968,7 +2024,8 @@ and the after-exit check, so a CLI that keeps waiting after a successful
 browser sign-in still waits out the 10-minute limit. Antigravity's sign-in
 launch does not yet go through `agent-cli-launch.ts`. Stop carries no attempt
 id, so a late stop can still end a newer sign-in started in another window.
-Chat first-send does not yet follow Antigravity's sign-in retry; Settings does.
+Chat first-send now follows Antigravity's sign-in retry (2026-10-26); the
+adapter and built-app evidence are recorded in J01.
 
 **Real CLI connect pass (2026-10-23):** a source host with an isolated home and
 real CLIs, its browser launch intercepted, exercised the new-user path over
