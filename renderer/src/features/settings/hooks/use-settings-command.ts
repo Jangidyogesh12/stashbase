@@ -22,6 +22,8 @@ export interface SettingsCommand<Input, Output> {
   readonly failure: FailureView | null;
   /** What the last successful attempt answered. */
   readonly result: Output | undefined;
+  /** Aborts the current attempt and clears its transient result/error. */
+  cancel(): void;
   /** Starts the command, aborting one of its own already in flight. */
   run(input: Input, onDone?: (result: Output) => void): void;
 }
@@ -51,25 +53,48 @@ export function useSettingsCommand<Input = void, Output = void>(
 ): SettingsCommand<Input, Output> {
   const signalFor = useRequestSignals();
   const { onDone, onFailed, onSettled, onStart } = options;
+  type Attempt = { input: Input; signal: AbortSignal };
   const mutation = useMutation({
-    mutationFn: (input: Input) => call(input, signalFor(lane)),
-    onMutate: async (input: Input) => {
+    mutationFn: async ({ input, signal }: Attempt) => {
+      signal.throwIfAborted();
+      const result = await call(input, signal);
+      signal.throwIfAborted();
+      return result;
+    },
+    onMutate: async ({ input, signal }: Attempt) => {
+      signal.throwIfAborted();
       await onStart?.(input);
     },
-    onError: (_error, input) => onFailed?.(input),
-    onSuccess: (result, input) => onDone?.(result, input),
-    onSettled: () => onSettled?.(),
+    onError: (_error, { input, signal }) => {
+      if (!signal.aborted) return onFailed?.(input);
+    },
+    onSuccess: (result, { input, signal }) => {
+      if (!signal.aborted) return onDone?.(result, input);
+    },
+    onSettled: (_result, _error, { signal }) => {
+      if (!signal.aborted) return onSettled?.();
+    },
   });
 
   return {
     busy: mutation.isPending,
     failure: mutation.isError ? settingsFailure(mutation.error) : null,
     result: mutation.data,
+    cancel: () => {
+      signalFor(lane);
+      mutation.reset();
+    },
     run: (input, done) => {
+      const attempt = { input, signal: signalFor(lane) };
       // The caller's completion is handed the answer alone; react-query's own
       // extra arguments are this module's business, not a panel's.
-      if (done) mutation.mutate(input, { onSuccess: (result) => done(result) });
-      else mutation.mutate(input);
+      if (done)
+        mutation.mutate(attempt, {
+          onSuccess: (result) => {
+            if (!attempt.signal.aborted) done(result);
+          },
+        });
+      else mutation.mutate(attempt);
     },
   };
 }
