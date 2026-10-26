@@ -87,7 +87,7 @@ describe('useAppearance', () => {
     expect(root().classList.contains('dark')).toBe(false);
   });
 
-  it('lets only the newest write undo itself', async () => {
+  it('keeps the newer optimistic choice while an earlier queued write fails', async () => {
     const { port, writes } = controlledPort();
     const { result } = mount(port);
     await waitFor(() => expect(result.current.preferences).not.toBeNull());
@@ -95,8 +95,8 @@ describe('useAppearance', () => {
     act(() => result.current.change({ theme: 'dark' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     act(() => result.current.change({ theme: 'light' }));
-    await waitFor(() => expect(writes).toHaveLength(2));
-    expect(result.current.preferences?.theme).toBe('light');
+    await waitFor(() => expect(result.current.preferences?.theme).toBe('light'));
+    expect(writes).toHaveLength(1);
 
     await act(async () => {
       writes[0]?.reject(new SettingsError('unavailable', 'aborted'));
@@ -105,5 +105,27 @@ describe('useAppearance', () => {
     expect(result.current.preferences?.theme).toBe('light');
     expect(root().classList.contains('light')).toBe(true);
     expect(root().classList.contains('dark')).toBe(false);
+    await waitFor(() => expect(writes).toHaveLength(2));
+    await act(async () => writes[1]?.reject(new Error('Second write refused')));
+    await waitFor(() => expect(result.current.preferences?.theme).toBe('system'));
   });
+});
+
+it('preserves Editor changes while a previous Appearance pane save fails', async () => {
+  const { port, writes } = controlledPort();
+  const wrapper = queryWrapper(createTestQueryClient());
+  const appearance = renderHook(() => useAppearance(port), { wrapper });
+  await waitFor(() => expect(appearance.result.current.preferences).not.toBeNull());
+  act(() => appearance.result.current.change({ theme: 'dark' }));
+  await waitFor(() => expect(writes).toHaveLength(1));
+  appearance.unmount();
+  const editor = renderHook(() => useAppearance(port), { wrapper });
+  await waitFor(() => expect(editor.result.current.preferences).not.toBeNull());
+  act(() => editor.result.current.change({ lineWidth: 'wide' }));
+  await act(async () => writes[0]?.reject(new Error('Theme save failed')));
+  await waitFor(() => expect(writes).toHaveLength(2));
+  expect(editor.result.current.preferences?.lineWidth).toBe('wide');
+  await act(async () => writes[1]?.resolve({ ...DEFAULTS, lineWidth: 'wide' }));
+  await waitFor(() => expect(editor.result.current.preferences?.lineWidth).toBe('wide'));
+  expect(editor.result.current.preferences?.theme).toBe('system');
 });

@@ -1,5 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { settingsFailure } from '@/features/settings/application/failure-messages';
 import type { AppearancePort } from '@/features/settings/application/ports';
@@ -8,12 +7,9 @@ import type {
   AppearanceChange,
   AppearancePreferences,
 } from '@/features/settings/domain/appearance';
-import { useSettingsCommand } from '@/features/settings/hooks/use-settings-command';
 import type { FailureView } from '@/shared/domain/feature-error';
 import { publishAppearanceSurface } from '@/shared/runtime/appearance-surface';
 
-/** What the Appearance panel renders and can do. The panel never sees a query
- *  or a mutation object, only this. */
 export interface AppearanceViewModel {
   readonly preferences: AppearancePreferences | null;
   readonly loading: boolean;
@@ -21,62 +17,84 @@ export interface AppearanceViewModel {
   change(change: AppearanceChange): void;
 }
 
-interface AppearanceWrite {
-  readonly change: AppearanceChange;
-  readonly optimistic: AppearancePreferences;
-  readonly revision: number;
+/** A window owns one save queue, shared by Settings panes and the reading menu.
+ * Accepted edits outlive their presenting pane. Serialize host writes and rebase
+ * pending patches after each outcome, so a failed theme never rolls back width. */
+class AppearanceWrites {
+  private confirmed: AppearancePreferences | null = null;
+  private pending: AppearanceChange[] = [];
+  private tail: Promise<void> = Promise.resolve();
+
+  constructor(private readonly client: QueryClient) {}
+
+  async load(port: AppearancePort, signal: AbortSignal): Promise<AppearancePreferences> {
+    if (this.pending.length) {
+      await this.tail;
+      signal.throwIfAborted();
+      if (this.confirmed) return this.confirmed;
+    }
+    return port.load(signal);
+  }
+
+  private publish() {
+    if (!this.confirmed) return;
+    const next = { ...this.confirmed };
+    for (const change of this.pending) Object.assign(next, change);
+    this.client.setQueryData(settingsQueryKeys.appearance, next);
+    publishAppearanceSurface(next);
+  }
+
+  save(port: AppearancePort, change: AppearanceChange): Promise<void> {
+    if (!this.pending.length) {
+      this.confirmed =
+        this.client.getQueryData<AppearancePreferences>(settingsQueryKeys.appearance) ?? null;
+    }
+    if (!this.confirmed) return Promise.resolve();
+    const cancelled = this.client.cancelQueries({ queryKey: settingsQueryKeys.appearance });
+    this.pending.push(change);
+    this.publish();
+    const saved = this.tail.then(async () => {
+      await cancelled;
+      try {
+        this.confirmed = await port.update(change, AbortSignal.timeout(30_000));
+      } finally {
+        this.pending.shift();
+        this.publish();
+      }
+    });
+    // The next edit must run even if its predecessor failed. The caller still
+    // receives the original rejection for its failure notice.
+    this.tail = saved.catch(() => {
+      // swallowed: only the queue tail recovers; the caller receives saved.
+    });
+    return saved;
+  }
+}
+const owners = new WeakMap<QueryClient, AppearanceWrites>();
+function writesFor(client: QueryClient): AppearanceWrites {
+  let owner = owners.get(client);
+  if (!owner) {
+    owner = new AppearanceWrites(client);
+    owners.set(client, owner);
+  }
+  return owner;
 }
 
 export function useAppearance(port: AppearancePort): AppearanceViewModel {
-  const queryClient = useQueryClient();
-  const preferences = useQuery(appearanceQuery(port));
-  const revision = useRef(0);
-  /** The newest record the server stood behind, and so the only honest thing a
-   *  rollback can go back to. Never an optimistic value. */
-  const confirmed = useRef<AppearancePreferences | null>(null);
-
-  const settle = (next: AppearancePreferences) => {
-    queryClient.setQueryData(settingsQueryKeys.appearance, next);
-    publishAppearanceSurface(next);
-  };
-
-  const update = useSettingsCommand(
-    'update',
-    (write: AppearanceWrite, signal) => port.update(write.change, signal),
-    {
-      onStart: async (write) => {
-        // A read already in flight must not land on top of the optimistic
-        // value, and cancelling it reverts the cache, so it goes first.
-        await queryClient.cancelQueries({ queryKey: settingsQueryKeys.appearance });
-        confirmed.current ??=
-          queryClient.getQueryData<AppearancePreferences>(settingsQueryKeys.appearance) ?? null;
-        queryClient.setQueryData(settingsQueryKeys.appearance, write.optimistic);
-      },
-      onFailed: (write) => {
-        // Only the newest write may undo itself. An older save that fails
-        // after a newer one started would otherwise revert the newer choice.
-        if (revision.current !== write.revision) return;
-        const previous = confirmed.current;
-        if (previous) settle(previous);
-      },
-      onDone: (saved) => {
-        confirmed.current = saved;
-        settle(saved);
-      },
-    },
-  );
-
+  const owner = writesFor(useQueryClient());
+  const preferences = useQuery({
+    ...appearanceQuery(port),
+    queryFn: ({ signal }) => owner.load(port, signal),
+  });
+  const update = useMutation({ mutationFn: (saved: Promise<void>) => saved });
   return {
     preferences: preferences.data ?? null,
     loading: preferences.isPending,
-    failure: preferences.isError ? settingsFailure(preferences.error) : update.failure,
-    change: (change) => {
-      const current = queryClient.getQueryData<AppearancePreferences>(settingsQueryKeys.appearance);
-      if (!current) return;
-      const optimistic = { ...current, ...change };
-      revision.current += 1;
-      publishAppearanceSurface(optimistic);
-      update.run({ change, optimistic, revision: revision.current });
-    },
+    failure: preferences.isError
+      ? settingsFailure(preferences.error)
+      : update.isError
+        ? settingsFailure(update.error)
+        : null,
+    change: (change) => update.mutate(owner.save(port, change)),
   };
 }
