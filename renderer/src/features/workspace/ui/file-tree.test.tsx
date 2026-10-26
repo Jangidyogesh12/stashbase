@@ -23,7 +23,7 @@ import { createTestQueryClient, withQueryClient } from '@/test/query';
 
 import { FileTree } from './file-tree';
 
-const PLAN = listingFile({ heading: 'Plan', path: 'docs/plan.md', size: 42 });
+const PLAN = listingFile({ path: 'docs/plan.md', size: 42 });
 const ARCHIVE = listingFile({
   format: 'generic',
   path: 'archive.zip',

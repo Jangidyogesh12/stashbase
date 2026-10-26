@@ -70,7 +70,9 @@ Journey-specific entry points and evidence stay in [Journey Coverage](journey-co
   never become visible source results or writable targets.
   `server/file-listing.ts` owns browsing visibility, including default-visible
   project configuration directories; `server/indexable.ts` retains dot-directory
-  exclusions for preparation and retrieval. Workspace listings apply the browsing
+  exclusions for preparation and retrieval. A listing reads directory entries and
+  `lstat` only and never opens a source: a cloud-only file downloads on its
+  first read, so one read per row made the tree wait on the network. Workspace listings apply the browsing
   preference with either explicit project scope or window scope; agent/MCP directory
   discovery uses the separate Project Operations surface.
 

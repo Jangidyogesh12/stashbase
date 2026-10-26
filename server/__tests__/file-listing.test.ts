@@ -7,9 +7,8 @@ import { runWithFolderRoot } from '../folder.ts';
 import { listFilesAndFoldersAsync } from '../file-listing.ts';
 import { shouldIndexFilePath } from '../indexable.ts';
 
-test('file-listing reports the truthful workbench tree without traversing excluded infrastructure', async () => {
+test('file-listing reports the truthful workbench tree without traversing excluded infrastructure', async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-test-'));
-  const originalReadFileSync = fs.readFileSync;
 
   try {
     // Set up test folder structure
@@ -36,15 +35,6 @@ test('file-listing reports the truthful workbench tree without traversing exclud
     fs.writeFileSync(path.join(folderMixed, 'config.JSON'), '{ invalid json');
     fs.writeFileSync(path.join(folderMixed, 'plain.TxT'), '# literal heading\n<strong>literal</strong>');
     fs.writeFileSync(path.join(folderMixed, 'broken.txt'), Buffer.from([0x62, 0x61, 0x80, 0x64]));
-    const largeText = path.join(folderMixed, 'large.txt');
-    fs.writeFileSync(largeText, Buffer.concat([
-      Buffer.from('# bounded preview\n'),
-      Buffer.alloc((8 * 1024 * 1024) + 1, 0x61),
-    ]));
-    fs.readFileSync = ((file, options) => {
-      if (String(file) === largeText) throw new Error('listing must not read a whole TXT source');
-      return originalReadFileSync(file, options as never);
-    }) as typeof fs.readFileSync;
     fs.writeFileSync(path.join(folderMixed, 'readme.txt'), 'searchable plain text');
     fs.writeFileSync(path.join(folderMixed, 'unfinished.tmp'), 'a user-owned temp file');
     fs.mkdirSync(path.join(folderMixed, 'config.json_files'));
@@ -68,6 +58,22 @@ test('file-listing reports the truthful workbench tree without traversing exclud
     fs.mkdirSync(folderDotOnly);
     fs.writeFileSync(path.join(folderDotOnly, '.DS_Store'), '');
     if (process.platform !== 'win32') fs.writeFileSync(path.join(tempDir, 'Icon\r'), '');
+
+    // A row comes from metadata alone. Opening a cloud-only source downloads
+    // it, so the listing must never open any file in the project.
+    const opened: string[] = [];
+    for (const [owner, method] of [
+      [fs.promises, 'open'],
+      [fs.promises, 'readFile'],
+      [fs, 'openSync'],
+      [fs, 'readFileSync'],
+    ] as const) {
+      const original = (owner as any)[method].bind(owner);
+      t.mock.method(owner as any, method, (file: unknown, ...rest: unknown[]) => {
+        if (String(file).startsWith(tempDir)) opened.push(String(file));
+        return original(file, ...rest);
+      });
+    }
 
     // Run listing scan
     const result = await runWithFolderRoot(tempDir, async () => {
@@ -100,16 +106,8 @@ test('file-listing reports the truthful workbench tree without traversing exclud
     assert.ok(fileNames.includes('mixed/config.JSON'));
     assert.ok(fileNames.includes('mixed/plain.TxT'));
     assert.ok(fileNames.includes('mixed/broken.txt'));
-    assert.ok(fileNames.includes('mixed/large.txt'));
     assert.ok(fileNames.includes('mixed/config.json_files/asset.md'), 'JSON must not claim a note bundle');
-    assert.equal(result.files.find((file) => file.name === 'mixed/plain.TxT')?.heading, '');
-    assert.equal(
-      result.files.find((file) => file.name === 'mixed/plain.TxT')?.snippet,
-      '# literal heading <strong>literal</strong>',
-      'TXT preview remains literal rather than using Markdown or HTML semantics',
-    );
-    assert.equal(result.files.find((file) => file.name === 'mixed/broken.txt')?.snippet, '');
-    assert.match(result.files.find((file) => file.name === 'mixed/large.txt')?.snippet ?? '', /^# bounded preview/);
+    assert.deepEqual(opened, [], 'listing reads metadata only and never opens a source');
 
     // The unchanged counts below double as the dot-file regression: the
     // two .DS_Store files must not appear in `other`/`otherExtensions`
@@ -132,7 +130,6 @@ test('file-listing reports the truthful workbench tree without traversing exclud
     assert.ok(!fileNames.includes('node_modules/index.js'), 'excluded directory contents are never traversed');
 
   } finally {
-    fs.readFileSync = originalReadFileSync;
     // Recursively clean up the temp directory
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

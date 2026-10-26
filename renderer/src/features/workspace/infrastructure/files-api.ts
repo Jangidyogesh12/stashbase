@@ -35,12 +35,9 @@ function mapListing(listing: WorkspaceFilesWire): WorkspaceListing {
     files: listing.files.map((file) => ({
       availability: file.availability ?? 'available',
       format: file.format,
-      heading: file.heading,
-      importedAt: file.imported_at,
       kind: file.entryKind ?? 'regular',
       path: file.name,
       size: file.size,
-      snippet: file.snippet,
     })),
     folderName: listing.folder,
     folders: listing.folders.map((folder) => ({

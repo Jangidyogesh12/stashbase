@@ -185,7 +185,7 @@ describe('workspace shell', () => {
           files: filesApi({
             load: vi.fn(async () =>
               listing(
-                files.map((path) => listingFile({ heading: 'Plan', path })),
+                files.map((path) => listingFile({ path })),
                 [],
                 'Notes',
               ),

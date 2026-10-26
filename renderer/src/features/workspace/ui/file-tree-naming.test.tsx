@@ -24,7 +24,7 @@ import { FileTree } from './file-tree';
 
 const RESEARCH_LISTING = listing(
   [
-    listingFile({ heading: 'Plan', path: 'docs/plan.md', size: 42 }),
+    listingFile({ path: 'docs/plan.md', size: 42 }),
     listingFile({ format: 'generic', path: 'archive.zip', size: 7 }),
     listingFile({ format: 'generic', kind: 'symlink', path: 'linked-file', size: 0 }),
   ],

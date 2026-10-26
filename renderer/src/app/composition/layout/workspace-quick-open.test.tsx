@@ -45,12 +45,9 @@ describe('workspace Quick Open composition', () => {
     const hiddenFile = {
       availability: 'available' as const,
       format: 'md' as const,
-      heading: '',
-      importedAt: '',
       kind: 'regular' as const,
       path: '.github/workflows/ci.md',
       size: 4,
-      snippet: '',
     };
     let showHidden = true;
     const filesApi: WorkspaceAdapters['files'] = {
@@ -140,22 +137,16 @@ describe('workspace Quick Open composition', () => {
           {
             availability: 'available',
             format: 'generic',
-            heading: '',
-            importedAt: '',
             kind: 'regular',
             path: 'archive.bin',
             size: 4,
-            snippet: '',
           },
           {
             availability: 'available',
             format: 'generic',
-            heading: '',
-            importedAt: '',
             kind: 'symlink',
             path: 'linked.bin',
             size: 0,
-            snippet: '',
           },
         ],
         folderName: 'Notes',

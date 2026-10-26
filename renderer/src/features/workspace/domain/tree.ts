@@ -16,12 +16,9 @@ type FolderKind = 'normal' | 'excluded' | 'unreadable';
 export interface WorkspaceFile {
   availability: 'available' | 'unreadable';
   format: ViewerFormat;
-  heading: string;
-  importedAt: string;
   kind: FileKind;
   path: string;
   size: number;
-  snippet: string;
 }
 
 export interface WorkspaceFolder {

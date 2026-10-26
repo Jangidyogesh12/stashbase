@@ -41,12 +41,9 @@ export function listingFile(overrides: Partial<WorkspaceFile> = {}): WorkspaceFi
   return {
     availability: 'available',
     format: 'md',
-    heading: '',
-    importedAt: '',
     kind: 'regular',
     path: 'notes.md',
     size: 12,
-    snippet: '',
     ...overrides,
   };
 }

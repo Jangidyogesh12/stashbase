@@ -16,11 +16,8 @@ const workspaceFileSchema = z
     availability: z.enum(WORKSPACE_ENTRY_AVAILABILITIES).optional(),
     entryKind: z.enum(WORKSPACE_FILE_KINDS).optional(),
     format: viewerFormatSchema,
-    heading: z.string().max(16_384),
-    imported_at: z.string().max(64),
     name: relativePathSchema,
     size: z.number().finite().nonnegative(),
-    snippet: z.string().max(16_384),
   })
   .strict();
 

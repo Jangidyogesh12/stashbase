@@ -14,11 +14,8 @@ describe('files API', () => {
           files: [
             {
               format: 'md',
-              heading: 'Plan',
-              imported_at: '2026-09-01T00:00:00.000Z',
               name: 'notes/plan.md',
               size: 42,
-              snippet: 'First step',
             },
           ],
           folder: 'Research',
@@ -34,11 +31,8 @@ describe('files API', () => {
       listing(
         [
           listingFile({
-            heading: 'Plan',
-            importedAt: '2026-09-01T00:00:00.000Z',
             path: 'notes/plan.md',
             size: 42,
-            snippet: 'First step',
           }),
         ],
         ['notes'],

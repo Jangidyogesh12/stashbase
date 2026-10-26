@@ -22,7 +22,7 @@ import { withQueryClient } from '@/test/query';
 import { FileTree } from './file-tree';
 import { SPRING_OPEN_MS } from './file-tree-drop';
 
-const PLAN = listingFile({ heading: 'Plan', path: 'docs/plan.md', size: 42 });
+const PLAN = listingFile({ path: 'docs/plan.md', size: 42 });
 const runtimes: WorkspaceRuntime[] = [];
 
 function renderTree(api: FilesPort, importFiles?: ComponentProps<typeof FileTree>['importFiles']) {

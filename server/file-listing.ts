@@ -5,14 +5,11 @@ import path from 'node:path';
 import {
   LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION,
 } from '../shared/file-formats.ts';
-import { decodeEntities } from './html.ts';
-import { onSwitch } from './folder.ts';
 import {
   detectFormat,
   detectViewerFormat,
   isDerivedNoteName,
   isNoteName,
-  type FileFormat,
   type ViewerFormat,
 } from './format.ts';
 import {
@@ -29,7 +26,7 @@ import type {
   WorkspaceEntryAvailability,
   WorkspaceFileKind,
 } from '../shared/project-files.ts';
-import { decodeDirectTextBytes, decodeDirectTextPreview } from './text-decoding.ts';
+import { decodeDirectTextBytes } from './text-decoding.ts';
 
 const LEGACY_DERIVED_SOURCE_RE = new RegExp(`^(.+)\\.(${LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
 const LEGACY_DERIVED_STEM_RE = new RegExp(`\\.(${LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
@@ -41,9 +38,6 @@ export interface FileEntry {
   format: ViewerFormat;
   /** Raw file size on disk. Zero-byte notes are intentionally not indexed. */
   size: number;
-  heading: string;
-  snippet: string;
-  imported_at: string;
   entryKind?: WorkspaceFileKind;
   availability?: WorkspaceEntryAvailability;
 }
@@ -62,19 +56,6 @@ export interface FolderListing {
 export type ImmediateDirectoryEntry =
   | { name: string; path: string; type: 'directory' }
   | { name: string; path: string; type: 'file'; format: ViewerFormat; size: number };
-
-/** Per-file preview cache keyed by absolute path. Avoids re-reading
- *  every file on every `GET /api/files`. Invalidated by mtime. */
-interface PreviewCacheEntry {
-  mtimeMs: number;
-  heading: string;
-  snippet: string;
-  imported_at: string;
-}
-const previewCache = new Map<string, PreviewCacheEntry>();
-const TEXT_PREVIEW_BYTES = 4096;
-
-onSwitch(() => previewCache.clear());
 
 interface ScanResult {
   isKept: boolean;
@@ -168,59 +149,26 @@ function unreadableFileEntry(entry: fs.Dirent, rel: string): FileEntry {
     name: rel,
     format: 'generic',
     size: 0,
-    heading: '',
-    snippet: '',
-    imported_at: '',
     ...(entryKind === 'regular' ? {} : { entryKind }),
     availability: 'unreadable',
   };
 }
 
+/** A row comes from the entry's metadata alone. Listing never opens a
+ * source: a cloud-only file (iCloud's Optimize Mac Storage, a streamed
+ * Google Drive) downloads on its first read, so reading ahead would make the
+ * tree wait on the network for every such file in the project. */
 async function scanWorkspaceFileAsync(entry: fs.Dirent, rel: string, full: string): Promise<FileEntry> {
   let st: fs.Stats;
   try { st = await fs.promises.lstat(full); }
   catch { return unreadableFileEntry(entry, rel); }
-  return finishWorkspaceFileEntryAsync(entry, rel, full, st);
-}
-
-function workspaceFileBase(entry: fs.Dirent, rel: string, st: fs.Stats): FileEntry {
   const entryKind = workspaceEntryKind(entry);
-  const format = entryKind === 'regular' ? (detectViewerFormat(entry.name) ?? 'generic') : 'generic';
   return {
     name: rel,
-    format,
+    format: entryKind === 'regular' ? (detectViewerFormat(entry.name) ?? 'generic') : 'generic',
     size: st.size,
-    heading: '',
-    snippet: '',
-    imported_at: st.mtime.toISOString(),
     ...(entryKind === 'regular' ? {} : { entryKind }),
   };
-}
-
-async function finishWorkspaceFileEntryAsync(
-  entry: fs.Dirent,
-  rel: string,
-  full: string,
-  st: fs.Stats,
-): Promise<FileEntry> {
-  const base = workspaceFileBase(entry, rel, st);
-  if (base.format === 'generic') return base;
-  // A table's first line is a header row, not a heading or snippet worth reading ahead.
-  if (base.format === 'pdf' || base.format === 'image' || base.format === 'docx' || base.format === 'audio' || base.format === 'csv') {
-    previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at: base.imported_at });
-    return base;
-  }
-  const cached = previewCache.get(full);
-  if (cached && cached.mtimeMs === st.mtimeMs) {
-    return { ...base, heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
-  }
-  try {
-    const { heading, snippet } = preview(await readTextPrefixAsync(full, st.size, base.format as FileFormat), base.format);
-    previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at: base.imported_at });
-    return { ...base, heading, snippet };
-  } catch {
-    return { ...base, format: 'generic', availability: 'unreadable' };
-  }
 }
 
 interface AsyncScanState {
@@ -278,25 +226,14 @@ async function scanDirectoryAsync(
   return { isKept: true, files, folders };
 }
 
-function finishFolderListing(root: string, scanResult: ScanResult): FolderListing {
-  const seen = new Set<string>();
-  for (const f of scanResult.files) seen.add(path.join(root, f.name));
-  for (const key of previewCache.keys()) {
-    if (!seen.has(key)) previewCache.delete(key);
-  }
-
+export async function listFilesAndFoldersAsync(opts: FolderListingOptions = {}): Promise<FolderListing> {
+  const scanResult = await scanDirectoryAsync(folderRoot(), '', { entriesSinceYield: 0 }, opts);
   scanResult.files.sort((a, b) => (a.name < b.name ? -1 : 1));
   scanResult.folders.sort((a, b) => (a.path < b.path ? -1 : 1));
   return {
     files: scanResult.files,
     folders: scanResult.folders,
   };
-}
-
-export async function listFilesAndFoldersAsync(opts: FolderListingOptions = {}): Promise<FolderListing> {
-  const root = folderRoot();
-  const scanResult = await scanDirectoryAsync(root, '', { entriesSinceYield: 0 }, opts);
-  return finishFolderListing(root, scanResult);
 }
 
 export async function listFilesAsync(): Promise<FileEntry[]> {
@@ -396,18 +333,6 @@ export async function walkMarkdownSourcesAsync(
   });
 }
 
-async function readTextPrefixAsync(full: string, size: number, format: FileFormat): Promise<string> {
-  const handle = await fs.promises.open(full, 'r');
-  try {
-    const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, size));
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const prefix = buffer.subarray(0, bytesRead);
-    return format === 'txt' ? decodeDirectTextPreview(full, prefix) : prefix.toString('utf8');
-  } finally {
-    await handle.close();
-  }
-}
-
 /** Junk OS files hidden from the workspace, matching Finder. `Icon\r` stores a
  *  macOS custom folder icon (Google Drive sets one on every synced folder).
  *  Workspace directory visibility belongs to `workspaceDirectoryEntries`;
@@ -469,60 +394,4 @@ function isDerivedScratchName(name: string): boolean {
   return /^\.\.?[^/]+_files\.(?:tmp|batch)-/i.test(name)
     || /^\.[^/]+\.pdf\.md\.tmp-/i.test(name)
     || /^\.[^/]+\.pdf\.md\.batches$/i.test(name);
-}
-
-function preview(
-  content: string,
-  format: FileFormat,
-): { heading: string; snippet: string } {
-  if (format === 'md') return previewMarkdown(content);
-  if (format === 'html') return previewHtml(content);
-  return { heading: '', snippet: content.replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim().slice(0, 80) };
-}
-
-function previewMarkdown(md: string): { heading: string; snippet: string } {
-  let heading = '';
-  let snippet = '';
-  for (const line of md.split('\n')) {
-    const t = line.trim();
-    if (!t) continue;
-    const m = t.match(/^#{1,6}\s+(.*)$/);
-    if (m) {
-      if (!heading) heading = m[1];
-      continue;
-    }
-    if (!snippet) {
-      snippet = t.slice(0, 80);
-      if (heading) break;
-    }
-    if (heading && snippet) break;
-  }
-  return { heading, snippet };
-}
-
-/** Cheap HTML preview without spinning up linkedom — file listing fires
- *  this on every file in the folder, so the regex path is the right
- *  tradeoff (the chunker does the proper DOM walk later). */
-function previewHtml(html: string): { heading: string; snippet: string } {
-  let heading = '';
-  const tm = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  if (tm) heading = decodeEntities(stripTags(tm[1])).trim();
-  if (!heading) {
-    const hm = html.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
-    if (hm) heading = decodeEntities(stripTags(hm[1])).trim();
-  }
-
-  const stripped = decodeEntities(
-    stripTags(
-      html
-        .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, '')
-        .replace(/<(?:script|style|noscript)\b[^>]*>[\s\S]*?<\/(?:script|style|noscript)>/gi, ''),
-    ),
-  );
-  const snippet = stripped.replace(/\s+/g, ' ').trim().slice(0, 80);
-  return { heading, snippet };
-}
-
-function stripTags(s: string): string {
-  return s.replace(/<[^>]+>/g, ' ');
 }

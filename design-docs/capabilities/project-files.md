@@ -87,6 +87,9 @@ larger pages sooner.
 - Returning focus to StashBase refreshes the open project's Files tree and
   reconciles external additions, renames, and deletions. Browsing those changes
   does not wait for search indexing, and the refresh preserves open documents.
+- Files lists names and file metadata only; it never reads a file to show its
+  row. A cloud-only file, such as one iCloud's Optimize Mac Storage has moved
+  off the disk, downloads when it is opened, not when the tree loads.
 
 ## External Files
 

@@ -963,7 +963,8 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   authority, conflicts, and failure handling.
   `server/__tests__/file-listing.test.ts` exercises root and nested project
   configuration/skills with hidden-file visibility both off and on, sync/async
-  listing parity, protected/derived exclusions, and unchanged index eligibility.
+  listing parity, protected/derived exclusions, unchanged index eligibility, and
+  that a listing never opens a source, so cloud-only files stay undownloaded.
   `server/routes/files.test.ts` verifies preference changes through folder-explicit
   workspace requests, including project isolation and refusal of unregistered roots.
   `pnpm test:server` covers strict durable preferences.
