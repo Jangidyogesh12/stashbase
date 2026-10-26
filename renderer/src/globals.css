@@ -901,6 +901,11 @@ html[data-reduce-motion='on'] *::after {
   inherits: false;
   initial-value: 1;
 }
+@property --sf-past {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
 
 @keyframes sf-reveal-start {
   from {
@@ -916,6 +921,17 @@ html[data-reduce-motion='on'] *::after {
   }
   to {
     --sf-end: 1;
+  }
+}
+/* Set while the region is scrolled past the start fade. Chromium keeps
+   sf-reveal-start's forwards fill after a region scrolled past the fade stops
+   overflowing (a folder collapses, the window grows), which leaves the top
+   faded with nothing above it. This animation carries that state with no fill
+   instead, so it drops out with the overflow. */
+@keyframes sf-past {
+  from,
+  to {
+    --sf-past: 1;
   }
 }
 
@@ -1036,46 +1052,48 @@ html[data-reduce-motion='on'] *::after {
   .scroll-fade {
     mask-image: linear-gradient(
       to bottom,
-      rgba(0, 0, 0, var(--sf-start)) 0,
+      rgba(0, 0, 0, calc(var(--sf-start) * (1 - var(--sf-past)))) 0,
       #000 var(--scroll-fade-size),
       #000 calc(100% - var(--scroll-fade-size)),
       rgba(0, 0, 0, var(--sf-end)) 100%
     );
     -webkit-mask-image: linear-gradient(
       to bottom,
-      rgba(0, 0, 0, var(--sf-start)) 0,
+      rgba(0, 0, 0, calc(var(--sf-start) * (1 - var(--sf-past)))) 0,
       #000 var(--scroll-fade-size),
       #000 calc(100% - var(--scroll-fade-size)),
       rgba(0, 0, 0, var(--sf-end)) 100%
     );
     animation:
-      sf-reveal-start both linear,
+      sf-reveal-start backwards linear,
+      sf-past linear,
       sf-reveal-end both linear;
-    animation-timeline: scroll(self), scroll(self);
-    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
-    animation-range-end: var(--scroll-fade-size), 100%;
+    animation-timeline: scroll(self), scroll(self), scroll(self);
+    animation-range-start: 0, var(--scroll-fade-size), calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%, 100%;
   }
   .scroll-fade-x {
     mask-image: linear-gradient(
       to right,
-      rgba(0, 0, 0, var(--sf-start)) 0,
+      rgba(0, 0, 0, calc(var(--sf-start) * (1 - var(--sf-past)))) 0,
       #000 var(--scroll-fade-size),
       #000 calc(100% - var(--scroll-fade-size)),
       rgba(0, 0, 0, var(--sf-end)) 100%
     );
     -webkit-mask-image: linear-gradient(
       to right,
-      rgba(0, 0, 0, var(--sf-start)) 0,
+      rgba(0, 0, 0, calc(var(--sf-start) * (1 - var(--sf-past)))) 0,
       #000 var(--scroll-fade-size),
       #000 calc(100% - var(--scroll-fade-size)),
       rgba(0, 0, 0, var(--sf-end)) 100%
     );
     animation:
-      sf-reveal-start both linear,
+      sf-reveal-start backwards linear,
+      sf-past linear,
       sf-reveal-end both linear;
-    animation-timeline: scroll(self inline), scroll(self inline);
-    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
-    animation-range-end: var(--scroll-fade-size), 100%;
+    animation-timeline: scroll(self inline), scroll(self inline), scroll(self inline);
+    animation-range-start: 0, var(--scroll-fade-size), calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%, 100%;
   }
 }
 
