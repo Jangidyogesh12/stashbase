@@ -482,8 +482,23 @@ desktop wiring, not provider ingestion or signed-package identity merging.
 checks and a shared five-minute foreground/wake throttle. `electron/main.cjs`
 binds native focus and power-resume events. Manager tests cover discovering a
 release without restarting, concurrent windows, in-flight announcements, opt-out,
-manual override, disposal and explicit-only downloads. Real N→N+1 package updates
-remain the release checklist's platform-specific evidence.
+manual override, disposal and explicit-only installation. Ready-state regressions
+cover timer/foreground replacement across several skipped releases, same-version
+download reuse, and a restart that refreshes and downloads the latest release
+before saving windows. Failed refreshes return a disclosed ready offer without
+installing; an explicit restart from that warning retains the existing offline
+installation choice. Failed replacements, concurrent restart clicks,
+download-event/promise ordering and disposal cannot silently install a stale offer.
+A 2026-10-27 isolated macOS Electron pass used the installed MacUpdater and its
+HTTP executor, metadata parsing, checksum/cache handling and native proxy with a
+local feed. A ready 2.1.0 download was replaced by 2.4.0 without installation;
+the restart refresh fetched 2.7.3 and handed only its bytes to the controlled
+native installer once. The built two-window smoke also passed save barriers,
+delayed handoff and failure rollback. Feed publication and native installation
+were controlled; no installed application was replaced.
+Real multi-version package replacement and post-update provider/session reuse
+remain unverified for this change; actual package updates remain the release
+checklist's platform-specific evidence.
 
 The Linux deb install path defers relaunch until the owned server exits;
 packaged startup also waits for a compatible previous server to release its port

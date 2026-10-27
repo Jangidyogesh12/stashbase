@@ -7,7 +7,10 @@ class FakeUpdater extends EventEmitter {
   checks = 0;
   downloads = 0;
   installs = 0;
-  async checkForUpdates() { this.checks += 1; }
+  async checkForUpdates() {
+    this.checks += 1;
+    this.emit('update-available', { version: '2.1.0' });
+  }
   async downloadUpdate() {
     this.downloads += 1;
     this.emit('download-progress', { percent: 42.3 });
@@ -61,8 +64,9 @@ test('an explicit opt-out cancels automatic checks but manual checks still work'
   await manager.refreshPreference();
   assert.equal(scheduled.length, 0);
   await manager.check({ manual: true });
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(updater.checks, 1);
-  assert.equal(manager.getState().phase, 'checking');
+  assert.equal(manager.getState().phase, 'ready');
 });
 
 test('a found release downloads in the background and installs only on an explicit restart', async () => {
@@ -81,8 +85,9 @@ test('a found release downloads in the background and installs only on an explic
   assert.equal(updater.installs, 1);
   assert.deepEqual(
     states.filter((state) => ['available', 'downloading', 'ready', 'installing'].includes(state.phase)).map((state) => state.phase),
-    ['available', 'downloading', 'downloading', 'ready', 'installing'],
+    ['available', 'downloading', 'downloading', 'ready', 'ready', 'installing'],
   );
+  assert.equal(updater.downloads, 1, 'restart reuses the already downloaded latest release');
   assert.equal(manager.getState().phase, 'installing');
 });
 
@@ -258,6 +263,137 @@ test('a resident application discovers releases periodically without a restart',
   assert.equal(updater.downloads, 1);
   assert.equal(updater.installs, 0);
   manager.dispose();
+});
+
+test('ready downloads are refreshed on the timer and foreground, skipping intervening releases', async () => {
+  let latest = '2.1.0';
+  let time = 0;
+  const { manager, updater, scheduled } = harness({ now: () => time });
+  const downloaded = [];
+  updater.checkForUpdates = async () => {
+    updater.checks++;
+    updater.emit('checking-for-update');
+    updater.emit('update-available', { version: latest });
+  };
+  updater.downloadUpdate = async () => {
+    downloaded.push(latest);
+    updater.emit('update-downloaded', { version: latest });
+  };
+  await manager.check();
+  await new Promise((resolve) => setImmediate(resolve));
+  latest = '2.4.0';
+  scheduled.shift().fn();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(manager.getState().phase, 'ready');
+  assert.equal(manager.getState().availableVersion, '2.4.0');
+
+  latest = '2.7.3';
+  time += 10 * 60_000;
+  await manager.checkOnActivity();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(manager.getState().availableVersion, '2.7.3');
+  await manager.check();
+  assert.deepEqual(downloaded, ['2.1.0', '2.4.0', '2.7.3']);
+  assert.equal(manager.getState().phase, 'ready');
+  assert.equal(updater.installs, 0, 'refreshing a ready download never restarts the app');
+  manager.dispose();
+});
+
+test('restart checks again with automatic checks disabled and installs only the latest download', async () => {
+  let finishDownload;
+  let saves = 0;
+  let installedVersion;
+  const { manager, updater, scheduled } = harness({
+    readAutoCheck: async () => false,
+    beforeInstall: async () => { saves++; return true; },
+    installUpdate: () => { installedVersion = manager.getState().availableVersion; },
+  });
+  await manager.start();
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  updater.checkForUpdates = async () => {
+    updater.checks++;
+    updater.emit('update-available', { version: '2.7.3' });
+  };
+  updater.downloadUpdate = async () => {
+    updater.downloads++;
+    await new Promise((resolve) => { finishDownload = resolve; });
+    updater.emit('update-downloaded', { version: '2.7.3' });
+  };
+  await manager.checkOnActivity();
+  assert.equal(updater.checks, 0, 'a ready download still honors automatic opt-out');
+  const actions = [manager.primaryAction(), manager.primaryAction()];
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(manager.getState().phase, 'downloading');
+  assert.equal(updater.checks, 1);
+  assert.equal(updater.downloads, 1);
+  assert.equal(saves, 0, 'windows remain editable while fetching the newer release');
+  assert.equal(installedVersion, undefined);
+  finishDownload();
+  await Promise.all(actions);
+  assert.equal(installedVersion, '2.7.3');
+  assert.equal(saves, 1, 'concurrent restart clicks share one installation');
+  assert.equal(scheduled.length, 0);
+  manager.dispose();
+});
+
+test('restart does not silently install a stale download when refreshing or downloading its successor fails', async () => {
+  for (const stage of ['check', 'download', 'withdrawn']) {
+    let saves = 0;
+    const { manager, updater } = harness({ beforeInstall: async () => { saves++; return true; } });
+    await manager.start();
+    updater.emit('update-downloaded', { version: '2.1.0' });
+    updater.checkForUpdates = async () => {
+      if (stage === 'check') throw new Error('offline during refresh');
+      updater.emit(stage === 'withdrawn' ? 'update-not-available' : 'update-available', { version: '2.7.3' });
+    };
+    updater.downloadUpdate = async () => { throw new Error('successor download failed'); };
+    await manager.primaryAction();
+    assert.equal(manager.getState().phase, stage === 'check' ? 'ready' : stage === 'withdrawn' ? 'current' : 'error');
+    if (stage === 'check') assert.equal(manager.getState().checkFailed, true);
+    assert.equal(updater.installs, 0);
+    assert.equal(saves, 0);
+    manager.dispose();
+  }
+});
+
+test('ready events cannot start another check until the updater finishes its download promise', async () => {
+  let finishDownload;
+  const { manager, updater } = harness();
+  updater.downloadUpdate = async () => {
+    updater.downloads++;
+    updater.emit('update-downloaded', { version: '2.1.0' });
+    await new Promise((resolve) => { finishDownload = resolve; });
+  };
+  await manager.check();
+  await manager.check();
+  assert.equal(updater.checks, 1);
+  const action = manager.primaryAction();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(updater.checks, 1);
+  assert.equal(updater.installs, 0);
+  finishDownload();
+  await action;
+  assert.equal(updater.checks, 2);
+  assert.equal(updater.downloads, 1);
+  assert.equal(updater.installs, 1);
+  manager.dispose();
+});
+
+test('disposal while restart downloads a newer release prevents installation', async () => {
+  let finishDownload;
+  const { manager, updater } = harness();
+  await manager.start();
+  updater.emit('update-downloaded', { version: '2.0.1' });
+  updater.downloadUpdate = async () => {
+    await new Promise((resolve) => { finishDownload = resolve; });
+    updater.emit('update-downloaded', { version: '2.1.0' });
+  };
+  const action = manager.primaryAction();
+  await new Promise((resolve) => setImmediate(resolve));
+  manager.dispose();
+  finishDownload();
+  await action;
+  assert.equal(updater.installs, 0);
 });
 
 test('focus and wake share a throttle, while manual checks bypass it and automatic opt-out wins', async () => {
@@ -461,7 +597,7 @@ test('a recheck finishing after availability cannot race installation or a secon
   updater.checkForUpdates = async () => {
     updater.checks++;
     updater.emit('update-available', { version: '2.1.0' });
-    await new Promise(resolve => { finish = resolve; });
+    if (updater.checks === 1) await new Promise(resolve => { finish = resolve; });
   };
   const check = manager.check();
   await new Promise(resolve => setImmediate(resolve));

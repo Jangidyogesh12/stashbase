@@ -1445,6 +1445,10 @@ certificate compatibility, and the limits of main-process debug hardening.
   The entire native download promise stays exclusive even after its downloaded
   event, and installation cannot race a metadata check or replacement download.
   The ready snapshot carries only a failed-recheck flag, never native error prose.
+  Restart refreshes an unflagged offer and awaits any replacement download before
+  the save/install barrier. A failed refresh returns the flagged ready offer
+  without installing; a subsequent explicit restart can accept that disclosed
+  version without another network request.
   The macOS install adapter owns its native completion listener: failure retires
   that attempt, and only a payload URL from the current loopback feed can finish
   its explicit restart. Each restart prepares the current feed instead of trusting

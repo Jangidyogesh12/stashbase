@@ -287,8 +287,12 @@ reader to current credits rather than claiming all credits are spent.
   version could not be checked. A failed replacement download offers Retry and
   never installs the superseded package. A finished download never restarts the
   application by itself: installation is that explicit click, or the same action
-  in Settings, and waits for affected document saves. Failure
-  leaves the current application and downloaded update recoverable. Relaunch waits
+  in Settings, and waits for affected document saves. Restart checks the latest
+  release again and downloads its replacement, if needed, before requesting
+  saves or closing windows, skipping intermediate releases. If that check fails,
+  it shows the failed-recheck notice without installing; the reader can then
+  explicitly restart into the disclosed ready version or choose Check again.
+  Failure leaves the current application and downloaded update recoverable. Relaunch waits
   for the previous local service to release its port before opening the replacement.
   The same choice governs the background checks for newer agent runtime
   releases ([Agent Sessions](agent-sessions.md)).

@@ -332,7 +332,17 @@ function createUpdateManager(options) {
 
   async function primaryAction() {
     await start();
-    if (disposed) return snapshot();
+    if (disposed || checking || state.phase !== 'ready') return snapshot();
+    // A failed recheck already tells the reader that this installer may be
+    // older. Preserve their explicit choice to install that ready download.
+    if (state.checkFailed) return installReadyUpdate();
+    // Otherwise refresh an offer that may have waited for days. Download its
+    // successor before asking windows to save, and never silently install the
+    // previous version if this restart's refresh fails.
+    await downloading;
+    await check();
+    await downloading;
+    if (disposed || state.checkFailed) return snapshot();
     // A finished download only waits. Restarting is always the reader's own
     // click, never a consequence of the download completing.
     return installReadyUpdate();

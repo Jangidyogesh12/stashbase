@@ -682,7 +682,7 @@ function updateBarrierFixture({ installUpdate = () => {} } = {}) {
   updater.downloadUpdate = async () => {
     updater.emit('update-downloaded', { version: '2.1.0' });
   };
-  updater.checkForUpdates = async () => {};
+  updater.checkForUpdates = async () => { updater.emit('update-available', { version: '2.1.0' }); };
   const manager = createUpdateManager({
     updater,
     currentVersion: '2.0.0',
