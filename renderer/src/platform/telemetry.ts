@@ -1,14 +1,19 @@
 import type { HttpClient } from '@/platform/http/client';
-import { rendererTelemetryEventSchema, type TelemetryEvent } from '@/protocols/http/telemetry';
+import {
+  rendererTelemetryEventSchema,
+  telemetryReceiptSchema,
+  type TelemetryEvent,
+} from '@/protocols/http/telemetry';
 
 /** Sends only the schema's bounded facts to the local collection owner. Errors never
  * reach the writing flow; the server owns opt-out and outbound transport. */
 export function createUsageRecorder(client: HttpClient) {
   const recent = new Map<string, number>();
   const starts = new Map<string, Promise<void>>();
+  let pending = 0;
   return (event: TelemetryEvent): void => {
     const parsed = rendererTelemetryEventSchema.safeParse(event);
-    if (!parsed.success) return;
+    if (!parsed.success || pending >= 100) return;
     const key =
       event.event === 'document_engaged'
         ? `${event.event}:${event.activity}:${event.format}`
@@ -20,16 +25,39 @@ export function createUsageRecorder(client: HttpClient) {
       if (recent.get(key) === minute) return;
       recent.set(key, minute);
     }
+    const body = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      event: parsed.data,
+    };
+    pending++;
     const send = async () => {
       try {
-        await client.request({
-          path: '/api/telemetry/events',
-          method: 'POST',
-          body: parsed.data,
-          signal: AbortSignal.timeout(2000),
-        });
-      } catch {
-        /* Usage never changes the operation's result. */
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt) await new Promise<void>((resolve) => setTimeout(resolve, 500 * attempt));
+          try {
+            const response = await client.request({
+              path: '/api/telemetry/events',
+              method: 'POST',
+              body,
+              signal: AbortSignal.timeout(2000),
+            });
+            const receipt = telemetryReceiptSchema.safeParse(response.body);
+            if (response.status === 200 && receipt.success && receipt.data.status !== 'retry')
+              return;
+            if (
+              response.status >= 400 &&
+              response.status < 500 &&
+              response.status !== 408 &&
+              response.status !== 429
+            )
+              return;
+          } catch {
+            /* Short retries never delay or resend the user's actual work. */
+          }
+        }
+      } finally {
+        pending--;
       }
     };
     if (event.event === 'agent_turn_started' && event.turn_id) {

@@ -160,8 +160,8 @@ function fixture(available = true) {
   return { service: createTelemetry(options), options, sent,
     config: () => config,
     setConfig: (next: AppConfigFile) => { config = next; },
-    readFails: () => { readFails = true; },
-    writeFails: () => { writeFails = true; },
+    readFails: (fails = true) => { readFails = fails; },
+    writeFails: (fails = true) => { writeFails = fails; },
     nextDay: () => { now += 86400000; },
     advance: (ms: number) => { now += ms; },
   };
@@ -234,7 +234,7 @@ test('saves preserve outcomes and actual-change evidence instead of suppressing 
   f.service.close();
 });
 
-test('HTTP boundary refuses arbitrary fields and never exposes the installation ID', async () => {
+test('renderer intake acknowledges durable admission, retries storage failures, and deduplicates lost receipts', async () => {
   const f = fixture();
   const app = express(); app.use(express.json()); mount(app, f.service);
   const server = app.listen(0, '127.0.0.1');
@@ -244,13 +244,60 @@ test('HTTP boundary refuses arbitrary fields and never exposes the installation 
   const url = `http://127.0.0.1:${address.port}/api/telemetry`;
   try {
     const post = (path: string, body: unknown, method = 'POST') => fetch(url + path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    assert.equal((await post('/events', { event: 'agent_turn_started', runtime: 'codex', prompt: 'private' })).status, 400);
+    const envelope = (event: unknown) => ({ id: crypto.randomUUID(), timestamp: new Date(f.options.now()).toISOString(), event });
+    assert.equal((await post('/events', envelope({ event: 'agent_turn_started', runtime: 'codex', prompt: 'private' }))).status, 400);
+    assert.equal((await post('/events', envelope({ event: 'agent_turn_started', runtime: 'codex', source: 'host' }))).status, 400);
+    assert.equal((await post('/events', { ...envelope({ event: 'app_opened' }), userId: 'injected' })).status, 400);
     assert.equal((await post('', { enabled: false, installationId: 'injected' }, 'PUT')).status, 400);
-    assert.equal((await post('/events', { event: 'app_opened' })).status, 204);
+    const request = envelope({ event: 'app_opened' });
+    f.writeFails();
+    const refused = await post('/events', request);
+    assert.equal(refused.status, 503);
+    assert.deepEqual(await refused.json(), { status: 'retry' });
+    assert.equal(f.config().telemetry, undefined);
+    f.writeFails(false);
+    f.advance(500);
+    assert.deepEqual(await (await post('/events', request)).json(), { status: 'accepted' });
+    await f.service.flush();
+    assert.deepEqual(await (await post('/events', request)).json(), { status: 'duplicate' });
+    assert.equal(f.sent.length, 1);
+    assert.equal(f.sent[0].body.uuid, request.id);
+    assert.equal(f.sent[0].body.timestamp, request.timestamp);
     assert.deepEqual(await (await fetch(url)).json(), { enabled: true, available: true });
     assert.equal((await post('', { enabled: false }, 'PUT')).status, 200);
     assert.equal(f.config().telemetry?.enabled, false);
+    assert.deepEqual(await (await post('/events', request)).json(), { status: 'disabled' });
   } finally { f.service.close(); server.closeAllConnections(); server.close(); }
+});
+
+test('short renderer retries cannot cross account changes, opt-out, or host restart', async () => {
+  const f = fixture();
+  const request = () => ({ id: crypto.randomUUID(), timestamp: new Date(f.options.now()).toISOString(),
+    event: { event: 'document_engaged' as const, activity: 'edit' as const, format: 'md' as const } });
+  account(f, 'A');
+  f.advance(1);
+  const oldAccount = request(); // The first request never reached the host.
+  f.advance(1);
+  account(f, 'B');
+  assert.equal(f.service.captureRenderer(oldAccount), 'discarded');
+  f.advance(1);
+  const disabled = request();
+  f.service.update({ enabled: false });
+  assert.equal(f.service.captureRenderer(disabled), 'disabled');
+  f.advance(1);
+  f.service.update({ enabled: true });
+  assert.equal(f.service.captureRenderer(disabled), 'discarded');
+  f.advance(1);
+  const fresh = request();
+  assert.equal(f.service.captureRenderer(fresh), 'accepted');
+  await f.service.flush();
+  assert.equal(f.sent.filter(({ body }) => body.event === 'document_engaged').length, 1);
+  assert.equal(f.sent.at(-1)!.body.distinct_id, 'user:B');
+  f.service.close();
+  f.advance(1);
+  const restarted = createTelemetry(f.options);
+  assert.equal(restarted.captureRenderer(fresh), 'discarded');
+  restarted.close();
 });
 
 test('error diagnostics share opt-out, redact causes, and suppress repeated failures', async () => {
@@ -686,7 +733,7 @@ test('turn recovery retains the originating identity/version/distribution and ne
   const f = fixture();
   const turn_id = crypto.randomUUID();
   account(f, 'A');
-  f.service.capture({ event: 'agent_turn_started', runtime: 'stashbase', turn_id });
+  f.service.observeTurn(turn_id, { stage: 'host_accepted', runtime: 'stashbase' });
   f.advance(5000);
   f.service.observeTurn(turn_id, { stage: 'runtime_dispatched' });
   await f.service.flush();
@@ -730,6 +777,45 @@ test('host completion wins once even when its facts race ahead of the start requ
   assert.equal(results[0].body.properties.context.connection_id, connection_id);
   assert.equal(f.config().telemetry!.turns!.length, 0);
   f.service.close();
+});
+
+test('all runtime acceptance paths persist turns without renderer intake and late starts cannot recount them', async (t) => {
+  const { EventEmitter } = await import('node:events');
+  const { telemetry } = await import('./telemetry.ts');
+  const { attachAgentDiagnostics, beginAgentDiagnosticTurn, reportAgentRuntimeError } = await import('./error-reporting.ts');
+  const f = fixture();
+  t.after(() => f.service.close());
+  t.mock.method(telemetry, 'scoped', () => f.service.scoped());
+  t.mock.method(telemetry, 'observeTurn', f.service.observeTurn);
+  for (const runtime of ['stashbase', 'claude', 'codex', 'antigravity'] as const) {
+    account(f, 'A');
+    const socket = new EventEmitter() as unknown as import('ws').WebSocket;
+    const turn_id = crypto.randomUUID();
+    attachAgentDiagnostics(socket, runtime);
+    beginAgentDiagnosticTurn(socket, turn_id);
+    const pending = f.config().telemetry!.turns!.find(turn => turn.turnId === turn_id)!;
+    assert.equal(pending.stage, 'host_accepted');
+    f.advance(1000);
+    account(f, 'B');
+    reportAgentRuntimeError(runtime, { t: 'turn-end', isError: false }, socket);
+    f.advance(1);
+    const late = { id: crypto.randomUUID(), timestamp: new Date(f.options.now()).toISOString(),
+      event: { event: 'agent_turn_started' as const, runtime, turn_id } };
+    assert.equal(f.service.captureRenderer(late), 'duplicate');
+    f.service.capture({ event: 'agent_turn_finished', runtime, turn_id, outcome: 'failed' });
+    await f.service.flush();
+    const events = f.sent.filter(({ body }) => body.properties.turn_id === turn_id).map(({ body }) => body);
+    const starts = events.filter(body => body.event === 'agent_turn_started');
+    const finishes = events.filter(body => body.event === 'agent_turn_finished');
+    assert.equal(starts.length, 1, runtime);
+    assert.equal(starts[0].properties.source, 'host');
+    assert.equal(starts[0].timestamp, pending.startedAt);
+    assert.equal(finishes.length, 1, runtime);
+    assert.equal(finishes[0].properties.outcome, 'success');
+    assert.equal(finishes[0].distinct_id, 'user:A');
+  }
+  f.service.observeTurn(crypto.randomUUID(), { outcome: 'success', reason: 'completed' });
+  assert.equal(f.config().telemetry!.turns!.length, 0);
 });
 
 test('an admitted turn reserves its terminal through queue saturation and diagnostic rate limiting', async () => {

@@ -69,7 +69,7 @@ export const unhandledHttpError: ErrorRequestHandler = (error: unknown, _req, re
 /** Installation has its own terminal event. Runtime events carry only their
  * error sentence; tool inputs, outputs, prompts, and replies never enter here. */
 const validTurnId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-const agentStates = new WeakMap<object, { interrupted: boolean; closing: boolean; finished?: boolean; lastError?: string; stage?: AgentTurnStage; tools?: Map<string, 'read' | 'write' | 'shell' | 'search' | 'agent' | 'other'> }>();
+const agentStates = new WeakMap<object, { runtime?: NonNullable<ErrorContext['runtime']>; interrupted: boolean; closing: boolean; finished?: boolean; lastError?: string; stage?: AgentTurnStage; tools?: Map<string, 'read' | 'write' | 'shell' | 'search' | 'agent' | 'other'> }>();
 const agentCaptures = new WeakMap<object, ReturnType<typeof telemetry.scoped>>();
 const agentProcessSnapshots = new WeakMap<object, () => NonNullable<ErrorContext['context']>>();
 const agentDiagnostics = new WeakMap<object, Omit<ErrorContext, 'source' | 'operation' | 'runtime'>>();
@@ -79,7 +79,7 @@ export function attachAgentDiagnostics(connection: WebSocket, runtime: NonNullab
     ...(windowId && validTurnId(windowId) ? { window_id: windowId } : {}),
     ...(process.env.STASHBASE_SERVER_INSTANCE_ID && validTurnId(process.env.STASHBASE_SERVER_INSTANCE_ID)
       ? { host_instance_id: process.env.STASHBASE_SERVER_INSTANCE_ID } : {}) } });
-  agentStates.set(connection, { interrupted: false, closing: false });
+  agentStates.set(connection, { runtime, interrupted: false, closing: false });
   agentCaptures.set(connection, telemetry.scoped());
   connection.on('message', (raw) => {
     try {
@@ -143,12 +143,13 @@ export function agentDiagnosticStage(connection: object, stage: AgentTurnStage):
   if (state) state.stage = stage;
   const details = agentDiagnostics.get(connection);
   if (details) details.context = { ...details.context, stage };
-  telemetry.observeTurn(details?.turn_id, { stage, ...(details?.context ? { context: details.context } : {}) });
+  telemetry.observeTurn(details?.turn_id, { stage, ...(stage === 'host_accepted' && state?.runtime ? { runtime: state.runtime } : {}),
+    ...(details?.context ? { context: details.context } : {}) });
 }
 
 export function beginAgentDiagnosticTurn(connection: object, turnId: string | undefined, context: NonNullable<ErrorContext['context']> = {}): void {
   agentCaptures.set(connection, telemetry.scoped());
-  agentStates.set(connection, { interrupted: false, closing: false });
+  agentStates.set(connection, { runtime: agentStates.get(connection)?.runtime, interrupted: false, closing: false });
   const previous = agentDiagnostics.get(connection);
   agentDiagnostics.set(connection, {
     ...(turnId && validTurnId(turnId) ? { turn_id: turnId } : {}),

@@ -316,6 +316,9 @@ reader to current credits rather than claiming all credits are spent.
   documents, chats, arbitrary provider payloads and whole logs are not collected.
   Bounded offline delivery preserves occurrence time and identity. A submitted
   agent turn can retain content-free progress and its result across restarts.
+  Once an agent accepts a task, reporting its execution does not depend on the
+  interface's submission report arriving first. Short reporting retries never
+  resend the task, block writing, or replay activity across an account/privacy change.
   If a prior host left no result, recovery reports an interrupted turn with an
   unknown outcome; it does not infer success, failure, or an exact end time.
   Lost connections and recoverable tool errors remain distinct from confirmed

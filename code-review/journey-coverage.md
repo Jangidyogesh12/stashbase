@@ -368,6 +368,15 @@ Document runtime changes and active reading-surface interaction report content-f
 engagement; agent usage correlates start/terminal results with a random turn ID.
 Settings General discloses account linking and the shared usage/error opt-out.
 
+Renderer intake returns explicit admission receipts. Bounded renderer retries keep
+one event ID/time, while Node owns short receipt deduplication and rejects requests
+from before an account/privacy transition or host replacement. The telemetry route
+test exercises failed storage followed by successful admission and a lost receipt;
+renderer tests cover transient refusal, retry exhaustion and per-turn ordering.
+The core gate, focused telemetry/native-diagnostic suites, affected renderer tests,
+formatting/lint and documentation checks passed. These checks use controlled
+transport and do not establish production delivery.
+
 `server/telemetry.test.ts` covers anonymous-to-account links, restart continuity,
 logout/direct account switching, delayed outcomes, offline queue replay, stable
 UUID/time/version, retryable/permanent refusals, capacity/expiry, corrupt config,
@@ -1981,6 +1990,11 @@ empty native history.
 **Turn diagnostics (2026-10-14):** `server/telemetry.ts`, `telemetry-state.ts`
 and `telemetry-turns.ts` own durable pending turns, reserved terminal admission,
 identity/version continuity, terminal deduplication and unknown-result recovery.
+Actual runtime acceptance now establishes a missing turn independently of renderer
+intake, marked with host origin/time. The shared adapter test covers all four runtime
+identities, late renderer starts, host results and an intervening account switch;
+recovery coverage also starts from host acceptance. Unknown results still cannot
+manufacture starts, and telemetry failure never controls task execution.
 `error-reporting.ts` observes native lifecycle facts; the hosted model diagnostic
 owner emits request failures independently of native forwarding. Renderer context
 reads carry explicit turn IDs and socket errors share connection IDs, including

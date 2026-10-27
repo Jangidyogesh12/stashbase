@@ -3,7 +3,7 @@ import type { PendingTurn, QueuedUsage, TelemetryState } from './telemetry-state
 
 type Finished = Extract<TelemetryEvent, { event: 'agent_turn_finished' }>;
 export type TurnObservation =
-  | { stage: AgentTurnStage; context?: DiagnosticContext }
+  | { stage: AgentTurnStage; runtime?: Finished['runtime']; context?: DiagnosticContext }
   | { outcome: Finished['outcome']; reason: NonNullable<Finished['reason']>; source?: Finished['source'] };
 
 export function turnDuration(milliseconds: number): NonNullable<Finished['duration']> {

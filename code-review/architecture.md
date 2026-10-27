@@ -1087,6 +1087,12 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   ingestion refusal remain observable-data limitations. One serial drain re-reads
   current preferences/queue after every await and removes only acknowledged UUIDs.
   Bounded retry never waits in the user's writing operation or shutdown.
+- Renderer intake acknowledges persisted admission separately from duplicates,
+  disabled/stale collection and temporary refusal. Short, bounded in-memory
+  retries retain event UUID/time; the existing Node queue is the only durable
+  delivery owner. Host receipts suppress replay after delivery; account/privacy
+  transitions and host replacement retire earlier renderer requests. Renderer
+  event envelopes cannot choose identity or claim host observations.
 - Foreground input and document/agent engagement establish activity, not timers,
   background work or streamed output. All windows share category suppression and
   sessions. Save/project/billing work captures initiating identity before await;
@@ -1094,6 +1100,9 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   Each admitted pending turn reserves a terminal queue slot; terminal insertion
   and pending removal are one atomic config write and bypass ordinary event rate
   limiting. Renderer preparation and host execution facts converge by turn ID.
+  An adapter's actual `host_accepted` observation can establish a missing start
+  using its registered runtime, host time and `source: host`. A late renderer
+  start cannot rewrite or recount it; arbitrary stages/results cannot create starts.
   Restart recovery reports an interrupted unknown result, never inferred success
   or a fabricated end time/duration. Unknown terminal IDs cannot manufacture starts;
   opt-out clears pending turns and bounded recent-completion IDs.

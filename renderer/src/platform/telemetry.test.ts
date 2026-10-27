@@ -42,8 +42,8 @@ it('counts real foreground input across days without a heartbeat or collecting i
 
 it('coalesces editing bursts before HTTP and never accepts host-only account or billing facts', async () => {
   vi.useFakeTimers();
-  const client = httpClient();
-  const request = vi.spyOn(client, 'request').mockRejectedValue(new Error('offline'));
+  const client = httpClient({ status: 'accepted' });
+  const request = vi.spyOn(client, 'request');
   const record = createUsageRecorder(client);
   for (let index = 0; index < 50; index++)
     record({ event: 'document_engaged', activity: 'edit', format: 'md' });
@@ -51,10 +51,8 @@ it('coalesces editing bursts before HTTP and never accepts host-only account or 
   record({ event: 'subscription_observed', plan: 'pro', paid: true, cancel_at_period_end: false });
   await Promise.resolve();
   expect(request).toHaveBeenCalledTimes(1);
-  expect(request.mock.calls[0]?.[0].body).toEqual({
-    event: 'document_engaged',
-    activity: 'edit',
-    format: 'md',
+  expect(request.mock.calls[0]?.[0].body).toMatchObject({
+    event: { event: 'document_engaged', activity: 'edit', format: 'md' },
   });
   vi.advanceTimersByTime(60_000);
   record({ event: 'document_engaged', activity: 'edit', format: 'md' });
@@ -62,12 +60,12 @@ it('coalesces editing bursts before HTTP and never accepts host-only account or 
 });
 
 it('an immediate terminal outcome waits for its own start without delaying other turns', async () => {
-  const client = httpClient();
+  const client = httpClient({ status: 'accepted' });
   let release!: () => void;
   const request = vi.spyOn(client, 'request').mockImplementationOnce(
     () =>
       new Promise((resolve) => {
-        release = () => resolve({ body: null, status: 200 });
+        release = () => resolve({ body: { status: 'accepted' }, status: 200 });
       }),
   );
   const record = createUsageRecorder(client);
@@ -86,7 +84,69 @@ it('an immediate terminal outcome waits for its own start without delaying other
   release();
   await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
   expect(request.mock.calls[2]?.[0].body).toMatchObject({
-    event: 'agent_turn_finished',
-    turn_id: first,
+    event: { event: 'agent_turn_finished', turn_id: first },
   });
+});
+
+it('retries transport and admission failures with the original ID and occurrence time', async () => {
+  vi.useFakeTimers();
+  const client = httpClient({ status: 'accepted' });
+  const request = vi
+    .spyOn(client, 'request')
+    .mockRejectedValueOnce(new Error('receipt lost'))
+    .mockResolvedValueOnce({ status: 503, body: { status: 'retry' } });
+  const record = createUsageRecorder(client);
+  record({ event: 'app_opened' });
+  const original = structuredClone(request.mock.calls[0]?.[0].body);
+  expect(request).toHaveBeenCalledTimes(1);
+  await vi.runAllTimersAsync();
+  expect(request).toHaveBeenCalledTimes(3);
+  expect(request.mock.calls.map(([message]) => message.body)).toEqual([
+    original,
+    original,
+    original,
+  ]);
+});
+
+it('stops after a definitive receipt or refusal and bounds attempts without a valid receipt', async () => {
+  vi.useFakeTimers();
+  for (const status of ['accepted', 'duplicate', 'disabled', 'discarded']) {
+    const client = httpClient({ status });
+    createUsageRecorder(client)({ event: 'app_opened' });
+    await vi.runAllTimersAsync();
+    expect(client.request).toHaveBeenCalledTimes(1);
+  }
+  for (const status of [400, 403]) {
+    const client = httpClient(null, status);
+    createUsageRecorder(client)({ event: 'app_opened' });
+    await vi.runAllTimersAsync();
+    expect(client.request).toHaveBeenCalledTimes(1);
+  }
+  for (const status of [200, 503]) {
+    const client = httpClient(null, status);
+    createUsageRecorder(client)({ event: 'app_opened' });
+    await vi.runAllTimersAsync();
+    expect(client.request).toHaveBeenCalledTimes(3);
+  }
+});
+
+it('holds only its own terminal behind start retries and bounds concurrent reports', async () => {
+  vi.useFakeTimers();
+  const client = httpClient({ status: 'accepted' });
+  const request = vi.spyOn(client, 'request').mockRejectedValueOnce(new Error('offline'));
+  const record = createUsageRecorder(client);
+  const turn_id = crypto.randomUUID();
+  record({ event: 'agent_turn_started', runtime: 'codex', turn_id });
+  record({ event: 'agent_turn_finished', runtime: 'codex', turn_id, outcome: 'success' });
+  record({ event: 'app_opened' });
+  await vi.runAllTimersAsync();
+  expect(
+    request.mock.calls.map(
+      ([message]) => (message.body as { event: { event: string } }).event.event,
+    ),
+  ).toEqual(['agent_turn_started', 'app_opened', 'agent_turn_started', 'agent_turn_finished']);
+  request.mockClear();
+  request.mockImplementation(() => new Promise(() => {}));
+  for (let index = 0; index < 200; index++) record({ event: 'app_opened' });
+  expect(request).toHaveBeenCalledTimes(100);
 });

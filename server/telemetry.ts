@@ -5,7 +5,8 @@ import { telemetryAvailable } from './telemetry-environment.ts';
 import { randomUUID } from 'node:crypto';
 import type { AppConfigFile } from './app-config.ts';
 import { readAppConfigStrict, writeAppConfigStrict } from './app-config.ts';
-import { boundedDiagnosticContext, telemetryEventSchema, type TelemetryEvent, type ErrorContext } from '../shared/protocols/http/telemetry.ts';
+import { boundedDiagnosticContext, telemetryEventSchema, type TelemetryEvent, type ErrorContext,
+  type RendererTelemetryRequest, type TelemetryReceiptStatus } from '../shared/protocols/http/telemetry.ts';
 import { diagnosticAlreadyReported, diagnosticOperation, errorDiagnostic } from './error-diagnostics.ts';
 import { diagnosticText } from '../shared/protocols/diagnostics.ts';
 import { diagnosticScope, type DiagnosticScope } from './diagnostic-context.ts';
@@ -49,6 +50,17 @@ export function createTelemetry(options: {
   let retry: ReturnType<typeof setTimeout> | undefined;
   let retryDelay = 1000;
   let generation = 0;
+  // Receipts only cover short renderer retries. The existing disk queue remains
+  // the sole durable owner; a new host refuses retries from its predecessor.
+  let rendererSince = now() - 1;
+  let rendererAccount: string | undefined;
+  try { rendererAccount = accountUsageId(options.read()); } catch { /* Admission retries unreadable storage. */ }
+  const rendererReceipts = new Map<string, number>();
+  const retireRenderer = () => { rendererSince = now(); rendererReceipts.clear(); };
+  const synchronizeRenderer = (config: AppConfigFile) => {
+    const account = accountUsageId(config);
+    if (rendererAccount !== account) { retireRenderer(); rendererAccount = account; }
+  };
   const occurrences = new Map<string, { event: DiagnosticEvent; identity: UsageIdentity; startedAt: number; repeated: number; native?: NativeDiagnostic }>();
   let occurrenceTimer: ReturnType<typeof setInterval> | undefined;
   // WS facts can arrive before the renderer's independent start HTTP request.
@@ -65,6 +77,7 @@ export function createTelemetry(options: {
   });
   const cancel = () => {
     generation++;
+    retireRenderer();
     pending?.abort();
     pending = null;
     clearTimeout(retry);
@@ -156,6 +169,7 @@ export function createTelemetry(options: {
   const kick = () => { if (!retry) void flush(); };
 
   const synchronize = (config: AppConfigFile, state: TelemetryState): UsageIdentity => {
+    synchronizeRenderer(config);
     usageIdentity(state, now());
     const userId = accountUsageId(config);
     if (state.userId !== userId) {
@@ -188,35 +202,36 @@ export function createTelemetry(options: {
     if (!['application_error', 'application_warning', 'account_login_result', 'billing_checkout_result', 'billing_portal_result', 'project_entry_result', 'document_write_result', 'agent_setup_result', 'agent_setup_stage', 'agent_runtime_start_result'].includes(input.event)) return input;
     return { ...scope, ...input, ...('context' in input || scope.context ? { context: { ...scope.context, ...('context' in input ? input.context : {}) } } : {}) } as TelemetryEvent;
   };
-  const capture = (input: TelemetryEvent, captured?: UsageIdentity, capturedGeneration = generation, rollup = false, native?: NativeDiagnostic): boolean | undefined => {
-    if (!allowed() || capturedGeneration !== generation) return;
+  const capture = (input: TelemetryEvent, captured?: UsageIdentity, capturedGeneration = generation, rollup = false,
+    native?: NativeDiagnostic, receipt?: RendererTelemetryRequest): TelemetryReceiptStatus => {
+    if (!allowed() || capturedGeneration !== generation) return 'disabled';
     try {
       const scoped = withScope(input);
       const parsed = telemetryEventSchema.safeParse('context' in scoped ? { ...scoped, context: boundedDiagnosticContext(scoped.context) } : scoped);
-      if (!parsed.success) return;
+      if (!parsed.success) return 'discarded';
       const config = options.read();
       const state = usageState(config, now());
-      if (!state.enabled) return;
+      if (!state.enabled) return 'disabled';
       const eventTurnId = 'turn_id' in parsed.data ? parsed.data.turn_id : undefined;
       const turn = eventTurnId ? state.turns?.find((item) => item.turnId === eventTurnId) : undefined;
       if (parsed.data.event === 'agent_turn_finished' && eventTurnId) {
-        if (!turn) return;
-        finishTelemetryTurn(state, turn, { ...parsed.data, source: parsed.data.source ?? 'renderer' }, now());
+        if (!turn) return state.finishedTurns?.[eventTurnId] !== undefined ? 'duplicate' : 'retry';
+        finishTelemetryTurn(state, turn, { ...parsed.data, source: parsed.data.source ?? 'renderer' }, receipt ? Date.parse(receipt.timestamp) : now());
         save(config, state);
         kick();
-        return true;
+        return 'accepted';
       }
       if (parsed.data.event === 'agent_turn_started' && eventTurnId) {
-        if (turn || state.finishedTurns?.[eventTurnId] !== undefined) return;
-        if ((state.turns?.length ?? 0) >= TURN_LIMIT) return;
+        if (turn || state.finishedTurns?.[eventTurnId] !== undefined) return 'duplicate';
+        if ((state.turns?.length ?? 0) >= TURN_LIMIT) return 'retry';
       }
       if (turn) captured = turnIdentity(turn);
       // Reserve an identity link, the new event, and every admitted terminal.
       const reservation = parsed.data.event === 'agent_turn_started' && eventTurnId ? 3 : 2;
-      if (turnCapacity(state) > QUEUE_LIMIT - reservation) { kick(); return; }
+      if (turnCapacity(state) > QUEUE_LIMIT - reservation) { kick(); return 'retry'; }
       const identity = synchronize(config, state);
-      if (captured && captured.installationId !== identity.installationId) return;
-      if (native && state.queue?.some((item) => item.uuid === native.uuid)) return true;
+      if (captured && captured.installationId !== identity.installationId) return 'discarded';
+      if (native && state.queue?.some((item) => item.uuid === native.uuid)) return 'duplicate';
       const event = parsed.data;
       if ('diagnostic' in event && event.diagnostic) event.diagnostic = errorDiagnostic(event.diagnostic);
       if ('context' in event && event.context) event.context = sanitizeContext(event.context);
@@ -237,7 +252,7 @@ export function createTelemetry(options: {
             // version and identity, even if delivered by a later host build.
             if (!bucket.repeated) bucket.native = native;
             bucket.repeated += repetitions;
-            return native ? true : undefined;
+            return 'duplicate';
           }
           event.occurrences = (bucket?.repeated ?? 0) + repetitions;
           occurrences.delete(key);
@@ -258,10 +273,10 @@ export function createTelemetry(options: {
           }
         }
       }
-      if (event.event === 'app_opened' && opened) return;
+      if (event.event === 'app_opened' && opened) return 'duplicate';
       const minute = Math.floor(now() / 60000);
       if (minute !== rateWindow) { rateWindow = minute; count = 0; }
-      if (count >= 120) return;
+      if (count >= 120) return 'retry';
       const active = event.event === 'app_active' || event.event === 'document_engaged' || event.event === 'agent_turn_started';
       const currentIdentity = !captured || (captured.anonymousId === identity.anonymousId && captured.userId === identity.userId);
       if (active && currentIdentity) {
@@ -272,14 +287,15 @@ export function createTelemetry(options: {
       }
       const marker = event.event === 'app_active' ? `app_active:${event.mode}`
         : event.event === 'document_engaged' ? `document_engaged:${event.activity}:${event.format}` : null;
-      if (marker && state.markers?.[marker] !== undefined && Math.floor(state.markers[marker] / 60_000) === minute) return;
+      if (marker && state.markers?.[marker] !== undefined && Math.floor(state.markers[marker] / 60_000) === minute) return 'duplicate';
       if (marker) state.markers = { ...state.markers, [marker]: now() };
       if (event.event === 'subscription_observed') {
         const status = `${event.plan}:${event.paid}:${event.cancel_at_period_end}`;
-        if (!currentIdentity || state.subscription === status) return;
+        if (!currentIdentity || state.subscription === status) return 'duplicate';
         state.subscription = status;
       }
       const queued = entry(captured ?? identity, event, turn?.sessionId ?? (currentIdentity ? state.sessionId : undefined));
+      if (receipt) Object.assign(queued, { uuid: receipt.id, timestamp: receipt.timestamp });
       if (native) Object.assign(queued, { uuid: native.uuid, timestamp: native.timestamp, version: native.version, distribution: native.distribution, os: native.os });
       if (!state.queue?.some((item) => item.uuid === queued.uuid)) (state.queue ??= []).push(queued);
       if (event.event === 'agent_turn_started' && event.turn_id) {
@@ -298,8 +314,8 @@ export function createTelemetry(options: {
       if (event.event === 'app_opened') opened = true;
       count++;
       kick();
-      return true;
-    } catch { /* Unavailable persistence fails closed without affecting work. */ }
+      return 'accepted';
+    } catch { return 'retry'; /* Unavailable persistence never affects work. */ }
   };
   const observeTurn = (turnId: string | undefined, observation: TurnObservation) => {
     if (!turnId || !allowed()) return;
@@ -309,6 +325,13 @@ export function createTelemetry(options: {
       if (!state.enabled || state.finishedTurns?.[turnId] !== undefined) return;
       const turn = state.turns?.find((item) => item.turnId === turnId);
       if (!turn) {
+        // Only an actual runtime acceptance can establish a missing start.
+        // Its time is host observation, never an invented renderer submission.
+        if ('stage' in observation && observation.stage === 'host_accepted' && observation.runtime
+          && capture({ event: 'agent_turn_started', runtime: observation.runtime, turn_id: turnId, source: 'host' }) === 'accepted') {
+          observeTurn(turnId, observation);
+          return;
+        }
         if (!earlyTurns.has(turnId) && earlyTurns.size >= TURN_LIMIT) earlyTurns.delete(earlyTurns.keys().next().value!);
         const early = earlyTurns.get(turnId) ?? { at: now(), observations: [] };
         if (early.observations.length >= 32 && 'outcome' in observation) early.observations.pop();
@@ -352,9 +375,9 @@ export function createTelemetry(options: {
   const drainNative = () => {
     if (collectionStopped) { options.native?.clear(); return; }
     options.native?.drain((record) => record.severity === 'info'
-      ? capture({ event: 'native_lifecycle', operation: record.operation, diagnostic: errorDiagnostic(record.diagnostic), context: record.context }, record.identity, generation, false, record) === true
-      : capture({ event: record.severity === 'warning' ? 'application_warning' : 'application_error', source: 'native',
-    operation: record.operation, diagnostic: record.diagnostic, context: record.context, occurrences: 1 }, record.identity, generation, false, record) === true);
+      ? ['accepted', 'duplicate'].includes(capture({ event: 'native_lifecycle', operation: record.operation, diagnostic: errorDiagnostic(record.diagnostic), context: record.context }, record.identity, generation, false, record))
+      : ['accepted', 'duplicate'].includes(capture({ event: record.severity === 'warning' ? 'application_warning' : 'application_error', source: 'native',
+    operation: record.operation, diagnostic: record.diagnostic, context: record.context, occurrences: 1 }, record.identity, generation, false, record)));
   };
   const nativeTimer = options.native && options.available ? setInterval(drainNative, 5000) : undefined;
   nativeTimer?.unref();
@@ -363,6 +386,24 @@ export function createTelemetry(options: {
     preferences,
     observeTurn,
     capture(input: TelemetryEvent) { capture(input); },
+    captureRenderer(request: RendererTelemetryRequest): TelemetryReceiptStatus {
+      if (!allowed()) return 'disabled';
+      try {
+        const config = options.read();
+        synchronizeRenderer(config);
+        const state = usageState(config, now());
+        if (!state.enabled) return 'disabled';
+        const occurred = Date.parse(request.timestamp);
+        if (!Number.isFinite(occurred) || occurred <= rendererSince || occurred < now() - 60_000 || occurred > now() + 1000) return 'discarded';
+        for (const [id, at] of rendererReceipts) if (at < now() - 60_000) rendererReceipts.delete(id);
+        if (rendererReceipts.has(request.id) || state.queue?.some(item => item.uuid === request.id)) return 'duplicate';
+        if (rendererReceipts.size >= QUEUE_LIMIT) return 'retry';
+        const event = request.event.event === 'agent_turn_started' ? { ...request.event, source: 'renderer' as const } : request.event;
+        const status = capture(event, undefined, generation, false, undefined, request);
+        if (status === 'accepted' || status === 'duplicate') rendererReceipts.set(request.id, now());
+        return status;
+      } catch { return 'retry'; }
+    },
     /** Capture before asynchronous host work to keep its terminal outcome on
      * the initiating account even if another window signs out or switches. */
     scoped() {
@@ -411,7 +452,7 @@ export function createTelemetry(options: {
       // network request is made after the switch is turned off.
       save(config, next.enabled ? { ...state, enabled: true } : { enabled: false });
       collectionStopped = !next.enabled;
-      if (next.enabled) { opened = false; retryDelay = 1000; kick(); }
+      if (next.enabled) { retireRenderer(); opened = false; retryDelay = 1000; kick(); }
       return preferences();
     },
     flush,

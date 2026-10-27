@@ -96,7 +96,8 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
   z.object({ event: z.literal('subscription_observed'), plan: z.enum(['free', 'plus', 'pro', 'other']),
     paid: z.boolean(), cancel_at_period_end: z.boolean() }).strict(),
   z.object({ event: z.literal('project_entry_result'), ...correlation, outcome }).strict(),
-  z.object({ event: z.literal('agent_turn_started'), runtime, turn_id: z.string().uuid().optional() }).strict(),
+  z.object({ event: z.literal('agent_turn_started'), runtime, turn_id: z.string().uuid().optional(),
+    source: z.enum(['renderer', 'host']).optional() }).strict(),
   z.object({
     event: z.literal('agent_turn_finished'), runtime, outcome: z.enum(['success', 'failed', 'cancelled', 'blocked', 'interrupted']), turn_id: z.string().uuid().optional(),
     duration: z.enum(['under_10s', '10s_to_60s', '1m_to_5m', 'over_5m']).optional(),
@@ -147,7 +148,16 @@ export type TelemetryEvent = z.infer<typeof telemetryEventSchema>;
 /** Authentication, billing and persisted writes are host facts. Renderers
  * cannot manufacture identity links or account/conversion outcomes. */
 export const rendererTelemetryEventSchema = telemetryEventSchema.refine((value) =>
-  ['app_opened', 'app_active', 'document_engaged', 'agent_turn_started', 'agent_turn_finished'].includes(value.event));
+  ['app_opened', 'app_active', 'document_engaged', 'agent_turn_started', 'agent_turn_finished'].includes(value.event)
+  && (!('source' in value) || value.source === undefined || value.source === 'renderer'));
+export const rendererTelemetryRequestSchema = z.object({
+  id: z.string().uuid(), timestamp: z.string().datetime(), event: rendererTelemetryEventSchema,
+}).strict();
+export type RendererTelemetryRequest = z.infer<typeof rendererTelemetryRequestSchema>;
+export const telemetryReceiptSchema = z.object({
+  status: z.enum(['accepted', 'duplicate', 'disabled', 'retry', 'discarded']),
+}).strict();
+export type TelemetryReceiptStatus = z.infer<typeof telemetryReceiptSchema>['status'];
 export const telemetryPreferencesSchema = z.object({
   enabled: z.boolean(), available: z.boolean(),
 }).strip();

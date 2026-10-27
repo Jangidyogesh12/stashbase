@@ -47,7 +47,7 @@ in provider history; absence is not evidence of source use.
 | `app_active` | Trusted pointer, keyboard or wheel input in a visible, focused app window | `mode`: welcome / documents / chat |
 | `document_engaged` | Interaction inside the active document surface, or an actual editor change | `activity`: read / edit; allowlisted `format` |
 | `project_entry_result` | Host project-open operation settles | `outcome` |
-| `agent_turn_started` | User submission or manual retry begins preparation | `runtime`, random `turn_id` |
+| `agent_turn_started` | Submission preparation, or first host acceptance when the submission report is missing | `runtime`, random `turn_id`, `source`: renderer / host |
 | `agent_turn_stage` | Host observes a significant execution boundary | `runtime`, `turn_id`, `stage`, per-turn `sequence`, bounded correlation context |
 | `agent_turn_finished` | Submission completes, fails, is blocked, cancelled or interrupted | `runtime`, `turn_id`, `outcome`, `source`, optional `reason`, last stage, sequence and observation times; duration only for an observed end |
 | `agent_runtime_start_result` | One Default/OpenCode startup attempt settles, including history and prewarm | `purpose`, `outcome`, `stage`, `attempt_id`, optional `retry_of`, `elapsed_ms`/`first_output_ms`, phase `timings`, runtime version and optional diagnostic |
@@ -170,7 +170,13 @@ the turn ID; duplicate terminal signals do not create another result. A bounded
 recent-completion record also rejects delayed duplicate starts. Unknown terminal
 IDs never manufacture a start.
 
-`agent_turn_started` means submission preparation, not native execution.
+`agent_turn_started` normally means submission preparation (`source: renderer`).
+If that report is missing when the runtime accepts the task, the host establishes
+the turn with `source: host` and its actual acceptance time. This is not a recovered
+submission time; duration then starts at host acceptance. Earlier events without
+`source` describe renderer submission. Late submission reports do not create a
+second start or rewrite the recorded origin. Arbitrary stage/terminal observations
+cannot establish a missing turn.
 Stages are `preparing` (the initial record), `host_accepted`, `runtime_dispatched`,
 `model_request_started`, `response_started`, `waiting_permission`, and
 `tool_running`. Stages can repeat across model/tool calls; sequence numbers order
@@ -232,13 +238,20 @@ the pending record are one atomic write. Full queues refuse new starts and other
 events rather than evicting identity links or reserved terminals. Pending records
 and up to 500 recent-completion IDs expire after seven days. Local storage failure,
 expiry and permanent ingestion refusal still limit delivery. Independently
-arriving host observations can wait briefly for an in-flight renderer start;
-this bounded in-memory race buffer cannot reconstruct starts lost before admission.
+arriving host observations other than acceptance can wait briefly for an admitted
+start. This bounded race buffer cannot infer a missing submission; actual host
+acceptance supplies its own start as described above.
 
 Collection never waits on network delivery to complete a writing operation or
 shutdown. The host re-reads current configuration after each outbound request so
 an acknowledgement cannot overwrite newer preferences or newly queued work.
-Renderer delivery queues up to 100 errors and retries each up to three times.
+Renderer usage delivery keeps at most 100 outstanding reports in memory and makes
+at most three attempts, retaining the event UUID and occurrence time. Local intake
+confirms saved admission, duplicates, disabled/stale collection or temporary refusal;
+only temporary failures retry. Account/privacy changes and host replacement discard
+older renderer requests. These short retries do not survive a closed renderer and
+never resend an Agent task. There is no second durable renderer queue.
+Renderer error delivery queues up to 100 errors and retries each up to three times.
 Native processes spool up to 50 bounded diagnostic records for seven days, including startup,
 renderer/child-process crashes, MCP startup and actual updater failures. The host
 imports them every five seconds or on shutdown, retaining occurrence time and
