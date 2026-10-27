@@ -8,7 +8,7 @@ const {
   registerWindowLifecycle,
 } = require('../../dist/electron/window/lifecycle.cjs');
 
-function harness({ load = true, timeoutMs = 1_000 } = {}) {
+function harness({ load = true, timeoutMs = 1_000, beforeClose } = {}) {
   const handlers = new Map();
   const windowHandlers = new Map();
   const webContentsHandlers = new Map();
@@ -38,6 +38,7 @@ function harness({ load = true, timeoutMs = 1_000 } = {}) {
     webContents,
   };
   const dependencies = {
+    beforeClose,
     onCloseBlocked: () => { blocked += 1; },
     BrowserWindow: { fromWebContents: (candidate) => (candidate === webContents ? window : null) },
     expectedOrigins: new Set(['app://renderer']),
@@ -121,6 +122,44 @@ test('native close waits for the renderer barrier and remains open after failure
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(setup.closeCalls(), 1);
   assert.equal(setup.blocked(), 1, 'a successful retry does not revoke quit intent');
+});
+
+test('host retirement happens after accepted saves and before window sockets disappear', async () => {
+  let retired = 0;
+  let release;
+  const setup = harness({ beforeClose: async () => {
+    retired++;
+    await new Promise(resolve => { release = resolve; });
+  } });
+  const closeEvent = { preventDefault() {} };
+  const ready = setup.handlers.get('window:context-release-ready');
+  setup.close(closeEvent);
+  await ready(setup.event, { ...setup.sent.at(-1)[1], ready: false });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(retired, 0, 'a refused save must preserve the live host sessions');
+  setup.close(closeEvent);
+  await ready(setup.event, { ...setup.sent.at(-1)[1], ready: true });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(retired, 1);
+  assert.equal(setup.closeCalls(), 0, 'the renderer remains alive until host retirement answers');
+  setup.close(closeEvent);
+  assert.equal(retired, 1, 'repeat close requests share the pending retirement');
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(setup.closeCalls(), 1);
+  setup.close({ preventDefault: () => assert.fail('the final native close must proceed') });
+});
+
+test('an update-approved close retires the host once and a failed host cannot pin the window', async () => {
+  let retired = 0;
+  const setup = harness({ beforeClose: async () => { retired++; throw new Error('host unavailable'); } });
+  setup.lifecycle.approveClose(setup.window);
+  setup.close({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(setup.sent.length, 0, 'the update already settled the save barrier');
+  assert.equal(retired, 1);
+  assert.equal(setup.closeCalls(), 1);
+  setup.close({ preventDefault: () => assert.fail('retirement is not repeated') });
 });
 
 test('the active save barrier rejects mismatched senders, request IDs, and reasons', async () => {

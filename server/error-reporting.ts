@@ -133,6 +133,9 @@ export function updateAgentDiagnosticContext(connection: object, context: NonNul
 export function markAgentDiagnosticClosing(connection: object, reason: NonNullable<ErrorContext['context']>['close_reason']): void {
   const state = agentStates.get(connection);
   const details = agentDiagnostics.get(connection);
+  // Runtime disposal also follows socket errors. Cleanup cannot turn that
+  // observed transport failure into an intentional cancellation.
+  if (details?.context?.close_reason === 'socket_error') return;
   if (state) state.closing = true;
   if (!details?.context?.close_reason) updateAgentDiagnosticContext(connection, { close_initiator: 'server', close_reason: reason });
 }

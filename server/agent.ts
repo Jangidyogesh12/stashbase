@@ -1,4 +1,5 @@
-import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { AGENT_SESSION_CLOSE } from '../shared/agent-protocol.ts';
+import { agentDiagnosticStage, beginAgentDiagnosticTurn, markAgentDiagnosticClosing, reportAgentRuntimeError } from './error-reporting.ts';
 /**
  * Structured-agent sidecar. Where `terminal.ts` bridges a raw PTY to an
  * xterm, this bridges the **Claude Agent SDK** to a WebSocket as a
@@ -1039,6 +1040,7 @@ export class AgentSession implements AttributedAgentSession {
 
   dispose(termination?: AgentSessionTermination): void {
     if (this.closed) return;
+    markAgentDiagnosticClosing(this.ws, termination?.kind === 'scope-removed' ? 'scope_removed' : 'session_disposed');
     if (termination?.kind === 'scope-removed') {
       this.send({ t: 'exit', reason: 'scope-removed', folder: termination.folder });
     }
@@ -1056,7 +1058,7 @@ export class AgentSession implements AttributedAgentSession {
       p.resolve({ behavior: 'deny', message: 'Session closed.' });
     }
     this.pending.clear();
-    try { this.ws.close(); } catch { /* already closed */ }
+    try { this.ws.close(AGENT_SESSION_CLOSE.code, AGENT_SESSION_CLOSE.reason); } catch { /* already closed */ }
   }
 
   private async retireNativeQuery(): Promise<void> {

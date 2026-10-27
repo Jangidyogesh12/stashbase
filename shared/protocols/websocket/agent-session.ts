@@ -3,6 +3,9 @@ import { agentCrewCallSchema } from '../http/agent-tools';
 
 import { agentIdSchema } from "../http/agent-runtime";
 
+// A clean server retirement is distinct from a transport that merely closes.
+export const AGENT_SESSION_CLOSE = { code: 1000, reason: 'session_disposed' } as const;
+
 const boundedText = (maximum: number) => z.string().max(maximum);
 const recordSchema = z.record(z.string(), z.unknown());
 

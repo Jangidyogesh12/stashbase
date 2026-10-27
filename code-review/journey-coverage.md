@@ -1529,6 +1529,18 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Intentional window retirement (2026-10-27):** all four runtime disposals mark
+intent before socket closure. Main retires the host window after successful saves
+and before destroying its renderer; failed saves retain live sessions, and failed
+host cleanup cannot pin a saved window. Telemetry regressions cover all four
+adapters, explicit client close, unexpected 1001 closure and socket errors.
+Lifecycle tests cover blocked saves, repeated closes and update approval; the
+real Electron lifecycle fixture uses the actual renderer adapter to verify
+host-socket retirement precedes window destruction without an error. A shared
+clean-close reason distinguishes retirement from bare 1000 and unclean 1006;
+existing terminal failure messages remain intact. These controlled checks do not replace a packaged/provider session
+on the reporting installation.
+
 **Composer position after approvals (2026-10-27):** the transcript scroll area
 in `ui/workspace.tsx` is also the containing block for its absolutely positioned
 accessibility labels. Without it, those labels escape the transcript's clipping

@@ -28,6 +28,7 @@ import {
   type AgentSessionInfoWire,
 } from '@/protocols/http/agent-sessions';
 import {
+  AGENT_SESSION_CLOSE,
   agentClientEventSchema,
   agentServerEventSchema,
   agentSessionConnectSchema,
@@ -295,6 +296,15 @@ export function createAgentSessionAdapter(
         if (event) listener.onEvent(event);
       };
       const onClose = (event?: Pick<CloseEvent, 'code' | 'reason' | 'wasClean'>) => {
+        if (
+          !settledByServer &&
+          event?.wasClean &&
+          event.code === AGENT_SESSION_CLOSE.code &&
+          event.reason === AGENT_SESSION_CLOSE.reason
+        ) {
+          settledByServer = true;
+          listener.onEvent({ kind: 'exited', message: null });
+        }
         if (!settledByServer)
           connectionError(
             `Agent connection closed unexpectedly (code ${event?.code ?? 'unknown'}, clean ${event?.wasClean ?? false}): ${event?.reason ?? ''}`,

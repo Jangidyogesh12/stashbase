@@ -1,4 +1,5 @@
-import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { AGENT_SESSION_CLOSE } from '../shared/agent-protocol.ts';
+import { agentDiagnosticStage, beginAgentDiagnosticTurn, markAgentDiagnosticClosing, reportAgentRuntimeError } from './error-reporting.ts';
 import { retireAgentProcess, ownAgentProcess, type AgentStopReason } from './agent-process.ts';
 /**
  * Live Antigravity WebSocket session runtime.
@@ -703,6 +704,7 @@ export class AntigravitySession implements AttributedAgentSession {
 
   dispose(termination?: AgentSessionTermination): void {
     if (this.closed) return;
+    markAgentDiagnosticClosing(this.ws, termination?.kind === 'scope-removed' ? 'scope_removed' : 'session_disposed');
     if (termination?.kind === 'scope-removed') {
       this.send({ t: 'exit', reason: 'scope-removed', folder: termination.folder });
     }
@@ -718,7 +720,7 @@ export class AntigravitySession implements AttributedAgentSession {
     const proc = this.proc;
     this.proc = null;
     if (proc) void retireAgentProcess(proc, termination?.kind === 'scope-removed' ? 'scope_removed' : 'session_closed').catch(() => {});
-    try { this.ws.close(); } catch { /* already closed */ }
+    try { this.ws.close(AGENT_SESSION_CLOSE.code, AGENT_SESSION_CLOSE.reason); } catch { /* already closed */ }
   }
 }
 

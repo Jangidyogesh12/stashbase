@@ -469,6 +469,10 @@ function installReplacementBoundary() {
   });
   replacementWindowLifecycle = windowLifecycle.registerWindowLifecycle({
     onCloseBlocked: () => { quitRequested = false; },
+    beforeClose: async (win) => {
+      const windowId = windowRegistry.idForWindow(win);
+      if (windowId) await requestWindowContextRelease(windowId);
+    },
     BrowserWindow,
     ipcMain,
     expectedOrigins: new Set([RENDERER_ORIGIN]),
@@ -1175,13 +1179,15 @@ async function createWindow({ background = false, reopensProject = false } = {})
   return win;
 }
 
+function requestWindowContextRelease(windowId) {
+  return requestJson(SERVER_PORT, '/api/window', 1000, {
+    method: 'DELETE',
+    headers: { 'x-stashbase-window-id': windowId },
+  });
+}
+
 function releaseWindowContext(windowId) {
-  void releaseWindowContextWithRetry(() => (
-    requestJson(SERVER_PORT, '/api/window', 1000, {
-      method: 'DELETE',
-      headers: { 'x-stashbase-window-id': windowId },
-    })
-  )).then(({ ok, result, attempts }) => {
+  void releaseWindowContextWithRetry(() => requestWindowContextRelease(windowId)).then(({ ok, result, attempts }) => {
     if (!ok) {
       const detail = result?.reachable ? `HTTP ${result.statusCode}` : 'server unreachable';
       console.warn(`[electron] window context cleanup failed after ${attempts} attempts: ${detail}`);

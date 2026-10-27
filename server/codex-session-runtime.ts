@@ -1,3 +1,4 @@
+import { AGENT_SESSION_CLOSE } from '../shared/agent-protocol.ts';
 import { setAgentProcessSnapshot, updateAgentDiagnosticContext, markAgentDiagnosticClosing, agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
 import { isStashbaseWorkspaceEdit, isWorkspaceFileChange } from './agent-file-permissions.ts';
 import { retireAgentProcess } from './agent-process.ts';
@@ -1037,7 +1038,7 @@ export class CodexSession implements AttributedAgentSession {
     }
     this.pendingApprovals.clear();
     this.disposeAppServer();
-    try { this.ws.close(); } catch { /* already closed */ }
+    try { this.ws.close(AGENT_SESSION_CLOSE.code, AGENT_SESSION_CLOSE.reason); } catch { /* already closed */ }
   }
 
   private disposeAppServer(): void {

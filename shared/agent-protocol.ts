@@ -18,6 +18,8 @@
  * vocabulary.
  */
 
+export { AGENT_SESSION_CLOSE } from './protocols/websocket/agent-session.ts';
+
 export type {
   AgentClientEvent,
   AgentId,

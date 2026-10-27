@@ -913,6 +913,74 @@ test('runtime exit and socket loss settle independently of the renderer with bou
   f.service.close();
 });
 
+test('window retirement cancels each runtime turn while an unexpected socket loss stays an error', async (t) => {
+  const { AGENT_SESSION_CLOSE } = await import('../shared/agent-protocol.ts');
+  const { EventEmitter } = await import('node:events');
+  const { AgentSession } = await import('./agent.ts');
+  const { CodexSession } = await import('./codex-session-runtime.ts');
+  const { AntigravitySession } = await import('./antigravity-session-runtime.ts');
+  const { OpenCodePanelSession } = await import('./opencode-agent.ts');
+  const { liveSessionSet } = await import('./agent-session-registry.ts');
+  const { telemetry } = await import('./telemetry.ts');
+  const { attachAgentDiagnostics, beginAgentDiagnosticTurn } = await import('./error-reporting.ts');
+  const f = fixture();
+  t.after(() => f.service.close());
+  t.mock.method(telemetry, 'scoped', () => f.service.scoped());
+  t.mock.method(telemetry, 'observeTurn', f.service.observeTurn);
+  class Socket extends EventEmitter {
+    OPEN = 1;
+    readyState = 1;
+    send() {}
+    closeReason = '';
+    close(code = 1000, reason = '') {
+      if (this.readyState === 3) return;
+      this.closeReason = reason;
+      this.readyState = 3;
+      this.emit('close', code);
+    }
+  }
+  for (const runtime of ['stashbase', 'claude', 'codex', 'antigravity'] as const) {
+    for (const reason of ['window', 'client', 'unexpected', 'socket-error'] as const) {
+      const socket = new Socket();
+      const ws = socket as unknown as import('ws').WebSocket;
+      const windowId = crypto.randomUUID();
+      attachAgentDiagnostics(ws, runtime, undefined, windowId);
+      const session = runtime === 'claude' ? new AgentSession(ws, windowId)
+        : runtime === 'codex' ? new CodexSession(ws, windowId)
+        : runtime === 'antigravity' ? new AntigravitySession(ws, windowId, undefined, undefined, undefined, undefined, undefined)
+        : new OpenCodePanelSession(ws, { windowId, folder: '/workspace' }, {
+          models: async () => [], client: async () => new Promise<never>(() => {}),
+          beginTurn() {}, endTurn() {}, tools: () => [], complete: async () => '',
+          runTool: async () => ({ text: '', tool: '', model: '' }), onExit: () => () => {}, close: async () => {},
+        });
+      const turn_id = crypto.randomUUID();
+      f.service.capture({ event: 'agent_turn_started', runtime, turn_id });
+      beginAgentDiagnosticTurn(ws, turn_id);
+      if (reason === 'window') {
+        const sessions = liveSessionSet<typeof session>();
+        sessions.add(session);
+        sessions.killWindow(windowId);
+      } else if (reason === 'client') socket.emit('message', Buffer.from('{"t":"close"}'));
+      else if (reason === 'socket-error') {
+        socket.emit('error', Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }));
+        socket.close(1006);
+      }
+      else socket.close(1001); // The close code alone does not prove user intent.
+      await f.service.flush();
+      const events = f.sent.filter(({ body }) => body.properties.turn_id === turn_id).map(({ body }) => body);
+      const terminal = events.find(event => event.event === 'agent_turn_finished')!;
+      const lost = reason === 'unexpected' || reason === 'socket-error';
+      if (!lost) assert.equal(socket.closeReason, AGENT_SESSION_CLOSE.reason, `${runtime}: ${reason}`);
+      assert.equal(terminal.properties.outcome, lost ? 'interrupted' : 'cancelled', `${runtime}: ${reason}`);
+      assert.equal(events.some(event => event.event === 'application_error'), lost, `${runtime}: ${reason}`);
+      const closed = events.find(event => event.event === 'agent_connection_closed')!;
+      assert.equal(closed.properties.context.close_reason,
+        reason === 'window' ? 'session_disposed' : reason === 'client' ? 'client_close'
+          : reason === 'socket-error' ? 'socket_error' : 'socket_closed');
+    }
+  }
+});
+
 test('tool failure can recover and interrupt acknowledgement remains cancellation', async (t) => {
   const { EventEmitter } = await import('node:events');
   const { telemetry } = await import('./telemetry.ts');

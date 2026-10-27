@@ -1163,6 +1163,11 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   at most twenty pending RPC method names, never RPC parameters. Connection
   closure is an observation separate from turn outcome, including idle/intentional
   closure. These observations cannot retroactively fail a completed turn.
+  Every runtime marks deliberate disposal before closing its socket. Cleanup
+  after an observed socket error must not relabel transport loss as cancellation.
+  A clean 1000 close with the shared `session_disposed` reason also tells the
+  renderer that retirement was deliberate. A bare 1000 or unclean 1006 remains
+  unexpected; a prior terminal failure keeps its original explanation.
   Agent sockets retain the authorized window UUID and host instance UUID. Main
   records renderer load/exit and actual window closure with that window UUID,
   an ephemeral app-session UUID, available renderer PID and webContents ID;
@@ -1439,6 +1444,10 @@ certificate compatibility, and the limits of main-process debug hardening.
   request. A refused entry leaves its window for the next project, and a
   leftover window closes unless it is the only one, which stays on Welcome.
 - Close asks the owning loaded renderer and stays open on failure/timeout.
+  After successful saves, including update-approved closes, main attempts host
+  window retirement before destroying the renderer and its sockets. That request
+  has a one-second deadline; an unavailable host cannot pin a saved window, and
+  the closed handler retains its bounded cleanup retry.
   Confirmed renderer termination releases the barrier because its buffers are
   already lost; reloading establishes a new renderer that must acknowledge. Explicit
   quit retains intent through asynchronous saves and revokes it on refusal.

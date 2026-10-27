@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
 const { once } = require('node:events');
 const { randomUUID } = require('node:crypto');
 const { app, BrowserWindow } = require('electron');
@@ -63,6 +64,67 @@ async function run() {
     native.clear();
   }
   await verifyNetworkExit(native, hostId);
+  await verifyIntentionalClose();
+}
+
+async function verifyIntentionalClose() {
+  const { registerWindowLifecycle } = require('../../dist/electron/window/lifecycle.cjs');
+  const { AGENT_SESSION_CLOSE } = require(path.join(root, 'agent-protocol.cjs'));
+  const server = require('node:http').createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html');
+    response.end('<!doctype html><title>Intentional close verification</title>');
+  });
+  const sockets = new WebSocketServer({ server });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  const order = [];
+  let peer;
+  const lifecycle = registerWindowLifecycle({
+    BrowserWindow, ipcMain: { handle() {} }, expectedOrigins: new Set(), hasCapability: () => false,
+    isLiveWindow: candidate => candidate === win && !win.isDestroyed(),
+    beforeClose: async () => {
+      assert.equal(win.isDestroyed(), false);
+      const closed = once(peer, 'close');
+      peer.close(AGENT_SESSION_CLOSE.code, AGENT_SESSION_CLOSE.reason);
+      await closed;
+      const result = await win.webContents.executeJavaScript('window.fixtureClosed');
+      assert.deepEqual(result, { errors: [], events: [{ kind: 'exited', message: null }] });
+      order.push('host-retired');
+    },
+  });
+  lifecycle.attach(win);
+  try {
+    await win.loadURL(`http://127.0.0.1:${sockets.address().port}/`);
+    const connected = once(sockets, 'connection');
+    await win.webContents.executeJavaScript(fs.readFileSync(path.join(root, 'session-api.js'), 'utf8') + `;
+      (() => {
+        const errors = [], events = [];
+        let finish;
+        window.fixtureClosed = new Promise(resolve => { finish = resolve; });
+        window.fixtureConnection = FixtureSession.createAgentSessionAdapter({
+            request: async () => { throw Error('Unexpected HTTP request'); },
+            reportError: error => errors.push(error.message),
+          }, 'http://127.0.0.1:${sockets.address().port}').connect(
+            { agent: 'claude', scope: { kind: 'folder', path: '/fixture' } },
+            { onEvent: event => events.push(event), onInvalidResponse: () => errors.push('invalid frame'),
+              onClose: () => finish({ errors, events }) },
+          );
+      })();`);
+    [peer] = await connected;
+    lifecycle.approveClose(win); // Saves were accepted by the shared barrier.
+    const closed = once(win, 'closed');
+    win.on('closed', () => order.push('window-closed'));
+    win.close();
+    await closed;
+    assert.deepEqual(order, ['host-retired', 'window-closed']);
+    console.log('real Electron intentional close retires the socket before window destruction without a renderer error');
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+    for (const socket of sockets.clients) socket.terminate();
+    await new Promise(resolve => sockets.close(resolve));
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
 }
 
 async function verifyNetworkExit(native, hostId) {

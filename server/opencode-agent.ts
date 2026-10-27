@@ -1,4 +1,5 @@
-import { agentDiagnosticStage, beginAgentDiagnosticTurn, reportAgentRuntimeError } from './error-reporting.ts';
+import { AGENT_SESSION_CLOSE } from '../shared/agent-protocol.ts';
+import { agentDiagnosticStage, beginAgentDiagnosticTurn, markAgentDiagnosticClosing, reportAgentRuntimeError } from './error-reporting.ts';
 /** OpenCode implementation of StashBase's Shared Agent Contract. */
 import { prepareAgentAttachments } from './agent-attachments.ts';
 import { agentClientEventSchema } from '../shared/protocols/websocket/agent-session.ts';
@@ -422,6 +423,7 @@ export class OpenCodePanelSession {
 
   dispose(termination?: AgentSessionTermination): void {
     if (this.disposed) return;
+    markAgentDiagnosticClosing(this.ws, termination?.kind === 'scope-removed' ? 'scope_removed' : 'session_disposed');
     if (termination) send(this.ws, { t: 'exit', reason: termination.kind, folder: termination.folder });
     this.disposed = true;
     this.pendingPermissions.clear();
@@ -444,7 +446,7 @@ export class OpenCodePanelSession {
     sessions.delete(this);
     void this.runtime.close(termination?.kind === 'scope-removed' ? 'scope_removed' : 'session_closed')
       .catch((error: unknown) => log.warn('Could not close the agent session runtime.', error));
-    if (this.ws.readyState === this.ws.OPEN) this.ws.close();
+    if (this.ws.readyState === this.ws.OPEN) this.ws.close(AGENT_SESSION_CLOSE.code, AGENT_SESSION_CLOSE.reason);
   }
 
   private async initialize(): Promise<void> {

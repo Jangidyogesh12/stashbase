@@ -30,6 +30,17 @@ async function run() {
     // Windows. The parent owns fixture cleanup after the child is gone.
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-electron-smoke-'));
     try {
+      if (script === 'lifecycle-diagnostics-smoke.cjs') {
+        require('esbuild').buildSync({
+          entryPoints: [path.resolve(__dirname, '../../renderer/src/features/agent/infrastructure/session-api.ts')],
+          outfile: path.join(root, 'session-api.js'), bundle: true, platform: 'browser', format: 'iife', globalName: 'FixtureSession',
+          tsconfig: path.resolve(__dirname, '../../renderer/tsconfig.json'),
+        });
+        require('esbuild').buildSync({
+          entryPoints: [path.resolve(__dirname, '../../shared/agent-protocol.ts')],
+          outfile: path.join(root, 'agent-protocol.cjs'), bundle: true, platform: 'node', format: 'cjs',
+        });
+      }
       const child = spawn(
         require('electron'),
         [...electronArguments, path.join(__dirname, script)],

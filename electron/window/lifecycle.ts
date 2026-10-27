@@ -28,6 +28,8 @@ export interface WindowLifecycleDependencies extends SenderAuthorization {
   ipcMain: Pick<IpcMain, 'handle'>;
   isLiveWindow(window: BrowserWindow | null): boolean;
   onCloseBlocked?(): void;
+  /** Best-effort host retirement after saves succeed, before sockets disappear. */
+  beforeClose?(window: BrowserWindow): Promise<unknown>;
 }
 
 export function registerWindowLifecycle(
@@ -39,6 +41,7 @@ export function registerWindowLifecycle(
 ) {
   const loaded = new WeakSet<LifecycleWindow>();
   const approvedClose = new WeakSet<LifecycleWindow>();
+  const retiredClose = new WeakSet<LifecycleWindow>();
   const closing = new WeakSet<LifecycleWindow>();
   const acks = createAckCoordinator({
     channel: WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL,
@@ -104,16 +107,22 @@ export function registerWindowLifecycle(
         acks.settle(webContentsId, true);
       });
       window.on('close', (event) => {
-        if (approvedClose.has(window) || !loaded.has(window)) return;
+        if (retiredClose.has(window)) return;
+        const needsSave = !approvedClose.has(window) && loaded.has(window);
+        if (!needsSave && !dependencies.beforeClose) return;
         event.preventDefault();
         if (closing.has(window)) return;
         closing.add(window);
-        void request(window, 'window-close')
+        void (needsSave ? request(window, 'window-close') : Promise.resolve(true))
           .catch(() => false)
-          .then((ready) => {
+          .then(async (ready) => {
             if (!ready) { dependencies.onCloseBlocked?.(); return; }
             if (!dependencies.isLiveWindow(window)) return;
-            approvedClose.add(window);
+            // A failed/unreachable host cannot retain a window whose saves
+            // succeeded. The closed handler still retries context cleanup.
+            await dependencies.beforeClose?.(window).catch(() => {});
+            if (!dependencies.isLiveWindow(window)) return;
+            retiredClose.add(window);
             window.close();
           })
           .finally(() => closing.delete(window));

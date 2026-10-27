@@ -1,10 +1,56 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
+import { AGENT_SESSION_CLOSE } from '@/protocols/websocket/agent-session';
 import { httpClient } from '@/test/fakes/http';
 
 import { createAgentSessionAdapter } from './session-api';
 
 describe('Agent session API', () => {
+  it('recognizes explicit clean server retirement while retaining unexpected closes and prior failures', () => {
+    for (const scenario of ['retired', 'unknown-clean', 'lost', 'failed'] as const) {
+      let receive: (message: { data: unknown }) => void = vi.fn();
+      let close: (event: Pick<CloseEvent, 'code' | 'reason' | 'wasClean'>) => void = vi.fn();
+      const socket = {
+        readyState: 1,
+        addEventListener(type: string, listener: typeof receive | typeof close) {
+          if (type === 'message') receive = listener as typeof receive;
+          else close = listener as typeof close;
+        },
+        removeEventListener: vi.fn(),
+        send: vi.fn(),
+        close: vi.fn(),
+      };
+      const reportError = vi.fn();
+      const onEvent = vi.fn();
+      const onClose = vi.fn();
+      createAgentSessionAdapter(
+        { ...httpClient(), reportError },
+        'http://127.0.0.1:1',
+        () => socket,
+      ).connect(
+        { agent: 'claude', scope: { kind: 'folder', path: '/Research' } },
+        { onEvent, onClose, onInvalidResponse: vi.fn() },
+      );
+      if (scenario === 'failed')
+        receive({ data: JSON.stringify({ t: 'exit', message: 'Native runtime failed.' }) });
+      close({
+        code: scenario === 'lost' ? 1006 : AGENT_SESSION_CLOSE.code,
+        reason: scenario === 'unknown-clean' ? '' : AGENT_SESSION_CLOSE.reason,
+        wasClean: scenario !== 'lost',
+      });
+      expect(onClose).toHaveBeenCalledOnce();
+      const expectedClose = scenario === 'retired' || scenario === 'failed';
+      expect(reportError).toHaveBeenCalledTimes(expectedClose ? 0 : 1);
+      expect(
+        onEvent.mock.calls.map(([event]) => ({ kind: event.kind, message: event.message })),
+      ).toEqual(
+        expectedClose
+          ? [{ kind: 'exited', message: scenario === 'retired' ? null : 'Native runtime failed.' }]
+          : [],
+      );
+    }
+  });
+
   it('does not label a consumer failure as a malformed server response', () => {
     let receive: (message: { data: unknown }) => void = vi.fn();
     const failure = new Error('Consumer failed while applying a valid text event');
