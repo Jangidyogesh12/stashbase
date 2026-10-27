@@ -14,6 +14,8 @@ export interface SoftwareUpdateRow {
   /** The build that is running. */
   readonly version: string;
   readonly actionLabel: string;
+  /** Available alongside Restart when a downloaded installer can be superseded. */
+  readonly checkAgain: (() => void) | null;
   act(): void;
   setAutoCheck(enabled: boolean): void;
 }

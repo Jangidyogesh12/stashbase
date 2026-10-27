@@ -390,3 +390,99 @@ test('GitHub release wrappers retain the severity of the actual check failure, n
   }
   manager.dispose();
 });
+
+test('a ready download can be rechecked, reused, and superseded without installing the old version', async () => {
+  const { manager, updater, scheduled } = harness();
+  let latest = '2.1.0';
+  let installed;
+  let finishDownload;
+  updater.checkForUpdates = async () => {
+    updater.checks++;
+    updater.emit('update-available', { version: latest });
+  };
+  updater.downloadUpdate = async () => {
+    updater.downloads++;
+    const version = latest;
+    if (version === '2.3.0') await new Promise(resolve => { finishDownload = resolve; });
+    installed = version;
+    updater.emit('update-downloaded', { version });
+  };
+  await manager.check();
+  await new Promise(resolve => setImmediate(resolve));
+  await manager.check();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(updater.checks, 2);
+  assert.equal(updater.downloads, 1, 'the same version reuses the ready installer');
+  latest = '2.3.0';
+  scheduled.shift().fn();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(manager.getState().availableVersion, latest);
+  assert.equal(manager.getState().phase, 'downloading');
+  await manager.primaryAction();
+  await manager.check();
+  assert.equal(updater.installs, 0);
+  assert.equal(updater.checks, 3, 'checks cannot overlap a replacement download');
+  finishDownload();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(manager.getState().phase, 'ready');
+  assert.equal(updater.installs, 0, 'a new download still needs an explicit restart');
+  await manager.primaryAction();
+  assert.equal(installed, '2.3.0');
+  assert.equal(updater.installs, 1);
+  manager.dispose();
+});
+
+test('failed rechecks preserve a ready installer and expose the failure, but failed replacements cannot install it', async () => {
+  const { manager, updater } = harness();
+  await manager.start();
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  const failure = new Error('net::ERR_INTERNET_DISCONNECTED');
+  updater.checkForUpdates = async () => { updater.emit('error', failure); throw failure; };
+  await manager.check();
+  assert.equal(manager.getState().phase, 'ready');
+  assert.equal(manager.getState().availableVersion, '2.1.0');
+  assert.equal(manager.getState().checkFailed, true);
+  updater.checkForUpdates = async () => updater.emit('update-available', { version: '2.3.0' });
+  updater.downloadUpdate = async () => { throw new Error('download failed'); };
+  await manager.check();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(manager.getState().phase, 'error');
+  assert.equal(manager.getState().availableVersion, '2.3.0');
+  await manager.primaryAction();
+  assert.equal(updater.installs, 0, 'the superseded package must not be installed');
+  manager.dispose();
+});
+
+test('a recheck finishing after availability cannot race installation or a second check', async () => {
+  let finish;
+  const { manager, updater } = harness();
+  await manager.start();
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  updater.checkForUpdates = async () => {
+    updater.checks++;
+    updater.emit('update-available', { version: '2.1.0' });
+    await new Promise(resolve => { finish = resolve; });
+  };
+  const check = manager.check();
+  await new Promise(resolve => setImmediate(resolve));
+  const peerCheck = manager.check();
+  await manager.primaryAction();
+  assert.equal(updater.checks, 1);
+  assert.equal(updater.installs, 0);
+  finish();
+  await Promise.all([check, peerCheck]);
+  await manager.primaryAction();
+  assert.equal(updater.installs, 1);
+  manager.dispose();
+});
+
+test('a downloaded update remains explicitly installable after an offline recheck', async () => {
+  const { manager, updater } = harness();
+  await manager.start();
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  updater.checkForUpdates = async () => { throw new Error('net::ERR_INTERNET_DISCONNECTED'); };
+  await manager.check();
+  await manager.primaryAction();
+  assert.equal(updater.installs, 1);
+  manager.dispose();
+});

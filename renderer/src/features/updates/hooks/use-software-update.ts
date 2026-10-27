@@ -23,6 +23,8 @@ export function useSoftwareUpdate(port: UpdatesPort | null): SoftwareUpdateRow {
     else run((updater) => updater.check());
   }, [action, run]);
 
+  const checkAgain = useCallback(() => run((updater) => updater.check()), [run]);
+
   const setAutoCheck = useCallback(
     (enabled: boolean) => {
       run((updater) => updater.setAutoCheck(enabled));
@@ -34,6 +36,7 @@ export function useSoftwareUpdate(port: UpdatesPort | null): SoftwareUpdateRow {
     autoCheckEnabled: state.autoCheckEnabled,
     busy: running || updateInProgress(state.status),
     act,
+    checkAgain: state.status.phase === 'ready' ? checkAgain : null,
     actionLabel: action?.label ?? 'Check for updates',
     failure,
     setAutoCheck,

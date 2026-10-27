@@ -339,3 +339,13 @@ test('a rejecting manager answers failed rather than throwing across IPC', async
     snapshot: idleSnapshot,
   });
 });
+
+test('projects failed rechecks without exposing native diagnostics or losing the ready version', async () => {
+  const { fixtures, handlers } = harness({ state: { ...installerState, phase: 'ready', availableVersion: '2.1.0', checkFailed: true, message: 'private native diagnostic' } });
+  const result = await handlers.get('updates:check')(fixtures[0].event);
+  assert.equal(result.ok, true);
+  assert.equal(result.snapshot.phase, 'ready');
+  assert.equal(result.snapshot.checkFailed, true);
+  assert.equal(result.snapshot.availableVersion, '2.1.0');
+  assert.equal('message' in result.snapshot, false);
+});

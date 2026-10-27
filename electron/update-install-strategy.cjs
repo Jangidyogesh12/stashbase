@@ -15,6 +15,42 @@ function createUpdateInstaller(options) {
     onInstalledWithoutRelaunch = () => {},
   } = options;
 
+  if (platform === 'darwin' && updater.nativeUpdater) {
+    const native = updater.nativeUpdater;
+    return () => {
+      // MacUpdater's ready flag and anonymous completion callback have no
+      // attempt identity. Own this handoff so failures retire the callback and
+      // a late completion from the replaced loopback feed cannot install it.
+      const feedOrigin = new URL(native.getFeedURL()).origin;
+      const cleanup = () => {
+        native.removeListener('update-downloaded', onDownloaded);
+        updater.removeListener('error', cleanup);
+      };
+      const onDownloaded = (_event, _notes, _name, _date, updateURL) => {
+        try {
+          // Electron supplies Squirrel's payload URL. MacUpdater serves each
+          // prepared payload through its current loopback server.
+          if (new URL(updateURL).origin !== feedOrigin) return;
+          cleanup();
+          updater.handleUpdateDownloaded();
+        } catch (error) {
+          cleanup();
+          updater.emit('error', error);
+        }
+      };
+      native.on('update-downloaded', onDownloaded);
+      updater.once('error', cleanup);
+      try {
+        // Always prepare the current feed on an explicit restart, even if a
+        // prior attempt left MacUpdater's squirrelDownloadedUpdate flag set.
+        native.checkForUpdates();
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+    };
+  }
+
   if (platform === 'linux' && !appImagePath) {
     return () => {
       // DebUpdater normally calls app.relaunch() inside doInstall, before

@@ -144,3 +144,55 @@ test('AppImage does not schedule a relaunch after a synchronous install error', 
   assert.throws(install, /install failed/);
   assert.equal(relaunched, false);
 });
+
+test('macOS retires failed native callbacks and fetches the replacement even after a stale completion', async () => {
+  const { MacUpdater } = require('electron-updater/out/MacUpdater');
+  const { createUpdateManager } = require('./update-manager.cjs');
+  const native = new EventEmitter();
+  let latest = '2.1.0';
+  let prepared;
+  let nativeTarget;
+  const requested = [];
+  const installed = [];
+  const payloadURL = version => `http://127.0.0.1:${version === '2.1.0' ? 41001 : 41003}/payload.zip`;
+  native.getFeedURL = () => new URL('/', payloadURL(prepared)).href;
+  native.checkForUpdates = () => requested.push(prepared);
+  native.quitAndInstall = () => installed.push(nativeTarget);
+  const updater = Object.assign(Object.create(MacUpdater.prototype), {
+    nativeUpdater: native, squirrelDownloadedUpdate: false, autoRunAppAfterInstall: true,
+    closeServerIfExists() {},
+    async checkForUpdates() { this.emit('update-available', { version: latest }); },
+    async downloadUpdate() { prepared = latest; this.emit('update-downloaded', { version: latest }); },
+  });
+  // Preserve the installed dependency's constructor bookkeeping at its native boundary.
+  native.on('update-downloaded', () => { updater.squirrelDownloadedUpdate = true; });
+  native.on('error', error => updater.emit('error', error));
+  const manager = createUpdateManager({
+    updater, currentVersion: '2.0.0', isPackaged: true, readAutoCheck: async () => false,
+    beforeInstall: async () => true, installUpdate: createUpdateInstaller({ updater, platform: 'darwin' }),
+  });
+  const check = async () => { await manager.check(); await new Promise(setImmediate); };
+  try {
+    await check();
+    await manager.primaryAction();
+    native.emit('error', new Error('native transfer failed'));
+    assert.equal(manager.getState().phase, 'error');
+    assert.equal(native.listenerCount('update-downloaded'), 1);
+    latest = '2.3.0';
+    await check();
+    nativeTarget = '2.1.0';
+    native.emit('update-downloaded', {}, '', '', new Date(), payloadURL(nativeTarget));
+    assert.deepEqual(installed, []);
+    await manager.primaryAction();
+    assert.deepEqual(requested, ['2.1.0', '2.3.0']);
+    assert.deepEqual(installed, [], 'the stale Squirrel ready flag cannot install the old payload');
+    native.emit('update-downloaded', {}, '', '', new Date(), payloadURL(nativeTarget));
+    assert.deepEqual(installed, [], 'late old completion during the replacement attempt is ignored');
+    nativeTarget = '2.3.0';
+    native.emit('update-downloaded', {}, '', '', new Date(), payloadURL(nativeTarget));
+    assert.deepEqual(installed, ['2.3.0']);
+    native.emit('update-downloaded', {}, '', '', new Date(), payloadURL(nativeTarget));
+    assert.deepEqual(installed, ['2.3.0'], 'completion callbacks are one attempt only');
+    assert.equal(native.listenerCount('update-downloaded'), 1);
+  } finally { manager.dispose(); }
+});

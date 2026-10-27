@@ -279,7 +279,13 @@ reader to current credits rather than claiming all credits are spent.
   throttle. Disabling automatic checks still permits a manual check at any time.
   A check that finds a release, automatic or manual, downloads it in the
   background without a notice. The sidebar speaks up only when the download is
-  ready, offering Restart to update. A finished download never restarts the
+  ready, offering Restart to update. Ready downloads remain eligible for
+  automatic checks, and Settings offers Check again alongside Restart to update.
+  A matching release reuses the existing download; a newly selected release
+  replaces it, with installation unavailable until that download finishes.
+  A failed recheck preserves the ready installer and explains that the latest
+  version could not be checked. A failed replacement download offers Retry and
+  never installs the superseded package. A finished download never restarts the
   application by itself: installation is that explicit click, or the same action
   in Settings, and waits for affected document saves. Failure
   leaves the current application and downloaded update recoverable. Relaunch waits

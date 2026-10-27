@@ -70,6 +70,7 @@ const managerStateSchema = z.object({
   autoCheckEnabled: z.boolean(),
   availableVersion: version.optional(),
   currentVersion: version,
+  checkFailed: z.boolean().optional(),
   percent: z.number().finite().optional(),
   phase: z.enum(UPDATE_PHASES),
 });
@@ -89,8 +90,11 @@ function describePhase(state: ManagerState): UpdatesSnapshot | null {
     case 'current':
     case 'error':
       return { ...shared, phase: state.phase };
-    case 'available':
     case 'ready':
+      return availableVersion
+        ? { ...shared, availableVersion, phase: 'ready', ...(state.checkFailed ? { checkFailed: true } : {}) }
+        : null;
+    case 'available':
     case 'installing':
       return availableVersion ? { ...shared, availableVersion, phase: state.phase } : null;
     case 'downloading':

@@ -66,6 +66,9 @@ function createUpdateManager(options) {
   let started = false;
   let startPromise = null;
   let checking = null;
+  let downloading = null;
+  let downloadedVersion = null;
+  let retainedDownload = null;
   let lastCheckAt = null;
   let updateSimulation = 'off';
   let installAttempt = null;
@@ -116,10 +119,21 @@ function createUpdateManager(options) {
   }
 
   function onChecking() {
-    publish({ phase: 'checking', message: undefined });
+    publish({ phase: 'checking', message: undefined, checkFailed: false });
   }
 
   function onAvailable(info = {}) {
+    if (downloadedVersion && info.version === downloadedVersion) {
+      publish({
+        phase: 'ready', availableVersion: downloadedVersion, percent: 100,
+        message: undefined, checkFailed: false,
+      });
+      return;
+    }
+    // Once a different release is selected, the native updater may replace its
+    // pending payload. Do not offer the previous installer after a failed download.
+    downloadedVersion = null;
+    retainedDownload = null;
     publish({
       phase: 'available',
       availableVersion: typeof info.version === 'string' ? info.version : state.availableVersion,
@@ -129,6 +143,8 @@ function createUpdateManager(options) {
   }
 
   function onNotAvailable() {
+    downloadedVersion = null;
+    retainedDownload = null;
     publish({
       phase: 'current',
       availableVersion: undefined,
@@ -145,7 +161,9 @@ function createUpdateManager(options) {
   }
 
   function onDownloaded(info = {}) {
+    downloadedVersion = typeof info.version === 'string' ? info.version : state.availableVersion;
     publish({
+      checkFailed: false,
       phase: 'ready',
       availableVersion: typeof info.version === 'string' ? info.version : state.availableVersion,
       percent: 100,
@@ -159,6 +177,13 @@ function createUpdateManager(options) {
       if (error && typeof error === 'object') reportedErrors.add(error);
       const severity = state.phase === 'checking' && checkNetworkError(error) ? 'warning' : 'error';
       try { onDiagnostic(error, { stage: state.phase, target_version: state.availableVersion }, severity); } catch { /* reporting is optional */ }
+    }
+    if (retainedDownload) {
+      publish({
+        phase: 'ready', availableVersion: retainedDownload, percent: 100,
+        checkFailed: true, message: errorMessage(error),
+      });
+      return;
     }
     if (state.phase === 'installing') {
       installAttempt = null;
@@ -231,14 +256,15 @@ function createUpdateManager(options) {
     if (!isPackaged) {
       return publish({ phase: 'unsupported', message: 'Update checks are available in packaged builds.' });
     }
-    if (['checking', 'downloading', 'ready', 'installing'].includes(state.phase)) {
+    if (downloading || ['checking', 'downloading', 'installing'].includes(state.phase)) {
       if (timer === null) scheduleCheck(checkIntervalMs);
       return snapshot();
     }
     if (!manual && !state.autoCheckEnabled) return snapshot();
     cancelScheduledCheck();
     lastCheckAt = now();
-    publish({ phase: 'checking', message: undefined });
+    retainedDownload = state.phase === 'ready' ? downloadedVersion : null;
+    publish({ phase: 'checking', message: undefined, checkFailed: false });
     const work = Promise.resolve().then(async () => {
       try {
         await updater.checkForUpdates();
@@ -248,7 +274,10 @@ function createUpdateManager(options) {
       } catch (error) {
         onError(error);
       } finally {
-        if (checking === work) checking = null;
+        if (checking === work) {
+          checking = null;
+          retainedDownload = null;
+        }
         if (state.autoCheckEnabled) scheduleCheck(checkIntervalMs);
       }
       return snapshot();
@@ -267,7 +296,7 @@ function createUpdateManager(options) {
   }
 
   async function installReadyUpdate() {
-    if (state.phase !== 'ready') return snapshot();
+    if (checking || downloading || state.phase !== 'ready') return snapshot();
     const attempt = {};
     installAttempt = attempt;
     publish({ phase: 'installing', message: undefined });
@@ -290,13 +319,15 @@ function createUpdateManager(options) {
   }
 
   async function download() {
-    if (state.phase !== 'available') return;
+    if (downloading || state.phase !== 'available') return;
     publish({ phase: 'downloading', percent: 0, message: undefined });
-    try {
-      await updater.downloadUpdate();
-    } catch (error) {
-      onError(error);
-    }
+    // update-downloaded can arrive before the dependency's download promise
+    // settles. Keep that whole flight exclusive, including its ready tail.
+    const work = Promise.resolve().then(() => updater.downloadUpdate()).catch(onError).finally(() => {
+      if (downloading === work) downloading = null;
+    });
+    downloading = work;
+    return work;
   }
 
   async function primaryAction() {

@@ -55,7 +55,7 @@ export const updatesSnapshotSchema = z.discriminatedUnion('phase', [
       phase: z.literal('downloading'),
     })
     .strict(),
-  z.object({ ...state, availableVersion: version, phase: z.literal('ready') }).strict(),
+  z.object({ ...state, availableVersion: version, checkFailed: z.literal(true).optional(), phase: z.literal('ready') }).strict(),
   z.object({ ...state, availableVersion: version, phase: z.literal('installing') }).strict(),
   z.object({ ...state, phase: z.literal('error') }).strict(),
 ]);

@@ -73,7 +73,10 @@ const UPDATE_OFFERS: { readonly [Phase in UpdatePhaseName]: UpdateOfferFor<Phase
   ready: {
     action: { kind: 'primary', label: 'Restart to update' },
     announce: true,
-    sentence: (status) => `StashBase ${status.version} is ready to install.`,
+    sentence: (status) =>
+      status.checkFailed
+        ? `Could not check for a newer version. StashBase ${status.version} is still ready to install.`
+        : `StashBase ${status.version} is ready to install.`,
   },
   installing: {
     action: null,

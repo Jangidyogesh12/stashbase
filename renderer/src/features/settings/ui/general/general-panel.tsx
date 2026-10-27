@@ -49,14 +49,26 @@ export function GeneralPanel({ softwareUpdate, telemetryApi, onOpenExternal }: G
               detail={softwareUpdate.status}
               title={`Version ${softwareUpdate.version}`}
               trail={
-                <Button
-                  disabled={softwareUpdate.busy}
-                  onClick={softwareUpdate.act}
-                  size="compact"
-                  variant="tertiary"
-                >
-                  {softwareUpdate.actionLabel}
-                </Button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {softwareUpdate.checkAgain && (
+                    <Button
+                      disabled={softwareUpdate.busy}
+                      onClick={softwareUpdate.checkAgain}
+                      size="compact"
+                      variant="tertiary"
+                    >
+                      Check again
+                    </Button>
+                  )}
+                  <Button
+                    disabled={softwareUpdate.busy}
+                    onClick={softwareUpdate.act}
+                    size="compact"
+                    variant="tertiary"
+                  >
+                    {softwareUpdate.actionLabel}
+                  </Button>
+                </div>
               }
             />
           </SettingsList>

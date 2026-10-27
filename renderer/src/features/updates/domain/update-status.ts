@@ -16,7 +16,7 @@ export type UpdateStatus =
       readonly phase: 'downloading';
       readonly version: string;
     }
-  | { readonly phase: 'ready'; readonly version: string }
+  | { readonly phase: 'ready'; readonly version: string; readonly checkFailed?: true }
   | { readonly phase: 'installing'; readonly version: string }
   | { readonly phase: 'error' };
 

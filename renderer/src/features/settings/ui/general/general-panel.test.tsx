@@ -17,6 +17,7 @@ function updateRow(overrides: Partial<SoftwareUpdateRow> = {}): SoftwareUpdateRo
     autoCheckEnabled: false,
     busy: false,
     actionLabel: 'Check for updates',
+    checkAgain: null,
     act: vi.fn(),
     failure: null,
     setAutoCheck: vi.fn(),
@@ -62,8 +63,11 @@ describe('GeneralPanel', () => {
 });
 
 it('offers the restart in Settings', async () => {
-  const row = updateRow({ actionLabel: 'Restart to update' });
+  const row = updateRow({ actionLabel: 'Restart to update', checkAgain: vi.fn() });
   renderPanel(row);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Restart to update' }));
+  expect(row.act).toHaveBeenCalledTimes(1);
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Check again' }));
+  expect(row.checkAgain).toHaveBeenCalledTimes(1);
   expect(row.act).toHaveBeenCalledTimes(1);
 });

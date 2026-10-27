@@ -160,3 +160,17 @@ describe('Settings recovery after dismissing the update notice', () => {
     expect(updates.port.check).not.toHaveBeenCalled();
   });
 });
+
+it('checks again from a ready download without invoking installation', async () => {
+  const updates = harness(accepted({ phase: 'ready', version: '2.1.0', checkFailed: true }));
+  const { result } = renderHook(() => useSoftwareUpdate(updates.port));
+  await waitFor(() => expect(result.current.checkAgain).not.toBeNull());
+  expect(result.current.status).toContain('Could not check for a newer version');
+  expect(result.current.actionLabel).toBe('Restart to update');
+  await act(async () => result.current.checkAgain?.());
+  expect(updates.port.check).toHaveBeenCalledTimes(1);
+  expect(updates.port.runPrimaryAction).not.toHaveBeenCalled();
+  act(() => updates.push({ phase: 'downloading', version: '2.3.0', percent: 0 }));
+  expect(result.current.checkAgain).toBeNull();
+  expect(result.current.busy).toBe(true);
+});

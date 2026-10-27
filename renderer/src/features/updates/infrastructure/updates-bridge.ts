@@ -42,7 +42,11 @@ function toStatus(snapshot: UpdatesSnapshot): UpdateStatus {
         version: snapshot.availableVersion,
       };
     case 'ready':
-      return { phase: 'ready', version: snapshot.availableVersion };
+      return {
+        phase: 'ready',
+        version: snapshot.availableVersion,
+        ...(snapshot.checkFailed ? { checkFailed: true } : {}),
+      };
     case 'installing':
       return { phase: 'installing', version: snapshot.availableVersion };
   }

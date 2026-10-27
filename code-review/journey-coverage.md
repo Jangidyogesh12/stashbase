@@ -57,6 +57,19 @@ outer dialog by 92.5px; the fix held it at zero with both client and scroll
 heights of 374px, preserving the header and close action. DOM-only Story checks
 do not establish this geometry.
 
+**Ready update rechecks (2026-10-27):** `electron/update-manager.cjs` permits
+manual and automatic checks after a download, reuses matching releases, and
+replaces the install target when a different release is selected. Failed checks
+retain an explicitly labelled ready installer; failed replacement downloads
+cannot install the superseded package. Update-manager regressions cover reuse,
+replacement, periodic checks, failure recovery, and concurrent checks/restarts.
+`electron/renderer/update-install-smoke.cjs` exercises the real MacUpdater proxy
+with controlled payloads, then the built renderer save barrier and delayed native
+handoff, including native failure rollback and ignoring old-feed completions
+before and during a replacement retry. Settings exposes Check again beside Restart; the hook and IPC/adapter
+checks preserve the failed-recheck flag without native diagnostics. These are
+controlled update checks, not verification of a real signed installer upgrade.
+
 **Core acceptance (2026-10-26):** `renderer/src/app.onboarding.test.tsx` drives
 the whole window from Welcome through opening an empty project, choosing each
 of Default/Claude/Codex/Antigravity, declining access without losing the draft,

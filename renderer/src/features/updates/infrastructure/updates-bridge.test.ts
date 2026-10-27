@@ -171,3 +171,21 @@ it('does not manufacture errors when several windows observe the same native upd
   push?.({ ...BUILD, phase: 'error' });
   expect(report).toHaveBeenCalledTimes(0);
 });
+
+it('preserves failed recheck status alongside the usable downloaded version', async () => {
+  const updates = createUpdatesAdapter(
+    bridge({
+      ok: true,
+      snapshot: {
+        ...BUILD,
+        phase: 'ready',
+        availableVersion: '2.1.0',
+        checkFailed: true,
+      },
+    }),
+  );
+  expect(await updates.check()).toEqual({
+    ok: true,
+    state: state({ phase: 'ready', version: '2.1.0', checkFailed: true }),
+  });
+});

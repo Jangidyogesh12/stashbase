@@ -10,6 +10,7 @@ const softwareUpdate: SoftwareUpdateRow = {
   autoCheckEnabled: true,
   busy: false,
   actionLabel: 'Check for updates',
+  checkAgain: null,
   act: () => undefined,
   failure: null,
   setAutoCheck: () => undefined,
@@ -51,6 +52,19 @@ export const ComponentDownloadFailed: Story = {
       port={{
         load: async () => ({ status: 'failed', error: 'network' }),
         retry: async () => ({ status: 'downloading', error: null }),
+      }}
+    />
+  ),
+};
+
+export const DownloadReady: Story = {
+  render: () => (
+    <GeneralHarness
+      updates={{
+        ...softwareUpdate,
+        actionLabel: 'Restart to update',
+        checkAgain: () => undefined,
+        status: 'StashBase 2.3.0 is ready to install.',
       }}
     />
   ),

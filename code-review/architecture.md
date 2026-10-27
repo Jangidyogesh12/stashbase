@@ -1439,7 +1439,16 @@ certificate compatibility, and the limits of main-process debug hardening.
   shared foreground/wake throttle. In-flight requests are shared across windows;
   throttled focus does not postpone periodic checks. Manual checks bypass the
   automatic preference, while timers/focus/wake honor it. Disposal prevents new
-  requests and retires the timer.
+  requests and retires the timer. Ready downloads can be rechecked; the manager
+  retains the ready version through a failed metadata check, reuses it for a
+  matching release, and invalidates it when another release is selected.
+  The entire native download promise stays exclusive even after its downloaded
+  event, and installation cannot race a metadata check or replacement download.
+  The ready snapshot carries only a failed-recheck flag, never native error prose.
+  The macOS install adapter owns its native completion listener: failure retires
+  that attempt, and only a payload URL from the current loopback feed can finish
+  its explicit restart. Each restart prepares the current feed instead of trusting
+  the dependency's versionless Squirrel-ready flag.
   `electron/updates/network-timeout.cjs` installs a 60-second response-idle
   deadline on the native updater's HTTP executor. Electron does not emit the
   Node socket event used by the dependency's inherited timeout. Response headers
