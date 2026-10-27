@@ -5,7 +5,8 @@ import { analyzeHtml } from './html.ts';
 
 /** Directories that are usually generated, dependency caches, VCS state,
  *  or source-project internals. If a user opens a code checkout, these
- *  skips keep indexing bounded and predictable. */
+ *  skips keep indexing bounded and predictable. `out` is not one: it is as
+ *  often a writer's exports folder as a build's. */
 export const INDEX_EXCLUDED_DIRS = new Set<string>([
   '.cache',
   '.git',
@@ -28,7 +29,6 @@ export const INDEX_EXCLUDED_DIRS = new Set<string>([
   'DerivedData',
   'dist',
   'node_modules',
-  'out',
   'target',
   'vendor',
 ]);
