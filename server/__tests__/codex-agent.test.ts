@@ -16,6 +16,7 @@ import { runtimeDescriptorFor } from '../agent-contract.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from '../agent-adapters.ts';
 import { CodexSession } from '../codex-session-runtime.ts';
 import { agentPersonaLibrary } from '../agent-persona.ts';
+import { composeAgentRuntimeInstructions } from '../agent-runtime-instructions.ts';
 import { clearCurrentFolder, runWithWindowId, openProjectFolder } from '../folder.ts';
 import { attachAgentDiagnostics } from '../error-reporting.ts';
 import { errorDiagnostic, telemetryEventSchema, type TelemetryEvent } from '../../shared/protocols/http/telemetry.ts';
@@ -317,12 +318,7 @@ test("Codex injects the Chat's Persona with hidden StashBase routing policy", as
   const developerInstructions = native.requests.find(
     (request) => request.method === 'thread/start',
   )?.params.developerInstructions;
-  assert.equal(typeof developerInstructions, 'string');
-  assert.match(String(developerInstructions), /StashBase MCP/i);
-  assert.match(String(developerInstructions), /search_project/);
-  assert.match(String(developerInstructions), /read_file/);
-  assert.match(String(developerInstructions), /Prefer primary research notes\./);
-  assert.notEqual(developerInstructions, persona);
+  assert.equal(developerInstructions, composeAgentRuntimeInstructions(persona));
 });
 
 test('Codex holds a model chosen while its catalog is still being read and applies it to the first turn', async (t) => {

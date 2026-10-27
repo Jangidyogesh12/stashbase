@@ -3138,6 +3138,18 @@ pricing or a newly packaged desktop journey.
 
 ## J07: Converge
 
+**Shared Agent instructions (2026-10-27):**
+`server/agent-runtime-instructions.ts` supplies Default, Claude, Codex, and
+Antigravity with one role and the default to answer in Chat. File output
+requires a user request or an applicable loaded project workflow for the
+current task; opening or attaching a source and granting write permissions
+do not provide edit intent. Known paths need no discovery preflight; gaps in
+tool coverage or prepared text permit native reading within runtime permissions.
+Project text writes still require MCP. Provider adapter tests cover instruction
+delivery, not model compliance. Real-provider behavior with discussion,
+draft-only requests, explicit file-output workflows, and original-source
+fallback remains unverified; this policy adds no enforced write gate.
+
 **Agent code and configuration (2026-10-20):** Project text reads/writes no
 longer depend on the Documents format whitelist. `project-file-mutations.ts`
 uses `file-save.ts`'s `saveTextFileContent`; `project-file-reader.ts` reads other

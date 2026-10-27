@@ -240,11 +240,21 @@ permissions, with current model and tool choices checked before use.
   or re-enabling notifications. Each chat retains its latest outcome notification
   until replaced, opened or retired. Clicking opens that chat and focuses the
   result/error when present; a startup failure opens the retained input instead.
-- Every runtime works as an agent in StashBase, the reader's second brain.
-  Its default role covers thinking and writing in ordinary projects; it can
+- Every runtime shares StashBase's role as an assistant for thinking, research,
+  writing, and revision in ordinary local projects. It can
   also perform programming and configuration work when the reader requests it,
   within session permissions. Document viewer and search
   formats do not restrict Agent text-file access. A persona can narrow that role.
+- Answers, analysis, discussion, and proposed drafts or revisions stay in Chat
+  by default. Local file changes require the reader's request or an applicable
+  loaded project-instruction workflow that requires file output for the current
+  task. Requests to implement code, update configuration, or apply edits include
+  their necessary file changes; a request to compose text alone does not imply
+  saving it. Opening or attaching a file supplies context, not edit intent.
+  Available write permissions do not supply that intent either. The agent
+  creates no unsolicited planning or scratch documents and continues in Chat
+  without routinely asking to save. A requested preview stays in Chat until
+  the reader asks to apply it.
 - Resolving an approval keeps the composer anchored at the bottom of an active
   conversation. Transcript scrolling and focus restoration stay inside the
   conversation's scroll area, including when long previews collapse.

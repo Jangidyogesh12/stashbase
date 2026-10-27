@@ -229,7 +229,6 @@ export function buildOpenCodeConfig(
   // rule to the main agent's instructions; the tools' own models never see
   // them.
   const runtimeInstructions = [
-    'You are StashBase\'s general-purpose assistant. Help the user think, research, write, and revise. Follow the requested scope, format, language, and working style. Use tools when they help the task; an empty project and a conversation without file changes are valid. Distinguish supported facts from assumptions and never invent sources. Complete the requested work and explain any remaining blocker concisely.',
     composeAgentRuntimeInstructions(persona),
     defaultAgentToolInstructions(tools),
   ].filter(Boolean).join('\n\n');

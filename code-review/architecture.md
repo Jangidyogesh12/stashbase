@@ -562,16 +562,19 @@ stable status without download, retry, or a new durable demand latch.
   may have changed, and the shell reconciles it the same way. Reads, listings,
   searches, and questions report nothing.
 - A persona is per-Chat guidance resolved at native mount and composed
-  with internal routing policy. A native runtime reads StashBase's one-sentence
-  agent role ahead of both, because each provider's own system prompt casts it
-  as a coding assistant; the bundled agent states its role in its own
-  configuration. That policy is the one text every runtime always
-  sees, so it owns which StashBase tool orients and reads prepared text, and that
+  with the shared role and internal conversation and tool-routing policy in
+  `server/agent-runtime-instructions.ts`. Default and native adapters use that
+  same composition; provider-native prompts remain in place. The policy owns
+  the default to answer in Chat and the requirement for a user request or
+  applicable loaded project workflow before file output. It guides model
+  decisions; it does not enforce a write gate. Discovery has no mandatory
+  tool preflight, and insufficient prepared text permits native source
+  inspection within runtime permissions. The same policy requires that
   existing text files use `edit_file` while new text files use `write_file`,
   including requested source code and configuration; a tool description alone
   cannot own a rule, because a runtime may defer it. Neither is a permission,
   skill contents, or a project-file edit, and StashBase ships no workflow
-  guidance of its own: that is the user's `AGENTS.md` / `CLAUDE.md`.
+  guidance of its own: that belongs to the user's loaded project instructions.
   `server/agent-persona.ts` owns the library: one Markdown file per persona in
   app data, seeded once from `assets/agent-personas/`, plus the record of each
   native session's persona. The Chat's persona id travels on its connection;

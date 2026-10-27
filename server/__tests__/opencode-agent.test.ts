@@ -15,6 +15,7 @@ import {
   openCodeSessionHasContent,
 } from '../opencode-agent.ts';
 import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, type OpenCodeSessionRuntime } from '../opencode-runtime.ts';
+import { composeAgentRuntimeInstructions } from '../agent-runtime-instructions.ts';
 import { agentProcessExitDiagnostic, ownAgentProcess, retireAgentProcess } from '../agent-process.ts';
 import { waitForOpenCodeServer, retryOpenCodeHistoryStartup, retireFailedOpenCode } from '../opencode-startup.ts';
 import { PassThrough } from 'node:stream';
@@ -699,13 +700,9 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
     enabled: true,
     timeout: 10_000,
   });
-  for (const profile of ['stashbase-folder'] as const) {
+  for (const profile of ['stashbase-folder', 'stashbase-edit'] as const) {
     const prompt = attributed.agent?.[profile]?.prompt ?? '';
-    assert.match(prompt, /StashBase MCP/i);
-    assert.match(prompt, /search_project/);
-    assert.match(prompt, /read_file/);
-    assert.match(prompt, /Use StashBase tools\./);
-    assert.notEqual(prompt, 'Use StashBase tools.');
+    assert.equal(prompt, composeAgentRuntimeInstructions('Use StashBase tools.'));
   }
 });
 

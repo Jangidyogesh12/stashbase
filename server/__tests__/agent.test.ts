@@ -19,6 +19,7 @@ import {
   selectClaudeModel,
 } from '../agent.ts';
 import { agentPersonaLibrary } from '../agent-persona.ts';
+import { composeAgentRuntimeInstructions } from '../agent-runtime-instructions.ts';
 import { agentBootstrapStatus } from '../agent-runtime-installer.ts';
 import { clearCurrentFolder, runWithWindowId, openProjectFolder, registerProjectFolderAsync } from '../folder.ts';
 import { derivedNoteFor, registerDerivedSource } from '../derived-store.ts';
@@ -102,20 +103,7 @@ test("Claude appends the Chat's Persona before hidden StashBase routing policy",
 
   session.begin();
   await settle();
-  assert.match(appended, /StashBase MCP/i);
-  assert.match(appended, /search_project/);
-  assert.match(appended, /Default file reads and searches to the bound project/);
-  assert.match(appended, /explicitly specifies files or directories outside the project/);
-  assert.match(appended, /native filesystem or shell tools.*runtime permissions/);
-  assert.match(appended, /create or modify files outside the project.*native filesystem or shell tools/);
-  assert.doesNotMatch(appended, /Every file operation and search targets the bound project only/);
-  assert.match(appended, /read_file/);
-  assert.match(appended, /do not install or run a separate parser/i);
-  assert.match(appended, /Modify existing project text files.*`edit_file`/);
-  assert.match(appended, /Changes are written directly/);
-  assert.doesNotMatch(appended, /suggest_edits/);
-  assert.match(appended, /Prefer primary research notes\./);
-  assert.notEqual(appended, persona);
+  assert.equal(appended, composeAgentRuntimeInstructions(persona));
 });
 
 interface TurnEvent {

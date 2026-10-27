@@ -40,6 +40,15 @@ an empty project and a conversation without references are valid.
 
 ## Retrieval and Access Differences
 
+Agents prefer StashBase discovery for project documents, without a mandatory
+search or directory listing before reading a known path. Native reads and
+searches can cover unavailable tools or material outside their coverage, such
+as code and configuration. Prepared text is the first choice for project PDFs,
+DOCX, and XLSX; missing, incomplete, or insufficient text, or a request for
+original-source analysis, permits inspecting the original content with native
+tools. These choices preserve the requested scope, file-write intent, and
+runtime permissions, including for installations.
+
 | Caller or mode | Required behavior |
 |---|---|
 | By keyword | Works without account or embedding setup. |

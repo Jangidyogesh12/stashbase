@@ -133,14 +133,15 @@ pauses queued work; uncertain delivery cannot trigger automatic replay.
 
 ### Flow
 
-Discuss what to write → request a draft/revision or edit directly → inspect the file →
-save → continue the conversation.
+Discuss what to write → request file creation/revision or edit directly → inspect
+the file → save → continue the conversation.
 
 ### Required Results
 
-Writing creates ordinary local content without stealing document focus. Discussion is
-not publication or authorization for unrelated changes. Discussion or a requested
-preview stays in Chat until the reader asks to apply it.
+Requested file output creates ordinary local content without stealing document
+focus. Conversation and proposed wording follow the Chat default in
+[Agent Sessions](../capabilities/agent-sessions.md); file changes follow the
+reader's request or an applicable project workflow.
 Requested source code and configuration are ordinary text files too; their exact
 names are preserved even when Documents offers only a read-only preview.
 A turn's direct Markdown changes can be reviewed in the document on request;
