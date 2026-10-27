@@ -265,40 +265,6 @@ test('a resident application discovers releases periodically without a restart',
   manager.dispose();
 });
 
-test('ready downloads are refreshed on the timer and foreground, skipping intervening releases', async () => {
-  let latest = '2.1.0';
-  let time = 0;
-  const { manager, updater, scheduled } = harness({ now: () => time });
-  const downloaded = [];
-  updater.checkForUpdates = async () => {
-    updater.checks++;
-    updater.emit('checking-for-update');
-    updater.emit('update-available', { version: latest });
-  };
-  updater.downloadUpdate = async () => {
-    downloaded.push(latest);
-    updater.emit('update-downloaded', { version: latest });
-  };
-  await manager.check();
-  await new Promise((resolve) => setImmediate(resolve));
-  latest = '2.4.0';
-  scheduled.shift().fn();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(manager.getState().phase, 'ready');
-  assert.equal(manager.getState().availableVersion, '2.4.0');
-
-  latest = '2.7.3';
-  time += 10 * 60_000;
-  await manager.checkOnActivity();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(manager.getState().availableVersion, '2.7.3');
-  await manager.check();
-  assert.deepEqual(downloaded, ['2.1.0', '2.4.0', '2.7.3']);
-  assert.equal(manager.getState().phase, 'ready');
-  assert.equal(updater.installs, 0, 'refreshing a ready download never restarts the app');
-  manager.dispose();
-});
-
 test('restart checks again with automatic checks disabled and installs only the latest download', async () => {
   let finishDownload;
   let saves = 0;
@@ -349,9 +315,15 @@ test('restart does not silently install a stale download when refreshing or down
     updater.downloadUpdate = async () => { throw new Error('successor download failed'); };
     await manager.primaryAction();
     assert.equal(manager.getState().phase, stage === 'check' ? 'ready' : stage === 'withdrawn' ? 'current' : 'error');
-    if (stage === 'check') assert.equal(manager.getState().checkFailed, true);
     assert.equal(updater.installs, 0);
     assert.equal(saves, 0);
+    if (stage === 'check') {
+      assert.equal(manager.getState().checkFailed, true);
+      assert.equal(manager.getState().availableVersion, '2.1.0');
+      await manager.primaryAction();
+      assert.equal(updater.installs, 1, 'a second click explicitly accepts the disclosed offline installer');
+      assert.equal(saves, 1);
+    }
     manager.dispose();
   }
 });
@@ -527,10 +499,11 @@ test('GitHub release wrappers retain the severity of the actual check failure, n
   manager.dispose();
 });
 
-test('a ready download can be rechecked, reused, and superseded without installing the old version', async () => {
-  const { manager, updater, scheduled } = harness();
+test('timer and foreground checks reuse ready downloads and replace them across skipped releases', async () => {
+  let time = 0;
+  const { manager, updater, scheduled } = harness({ now: () => time });
   let latest = '2.1.0';
-  let installed;
+  const downloaded = [];
   let finishDownload;
   updater.checkForUpdates = async () => {
     updater.checks++;
@@ -540,7 +513,7 @@ test('a ready download can be rechecked, reused, and superseded without installi
     updater.downloads++;
     const version = latest;
     if (version === '2.3.0') await new Promise(resolve => { finishDownload = resolve; });
-    installed = version;
+    downloaded.push(version);
     updater.emit('update-downloaded', { version });
   };
   await manager.check();
@@ -561,9 +534,15 @@ test('a ready download can be rechecked, reused, and superseded without installi
   finishDownload();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(manager.getState().phase, 'ready');
+  latest = '2.7.3';
+  time += 10 * 60_000;
+  await manager.checkOnActivity();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(manager.getState().phase, 'ready');
+  assert.equal(manager.getState().availableVersion, latest);
   assert.equal(updater.installs, 0, 'a new download still needs an explicit restart');
   await manager.primaryAction();
-  assert.equal(installed, '2.3.0');
+  assert.deepEqual(downloaded, ['2.1.0', '2.3.0', '2.7.3']);
   assert.equal(updater.installs, 1);
   manager.dispose();
 });
@@ -607,17 +586,6 @@ test('a recheck finishing after availability cannot race installation or a secon
   assert.equal(updater.installs, 0);
   finish();
   await Promise.all([check, peerCheck]);
-  await manager.primaryAction();
-  assert.equal(updater.installs, 1);
-  manager.dispose();
-});
-
-test('a downloaded update remains explicitly installable after an offline recheck', async () => {
-  const { manager, updater } = harness();
-  await manager.start();
-  updater.emit('update-downloaded', { version: '2.1.0' });
-  updater.checkForUpdates = async () => { throw new Error('net::ERR_INTERNET_DISCONNECTED'); };
-  await manager.check();
   await manager.primaryAction();
   assert.equal(updater.installs, 1);
   manager.dispose();
