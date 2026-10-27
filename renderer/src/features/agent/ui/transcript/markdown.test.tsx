@@ -62,6 +62,28 @@ $$\href{javascript:alert(1)}{unsafe}$$`}
     expect(container.textContent).not.toContain('$$');
   });
 
+  it('renders LaTeX bracket delimiters as math and leaves code as written', () => {
+    const { container } = render(
+      <AgentMarkdown
+        markdown={String.raw`The core formula:
+
+\[
+\operatorname{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+\]
+
+- **\(QK^\top\)**: scores, then rows \[a \\[2pt] b\] stacked.
+  \[ Q=XW_Q \]
+
+Keep ${'`\\(x\\)`'} as code.`}
+      />,
+    );
+
+    expect(container.querySelectorAll('.katex-display')).toHaveLength(2); // dom-contract: KaTeX's display-mode wrapper
+    expect(container.querySelectorAll('math')).toHaveLength(4); // dom-contract: KaTeX's accessible MathML output
+    expect(screen.getByText(String.raw`\(x\)`).tagName).toBe('CODE');
+    expect(container.textContent).not.toContain('$$');
+  });
+
   it('keeps prices as written instead of reading them as math', () => {
     const { container } = render(
       <AgentMarkdown markdown="Sync costs $4 per month billed annually or $5 billed monthly." />,

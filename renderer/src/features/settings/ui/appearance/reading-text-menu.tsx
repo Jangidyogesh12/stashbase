@@ -22,10 +22,18 @@ import {
 } from '@/features/settings/domain/appearance';
 import { useAppearance } from '@/features/settings/hooks/use-appearance';
 import { PresetChoice } from '@/features/settings/ui/appearance/preset-choice';
+import type { IconComponentProps } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
 import { SizeProvider } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 import { FailureNotice } from '@/shared/ui/failure-notice';
+
+/** `ALargeSmall` draws its letters in the middle third of its frame, so at
+ *  the button's icon step the large A stood shorter than the label's
+ *  lowercase. Drawn larger, it reaches just under the label's capitals. */
+function ReadingTextGlyph(props: IconComponentProps) {
+  return <ALargeSmall {...props} size={22} />;
+}
 
 export function ReadingTextMenu({ appearanceApi }: { appearanceApi: AppearancePort }) {
   const appearance = useAppearance(appearanceApi);
@@ -44,7 +52,7 @@ export function ReadingTextMenu({ appearanceApi }: { appearanceApi: AppearancePo
             <Button
               aria-label={font ? `Reading text: ${font}` : 'Reading text'}
               disabled={preferences === null}
-              leadingIcon={ALargeSmall}
+              leadingIcon={ReadingTextGlyph}
               size="compact"
               trailingIcon={ChevronDown}
               variant="ghost"

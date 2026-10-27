@@ -3015,7 +3015,8 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   cover refusal, retained drafts and context, unknown outcomes, restored
   identity, and protected titles. Sidebar title search includes drafts; arrows follow
   project visits. Thinking/routine tools fold per turn, with approvals, failures,
-  and file results visible. Markdown supports math and scoped file navigation.
+  and file results visible. Markdown supports double-dollar and LaTeX bracket
+  math and scoped file navigation.
 - **Limits:** historical attachment metadata cannot recover upload bytes; reuse
   shows unavailable items and requires replacement or explicit removal. Direct
   Retry requires the exact retained request; restored-only requests use Reuse. Unknown

@@ -164,9 +164,13 @@ export function CornerNotice({
     >
       <div className="flex items-start gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-2">{children}</div>
-        <Button aria-label={dismissLabel} onClick={onDismiss} size="icon-compact" variant="ghost">
-          <X aria-hidden="true" />
-        </Button>
+        {/* One line tall, so the cross centres on the sentence's first line
+            and its taller box spills evenly into the card's padding. */}
+        <span className="flex h-lh shrink-0 items-center">
+          <Button aria-label={dismissLabel} onClick={onDismiss} size="icon-compact" variant="ghost">
+            <X aria-hidden="true" />
+          </Button>
+        </span>
       </div>
       {action && (
         <Button

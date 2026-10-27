@@ -228,7 +228,9 @@ refused with a visible reason; its metadata is never silently omitted from a rev
 
 Markdown math uses double-dollar delimiters or `math` / `latex` fenced blocks.
 Single-dollar amounts remain ordinary text in Documents and Chat, including
-when a Markdown document is saved.
+when a Markdown document is saved. Chat replies also render LaTeX's `\[ \]` and
+`\( \)` delimiters, which many models write, outside code. Documents does not
+treat them as math.
 
 File diffs, save-conflict comparisons, and agent tool approvals have their own
 flows. Other editable formats currently have no inline revision surface.
