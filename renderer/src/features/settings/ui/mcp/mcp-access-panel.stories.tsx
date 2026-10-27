@@ -6,8 +6,8 @@ import { expect, screen, userEvent } from 'storybook/test';
 
 import type { McpAccessPort } from '@/features/settings/application/ports';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
+import { SettingsShell } from '@/features/settings/ui/shell';
 
-import { SettingsShell } from '../shell';
 import { McpAccessPanel } from './mcp-access-panel';
 
 function Queries({ children }: { children: ReactNode }) {
