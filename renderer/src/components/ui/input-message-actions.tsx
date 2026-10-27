@@ -131,21 +131,6 @@ export function ComposerActions({
       <div className="flex min-w-0 items-center gap-1.5">{leftContent}</div>
       <div className="flex shrink-0 items-center gap-1.5">
         {rightContent}
-        {mode === 'queue' && onStop && (
-          <Tooltip content="Stop" side="top">
-            <Button
-              aria-label="Stop"
-              className={shape.circle}
-              disabled={disabled}
-              onClick={onStop}
-              size="icon-compact"
-              type="button"
-              variant="secondary"
-            >
-              <span className={`h-3 w-3 ${shape.glyph} bg-current`} />
-            </Button>
-          </Tooltip>
-        )}
         <Tooltip content={label} side="top">
           <Button
             type="button"
@@ -170,7 +155,7 @@ export function ComposerActions({
                 className="flex items-center justify-center leading-none"
               >
                 {mode === 'stop' ? (
-                  <span className={`h-3 w-3 ${shape.glyph} bg-current`} />
+                  <span aria-hidden className={`block h-3 w-3 ${shape.glyph} bg-current`} />
                 ) : (
                   // Override icon-sm's small 14px svg — the send glyph reads
                   // better a touch larger. `size` matches the attribute to

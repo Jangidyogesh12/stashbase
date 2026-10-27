@@ -1777,6 +1777,15 @@ clean-close reason distinguishes retirement from bare 1000 and unclean 1006;
 existing terminal failure messages remain intact. These controlled checks do not replace a packaged/provider session
 on the reporting installation.
 
+**Composer action while running (2026-10-27):** `input-message-actions.tsx`
+uses one action: Stop for an empty running draft, or Send now / Queue message
+when the draft can be submitted. The extra secondary Stop duplicated the action
+and rendered its inline square at zero size. `input-message.test.tsx` covers
+empty-to-draft-to-empty transitions for steering and queued delivery, Stop and
+submission callbacks. The built `Queued` Story reproduces the old gray circle;
+browser review checks the surviving square's visible dimensions and action
+switching. This is controlled renderer evidence, not a real-provider turn.
+
 **Composer position after approvals (2026-10-27):** the transcript scroll area
 in `ui/workspace.tsx` is also the containing block for its absolutely positioned
 accessibility labels. Without it, those labels escape the transcript's clipping

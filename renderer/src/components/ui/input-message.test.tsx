@@ -179,6 +179,36 @@ function fullComposer(
 }
 
 describe('InputMessage composer regions', () => {
+  it.each([false, true])(
+    'uses one action as the running draft changes (steering: %s)',
+    async (steering) => {
+      const seen: { context: InputMessageEditorContext | null } = { context: null };
+      const onStop = vi.fn();
+      const props = {
+        status: 'streaming',
+        onStop,
+        ...(steering ? { onSteer: vi.fn() } : {}),
+      } as const;
+      const view = render(fullComposer(seen, { ...props, value: '  ' }));
+
+      expect(
+        screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')),
+      ).toEqual(['Stop']);
+      await userEvent.click(screen.getByRole('button', { name: 'Stop' }));
+      expect(onStop).toHaveBeenCalledOnce();
+
+      view.rerender(fullComposer(seen, { ...props, value: 'Please keep it short' }));
+      expect(
+        screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')),
+      ).toEqual([steering ? 'Send now' : 'Queue message']);
+
+      view.rerender(fullComposer(seen, { ...props, value: '' }));
+      expect(
+        screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')),
+      ).toEqual(['Stop']);
+    },
+  );
+
   it('renders the field, the attachments and the queue as one accessible surface', async () => {
     const seen: { context: InputMessageEditorContext | null } = { context: null };
     const file = new File(['x'], 'shot.png', { type: 'image/png' });
@@ -233,12 +263,8 @@ describe('InputMessage composer regions', () => {
       }),
     );
 
-    await user.click(screen.getByRole('button', { name: 'Stop' }));
-    expect(onStop).toHaveBeenCalledOnce();
-    expect(onValueChange).not.toHaveBeenCalled();
-    expect(onQueueChange).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('textbox', { name: 'Message' }));
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Queue message' }));
+    expect(onStop).not.toHaveBeenCalled();
     expect(onQueueChange).toHaveBeenCalledWith([
       { files: [], id: expect.any(String), text: 'hello' },
     ]);
