@@ -68,10 +68,14 @@ export interface ExtractorRun {
 export interface ExtractorOutcome {
   /** Exit code once the whole process tree is gone; null when signal-terminated. */
   code: number | null;
+  /** Native termination evidence, independent of caller-requested cancellation. */
+  signal: NodeJS.Signals | null;
   /** True when `signal` aborted the run; the tree has been reaped. */
   cancelled: boolean;
   /** Last three trimmed stderr lines, for failure messages. */
   stderrTail: string;
+  /** Bounded stderr for diagnostics, including native fault tracebacks. */
+  stderr?: string;
 }
 
 /** Spawn one PDF/OCR extractor at lowered priority and settle after its whole
@@ -132,7 +136,8 @@ function runExtractorOnce({ mode, script, args, signal, onStderrLine }: Extracto
     void waitForExtractorTree(proc).then((code) => {
       signal?.removeEventListener('abort', onAbort);
       if (lineBuffer) onStderrLine?.(lineBuffer);
-      resolve({ code, cancelled, stderrTail: stderr.trim().split('\n').slice(-3).join('\n') });
+      resolve({ code, signal: proc.signalCode, cancelled, stderr: stderr.trim(),
+        stderrTail: stderr.trim().split('\n').slice(-3).join('\n') });
     }, reject);
   });
 }

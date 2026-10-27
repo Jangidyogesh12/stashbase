@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import faulthandler
 from pathlib import Path
 
 OCR_COMPLETE_MARKER = "<!-- stashbase-ocr-conversion: complete -->"
@@ -68,6 +69,7 @@ def extract_text(image_path: Path | bytes) -> str:
 
 
 def main() -> int:
+    faulthandler.enable()
     parser = argparse.ArgumentParser(description="Image → OCR text note for StashBase.")
     parser.add_argument("image")
     parser.add_argument("out_path", help="Target note path (`.<stem>.md`).")

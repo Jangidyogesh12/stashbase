@@ -49,6 +49,12 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**CLI probe diagnostics (2026-10-27):** `server/agent-probe.ts` retains bounded
+stdout/stderr and exit evidence when a probe times out, after reaping its process
+tree. `extractor-process.test.ts` runs a stalled child and verifies the captured,
+credential-filtered diagnostic. Probe deadlines and login behavior are unchanged;
+this controlled failure does not establish provider authentication availability.
+
 **Settings scroll containment (2026-10-27):** `settings/ui/shell.tsx` makes the
 settings content scroller its accessibility labels' containing block. The
 `InSettingsWindow` MCP Story exercises URL controls and expanded Docker port
@@ -1315,6 +1321,18 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   expand script/network authority.
 
 ## J04: Preparation
+
+**Extractor termination evidence (2026-10-27):** PDF/OCR errors now retain native
+signals and structured stderr alongside exit codes. A real child-process fixture
+distinguishes signal termination from caller cancellation. Retry and durable
+failure policies are unchanged. This improves evidence for the reported OCR/PDF
+failures; the original source files and the native crash cause remain unavailable.
+macOS PDF batches now spawn fresh interpreters; PDF/OCR entry points and batch
+workers enable native fault tracebacks. Source-mode tests convert a real two-page
+PDF through spawned batches and preserve its bytes. A temporary PyInstaller build
+of the actual combined entry verifies two spawned batches using controlled parser
+fixtures; it does not prove packaged native PDF/OCR library behavior. Original
+crash inputs and release-package verification remain gaps.
 
 **MFS startup retirement (2026-10-25):** a real child/descendant fixture failed
 because the readiness watchdog killed only its leader, leaving the helper

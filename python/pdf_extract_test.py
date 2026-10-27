@@ -1,4 +1,5 @@
 import json
+import multiprocessing
 import sys
 import time
 import types
@@ -9,6 +10,10 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 import pdf_extract
+
+
+def _hung_batch(out_queue, args):
+    time.sleep(10)
 
 
 class _FakePage:
@@ -292,15 +297,6 @@ class PdfExtractTests(unittest.TestCase):
             self.assertLess(pdf_extract._ocr_dpi_for_pages(pdf, [0], max_mpix=12), 300)
 
     def test_pymupdf_converter_falls_back_when_batch_times_out(self) -> None:
-        rich = types.ModuleType("pymupdf4llm")
-
-        def to_markdown(*args, **kwargs):
-            time.sleep(10)
-            return "never returned"
-
-        rich.to_markdown = to_markdown
-        sys.modules["pymupdf4llm"] = rich
-
         plain = types.ModuleType("pymupdf")
         plain.open = lambda path: _FakeDoc([_FakePage("rescued text")])
         sys.modules["pymupdf"] = plain
@@ -312,11 +308,33 @@ class PdfExtractTests(unittest.TestCase):
             out = root / ".Hung Batch.pdf.md"
             bundle = root / ".Hung Batch.pdf_files"
 
-            pdf_extract.convert_with_pymupdf(pdf, out, bundle, batch_timeout_s=0.05)
+            with mock.patch.object(pdf_extract, "_batch_child_main", _hung_batch):
+                pdf_extract.convert_with_pymupdf(pdf, out, bundle, batch_timeout_s=0.05)
 
             text = out.read_text(encoding="utf-8")
             self.assertIn("# Hung Batch", text)
             self.assertIn("rescued text", text)
+
+    def test_spawned_batches_extract_real_pdf_without_inheriting_native_parent_state(self) -> None:
+        import pymupdf
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pdf = root / "Source.pdf"
+            with pymupdf.open() as document:
+                for text in ["First isolated page", "Second isolated page"]:
+                    document.new_page().insert_text((72, 72), text)
+                document.save(pdf)
+            original = pdf.read_bytes()
+            out = root / "note.md"
+            # Exercise the fresh-process path on every CI OS. The parent has
+            # already loaded and used the native PDF library above.
+            with mock.patch.object(pdf_extract, "_multiprocessing_context", return_value=multiprocessing.get_context("spawn")):
+                pdf_extract.convert_with_pymupdf(pdf, out, root / "assets", batch_size=1, batch_timeout_s=30)
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("First isolated page", text)
+            self.assertIn("Second isolated page", text)
+            self.assertIn(pdf_extract.PDF_COMPLETE_MARKER, text)
+            self.assertEqual(pdf.read_bytes(), original)
 
     def test_pymupdf_converter_resumes_completed_batches(self) -> None:
         rich = types.ModuleType("pymupdf4llm")

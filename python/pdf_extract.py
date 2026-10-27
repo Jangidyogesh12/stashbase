@@ -27,6 +27,7 @@ on stderr.
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import gc
 import json
 import multiprocessing
@@ -540,6 +541,7 @@ def _batch_child_main(
     out_queue: "multiprocessing.Queue[tuple[str, tuple[int, str, str, bool] | str]]",
     args: tuple[str, list[int], int, int, str, str, float],
 ) -> None:
+    faulthandler.enable()
     try:
         out_queue.put(("ok", _convert_batch_worker(args)))
     except BaseException:
@@ -547,6 +549,11 @@ def _batch_child_main(
 
 
 def _multiprocessing_context() -> multiprocessing.context.BaseContext:
+    # Native PDF/OCR libraries may start threads in the parent. macOS cannot
+    # safely reuse that process state after fork; the frozen entry point also
+    # calls freeze_support before dispatching extractor subcommands.
+    if sys.platform == "darwin":
+        return multiprocessing.get_context("spawn")
     methods = multiprocessing.get_all_start_methods()
     if "fork" in methods:
         return multiprocessing.get_context("fork")
@@ -724,6 +731,7 @@ def convert_with_pymupdf(
 
 
 def main() -> int:
+    faulthandler.enable()
     parser = argparse.ArgumentParser(description="PDF → markdown + bundle for StashBase.")
     parser.add_argument(
         "--probe-text-layer",

@@ -37,7 +37,8 @@ export async function probeAgentCommand(
     void completion.then((status) => {
       cleanup();
       if (options.signal?.aborted) reject(new Error('Agent probe was cancelled.'));
-      else if (timedOut) reject(new Error(`Agent probe timed out after ${options.timeoutMs}ms.`));
+      else if (timedOut) reject(Object.assign(new Error(`Agent probe timed out after ${options.timeoutMs}ms.`),
+        { exit_code: status, signal: child.signalCode, stdout, stderr }));
       else resolve({ status, stdout, stderr });
     }, (error) => { cleanup(); reject(error); });
   });

@@ -243,6 +243,11 @@ source URL and installed package version.
   after a cancellable 250 ms delay; no successfully started extraction is replayed.
   Persistent launch failure retains its cause, errno/syscall and attempt count.
   Extractor stdout is drained even though artifacts are written to files.
+  macOS PDF batches use fresh spawned interpreters rather than inheriting native
+  PDF/OCR state through fork. The combined frozen entry calls freeze_support
+  before dispatch; batch workers and PDF/OCR entry points enable native fault
+  tracebacks on stderr. A crash still fails conversion and cannot publish empty
+  success or silently retry uncertain work.
   Optional helpers must not block browsing or steal native focus.
 - Reconcile is folder-explicit and rediscovers lost in-memory work. Boot binds
   every registered folder and reconciles none; a folder reconciles when a window
@@ -1080,6 +1085,9 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   diagnostic spooling; it never comes from renderer event input.
   Diagnostic messages, paths, causes, stacks and bounded process output are retained;
   arbitrary request/provider objects, documents, prompts and whole logs are excluded.
+  CLI probe timeouts keep separate output tails and termination evidence after
+  process-tree cleanup. PDF/OCR failures retain their exit signal independently
+  of cancellation; diagnostic enrichment does not change their retry policy.
   The public ingestion token is build configuration, not a user credential.
 - Queue envelopes preserve UUID, occurrence time, installation, anonymous/account
   identity and source version through retry/restart. Identity links share durable

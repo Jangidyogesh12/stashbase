@@ -11,7 +11,45 @@ import {
   spawnOptionsForExtractor,
   spawnOptionsForPdfOcr,
   terminateExtractorTree,
+  runExtractor,
 } from './extractor-process.ts';
+import { probeAgentCommand } from './agent-probe.ts';
+import { errorDiagnostic } from './error-diagnostics.ts';
+
+test('extractor outcome distinguishes a native signal from an exit code and cancellation', { skip: process.platform === 'win32' }, async () => {
+  for (const cancelled of [false, true]) {
+    const controller = new AbortController();
+    const outcome = await runExtractor({ mode: 'ocr', script: 'ocr_extract.py', args: [], signal: controller.signal }, {
+      spawn: ((_command: string, _args: string[], options: ReturnType<typeof spawnOptionsForPdfOcr>) => {
+        const child = spawn(process.execPath, ['-e', cancelled
+          ? "process.stderr.write('ready'); setInterval(() => {}, 1000)"
+          : "require('fs').writeSync(2, ['native failure', 'frame 1', 'frame 2', 'frame 3', 'worker exit'].join(String.fromCharCode(10))); process.kill(process.pid, 'SIGTERM')"], options);
+        if (cancelled) child.stderr!.once('data', () => controller.abort());
+        return child;
+      }) as unknown as typeof spawn,
+    });
+    assert.equal(outcome.code, null);
+    assert.equal(outcome.signal, 'SIGTERM');
+    assert.equal(outcome.cancelled, cancelled);
+    assert.equal(outcome.stderrTail, cancelled ? 'ready' : 'frame 2\nframe 3\nworker exit');
+    assert.equal(outcome.stderr?.split('\n')[0], cancelled ? 'ready' : 'native failure');
+  }
+});
+
+test('a timed-out CLI probe preserves bounded, redacted output after reaping its process', async () => {
+  await assert.rejects(probeAgentCommand(process.execPath, ['-e',
+    "require('fs').writeSync(1, 'x'.repeat(5000) + 'probe started'); require('fs').writeSync(2, 'auth check stalled token=private-token'); setInterval(() => {}, 1000)",
+  ], { env: process.env, timeoutMs: 1000 }), error => {
+    const diagnostic = errorDiagnostic(error);
+    assert.match(diagnostic.message, /timed out/);
+    assert.match(diagnostic.stdout!, /probe started$/);
+    assert.ok(diagnostic.stdout!.length <= 4000);
+    assert.match(diagnostic.stderr!, /auth check stalled/);
+    if (process.platform !== 'win32') assert.equal(diagnostic.signal, 'SIGTERM');
+    assert.doesNotMatch(JSON.stringify(diagnostic), /private-token/);
+    return true;
+  });
+});
 
 const CHILD_SOURCE = 'setInterval(() => undefined, 1000)';
 const PARENT_SOURCE = [

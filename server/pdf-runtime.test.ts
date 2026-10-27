@@ -28,12 +28,13 @@ test('packaged PDF probes wait for an installed component without demanding a do
       import { PassThrough } from 'node:stream';
       globalThis.fetch = async () => { throw new Error('probe must not download'); };
       const launches = [];
+      let outcome = { code: 0, signal: null, stderr: '' };
       childProcess.spawn = (cmd, args) => {
         launches.push({ cmd, args });
         const proc = Object.assign(new EventEmitter(), {
-          stderr: new PassThrough(), stdout: new PassThrough(), exitCode: 0,
+          stderr: new PassThrough(), stdout: new PassThrough(), exitCode: outcome.code, signalCode: outcome.signal,
         });
-        setImmediate(() => { proc.emit('exit', 0); proc.emit('close', 0); });
+        setImmediate(() => { proc.stderr.write(outcome.stderr); proc.emit('exit', outcome.code, outcome.signal); proc.emit('close', outcome.code, outcome.signal); });
         return proc;
       };
       syncBuiltinESMExports();
@@ -53,6 +54,23 @@ test('packaged PDF probes wait for an installed component without demanding a do
           const abort = AbortSignal.abort();
           assert.equal(await PDF_SPEC.classifyCost('/fixture.pdf', abort), 10);
           assert.equal(launches.length, 2);
+          const { IMAGE_SPEC } = await import('./server/image.ts');
+          const { errorDiagnostic } = await import('./server/error-diagnostics.ts');
+          for (const code of [7, null]) {
+            outcome = { code, signal: code === null ? 'SIGTERM' : null,
+              stderr: ['native extraction failed token=private-token', 'frame 1', 'frame 2', 'frame 3', 'worker exit'].join(String.fromCharCode(10)) };
+            for (const [spec, file] of [[PDF_SPEC, '/fixture.pdf'], [IMAGE_SPEC, '/fixture.png']]) {
+              await assert.rejects(spec.convert(file), error => {
+                const diagnostic = errorDiagnostic(error);
+                assert.equal(diagnostic.exit_code, code ?? undefined);
+                assert.equal(diagnostic.signal, outcome.signal ?? undefined);
+                assert.match(diagnostic.stderr, /native extraction failed/);
+                assert.doesNotMatch(JSON.stringify(diagnostic), /private-token/);
+                assert.equal(error.name, spec === PDF_SPEC && code === null ? 'TransientConversionError' : 'Error');
+                return true;
+              });
+            }
+          }
         } else {
           assert.equal(launches.length, 0);
           assert.throws(() => host.extractorSpawn('pdf', 'pdf_extract.py', []), /component is not ready/);

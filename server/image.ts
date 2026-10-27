@@ -33,7 +33,7 @@ async function convertImage(
   signal?.throwIfAborted();
   const notePath = derivedNoteFor(imageAbsPath);
   mkdirSync(derivedDir(), { recursive: true });
-  const { code, cancelled, stderrTail } = await runExtractor({
+  const { code, signal: exitSignal, cancelled, stderrTail, stderr } = await runExtractor({
     mode: 'ocr',
     script: 'ocr_extract.py',
     args: [imageAbsPath, notePath],
@@ -42,11 +42,12 @@ async function convertImage(
   if (cancelled) throw new TransientConversionError('ocr_extract cancelled');
   if (code === 0) return { notePath };
   if (isMissingRapidOcrError(stderrTail)) {
-    throw new Error(
+    throw Object.assign(new Error(
       'OCR engine is not installed. Run `pnpm setup:python-extract` and restart StashBase; the image still opens, but its text cannot be searched until OCR is available.',
-    );
+    ), { exit_code: code, signal: exitSignal, stderr: stderr ?? stderrTail });
   }
-  throw new Error(`ocr_extract exit ${code}: ${stderrTail || '(no stderr)'}`);
+  throw Object.assign(new Error(`ocr_extract ${exitSignal ? `signal ${exitSignal}` : `exit ${code}`}: ${stderrTail || '(no stderr)'}`),
+    { exit_code: code, signal: exitSignal, stderr: stderr ?? stderrTail });
 }
 
 /** Conversion spec wiring images into the shared `conversion.ts` plumbing.

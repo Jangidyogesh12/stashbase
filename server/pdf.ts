@@ -224,7 +224,7 @@ async function convertPdf(
       log.debug(`${path.basename(pdfAbsPath)}: ${trimmed}`);
     }
   };
-  const { code, cancelled, stderrTail } = await runExtractor({
+  const { code, signal: exitSignal, cancelled, stderrTail, stderr } = await runExtractor({
     mode: 'pdf',
     script: 'pdf_extract.py',
     args: [pdfAbsPath, notePath, bundleDir],
@@ -233,8 +233,9 @@ async function convertPdf(
   });
   if (cancelled) throw new TransientConversionError('pdf_extract cancelled');
   if (code === 0) return { notePath, bundleDir };
-  const message = `pdf_extract exit ${code}: ${stderrTail || '(no stderr)'}`;
-  throw code === null ? new TransientConversionError(message) : new Error(message);
+  const message = `pdf_extract ${exitSignal ? `signal ${exitSignal}` : `exit ${code}`}: ${stderrTail || '(no stderr)'}`;
+  throw Object.assign(code === null ? new TransientConversionError(message) : new Error(message),
+    { exit_code: code, signal: exitSignal, stderr: stderr ?? stderrTail });
 }
 
 /** Conversion spec wiring PDFs into the shared `conversion.ts` plumbing. */
