@@ -157,6 +157,22 @@ const SKILLS = [
   { id: 'summarize', label: 'summarize', description: 'Summarize a folder' },
 ];
 
+/** No provider work: each accepted decision produces the next local request. */
+function approvalRequest(index: number) {
+  return {
+    kind: 'permission-requested' as const,
+    id: `approval-${index}`,
+    toolUseId: `edit-${index}`,
+    name: 'Edit',
+    title: null,
+    input: {
+      file_path: `/Library/Research/draft-${index}.md`,
+      old_string: 'Original paragraph.',
+      new_string: Array.from({ length: 40 }, (_, line) => `Revised paragraph ${line}.`).join('\n'),
+    },
+  };
+}
+
 /** The catalog answers asynchronously, so a story that means to show a working
  *  conversation has to wait for the setup gate to lift. Without it the canvas
  *  is scored mid-check, and the composer's controls are never looked at. */
@@ -166,6 +182,7 @@ const readyWorkspace = async () => {
 };
 
 function WorkspacePreview({
+  approvals = false,
   authRefused = false,
   context = false,
   docked = false,
@@ -179,6 +196,7 @@ function WorkspacePreview({
   startupChecking = false,
   startupFailure,
 }: {
+  approvals?: boolean;
   authRefused?: boolean;
   context?: boolean;
   docked?: boolean;
@@ -225,6 +243,10 @@ function WorkspacePreview({
           queueMicrotask(() => {
             listener.onEvent({ error: null, kind: 'skills', skills: SKILLS, state: 'available' });
             listener.onEvent({ kind: 'ready' });
+            if (approvals) {
+              listener.onEvent({ kind: 'turn-started' });
+              listener.onEvent(approvalRequest(0));
+            }
             if (followUp) {
               // A real turn that never answers, and a follow-up sent into it.
               const session = next.activeSession();
@@ -239,7 +261,21 @@ function WorkspacePreview({
               });
             }
           });
-          return { close: () => undefined, send: () => true };
+          let count = 1;
+          let closed = false;
+          return {
+            close: () => {
+              closed = true;
+            },
+            send: (command) => {
+              if (approvals && command.kind === 'reply-permission') {
+                queueMicrotask(() => {
+                  if (!closed) listener.onEvent(approvalRequest(count++));
+                });
+              }
+              return true;
+            },
+          };
         },
         list: async () => [],
         remove: async () => undefined,
@@ -348,6 +384,7 @@ function WorkspacePreview({
         new File([STORY_IMAGE], 'workspace-cover.svg', { type: 'image/svg+xml' }),
       ]);
     }
+    if (approvals) next.activeSession().start();
     if (skills) {
       const session = next.activeSession();
       session.start();
@@ -387,14 +424,19 @@ function WorkspacePreview({
       });
     }
     return next;
-  }, [startupFailure, authRefused, context, empty, followUp, interrupted, skills]);
+  }, [approvals, startupFailure, authRefused, context, empty, followUp, interrupted, skills]);
 
   useEffect(() => () => runtime.dispose(), [runtime]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className={cn('h-[46rem]', docked ? 'w-[36rem] border-l border-border' : 'w-[64rem]')}>
-        <div className="h-full">
+      <div
+        className={cn(
+          approvals ? 'h-[28rem]' : 'h-[46rem]',
+          docked ? 'w-[36rem] border-l border-border' : 'w-[64rem]',
+        )}
+      >
+        <div className="relative h-full overflow-hidden">
           <ManagedAgentWorkspace
             onOpenAppSettings={() => undefined}
             catalog={{
@@ -591,5 +633,32 @@ export const StartupUpdateRequiresSignIn: Story = {
     await readyWorkspace();
     await userEvent.click(await screen.findByRole('button', { name: 'Update Codex' }));
     await screen.findByRole('button', { name: 'Continue after sign-in' });
+  },
+};
+
+/** A short window with a long diff: hidden transcript labels must not create
+ * a second scroll range in the pane as decisions collapse and new ones land. */
+export const RepeatedApprovals: Story = {
+  args: { approvals: true },
+  parameters: { fluidCanvas: { minHeight: '34rem', width: '68rem' } },
+  play: async () => {
+    await readyWorkspace();
+    const composer = await screen.findByRole('textbox', { name: 'Message' });
+    const log = screen.getByRole('log', { name: 'Chat transcript' });
+    const pane = log.parentElement?.parentElement;
+    if (!pane) throw new Error('Expected the chat pane around the workspace');
+    const top = composer.getBoundingClientRect().top;
+    for (let index = 0; index < 5; index += 1) {
+      await screen.findByRole('region', { name: `Edited draft-${index}.md` });
+      const allow = screen.getByRole('button', { name: 'Allow' });
+      // Browser focus/navigation can reveal a pending control before activation.
+      // Layout assertions require running this Story in a real browser.
+      allow.scrollIntoView({ block: 'nearest' });
+      await userEvent.click(allow);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(pane.scrollHeight).toBe(pane.clientHeight);
+      expect(pane.scrollTop).toBe(0);
+      expect(composer.getBoundingClientRect().top).toBe(top);
+    }
   },
 };

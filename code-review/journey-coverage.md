@@ -49,6 +49,14 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Settings scroll containment (2026-10-27):** `settings/ui/shell.tsx` makes the
+settings content scroller its accessibility labels' containing block. The
+`InSettingsWindow` MCP Story exercises URL controls and expanded Docker port
+settings. At a real-browser 928 by 480 viewport, the old layout scrolled the
+outer dialog by 92.5px; the fix held it at zero with both client and scroll
+heights of 374px, preserving the header and close action. DOM-only Story checks
+do not establish this geometry.
+
 **Core acceptance (2026-10-26):** `renderer/src/app.onboarding.test.tsx` drives
 the whole window from Welcome through opening an empty project, choosing each
 of Default/Claude/Codex/Antigravity, declining access without losing the draft,
@@ -1483,6 +1491,18 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
   evaluation does not establish ranking quality.
 
 ## J06: Agent
+
+**Composer position after approvals (2026-10-27):** the transcript scroll area
+in `ui/workspace.tsx` is also the containing block for its absolutely positioned
+accessibility labels. Without it, those labels escape the transcript's clipping
+and add scrollable overflow to the outer chat pane, which can move the composer
+when the browser reveals a decision. `RepeatedApprovals` in `workspace.stories.tsx`
+exercises five consecutive approvals with long edit previews in a short window.
+A real-browser comparison failed on the old layout (468px scroll height in a
+448px pane) and passed with the fix, preserving pane scroll offset and composer
+position. The Story's geometry assertions need a real browser; the DOM test
+runner alone does not establish layout correctness. Packaged reproduction on
+the reporting installation remains unverified.
 
 **Startup readiness in the composer (2026-10-26):**
 `hooks/use-agent-catalog.ts` follows running preparation until the host reports

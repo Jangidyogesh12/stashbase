@@ -1,10 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Plug } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { expect, screen, userEvent } from 'storybook/test';
 
 import type { McpAccessPort } from '@/features/settings/application/ports';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 
+import { SettingsShell } from '../shell';
 import { McpAccessPanel } from './mcp-access-panel';
 
 function Queries({ children }: { children: ReactNode }) {
@@ -76,4 +79,42 @@ export const DockerListenerFailed: Story = {
       })}
     />
   ),
+};
+
+/** Run at a short desktop viewport too: DOM-only tests cannot detect overflow. */
+export const InSettingsWindow: Story = {
+  render: () => (
+    <SettingsShell
+      open
+      onClose={() => undefined}
+      onSectionChange={() => undefined}
+      section="advanced"
+      sections={[
+        {
+          id: 'advanced',
+          label: 'Advanced',
+          icon: Plug,
+          available: true,
+          render: () => (
+            <McpAccessPanel
+              mcpAccessApi={port({ ...reachable, dockerAccess: true, dockerActive: true })}
+            />
+          ),
+        },
+      ]}
+    />
+  ),
+  play: async () => {
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    await userEvent.click(await screen.findByRole('tab', { name: 'URL' }));
+    const details = await screen.findByText('Docker port settings');
+    details.scrollIntoView({ block: 'nearest' });
+    await userEvent.click(details);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(dialog.scrollHeight).toBe(dialog.clientHeight);
+    expect(dialog.scrollTop).toBe(0);
+    expect(
+      screen.getByRole('heading', { name: 'Settings' }).getBoundingClientRect().top,
+    ).toBeGreaterThanOrEqual(dialog.getBoundingClientRect().top);
+  },
 };

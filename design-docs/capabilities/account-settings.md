@@ -148,6 +148,10 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
 
 ## Shared State and Recovery
 
+- Long settings pages scroll inside their content pane. Hidden accessibility
+  labels and status messages stay within that pane's positioning boundary;
+  revealing a lower control must not scroll away the dialog title or close action.
+
 - Settings declare their scope. Project agent preferences follow the project;
   current account and embedding configuration are shared across windows.
 - A failed read is not an empty configuration. Failed writes preserve unrelated

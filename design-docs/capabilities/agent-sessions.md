@@ -245,6 +245,9 @@ permissions, with current model and tool choices checked before use.
   also perform programming and configuration work when the reader requests it,
   within session permissions. Document viewer and search
   formats do not restrict Agent text-file access. A persona can narrow that role.
+- Resolving an approval keeps the composer anchored at the bottom of an active
+  conversation. Transcript scrolling and focus restoration stay inside the
+  conversation's scroll area, including when long previews collapse.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.

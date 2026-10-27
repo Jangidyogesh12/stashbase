@@ -189,11 +189,13 @@ function ChatWorkspace({
         }
       />
       {empty && <div aria-hidden className="min-h-0 grow basis-0" />}
+      {/* Contain absolute transcript labels here. Otherwise they escape the
+          log's clipping and create a scroll range in the pane around the composer. */}
       <div
         aria-busy={activeTurn}
         aria-live="polite"
         aria-label="Chat transcript"
-        className={cn('min-h-0 overflow-y-auto', empty ? 'flex-initial' : 'flex-1')}
+        className={cn('relative min-h-0 overflow-y-auto', empty ? 'flex-initial' : 'flex-1')}
         ref={logRef}
         role="log"
       >
