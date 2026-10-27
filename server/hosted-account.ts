@@ -79,6 +79,16 @@ class HostedAuthError extends Error {
   constructor(message: string, readonly invalidSession: boolean) { super(message); }
 }
 
+export function isHostedSignInRequired(error: unknown): boolean {
+  return error instanceof HostedAuthError && error.invalidSession;
+}
+
+function requireHostedAccountSession(): HostedAccountSession {
+  const session = getHostedAccountSession();
+  if (!session) throw new HostedAuthError('Sign in to StashBase to use the Default Agent and its free credits.', true);
+  return session;
+}
+
 function messageOf(value: ErrorPayload | null, fallback: string): string {
   const messages: Record<string, string> = { otp_rate_limited: 'Wait a minute before requesting another code. You can request up to five codes per hour.', otp_invalid: 'The code is incorrect or expired. Request a new code.', otp_delivery_failed: 'The email could not be sent. Please try again later.', google_already_linked: 'Google is already connected.', auth_service_unavailable: 'The sign-in service is unavailable. Please try again later.' };
   return ((value?.code && messages[value.code]) || value?.message) ?? value?.error_description ?? value?.msg ?? value?.error ?? fallback;
@@ -96,12 +106,24 @@ export function normalizedGoogleProfile(user: AuthUser | undefined): Pick<Hosted
 
 async function authRequest<T>(path: string, sessionToken?: string, body?: Record<string, unknown>, signal = AbortSignal.timeout(10_000)): Promise<T | null> {
   const response = await hostedAuthRequest(path, { body, accessToken: sessionToken, signal });
+  const diagnostic = {
+    http_status: response.status,
+    content_type: response.headers.get('content-type') ?? undefined,
+    request_id: response.headers.get('x-request-id') ?? undefined,
+  };
   let payload: (T & ErrorPayload) | null;
-  try { payload = await response.json() as (T & ErrorPayload) | null; } catch { throw new Error("The authentication service returned an unreadable response."); }
-  if (!response.ok) throw new HostedAuthError(
+  try { payload = await response.json() as (T & ErrorPayload) | null; } catch (error) {
+    // JSON parser messages can contain upstream response bytes, including
+    // credentials. Keep the failure type without retaining that body excerpt.
+    const cause = error instanceof SyntaxError ? new SyntaxError('Invalid JSON in authentication response.') : error;
+    throw Object.assign(new Error('The authentication service returned an unreadable response.', {
+      cause: signal.aborted ? signal.reason : cause,
+    }), diagnostic);
+  }
+  if (!response.ok) throw Object.assign(new HostedAuthError(
     messageOf(payload, `Account authentication failed (HTTP ${response.status}).`),
     response.status === 401,
-  );
+  ), diagnostic);
   return payload;
 }
 
@@ -116,7 +138,10 @@ async function readSession(sessionToken: string, signal: AbortSignal): Promise<A
 async function sessionFrom(sessionToken: string, fallback?: HostedAccountSession): Promise<HostedAccountSession> {
   const signal = AbortSignal.timeout(10_000);
   const value = await readSession(sessionToken, signal);
-  if (fallback && (value.user.id !== fallback.userId || getHostedAccountSession()?.accessToken !== fallback.accessToken || getHostedAccountSession()?.sessionToken !== fallback.sessionToken)) throw new Error('The hosted account changed while its token was refreshing.');
+  if (fallback) {
+    const current = requireHostedAccountSession();
+    if (value.user.id !== fallback.userId || current.accessToken !== fallback.accessToken || current.sessionToken !== fallback.sessionToken) throw new Error('The hosted account changed while its token was refreshing.');
+  }
   const result = await authRequest<{ token: string }>('/token', sessionToken, undefined, signal);
   // The API verifies signatures. Here we check the token's lifetime and binding
   // before caching it; decoding alone is never used to authorize an operation.
@@ -358,8 +383,7 @@ export function hostedOAuthStatus(flowId: string): HostedOAuthStatus {
 }
 
 export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}): Promise<string> {
-  const session = getHostedAccountSession();
-  if (!session) throw new Error('Sign in to StashBase to use the Default Agent and its free credits.');
+  const session = requireHostedAccountSession();
   if (!options.forceRefresh && session.expiresAt > Math.floor(Date.now() / 1000) + 60) return session.accessToken;
   const sessionKey = `${session.userId}\0${session.sessionToken}\0${session.accessToken}`;
   if (tokenRefresh?.sessionKey === sessionKey) return tokenRefresh.promise;
@@ -367,8 +391,8 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
   const promise = (async () => {
     try {
       const refreshed = await sessionFrom(session.sessionToken, session);
-      const current = getHostedAccountSession();
-      if (!current || `${current.userId}\0${current.sessionToken}\0${current.accessToken}` !== sessionKey) {
+      const current = requireHostedAccountSession();
+      if (`${current.userId}\0${current.sessionToken}\0${current.accessToken}` !== sessionKey) {
         throw new Error('The hosted account changed while its token was refreshing.');
       }
       setHostedAccountSession(refreshed);

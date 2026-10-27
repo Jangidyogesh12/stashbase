@@ -33,7 +33,14 @@ export function createHttpClient(
       const headers = new Headers({ accept: 'application/json' });
       if (telemetryTurnId) headers.set('x-stashbase-agent-turn-id', telemetryTurnId);
       const correlation = telemetryTurnId ? { turn_id: telemetryTurnId } : {};
-      const init: RequestInit = { headers, method, ...(signal ? { signal } : {}) };
+      // Local API data belongs to the live window/account. Chromium's HTTP
+      // cache must not become a second owner beside the feature query caches.
+      const init: RequestInit = {
+        headers,
+        method,
+        cache: 'no-store',
+        ...(signal ? { signal } : {}),
+      };
       if (body !== undefined) {
         headers.set('content-type', 'application/json');
         init.body = JSON.stringify(body);
@@ -41,6 +48,13 @@ export function createHttpClient(
       let response: Response;
       try {
         response = await fetchRequest(new URL(path, baseUrl), init);
+        // Older installations have exposed a bare 304 to fetch callers. There
+        // is no cached body here: retry a read once without cache validation.
+        // Never replay a mutation or a cancelled request.
+        if (method === 'GET' && response.status === 304) {
+          signal?.throwIfAborted();
+          response = await fetchRequest(new URL(path, baseUrl), { ...init, cache: 'reload' });
+        }
       } catch (error) {
         if (!signal?.aborted || signal.reason?.name === 'TimeoutError')
           reportError?.(error, 'http-transport', {

@@ -17,6 +17,7 @@ import {
   fetchHostedBillingStatus,
   hostedAccountState,
   hostedAccountAvatar,
+  isHostedSignInRequired,
   hostedOAuthStatus,
   noteHostedOAuthAppReturn,
   noteHostedOAuthReturnIntent,
@@ -56,6 +57,11 @@ function oauthPurpose(value: unknown): HostedOAuthPurpose | null {
 
 function callbackOrigin(req: express.Request): string {
   return new URL(`http://${req.get('host') ?? ''}`).origin;
+}
+
+function hostedServiceFailure(res: express.Response, error: unknown): void {
+  res.locals.diagnosticError = error;
+  res.status(isHostedSignInRequired(error) ? 401 : 502).json({ error: errorMessage(error) });
 }
 
 export function mount(app: express.Express, { appReturnToken }: AccountRouteOptions): void {
@@ -105,8 +111,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await fetchHostedAgentAllowance());
     } catch (error: unknown) {
-      res.locals.diagnosticError = error;
-      res.status(502).json({ error: errorMessage(error) });
+      hostedServiceFailure(res, error);
     }
   });
 
@@ -114,7 +119,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     try {
       res.json({ plans: await fetchHostedBillingPlans() });
     } catch (error: unknown) {
-      res.status(502).json({ error: errorMessage(error) });
+      hostedServiceFailure(res, error);
     }
   });
 
@@ -123,7 +128,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await fetchHostedBillingStatus());
     } catch (error: unknown) {
-      res.status(502).json({ error: errorMessage(error) });
+      hostedServiceFailure(res, error);
     }
   });
 
@@ -136,7 +141,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await createHostedCheckout(priceId));
     } catch (error: unknown) {
-      res.status(502).json({ error: errorMessage(error) });
+      hostedServiceFailure(res, error);
     }
   });
 
@@ -147,7 +152,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await changeHostedBilling(input.data));
     } catch (error: unknown) {
-      res.status(502).json({ error: errorMessage(error) });
+      hostedServiceFailure(res, error);
     }
   });
 
@@ -156,7 +161,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await createHostedBillingPortal());
     } catch (error: unknown) {
-      res.status(502).json({ error: errorMessage(error) });
+      hostedServiceFailure(res, error);
     }
   });
 

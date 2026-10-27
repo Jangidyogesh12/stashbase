@@ -49,6 +49,18 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Account request recovery (2026-10-27):** credits and billing distinguish
+authentication lost during a request (401) from an unavailable service (502).
+Controlled route checks cover expired sessions, concurrent sign-out and network
+failure without revoking valid saved credentials. A real private Auth relay
+fixture preserves upstream status/content type/request ID through malformed
+JSON, without logging response excerpts. The renderer HTTP adapter bypasses
+HTTP cache and retries an exposed 304 once for GET only; regressions cover
+cancellation, repeated 304 and refusing to replay writes. A real Electron fixture
+recovers a bare 304 and confirms subsequent reads reach the local server. These checks do not
+establish availability of the real sign-in or credits service; a fresh external
+provider login and reply remain unverified for this change.
+
 **CLI probe diagnostics (2026-10-27):** `server/agent-probe.ts` retains bounded
 stdout/stderr and exit evidence when a probe times out, after reaping its process
 tree. `extractor-process.test.ts` runs a stalled child and verifies the captured,
@@ -843,6 +855,14 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
   Cross-platform native-picker and signed-installer validation remain release checks.
 
 ## J03: Documents
+
+**Preview fonts and save-conflict reporting (2026-10-27):** the renderer-origin
+policy admits opaque-origin GET/HEAD only on scoped resource routes. Route tests
+load a font with `Origin: null`, refuse unregistered folders and API/write access,
+and preserve the exact application-origin checks. The Electron request smoke
+loads a real font inside an opaque HTML iframe and verifies that API access is
+still denied. Versioned-save coverage checks HTTP 409, preserved external bytes,
+and a `conflict` telemetry outcome for stale source versions.
 
 **Tables: CSV/TSV and XLSX (2026-10-23):** `csv` is a viewer format of its own
 (`shared/file-formats.ts`), editable through `detectEditableTextFormat` and kept

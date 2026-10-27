@@ -51,8 +51,14 @@ export function createHostedAuthRequest(bridge: { port?: string; token?: string;
               const reply = JSON.parse(Buffer.concat(parts).toString('utf8'));
               if (response.statusCode === 502) throw { code: reply.errorCode };
               if (!Number.isInteger(reply.status) || reply.status < 200 || reply.status > 599 || typeof reply.body !== 'string') throw { code: 'AUTH_BRIDGE_UNAVAILABLE' };
+              const headers = new Headers();
+              for (const [field, header] of [['contentType', 'content-type'], ['requestId', 'x-request-id']] as const) {
+                if (reply[field] === undefined) continue;
+                if (typeof reply[field] !== 'string' || reply[field].length > 256) throw { code: 'AUTH_BRIDGE_UNAVAILABLE' };
+                headers.set(header, reply[field]);
+              }
               resolve(new Response([204, 205, 304].includes(reply.status) ? null : reply.body, {
-                status: reply.status, headers: { 'content-type': 'application/json' },
+                status: reply.status, headers,
               }));
             } catch (error) { reject(error); }
           });

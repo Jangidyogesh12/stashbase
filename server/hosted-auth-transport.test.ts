@@ -54,6 +54,9 @@ test('native transport retains provider rejection but sends only safe network er
   const bridge = await createAuthNetworkBridge({ fetch: async () => {
     if (mode === 'http') return Response.json({ error_code: 'flow_state_expired', msg: 'Expired authorization' }, { status: 400 });
     if (mode === 'large') return new Response('x'.repeat(AUTH_RESPONSE_LIMIT + 1));
+    if (mode === 'unreadable') return new Response('upstream unavailable', { status: 503, headers: {
+      'content-type': 'text/plain', 'x-request-id': 'fixture-request', 'set-cookie': 'private-cookie',
+    } });
     throw new Error('net::ERR_PROXY_CONNECTION_FAILED https://user:private-password@proxy.test/?code=private-code');
   } });
   t.after(() => bridge.close());
@@ -62,6 +65,13 @@ test('native transport retains provider rejection but sends only safe network er
   const rejected = await invoke();
   assert.equal(rejected.status, 400);
   assert.deepEqual(await rejected.json(), { error_code: 'flow_state_expired', msg: 'Expired authorization' });
+  mode = 'unreadable';
+  const unreadable = await invoke();
+  assert.equal(unreadable.status, 503);
+  assert.equal(unreadable.headers.get('content-type'), 'text/plain');
+  assert.equal(unreadable.headers.get('x-request-id'), 'fixture-request');
+  assert.equal(unreadable.headers.get('set-cookie'), null);
+  assert.equal(await unreadable.text(), 'upstream unavailable');
   mode = 'network';
   await assert.rejects(invoke, error => {
     assert.match(String(error), /exchange.*system proxy.*ERR_PROXY_CONNECTION_FAILED/);

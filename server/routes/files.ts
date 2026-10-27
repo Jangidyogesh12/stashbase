@@ -1,4 +1,5 @@
 import { telemetry } from '../telemetry.ts';
+import { errorCode } from '../log.ts';
 /** Active-folder file surface. This module owns note list/create/read/write
  * and reveal, then composes mutation, ordering, and asset subroutes. */
 import express from 'express';
@@ -153,7 +154,7 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
         }),
       );
     } catch (err: unknown) {
-      record({ event: 'document_write_result', outcome: (err as { status?: number }).status === 409 ? 'conflict' : 'failed' });
+      record({ event: 'document_write_result', outcome: errorCode(err) === 'FILE_CHANGED' ? 'conflict' : 'failed' });
       sendError(res, err);
     }
     return;

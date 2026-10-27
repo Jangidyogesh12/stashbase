@@ -18,13 +18,42 @@ registerAppScheme(protocol);
 const requests = [];
 const upgrades = [];
 const sockets = new WebSocketServer({ noServer: true });
-const server = http.createServer((request, response) => {
+const { createRendererOriginPolicy } = require(path.join(root, 'renderer-origin.cjs'));
+const requestApp = require('express')();
+const origins = new Set([APP_ORIGIN]);
+requestApp.use(createRendererOriginPolicy(origins));
+let fontRequest;
+let cacheProbeRequests = 0;
+requestApp.use((request, response) => {
   // Deliberately accept all path spellings: the real Express router is case
   // insensitive too. The assertion is that denied requests never arrive here.
-  response.setHeader('Access-Control-Allow-Origin', APP_ORIGIN);
-  response.setHeader('Access-Control-Allow-Headers', 'content-type');
-  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  if (request.method === 'OPTIONS') { response.writeHead(204).end(); return; }
+  if (request.path === '/api/cache-probe') {
+    cacheProbeRequests++;
+    if (cacheProbeRequests === 1) response.status(304).end();
+    else response.json({ value: 'live-settings' });
+    return;
+  }
+  if (request.path === '/asset/__folder/fixture/font.woff2') {
+    fontRequest = { origin: request.headers.origin, windowId: request.headers['x-stashbase-window-id'] ?? null };
+    response.setHeader('content-type', 'font/woff2');
+    response.end(fs.readFileSync(require.resolve('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
+      { paths: [path.resolve(__dirname, '../../renderer')] })));
+    return;
+  }
+  if (request.path === '/asset/__folder/fixture/preview.html') {
+    response.setHeader('content-type', 'text/html');
+    response.end(`<!doctype html><body><script>
+      (async () => {
+        try {
+          const font = await new FontFace('Fixture', 'url(font.woff2)').load();
+          document.fonts.add(font);
+          const api = await fetch('/api/probe').then(() => 'allowed', () => 'blocked');
+          parent.postMessage({ fixture: 'font', status: font.status, api }, '*');
+        } catch (error) { parent.postMessage({ fixture: 'font', error: String(error) }, '*'); }
+      })();
+    </script></body>`);
+    return;
+  }
   if (request.url === '/') {
     response.setHeader('content-type', 'text/html');
     response.end('<!doctype html><body>Vite origin fixture</body>');
@@ -34,6 +63,7 @@ const server = http.createServer((request, response) => {
   response.setHeader('content-type', 'application/json');
   response.end(JSON.stringify(requests.at(-1)));
 });
+const server = http.createServer(requestApp);
 server.on('upgrade', (request, socket, head) => {
   upgrades.push({ url: request.url, windowId: request.headers['x-stashbase-window-id'] ?? null });
   sockets.handleUpgrade(request, socket, head, (ws) => {
@@ -75,6 +105,7 @@ async function probeWindow(window, origin) {
 app.whenReady().then(async () => {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const serverOrigin = `http://127.0.0.1:${server.address().port}`;
+  origins.add(serverOrigin);
   installAppProtocol({ protocol, net, rendererRoot: root, serverOrigin });
   const window = new BrowserWindow({ show: false, webPreferences: applicationWindowWebPreferences({}) });
   const unregistered = new BrowserWindow({ show: false, webPreferences: applicationWindowWebPreferences({}) });
@@ -103,8 +134,35 @@ app.whenReady().then(async () => {
   }
   assert.equal(denied.api, 'blocked');
   assert.equal(denied.agent, 'blocked');
+  const preview = await window.webContents.executeJavaScript(`new Promise(resolve => {
+    const frame = document.createElement('iframe');
+    frame.sandbox = 'allow-scripts';
+    frame.src = ${JSON.stringify(serverOrigin + '/asset/__folder/fixture/preview.html')};
+    const listener = event => {
+      if (event.source !== frame.contentWindow || event.data.fixture !== 'font') return;
+      window.removeEventListener('message', listener);
+      frame.remove();
+      resolve({ ...event.data, origin: event.origin });
+    };
+    window.addEventListener('message', listener);
+    document.body.append(frame);
+  })`);
+  assert.deepEqual(preview, { fixture: 'font', status: 'loaded', api: 'blocked', origin: 'null' });
+  assert.deepEqual(fontRequest, { origin: 'null', windowId: null });
   assert.equal(requests.filter((request) => /\/api\//iu.test(request.url)).length, 1);
   assert.deepEqual(upgrades, [{ url: '/ws/agent?agent=codex', windowId: 'registered-window' }]);
+  const cacheRecovery = await window.webContents.executeJavaScript(
+    fs.readFileSync(path.join(root, 'http-client.js'), 'utf8') + `;
+    (async () => {
+      const errors = [];
+      const client = FixtureHttp.createHttpClient(${JSON.stringify(serverOrigin)}, fetch, error => errors.push(error.message));
+      const first = await client.request({ path: '/api/cache-probe' });
+      const second = await client.request({ path: '/api/cache-probe' });
+      return { statuses: [first.status, second.status], values: [first.body, second.body], errors };
+    })()`);
+  assert.deepEqual(cacheRecovery, { statuses: [200, 200], values: [{ value: 'live-settings' }, { value: 'live-settings' }], errors: [] });
+  assert.equal(cacheProbeRequests, 3);
+  console.log('real Electron API reads recover a bare 304 and bypass stale HTTP cache');
   const viteWindow = new BrowserWindow({ show: false, webPreferences: applicationWindowWebPreferences({}) });
   installRequestAuthorization({
     rendererOrigins: new Set([serverOrigin]), serverOrigin, session: session.defaultSession,

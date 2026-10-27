@@ -30,6 +30,17 @@ async function run() {
     // Windows. The parent owns fixture cleanup after the child is gone.
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-electron-smoke-'));
     try {
+      if (script === 'request-authorization-smoke.cjs') {
+        // Exercise the production host policy inside the real Chromium fixture.
+        require('esbuild').buildSync({
+          entryPoints: [path.resolve(__dirname, '../../server/middleware/renderer-origin.ts')],
+          outfile: path.join(root, 'renderer-origin.cjs'), bundle: true, platform: 'node', format: 'cjs',
+        });
+        require('esbuild').buildSync({
+          entryPoints: [path.resolve(__dirname, '../../renderer/src/platform/http/client.ts')],
+          outfile: path.join(root, 'http-client.js'), bundle: true, platform: 'browser', format: 'iife', globalName: 'FixtureHttp',
+        });
+      }
       if (script === 'lifecycle-diagnostics-smoke.cjs') {
         require('esbuild').buildSync({
           entryPoints: [path.resolve(__dirname, '../../renderer/src/features/agent/infrastructure/session-api.ts')],

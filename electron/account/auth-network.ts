@@ -68,7 +68,11 @@ export async function createAuthNetworkBridge(options: { fetch: typeof fetch }) 
         }
       } finally { await reader?.cancel().catch(() => {}); }
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ status: upstream.status, body: Buffer.concat(parts).toString('utf8') }));
+      response.end(JSON.stringify({
+        status: upstream.status, body: Buffer.concat(parts).toString('utf8'),
+        contentType: upstream.headers.get('content-type')?.slice(0, 256),
+        requestId: upstream.headers.get('x-request-id')?.slice(0, 256),
+      }));
     } catch (error) {
       if (!response.destroyed) {
         const failure = authNetworkError(controller.signal.aborted ? controller.signal.reason : error);

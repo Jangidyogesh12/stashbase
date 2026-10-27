@@ -912,6 +912,10 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   Only an authenticated service rejection (401) or an explicit null session
   may clear matching saved credentials. Malformed successful responses are not
   evidence of revocation. Network, timeout, rate-limit, and server failures preserve them.
+  Credits and billing return 401 when authentication is lost during their request,
+  as they do for a request begun signed out; other upstream failures remain 502.
+  Unreadable Auth responses retain upstream status, content type, request ID and
+  safe parse/transport causes. Parser body excerpts never enter diagnostics.
 - `server/hosted-auth-transport.ts` sends desktop Auth exchange, refresh, profile
   and logout requests through `electron/account/auth-network.ts`. Electron owns
   an in-memory Chromium session in system-proxy mode; Node retains PKCE, session
@@ -931,6 +935,8 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   started Vite host reused by Electron) has no native transport and retains Node
   fetch. `shared/hosted-auth-network.ts` converts transport causes to safe codes
   and explanations; raw messages containing credentials/URLs are not relayed.
+  Only bounded content type and request ID response headers cross the relay;
+  cookies and other provider headers do not.
   OAuth failure telemetry retains this structured error rather than just its
   outer message. No automatic retry consumes an uncertain one-time code.
 - Better Auth owns Google OAuth and creates a separate desktop session through
@@ -1176,6 +1182,8 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   A clean 1000 close with the shared `session_disposed` reason also tells the
   renderer that retirement was deliberate. A bare 1000 or unclean 1006 remains
   unexpected; a prior terminal failure keeps its original explanation.
+  A versioned save's `FILE_CHANGED` outcome is a conflict, matching its HTTP 409,
+  even when the underlying source error has no HTTP status property.
   Agent sockets retain the authorized window UUID and host instance UUID. Main
   records renderer load/exit and actual window closure with that window UUID,
   an ephemeral app-session UUID, available renderer PID and webContents ID;
@@ -1236,6 +1244,9 @@ registered host boundaries; renderer shared types are a different layer.
   same-folder subtree mutation. Separate request lanes cannot cancel unrelated work.
   Stores, query caches, timers, subscriptions, workers, and URLs have explicit
   owners and disposal. One window has one query client, not durable authority.
+  Local JSON API requests bypass Chromium's HTTP cache. If a GET still exposes
+  a bare 304, the HTTP adapter retries that read once with cache reload, preserving
+  cancellation. Writes and other failures are never replayed by this recovery.
   The PDF page owner caps each raster backing store at four megapixels and
   4096 pixels per edge, independently of CSS zoom and text-layer coordinates.
   The visible canvas is reset when its page leaves view or unmounts, even after
@@ -1388,6 +1399,9 @@ Markdown renders schema nodes; DOCX is sanitized inside its worker with the shar
 policy. Local HTML's scripts run in an opaque sandbox without same-origin/preload,
 form, popup, or navigation authority. Frame messages validate source, shape, and
 user activation for external links (server-produced DOCX has its narrow exception).
+The host accepts the opaque `null` origin only for GET/HEAD of `/asset/`,
+`/asset-derived/`, and `/pdfjs-assets/`, so fonts/modules can load with CORS.
+Resource membership/path checks still apply; this grants no API or write access.
 Relative links resolve inside the source's folder. Executable HTML/remote resources
 remain a documented trust gap, not permission to expand the boundary.
 

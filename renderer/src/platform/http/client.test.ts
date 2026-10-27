@@ -60,6 +60,50 @@ describe('HTTP client', () => {
     expect(init?.body).toBe(JSON.stringify({ baseVersion: 'v1', content: 'changed' }));
   });
 
+  it('recovers a bare 304 once without treating an empty body as settings', async () => {
+    const fetchRequest = vi
+      .fn<(...args: Parameters<typeof fetch>) => Promise<Response>>()
+      .mockResolvedValueOnce(new Response(null, { status: 304 }))
+      .mockResolvedValueOnce(Response.json({ current: 'live-project' }));
+    const report = vi.fn();
+    const signal = new AbortController().signal;
+    const client = createHttpClient('http://127.0.0.1:8090', fetchRequest, report);
+    await expect(client.request({ path: '/api/account', signal })).resolves.toMatchObject({
+      body: { current: 'live-project' },
+      status: 200,
+    });
+    expect(fetchRequest).toHaveBeenCalledTimes(2);
+    expect(fetchRequest.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store', signal });
+    expect(fetchRequest.mock.calls[1]?.[1]).toMatchObject({ cache: 'reload', signal });
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('bounds 304 recovery and never replays writes or cancelled reads', async () => {
+    for (const method of ['GET', 'POST'] as const) {
+      const fetchRequest = vi.fn(async () => new Response(null, { status: 304 }));
+      const report = vi.fn();
+      const client = createHttpClient('http://127.0.0.1:8090', fetchRequest, report);
+      await expect(client.request({ path: '/api/account', method })).resolves.toMatchObject({
+        status: 304,
+        bodyError: expect.any(SyntaxError),
+      });
+      expect(fetchRequest).toHaveBeenCalledTimes(method === 'GET' ? 2 : 1);
+      expect(report).toHaveBeenCalledTimes(1);
+    }
+    const controller = new AbortController();
+    const fetchRequest = vi.fn(async () => {
+      controller.abort();
+      return new Response(null, { status: 304 });
+    });
+    const report = vi.fn();
+    const client = createHttpClient('http://127.0.0.1:8090', fetchRequest, report);
+    await expect(client.request({ path: '/api/account', signal: controller.signal })).rejects.toBe(
+      controller.signal.reason,
+    );
+    expect(fetchRequest).toHaveBeenCalledOnce();
+    expect(report).not.toHaveBeenCalled();
+  });
+
   it('exposes metadata for HEAD requests without trying to parse an absent body', async () => {
     const client = createHttpClient(
       'http://127.0.0.1:8090',

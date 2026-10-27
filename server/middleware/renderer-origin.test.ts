@@ -17,6 +17,7 @@ test('renderer origin policy allows the exact app origin and answers preflight',
     res.setHeader('x-stashbase-file-version', 'fixture-version');
     res.json({ ok: true });
   });
+  app.all(['/asset/font.woff2', '/asset-derived/document.html', '/pdfjs-assets/worker.mjs'], (_req, res) => res.send('resource'));
 
   let server: HttpServer | undefined = app.listen(0, '127.0.0.1');
   t.after(async () => {
@@ -68,4 +69,21 @@ test('renderer origin policy allows the exact app origin and answers preflight',
     code: 'BAD_ORIGIN',
     error: 'cross-origin request rejected',
   });
+
+  for (const resource of ['/asset/font.woff2', '/asset-derived/document.html', '/pdfjs-assets/worker.mjs']) {
+    for (const method of ['GET', 'HEAD']) {
+      const response = await fetch(baseUrl + resource, { method, headers: { Origin: 'null' } });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('access-control-allow-origin'), 'null');
+      assert.equal(response.headers.get('access-control-allow-methods'), 'GET, HEAD');
+    }
+  }
+  for (const [route, method, origin] of [
+    ['/api/projects', 'GET', 'null'], ['/api/projects', 'POST', 'null'],
+    ['/asset/font.woff2', 'PUT', 'null'], ['/asset/font.woff2', 'OPTIONS', 'null'],
+    ['/asset/font.woff2', 'GET', 'https://example.com'], ['/asset-extra/font.woff2', 'GET', 'null'],
+  ]) {
+    const response = await fetch(baseUrl + route, { method, headers: { Origin: origin } });
+    assert.equal(response.status, 403, `${method} ${route} from ${origin}`);
+  }
 });

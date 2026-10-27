@@ -364,6 +364,78 @@ test('allowance HTTP failures preserve upstream metadata and network causes only
   assert.doesNotMatch(JSON.stringify(output), /private-access|private-refresh|private-token|private-response-body/);
 });
 
+test('credits and billing keep authentication loss distinct from service failure during a request', () => {
+  const result = runIsolated(`
+    const express = (await import('express')).default;
+    const { mount } = await import('./server/routes/account.ts');
+    const config = await import('./server/app-config.ts');
+    const localFetch = globalThis.fetch;
+    let scenario;
+    globalThis.fetch = async (url) => {
+      if (scenario === 'expired') return Response.json(null);
+      if (scenario === 'signout-refresh' || scenario === 'signout-token') {
+        if (scenario === 'signout-refresh' || String(url).endsWith('/token')) config.setHostedAccountSession(undefined);
+        return authReply(url, { user: { id: 'fixture', email: 'fixture@example.test' } });
+      }
+      if (scenario === 'signout') {
+        config.setHostedAccountSession(undefined);
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      throw new TypeError('fetch failed');
+    };
+    const app = express();
+    mount(app, { appReturnToken: 'test' });
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise(resolve => server.once('listening', resolve));
+    const replies = [];
+    try {
+      for (const route of ['agent-usage', 'billing/status']) {
+        for (scenario of ['signed-out', 'expired', 'signout', 'signout-refresh', 'signout-token', 'network']) {
+          config.setHostedAccountSession(scenario === 'signed-out' ? undefined : {
+            userId: 'fixture', email: 'fixture@example.test', accessToken: 'fixture-access',
+            sessionToken: 'fixture-refresh', expiresAt: ['expired', 'signout-refresh', 'signout-token'].includes(scenario) ? 0 : 4102444800,
+          });
+          const response = await localFetch('http://127.0.0.1:' + server.address().port + '/api/account/' + route);
+          replies.push({ route, scenario, status: response.status, body: await response.json(), session: !!config.getHostedAccountSession() });
+        }
+      }
+      process.stdout.write(JSON.stringify(replies));
+    } finally { server.closeAllConnections(); server.close(); }
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  for (const reply of JSON.parse(result.stdout)) {
+    assert.equal(reply.status, reply.scenario === 'network' ? 502 : 401, JSON.stringify(reply));
+    assert.equal(reply.session, reply.scenario === 'network');
+  }
+});
+
+test('malformed authentication responses retain native HTTP evidence without body excerpts or revocation', () => {
+  const result = runIsolated(`
+    const { createAuthNetworkBridge } = await import('./electron/account/auth-network.ts');
+    const bridge = await createAuthNetworkBridge({ fetch: async () => new Response('private-response-secret', {
+      status: 503, headers: { 'content-type': 'text/plain', 'x-request-id': 'auth-fixture-request' },
+    }) });
+    process.env.STASHBASE_AUTH_NETWORK_PORT = String(bridge.port);
+    process.env.STASHBASE_AUTH_NETWORK_TOKEN = bridge.token;
+    const account = await import('./server/hosted-account.ts');
+    const config = await import('./server/app-config.ts');
+    const { errorDiagnostic } = await import('./server/error-diagnostics.ts');
+    config.setHostedAccountSession({ userId: 'fixture', email: 'fixture@example.test', accessToken: 'fixture-access', sessionToken: 'fixture-refresh', expiresAt: 0 });
+    try { await account.hostedAccessToken(); throw new Error('Expected rejection'); }
+    catch (error) { process.stdout.write(JSON.stringify({ diagnostic: errorDiagnostic(error), session: !!config.getHostedAccountSession(), authRequired: account.isHostedSignInRequired(error) })); }
+    finally { bridge.close(); }
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.diagnostic.http_status, 503);
+  assert.equal(output.diagnostic.content_type, 'text/plain');
+  assert.equal(output.diagnostic.request_id, 'auth-fixture-request');
+  assert.equal(output.diagnostic.causes[0].name, 'SyntaxError');
+  assert.equal(output.session, true);
+  assert.equal(output.authRequired, false);
+  assert.doesNotMatch(result.stdout, /private-response-secret|fixture-access|fixture-refresh/);
+});
+
 test('Google profile normalization accepts safe fields and rejects unsafe avatars', () => {
   const result = runIsolated(`
     const account = await import('./server/hosted-account.ts');

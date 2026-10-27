@@ -11,6 +11,8 @@ import { fileVersionAsync } from "../active-file-operations.ts";
 import { filesystemPath } from "../filesystem-path.ts";
 import { clearCurrentFolder, removeRecentAsync, openProjectFolder } from "../folder.ts";
 import { requireFolder } from "../http.ts";
+import { telemetry } from '../telemetry.ts';
+import { createRendererOriginPolicy } from '../middleware/renderer-origin.ts';
 import { mount } from "./files.ts";
 import { getWorkspacePreferences, setWorkspacePreferences } from "../app-config.ts";
 import { mount as mountWorkspacePreferences } from "./workspace-preferences.ts";
@@ -67,6 +69,8 @@ test("versioned document route accepts JSON through the shared source authority"
   // A real upsert leaves a child alive in a clean CI environment.
   const { indexer } = await import('../state.ts');
   t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'updated' }));
+  const writes: unknown[] = [];
+  t.mock.method(telemetry, 'scoped', () => (event: unknown) => { writes.push(event); });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-json-route-"));
   const source = '\uFEFF{\r\n  "value": 1\r\n}\r\n';
   fs.writeFileSync(path.join(root, "data.json"), source, "utf8");
@@ -103,6 +107,21 @@ test("versioned document route accepts JSON through the shared source authority"
     assert.equal(body.name, "data.json");
     assert.equal(body.content, '\uFEFF{\r\n  "value": 2\r\n}\r\n');
     assert.equal(fs.readFileSync(path.join(root, "data.json"), "utf8"), body.content);
+    const staleVersion = await fileVersionAsync('data.json');
+    const externalContent = '{"value": 3}\n';
+    fs.writeFileSync(path.join(root, 'data.json'), externalContent);
+    const conflict = await fetch(
+      `http://127.0.0.1:${address.port}/api/files/data.json?folder=${encodeURIComponent(root)}`,
+      { method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ baseVersion: staleVersion, content: '{"value": 4}\n' }) },
+    );
+    assert.equal(conflict.status, 409);
+    assert.equal(((await conflict.json()) as { code: string }).code, 'FILE_CHANGED');
+    assert.equal(fs.readFileSync(path.join(root, 'data.json'), 'utf8'), externalContent);
+    assert.deepEqual(writes, [
+      { event: 'document_write_result', outcome: 'success', changed: true },
+      { event: 'document_write_result', outcome: 'conflict' },
+    ]);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
@@ -230,10 +249,12 @@ test("folder-scoped browser assets load without a window header", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-folder-asset-"));
   const content = Buffer.from("%PDF-1.7\nfolder-scoped viewer fixture\n", "utf8");
   fs.writeFileSync(path.join(root, "viewer.pdf"), content);
+  fs.writeFileSync(path.join(root, 'font.woff2'), 'font fixture');
   await openProjectFolder(root);
   clearCurrentFolder();
 
   const app = express();
+  app.use(createRendererOriginPolicy(new Set(['app://renderer'])));
   app.use("/asset", requireFolder);
   mount(app);
   const server = http.createServer(app);
@@ -253,12 +274,20 @@ test("folder-scoped browser assets load without a window header", async () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), content);
+    const font = await fetch(
+      `http://127.0.0.1:${address.port}/asset/__folder/${folderToken}/font.woff2`,
+      { headers: { Origin: 'null' } },
+    );
+    assert.equal(font.status, 200);
+    assert.equal(font.headers.get('access-control-allow-origin'), 'null');
+    assert.equal(await font.text(), 'font fixture');
 
     const outsider = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-folder-asset-outsider-"));
     try {
       const outsiderToken = encodeURIComponent(encodeURIComponent(outsider));
       const rejected = await fetch(
         `http://127.0.0.1:${address.port}/asset/__folder/${outsiderToken}/viewer.pdf`,
+        { headers: { Origin: 'null' } },
       );
       assert.equal(rejected.status, 404);
     } finally {
