@@ -54,6 +54,8 @@ describe('CSV documents', () => {
       ),
     });
     renderSource(api, SALES, { tableApi: table });
+    // Cold module loading on CI is separate from the table's response time.
+    await act(() => vi.dynamicImportSettled());
 
     expect(await screen.findByRole('grid', { name: 'sales.csv' })).not.toBeNull();
     expect(screen.getByRole('columnheader', { name: '产品' })).not.toBeNull();
