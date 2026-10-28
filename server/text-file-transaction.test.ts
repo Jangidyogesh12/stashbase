@@ -181,3 +181,18 @@ test('a deleted source refuses a versioned save and is recreated only by an expl
   assert.equal(fs.readFileSync(note, 'utf8'), 'my draft');
   assert.equal(restored.version, textVersion('my draft'));
 });
+
+test('an absent-version save creates a sibling but never replaces a concurrently created file', async (t) => {
+  t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'unchanged' }));
+  const root = folder();
+  await runWithFolderRoot(root, async () => {
+    await saveFileContent('form.json', '{"value":1}', { baseVersion: 'absent' });
+    assert.equal(fs.readFileSync(path.join(root, 'form.json'), 'utf8'), '{"value":1}');
+    await assert.rejects(saveFileContent('form.json', '{"value":2}', { baseVersion: 'absent' }), { code: 'FILE_CHANGED' });
+    assert.equal(fs.readFileSync(path.join(root, 'form.json'), 'utf8'), '{"value":1}');
+    fs.writeFileSync(path.join(root, 'raced.json'), '{"agent":true}');
+    await assert.rejects(saveFileContent('raced.json', '{}', { baseVersion: 'absent' }), { code: 'FILE_CHANGED' });
+    fs.symlinkSync(path.join(root, '..'), path.join(root, 'outside'));
+    await assert.rejects(saveFileContent('outside/forbidden.json', '{}', { baseVersion: 'absent' }));
+  });
+});

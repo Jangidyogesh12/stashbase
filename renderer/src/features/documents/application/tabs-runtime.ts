@@ -1,15 +1,10 @@
 /** Own the open set, serialize releases and mutations, and retain navigation independently of saves. */
 import { createStore } from 'zustand/vanilla';
 
-import {
-  createDocumentRuntime,
-  type DocumentRuntime,
-} from '@/features/documents/application/document-runtime';
 import { isDocumentDirty, sourceIdentity } from '@/features/documents/domain/document';
 import type { DocumentVisit } from '@/features/documents/domain/history';
 import type { DocumentLocation } from '@/features/documents/domain/location';
 import {
-  activateDocumentTab,
   clearDocumentCloseDecision,
   createDocumentTabsState,
   disposeDocumentTabsState,
@@ -23,15 +18,18 @@ import { isExternalSource } from '@/shared/domain/external-source';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { createScopeGuard } from '@/shared/runtime/scope-guard';
 
+import { createDocumentRuntime, type DocumentRuntime } from './document-runtime';
 import {
   askAboutDraft,
   closeDecidedTab,
   dropSettledTab,
   isDetachedDraft,
   mutateOpenSources,
+  saveOpenDocuments,
   type DraftSettlementContext,
 } from './draft-settlement';
 import { createDocumentHistoryRuntime } from './history-runtime';
+import { bindHtmlData } from './html-data-documents';
 import { createDocumentNavigationRuntime } from './navigation-runtime';
 import type {
   DocumentOpenOptions,
@@ -95,16 +93,8 @@ export function createDocumentTabsRuntime({
     return result;
   }
 
-  const saveDocuments = async (items: Iterable<DocumentRuntime>): Promise<boolean> => {
-    for (const document of items) {
-      if (!(await document.save(api))) {
-        store.setState((state) => activateDocumentTab(state, document.scope.id));
-        navigation.activate(document.scope.id);
-        return false;
-      }
-    }
-    return true;
-  };
+  const saveDocuments = (items: Iterable<DocumentRuntime>) =>
+    saveOpenDocuments({ store, navigation }, api, items);
 
   const keep = (tabId: string): boolean => {
     if (!documents.has(tabId)) return false;
@@ -133,6 +123,24 @@ export function createDocumentTabsRuntime({
         if (state.editor && isDocumentDirty(state.editor)) keep(id);
       }),
     );
+    bindHtmlData(runtime, {
+      api,
+      documents,
+      sourceIds,
+      createChild,
+      createId,
+      keep,
+      reveal(document) {
+        store.setState((state) =>
+          openDocumentTab(state, { id: document.scope.id, source: document.scope.source }, false),
+        );
+        navigation.activate(document.scope.id);
+      },
+      release(document) {
+        if (store.getState().tabs.some((tab) => tab.id === document.scope.id)) return;
+        releaseChild(document.scope.id);
+      },
+    });
     return runtime;
   };
 
@@ -147,6 +155,18 @@ export function createDocumentTabsRuntime({
     // An external file's grant ends with its tab, so history cannot step back
     // to it once the tab is gone.
     if (isExternalSource(document.scope.source)) history.forget(document.scope.source);
+  };
+
+  const releaseChild = (id: string) => {
+    const document = documents.get(id);
+    if (
+      [...documents.values()].some(
+        (candidate) =>
+          !candidate.signal.aborted && candidate.htmlData?.store.getState().document === document,
+      )
+    )
+      return;
+    retireChild(id);
   };
 
   const requestDocumentLocation = (document: DocumentRuntime, options: DocumentLocation) => {
@@ -191,7 +211,7 @@ export function createDocumentTabsRuntime({
     const replaced = preview ? previewDocumentTab(store.getState()) : null;
     const document = createChild(id, source);
     store.setState((current) => openDocumentTab(current, { id, source }, preview));
-    if (replaced) retireChild(replaced.id);
+    if (replaced) releaseChild(replaced.id);
     navigation.activate(id);
     requestDocumentLocation(document, options);
     if (record) history.record({ source, ...options });
@@ -259,6 +279,7 @@ export function createDocumentTabsRuntime({
     keep,
     navigation,
     retireChild,
+    releaseChild,
     retireOperations: () => guard.retireOperations(),
     saveDocuments,
     sourceIds,
@@ -307,8 +328,6 @@ export function createDocumentTabsRuntime({
         const document = documents.get(tabId);
         const captured = guard.capture();
         if (!document || document.store.getState().mutationPending) return false;
-        // A draft with no file cannot be settled by saving it, so the barrier
-        // below would refuse this close forever. Ask instead of doing nothing.
         if (isDetachedDraft(document)) return askAboutDraft(settlement, tabId);
         if (!(await document.save(api))) return false;
         let closed = false;
@@ -348,10 +367,6 @@ export function createDocumentTabsRuntime({
     flush() {
       return enqueueTransition(async () => {
         if (disposed || uncertainMutations.size) return false;
-        // Quitting or leaving the project cannot settle such a draft either,
-        // so the release is refused with the question rather than in silence.
-        // Both exits are then on screen: the document's own restore, or the
-        // close that drops the draft.
         const detached = [...documents.values()].find(isDetachedDraft);
         if (detached) return askAboutDraft(settlement, detached.scope.id);
         return saveDocuments([...documents.values()]);

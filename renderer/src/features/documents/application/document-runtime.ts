@@ -273,12 +273,15 @@ export function createDocumentRuntime({
         queries.replaceSource({ content: editor.baseline, format, version: editor.version });
       store.setState((state) => ({ ...state, scope }));
     },
-    reconcile(nextSource) {
+    reconcile(nextSource, options) {
       if (disposed) return;
       // A held edit makes the buffer dirty, which is what keeps a reconcile
       // from replacing it.
       settleEdits();
       const next = reconcileDocumentSource(store.getState(), nextSource);
+      // A source read outside React Query must update its cache too, or a
+      // remounted editor can replay the older cached bytes over this read.
+      if (options?.cache) queries.replaceSource(nextSource);
       if (next === store.getState()) return;
       // The bytes under the editor were replaced, so a save still in flight is
       // no longer about the text this document holds.

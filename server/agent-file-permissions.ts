@@ -8,7 +8,7 @@ export function isWorkspaceFileChange(
 ): boolean {
   return isPathWithinWorkspace(typeof params?.grantRoot === 'string' ? params.grantRoot : '', cwd);
 }
-/** Edit mode accepts only ordinary StashBase write/edit tools in the folder. */
+/** Edit mode accepts ordinary StashBase text edits and blank-note creation in the folder. */
 export function isStashbaseWorkspaceEdit(
   approval: { input: Record<string, unknown> },
   cwd: string | null,
@@ -16,7 +16,7 @@ export function isStashbaseWorkspaceEdit(
   const tool = approval.input.tool;
   const args = approval.input.arguments as Record<string, unknown> | undefined;
   return String(approval.input.server ?? '').toLowerCase() === 'stashbase'
-    && (tool === 'write_file' || tool === 'edit_file')
+    && (tool === 'write_file' || tool === 'edit_file' || tool === 'create_interactive_note')
     && isPathWithinWorkspace(typeof args?.path === 'string' ? args.path : '', cwd);
 }
 

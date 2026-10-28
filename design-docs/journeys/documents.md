@@ -10,8 +10,11 @@ source mutations, saving, and release guarantees.
 1. Browse Files, Quick Open, a link, or a search result through the same document
    navigation. Reuse an open tab; otherwise open a replaceable preview. A failed
    open preserves the last usable view. Search navigation locates the supported match.
-2. Keep a preview or start editing to retain its tab. New draft creates an ordinary
-   Markdown file; New tab creates only a starting point. Import copies files into
+2. Keep a preview or start editing to retain its tab. New tab offers **Create text
+   note**, which opens a blank Markdown file, and **Create interactive note**, which
+   opens a usable blank HTML note in its own directory with `index.html` and
+   `assets/`. Both create beside the Files selection and offer inline naming.
+   New tab itself writes nothing. Import copies files into
    the current project and refreshes the list without taking document focus.
    Desktop files dropped on Files are imported; dropped on the document pane or the
    chat beside it, even with no document open, each opens where it is as an
@@ -40,6 +43,9 @@ The visible document follows external edits while it stays open and catches up
 when the reader returns to the window, without requiring a tab switch.
 HTML previews also follow changes to local scripts and stylesheets referenced
 directly by the page, including a dashboard's separate data script.
+[HTML forms](../capabilities/project-files.md#html-forms) retain their live view,
+save their JSON data automatically, and share that draft with its source editor;
+code changes reload the form at once.
 
 ## Conflict Decisions
 

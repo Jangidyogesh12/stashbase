@@ -260,6 +260,12 @@ permissions, with current model and tool choices checked before use.
   creates no unsolicited planning or scratch documents and continues in Chat
   without routinely asking to save. A requested preview stays in Chat until
   the reader asks to apply it.
+- Requested ordinary writing defaults to a Markdown text note. A requested custom
+  layout or interactive page can use an HTML interactive note. The shared creation
+  tool supplies the same usable blank page as manual creation, in its own directory
+  with `index.html` and `assets/`. The agent can read and customize those files;
+  resource filenames and JSON structures are flexible, and existing user data is
+  preserved. User-specified formats and existing authored layouts take precedence.
 - Resolving an approval keeps the composer anchored at the bottom of an active
   conversation. Transcript scrolling and focus restoration stay inside the
   conversation's scroll area, including when long previews collapse.

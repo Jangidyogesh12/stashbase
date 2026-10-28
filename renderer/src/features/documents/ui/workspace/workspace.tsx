@@ -17,7 +17,7 @@ import {
   documentTextFormat,
   documentViewerFormat,
 } from '@/features/documents/domain/document-format';
-import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
+import { retainDocumentTabIds } from '@/features/documents/domain/retained-tabs';
 import type { DocumentSelection } from '@/features/documents/domain/selection';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
 import { DocumentSource } from '@/features/documents/ui/source/document';
@@ -98,14 +98,14 @@ export function DocumentWorkspace({
       runtime,
     }),
   );
-  const retainedMarkdownIds = retainMarkdownTabIds(
+  const retainedIds = retainDocumentTabIds(
     retention.runtime === runtime ? retention.ids : [],
     tabs,
     activeTabId,
   );
   useEffect(() => {
     setRetention((current) => {
-      const ids = retainMarkdownTabIds(
+      const ids = retainDocumentTabIds(
         current.runtime === runtime ? current.ids : [],
         tabs,
         activeTabId,
@@ -121,7 +121,7 @@ export function DocumentWorkspace({
     });
   }, [activeTabId, runtime, tabs]);
   if (tabs.length === 0 && !openFailure) return null;
-  const activeIsRetainedMarkdown = activeTab ? retainedMarkdownIds.includes(activeTab.id) : false;
+  const activeIsRetained = activeTab ? retainedIds.includes(activeTab.id) : false;
   // A format that never claims a find controller shows no find bar at all.
   const activeFindable = activeTab
     ? documentViewerEntry(documentViewerFormat(activeTab.source.path), viewers).find
@@ -200,10 +200,10 @@ export function DocumentWorkspace({
           {activeFindable ? searchNotice : SEARCH_NOTICES[searchPurpose].unavailable}
         </NoticeStrip>
       )}
-      {retainedMarkdownIds.map((tabId) => renderDocument(tabId, tabId !== activeTabId))}
+      {retainedIds.map((tabId) => renderDocument(tabId, tabId !== activeTabId))}
       {activeTab &&
         documentTextFormat(activeTab.source.path) !== 'md' &&
-        !activeIsRetainedMarkdown &&
+        !activeIsRetained &&
         renderDocument(activeTab.id, false)}
       {activeFindable && <DocumentFind runtime={runtime.navigation} />}
     </section>

@@ -69,6 +69,16 @@ const workspaceEntryNameSchema = z
 
 const workspaceEntryKindSchema = z.enum(['file', 'folder']);
 
+export const interactiveNoteCreateRequestSchema = z.object({
+  parentPath: z.string().max(4096),
+  name: workspaceEntryNameSchema.optional(),
+}).strict();
+
+export const interactiveNoteCreateResponseSchema = z.object({
+  path: relativePathSchema,
+  entryPath: relativePathSchema,
+}).strict();
+
 /** Identity of one file or folder inside an explicit member folder. */
 export const workspaceEntryRequestSchema = z
   .object({

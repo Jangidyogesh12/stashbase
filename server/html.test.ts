@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { analyzeHtml } from './html.ts';
+import { injectHtmlDataClient } from './html-data.ts';
 
 // The preview iframe renders a user's own document, so the app stylesheet
 // never reaches it. What the server injects is the only chrome the frame
@@ -59,4 +60,28 @@ test('the frame accepts a bounded scrollbar theme only from its parent', () => {
   assert.match(preparedHtml, /d\.type === 'stashbase-theme'/u);
   assert.match(preparedHtml, /d\.theme !== 'dark' && d\.theme !== 'light'/u);
   assert.match(preparedHtml, /--stashbase-scrollbar-surface/u);
+});
+
+test('authored markup reaches the frame unchanged, so scripts and links find their own ids', () => {
+  const body = '<h2 id="plan" class="title">Plan</h2><h3 id="modal-title">Delete?</h3><a href="#plan">Top</a>';
+  const { preparedHtml, plaintext } = analyzeHtml(`<html><head></head><body>${body}</body></html>`);
+  assert.ok(preparedHtml.includes(body));
+  assert.equal(plaintext, '## Plan\n\n### Delete?\n\nTop');
+});
+
+test('injected chrome adds no lines ahead of authored code', () => {
+  const source = [
+    '<!doctype html>',
+    '<html>',
+    '<head>',
+    '<title>t</title>',
+    '</head>',
+    '<body>',
+    '<script>document.getElementById("modal-title").textContent = "x";</script>',
+    '</body>',
+    '</html>',
+  ].join('\n');
+  const served = injectHtmlDataClient(analyzeHtml(source).preparedHtml);
+  const line = (html: string) => html.slice(0, html.indexOf('modal-title')).split('\n').length;
+  assert.equal(line(served), line(source));
 });

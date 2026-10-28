@@ -19,6 +19,7 @@ import {
 } from '../project-file-mutations.ts';
 import { getProjectInfo, type ProjectInfo } from '../project-info.ts';
 import { createProjectFolder } from '../agent-projects.ts';
+import { createProjectInteractiveNote } from '../interactive-note.ts';
 import { isEmbeddingConfigured } from '../app-config.ts';
 import { errorMessage } from '../log.ts';
 import { filesystemPath } from '../filesystem-path.ts';
@@ -71,6 +72,7 @@ export interface ProjectOperations {
   reindex(input?: { folder?: string }): Promise<unknown>;
   /** Explicitly create and register a project without changing any conversation. */
   createProject(input: { name: unknown; location?: unknown }): Promise<unknown>;
+  createInteractiveNote(input: { path: unknown; name?: unknown }): Promise<unknown>;
   listDirectory(path?: unknown): Promise<unknown>;
   read(path: unknown, range?: ProjectFileLineRange): Promise<unknown>;
   write(input: { path: unknown; content: unknown; baseVersion?: string }): Promise<unknown>;
@@ -86,6 +88,7 @@ export interface ProjectOperationsDependencies {
   reindexFolder: (folder: string) => Promise<SyncResult>;
   indexStatus: (folderRoot: string) => Promise<IndexerStatus>;
   createProject: typeof createProjectFolder;
+  createInteractiveNote: typeof createProjectInteractiveNote;
   listDirectory: typeof listProjectDirectory;
   read: typeof readProjectFile;
   write: typeof writeProjectFile;
@@ -102,6 +105,7 @@ const productionDependencies: ProjectOperationsDependencies = {
   reindexFolder: (folder) => syncFolderNow(folder, { reason: 'mcp reindex' }),
   indexStatus: (folderRoot) => indexer.status(folderRoot),
   createProject: createProjectFolder,
+  createInteractiveNote: createProjectInteractiveNote,
   listDirectory: listProjectDirectory,
   read: readProjectFile,
   write: writeProjectFile,
@@ -208,6 +212,7 @@ export function createProjectOperations(
 
     listDirectory: (path) => asProjectOperation(() => deps.listDirectory(path)),
     read: (path, range) => asProjectOperation(() => deps.read(path, range)),
+    createInteractiveNote: (input) => asProjectOperation(() => deps.createInteractiveNote(input)),
     write: ({ path, content, baseVersion }) => asProjectOperation(() => {
       if (typeof content !== 'string') throw routeError('content (string) required', 400);
       return deps.write(path, content, { baseVersion });

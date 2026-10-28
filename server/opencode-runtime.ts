@@ -252,6 +252,7 @@ export function buildOpenCodeConfig(
     stashbase_move_file: 'ask',
     stashbase_delete_file: 'ask',
     stashbase_create_project: 'ask',
+    stashbase_create_interactive_note: 'ask',
     // OpenCode's own sub-agents would rerun the main model with the whole
     // runtime context; Default's other models are tools instead.
     task: 'deny',

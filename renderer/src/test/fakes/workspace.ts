@@ -84,6 +84,10 @@ export function projectRegistrySnapshot(
 export function filesApi(overrides: Partial<FilesPort> = {}): FilesPort {
   return {
     createEntry: vi.fn(async () => ({ path: 'new.md' })),
+    createInteractiveNote: vi.fn(async () => ({
+      path: 'Untitled',
+      entryPath: 'Untitled/index.html',
+    })),
     deleteEntry: vi.fn(async () => undefined),
     load: vi.fn(async () => listing()),
     moveEntry: vi.fn(async () => ({ path: 'moved.md' })),

@@ -15,12 +15,14 @@ import type { TableViewMode } from '@/features/documents/domain/table';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import type { CapturedScope } from '@/shared/runtime/scope-guard';
 
+import type { HtmlDataSession } from './html-data-session';
 import type { DocumentQueryScope, DocumentSourcePort } from './ports';
 
 /** Capture before an await; a later completion must still own this scope. */
 export type DocumentOperationScope = CapturedScope<DocumentScope>;
 
 export interface DocumentRuntime {
+  htmlData?: HtmlDataSession;
   readingPosition: { top: number; left: number } | null;
   readonly scope: DocumentScope;
   readonly signal: AbortSignal;
@@ -39,7 +41,7 @@ export interface DocumentRuntime {
   dispose(): void;
   finishMerge(api: DocumentSourcePort): Promise<boolean>;
   publishRevisionCount(reviewId: string, pending: number): void;
-  reconcile(source: DocumentTextSource): void;
+  reconcile(source: DocumentTextSource, options?: { cache: boolean }): void;
   rebind(
     source: SourceReference,
     createQueries: (scope: DocumentScope) => DocumentQueryScope,

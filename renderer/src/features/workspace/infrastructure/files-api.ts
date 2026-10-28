@@ -14,6 +14,8 @@ import {
 } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
+  interactiveNoteCreateRequestSchema,
+  interactiveNoteCreateResponseSchema,
   workspaceCreateEntryRequestSchema,
   workspaceDeleteEntryResponseSchema,
   workspaceEntryPathResponseSchema,
@@ -164,6 +166,16 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
           },
         ),
         schema: entryPathSchema,
+      });
+    },
+    async createInteractiveNote(folderPath, parentPath, signal) {
+      const body = interactiveNoteCreateRequestSchema.parse({ parentPath });
+      return mutate({
+        ...files(`/api/interactive-notes?${folderQuery(folderPath)}`, signal, {
+          body,
+          method: 'POST',
+        }),
+        schema: interactiveNoteCreateResponseSchema,
       });
     },
     async renameEntry(folderPath, entry, name, signal) {

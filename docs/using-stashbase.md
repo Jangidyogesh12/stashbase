@@ -195,3 +195,70 @@ configuration from **Settings → Advanced → External apps (MCP)**. See
 [MCP Configuration](mcp-configuration.md) for setup and access boundaries, and
 [Your Files and Your Data](../README.md#your-files-and-your-data) for local and
 cloud processing boundaries.
+
+## Fillable HTML Forms
+
+In **New tab**, choose **Create text note** for a blank Markdown document, or
+**Create interactive note** for a page you can fill in immediately. Both create
+beside the Files selection. Name the new file or folder in Files.
+
+An interactive note has its own folder with `index.html` and `assets/note.json`.
+Enter a title and body. Changes save automatically, and the status reports
+**Saved** only after saving finishes. Closing the note also settles its accepted draft. Move or copy
+the whole folder to keep the page with its data. `assets` starts collapsed; opening
+the page does not add a JSON tab. You can open the data file from Files when needed.
+
+You can also ask an Agent to create an interactive note. Its
+`create_interactive_note` tool takes an existing project directory and an optional
+note name, creates the same blank starter, and returns the entry and data paths.
+The Agent can then customize the page with ordinary file tools. This entry currently
+provides the blank starter; there is no template picker.
+
+Pages run in a sandbox: `alert`, `confirm`, and `prompt` are ignored (`confirm`
+answers false), so build dialogs into the page itself. StashBase shows the page's own markup unchanged, and
+error line numbers match the file.
+
+Authored HTML can use any JSON filename or subdirectory under its own `assets/`.
+Supply its relative path to `load`; later updates and saves use that same binding.
+A no-argument `load()` uses the same-stem JSON sibling. A loaded page cannot switch
+its data file without reopening.
+
+Form authors can use the injected API directly, including in an early script:
+
+```js
+const data = (await window.stashbase.data.load('./assets/records.json')) ?? { rows: [] };
+renderTable(data);
+
+// Call from a user input handler. Await acknowledgement and show errors.
+async function onTableChange(nextData) {
+  await window.stashbase.data.update(nextData);
+}
+
+// Optional: confirm that the file has been written.
+async function onSaveClick() {
+  await window.stashbase.data.save();
+  showSaved();
+}
+```
+
+`update` changes the shared draft, and StashBase writes it to the file about half
+a second later. `save` resolves only when saving succeeds, and rejects on failure
+or conflict. Update and Save must come from a user interaction with the form. Closing the form or leaving the
+project also settles its data draft through the normal document save barrier.
+A missing JSON loads as `null`; the first write creates it without replacing a
+file another writer created in the meantime. Invalid JSON is an error, not an empty form.
+Use JSON-compatible values (no `undefined`, functions, or non-finite numbers).
+Forms use the JSON tree limits: 500 KiB, 20,000 nodes, and 80 levels of nesting.
+Duplicate object keys are refused so neither value is silently discarded.
+
+Valid changes saved in the JSON editor automatically reload the HTML with the new
+data. External JSON changes appear within about two seconds while the form is
+visible, or when you return to it. The form's own updates and saves do not reset
+it. Unsaved data stays in place, and invalid JSON keeps the last usable preview.
+If saving conflicts with a disk change, StashBase opens the JSON comparison; your
+draft remains available. A change to the HTML file reloads the form at once with
+the same data. Anything typed that the page has not passed to `update` is lost.
+Renaming the HTML or moving its whole directory
+preserves explicit relative references. If you rename a resource, update its
+reference in the HTML too. The interface is supplied only inside StashBase; opening
+the HTML in an ordinary browser does not supply it. No localStorage is used.

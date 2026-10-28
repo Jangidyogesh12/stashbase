@@ -283,14 +283,14 @@ describe('titlebar band', () => {
       expect(screen.getByRole('button', { name: 'New tab' })).toBe(plusAgain);
 
       // The plus seats the New tab, selected, with its page in the document
-      // slot. Create new draft makes Untitled.md at the root while nothing is
+      // slot. Create text note makes Untitled.md at the root while nothing is
       // selected and opens it at once as a kept tab, which takes the New tab
       // away.
       await user.click(plusAgain);
       expect(screen.getByRole('tab', { name: 'New tab' }).getAttribute('aria-selected')).toBe(
         'true',
       );
-      await user.click(screen.getByRole('button', { name: 'Create new draft' }));
+      await user.click(screen.getByRole('button', { name: 'Create text note' }));
       expect(await screen.findByRole('tab', { name: 'Untitled.md' }, LAZY)).not.toBeNull();
       expect(screen.queryByRole('tab', { name: 'New tab' })).toBeNull();
       expect(files.createEntry).toHaveBeenCalledWith(
@@ -298,6 +298,15 @@ describe('titlebar band', () => {
         'file',
         '',
         'Untitled.md',
+        expect.any(AbortSignal),
+      );
+      await user.click(screen.getByRole('button', { name: 'New tab' }));
+      await user.click(screen.getByRole('button', { name: 'Create interactive note' }));
+      expect(await screen.findByRole('tab', { name: 'index.html' }, LAZY)).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'New tab' })).toBeNull();
+      expect(files.createInteractiveNote).toHaveBeenCalledWith(
+        expect.any(String),
+        '',
         expect.any(AbortSignal),
       );
     },

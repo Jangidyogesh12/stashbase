@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import vm from 'node:vm';
+import { injectHtmlDataClient } from './html-data.ts';
+
+test('the injected API exists before authored scripts, waits for its parent, and propagates failures', async () => {
+  const html = injectHtmlDataClient('<!doctype html><script>window.authored = true;</script>');
+  assert.ok(html.indexOf("Object.defineProperty(window, 'stashbase'") < html.indexOf('window.authored'));
+  const sent: any[] = [];
+  let receive!: (event: any) => void;
+  const parent = { postMessage: (message: any) => sent.push(message) };
+  const window: any = { parent, addEventListener: (_type: string, handler: typeof receive) => { receive = handler; } };
+  vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)![1], { window });
+  const loading = window.stashbase.data.load('./assets/customers.json');
+  await Promise.resolve();
+  assert.equal(sent.length, 0);
+  receive({ source: {}, data: { type: 'stashbase-data-ready' } });
+  await Promise.resolve();
+  assert.equal(sent.length, 0);
+  receive({ source: parent, data: { type: 'stashbase-data-ready' } });
+  await Promise.resolve();
+  assert.equal(sent[0].method, 'load');
+  assert.equal(sent[0].path, './assets/customers.json');
+  receive({ source: parent, data: { type: 'stashbase-data-result', id: sent[0].id, value: { rows: [] } } });
+  assert.deepEqual(await loading, { rows: [] });
+  const update = window.stashbase.data.update({ rows: [1] });
+  await Promise.resolve();
+  assert.equal(sent[1].content, '{"rows":[1]}');
+  const rejected = assert.rejects(update, /conflict/);
+  receive({ source: parent, data: { type: 'stashbase-data-result', id: sent[1].id, error: 'conflict' } });
+  await rejected;
+  await assert.rejects(window.stashbase.data.update({ value: NaN }), /JSON values/);
+  const saving = window.stashbase.data.save();
+  await Promise.resolve();
+  receive({ source: parent, data: { type: 'stashbase-data-result', id: sent[2].id } });
+  await saving;
+  assert.equal(Object.isFrozen(window.stashbase.data), true);
+});

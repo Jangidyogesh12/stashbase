@@ -13,9 +13,15 @@ export interface NewTabPageProps {
   /** Starts a draft the way the folder header's New file does; the draft
    *  opening in front is what takes the New tab away. */
   onCreateDraft(): void;
+  onCreateInteractiveNote(): void;
 }
 
-export function NewTabPage({ className, onClose, onCreateDraft }: NewTabPageProps) {
+export function NewTabPage({
+  className,
+  onClose,
+  onCreateDraft,
+  onCreateInteractiveNote,
+}: NewTabPageProps) {
   return (
     <section
       aria-label="New tab"
@@ -25,7 +31,10 @@ export function NewTabPage({ className, onClose, onCreateDraft }: NewTabPageProp
       )}
     >
       <Button onClick={onCreateDraft} variant="ghost">
-        Create new draft
+        Create text note
+      </Button>
+      <Button onClick={onCreateInteractiveNote} variant="ghost">
+        Create interactive note
       </Button>
       <Button onClick={onClose} variant="ghost">
         Close

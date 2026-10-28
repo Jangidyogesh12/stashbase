@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from '../html.ts';
+import { injectHtmlDataClient } from '../html-data.ts';
 import { fileStatVersionAsync, resolveAssetAsync, resolveExistingAsync } from '../active-file-operations.ts';
 import { detectViewerFormat } from '../format.ts';
 import { derivedHtmlPathForDocx } from '../docx.ts';
@@ -61,7 +62,7 @@ export function mountFileAssetRoutes(app: express.Express): void {
         if (ext === '.html' || ext === '.htm') {
           const raw = await fs.promises.readFile(abs, 'utf8');
           const { preparedHtml } = analyzeHtml(raw);
-          res.type('text/html').send(preparedHtml);
+          res.type('text/html').send(injectHtmlDataClient(preparedHtml));
           return;
         }
         res.type(ASSET_MIME_TYPES[ext] ?? 'application/octet-stream');

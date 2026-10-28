@@ -101,7 +101,7 @@ export async function saveTextFileContent(
     if (previous?.content === savedContent) {
       return { ...previous, changed: false, indexWarning: await upsertSavedFile(name, savedContent) };
     }
-    if (opts.baseVersion !== undefined && previous?.version !== opts.baseVersion) {
+    if (opts.baseVersion !== undefined && (previous?.version ?? 'absent') !== opts.baseVersion) {
       throw fileChanged(previous?.version ?? null);
     }
     const saved = await replaceTextSnapshotAsync(name, savedContent, previous?.version ?? null);

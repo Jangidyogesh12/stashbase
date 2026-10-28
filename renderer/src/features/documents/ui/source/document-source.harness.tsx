@@ -69,9 +69,10 @@ export function renderSource(
   options: SourceOptions = {},
 ) {
   const queryClient = createTestQueryClient();
+  let nextId = 1;
   const runtime = createDocumentTabsRuntime({
     api,
-    createId: () => 'tab-1',
+    createId: () => `tab-${++nextId}`,
     createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
     folderPath: '/project/notes',
     generation: 1,
@@ -99,7 +100,7 @@ export function renderSource(
     />,
     queryClient,
   );
-  return { runtime };
+  return { queryClient, runtime };
 }
 
 /** The CodeMirror view behind the editor labelled `label`. */

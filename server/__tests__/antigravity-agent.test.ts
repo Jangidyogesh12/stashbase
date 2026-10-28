@@ -263,6 +263,7 @@ test('the approval hook passes reads, asks the reader before changes, and refuse
   h.ws.client({ t: 'permission-reply', id: h.ws.events('permission')[6]!.id, allow: true });
   assert.deepEqual(await editCommand, { decision: 'allow' });
   assert.deepEqual(await review('mcp_stashbase_edit_file', { path: path.join(h.folder, 'a.md') }), { decision: 'allow' });
+  assert.deepEqual(await review('mcp_stashbase_create_interactive_note', { path: h.folder, name: 'Notebook' }), { decision: 'allow' });
   assert.deepEqual(await review('replace_file_content', { TargetFile: path.join(h.folder, 'b.md') }), { decision: 'allow' });
   const outside = review('replace_file_content', { TargetFile: path.join(os.tmpdir(), 'elsewhere.md') });
   await until(() => h.ws.events('permission').length === 8, 'outside-project card');

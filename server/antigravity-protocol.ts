@@ -162,10 +162,10 @@ export function antigravityErrorFromStderr(stderr: string): string {
 /** StashBase's own MCP tools, which the routing policy names. */
 const STASHBASE_TOOLS = new Set([
   'list_projects', 'list_directory', 'read_file', 'write_file', 'edit_file',
-  'move_file', 'delete_file', 'search_project', 'create_project', 'reindex',
+  'move_file', 'delete_file', 'search_project', 'create_project', 'create_interactive_note', 'reindex',
 ]);
 const STASHBASE_READ_TOOLS = new Set(['list_projects', 'list_directory', 'read_file', 'search_project', 'reindex']);
-const STASHBASE_WRITE_TOOLS = new Set(['write_file', 'edit_file']);
+const STASHBASE_WRITE_TOOLS = new Set(['write_file', 'edit_file', 'create_interactive_note']);
 
 /** Native tools that only read the filesystem, report progress, or end the
  * turn. Names as `agy` 1.4.0 lists them in its `init` event. */

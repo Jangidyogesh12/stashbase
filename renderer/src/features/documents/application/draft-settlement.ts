@@ -20,11 +20,12 @@ import {
 import {
   clearDocumentCloseDecision,
   closeDocumentTab,
+  openDocumentTab,
   requestDocumentClose,
   type DocumentTabsState,
 } from '@/features/documents/domain/tabs';
 
-import type { DocumentQueryScope } from './ports';
+import type { DocumentQueryScope, DocumentSourcePort } from './ports';
 
 /** What settling a draft needs from the open set it runs inside. */
 export interface DraftSettlementContext {
@@ -38,6 +39,8 @@ export interface DraftSettlementContext {
   keep(tabId: string): boolean;
   navigation: { activate(tabId: string | null): void };
   retireChild(tabId: string): void;
+  /** A closed tab may still have an HTML form owning its shared data. */
+  releaseChild(tabId: string): void;
   /** Refuses the completions of tabs transitions started before this one. */
   retireOperations(): void;
   saveDocuments(documents: Iterable<DocumentRuntime>): Promise<boolean>;
@@ -45,6 +48,26 @@ export interface DraftSettlementContext {
   store: StoreApi<DocumentTabsState>;
   /** Paths whose last mutation never reported an outcome. */
   uncertainMutations: Set<string>;
+}
+
+/** Save shared drafts and reveal the actual source when a form cannot settle. */
+export async function saveOpenDocuments(
+  context: Pick<DraftSettlementContext, 'store' | 'navigation'>,
+  api: DocumentSourcePort,
+  documents: Iterable<DocumentRuntime>,
+): Promise<boolean> {
+  for (const document of documents) {
+    if (document.signal.aborted) continue;
+    if (!(await document.save(api))) {
+      const failed = document.htmlData?.store.getState().document ?? document;
+      context.store.setState((state) =>
+        openDocumentTab(state, { id: failed.scope.id, source: failed.scope.source }, false),
+      );
+      context.navigation.activate(failed.scope.id);
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -144,8 +167,13 @@ export function isDetachedDraft(document: DocumentRuntime): boolean {
  * navigation. Nothing here settles a save: every caller has already decided
  * what happens to the work.
  */
-export function dropSettledTab(context: DraftSettlementContext, tabId: string): void {
-  context.retireChild(tabId);
+export function dropSettledTab(
+  context: DraftSettlementContext,
+  tabId: string,
+  discard = false,
+): void {
+  if (discard) context.retireChild(tabId);
+  else context.releaseChild(tabId);
   context.store.setState((state) => closeDocumentTab(state, tabId));
   context.navigation.activate(context.store.getState().activeTabId);
   context.retireOperations();
@@ -157,6 +185,11 @@ export function dropSettledTab(context: DraftSettlementContext, tabId: string): 
  * can return it as its own refusal.
  */
 export function askAboutDraft(context: DraftSettlementContext, tabId: string): false {
+  const document = context.documents.get(tabId);
+  if (document)
+    context.store.setState((state) =>
+      openDocumentTab(state, { id: tabId, source: document.scope.source }, false),
+    );
   context.store.setState((state) => requestDocumentClose(state, tabId));
   context.navigation.activate(tabId);
   return false;
@@ -173,6 +206,6 @@ export function closeDecidedTab(context: DraftSettlementContext): boolean {
     context.store.setState((state) => clearDocumentCloseDecision(state));
     return false;
   }
-  dropSettledTab(context, decision.tabId);
+  dropSettledTab(context, decision.tabId, true);
   return true;
 }

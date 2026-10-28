@@ -259,6 +259,11 @@ function WorkspaceWindow() {
     chrome.navigator.select('files');
     workspace?.requestCreate('draft');
   };
+  const newInteractiveNote = () => {
+    session.runtime.setSidebarOpen(true);
+    chrome.navigator.select('files');
+    workspace?.requestCreate('interactive-note');
+  };
 
   return (
     // One account for the window: the sidebar's footer row, the composer's
@@ -321,6 +326,7 @@ function WorkspaceWindow() {
             onBrowsePersonas={gallery.browsePersonas}
             newTab={newTab}
             onCreateDraft={newDraft}
+            onCreateInteractiveNote={newInteractiveNote}
             onPrepare={preparation.prepare}
             onReprocess={refresh.reprocess}
             onReviewTurnChange={revisions.reviewTurnChange}

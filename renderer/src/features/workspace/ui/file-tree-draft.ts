@@ -39,6 +39,7 @@ export function useTreeDraft({
     beginRename(entry: WorkspaceEntry): void;
     consumeRenamePath(): void;
     createDraft(parentPath: string, name: string): Promise<void>;
+    createInteractiveNote(parentPath: string): Promise<void>;
     renamePath: string | null;
   };
   renderedPathKey: string;
@@ -48,7 +49,14 @@ export function useTreeDraft({
   setRenameCaret(offset: number | undefined): void;
   setRovingPath(path: string): void;
 }): void {
-  const { beginCreate, beginRename, consumeRenamePath, createDraft, renamePath } = operations;
+  const {
+    beginCreate,
+    beginRename,
+    consumeRenamePath,
+    createDraft,
+    createInteractiveNote,
+    renamePath,
+  } = operations;
   const pendingCreate = useStore(runtime.store, (state) => state.pendingCreate);
 
   // The request is cleared as it is taken up, so the same ask can be made
@@ -63,9 +71,13 @@ export function useTreeDraft({
         beginCreate('folder', parent);
         return;
       }
+      if (pendingCreate.kind === 'interactive-note') {
+        void createInteractiveNote(parent);
+        return;
+      }
       void createDraft(parent, untitledDraftName(listing, parent));
     });
-  }, [beginCreate, createDraft, listing, pendingCreate, runtime]);
+  }, [beginCreate, createDraft, createInteractiveNote, listing, pendingCreate, runtime]);
 
   // The row is selected and renamed with the stem of its name ready to be
   // typed over; the rename row focuses itself when it mounts.

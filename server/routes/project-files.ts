@@ -47,6 +47,14 @@ export function mount(app: express.Express, operations: ProjectOperations = crea
     }
   });
 
+  app.post('/api/project/interactive-note', async (req, res) => {
+    try {
+      res.json(await operations.createInteractiveNote({ path: req.body?.path, name: req.body?.name }));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   // Unified source search over one explicit or attributed Folder (optional
   // `path_prefix` and source `types` filters). Powers MCP's
   // `search_project`; omitted mode uses the current embedding configuration.

@@ -188,6 +188,11 @@ export function createProjectMcpServer(opts: ProjectMcpServerOptions): Server {
       };
     }
 
+    if (req.params.name === 'create_interactive_note') {
+      const result = await operations.createInteractiveNote({ path: args.path, name: args.name });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
     if (req.params.name === 'edit_file') {
       const result = await operations.edit({ path: args.path, oldText: args.old_text, newText: args.new_text, replaceAll: args.replace_all === true, baseVersion: typeof args.baseVersion === 'string' ? args.baseVersion : undefined });
       return {
@@ -375,6 +380,25 @@ const BUILTIN_TOOLS = [
           baseVersion: { type: 'string', description: 'Optional version from read_file for optimistic conflict checks.' },
         },
         required: ['path', 'content'],
+      },
+    },
+    {
+      name: 'create_interactive_note',
+      description:
+        'Create a blank interactive HTML note in its own new directory beneath an existing project directory. ' +
+        'Creates index.html and assets/note.json with title/body editing and automatic saving, and returns their absolute paths. ' +
+        'An omitted name chooses a free Untitled name; an explicit existing name is refused without overwriting. ' +
+        'Read and customize the generated files with read_file/edit_file. Keep external resources under this note’s assets/ ' +
+        'and reference them relatively; filenames, subdirectories and JSON structures are freely editable. ' +
+        'HTML data uses stashbase.data.load("./assets/name.json"), update(value), and save(); update/save require user interaction. ' +
+        'Use write_file for ordinary Markdown text notes. This tool creates the blank starter, not a template catalog.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Absolute existing parent directory inside the authorized project.' },
+          name: { type: 'string', description: 'Optional name for the new note directory, without path separators.' },
+        },
+        required: ['path'],
       },
     },
     {

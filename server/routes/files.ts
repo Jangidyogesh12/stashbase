@@ -30,7 +30,9 @@ import { readDelimitedTable } from '../delimited-table.ts';
 import { documentAssetVersionAsync } from '../document-asset-version.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
+import { createInteractiveNote } from '../interactive-note.ts';
 import {
+  interactiveNoteCreateRequestSchema,
   delimitedTableRequestSchema,
   delimitedTableResponseSchema,
   documentTextOverwriteRequestSchema,
@@ -197,6 +199,17 @@ export function mount(
   });
 
   // ----- create -----
+  app.post('/api/interactive-notes', async (req, res) => {
+    if (!(await guardExplicitFolder(req, res))) return;
+    const parsed = interactiveNoteCreateRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid interactive note request.' });
+    try {
+      res.json(await createInteractiveNote(parsed.data));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   // Body: { name?, content?, dir? }.
   //  - `name` omitted → auto-pick first free `untitled-N.md` (race-safe via O_EXCL).
   //  - `dir`  optional → place the file inside that folder-relative folder

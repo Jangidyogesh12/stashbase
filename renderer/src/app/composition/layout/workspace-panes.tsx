@@ -56,6 +56,7 @@ export interface WorkspacePanesProps {
   onBrowsePersonas(): void;
   /** What the New tab's page starts: a draft beside the tree's selection. */
   onCreateDraft(): void;
+  onCreateInteractiveNote(): void;
   onPrepare(source: SourceReference): void;
   onReprocess(source: SourceReference): void;
   /** Opens what an Agent turn changed in one file as a review inside it. */
@@ -77,6 +78,7 @@ export function WorkspacePanes({
   onAskAgent,
   onBrowsePersonas,
   onCreateDraft,
+  onCreateInteractiveNote,
   onPrepare,
   onReprocess,
   onReviewTurnChange,
@@ -217,6 +219,7 @@ export function WorkspacePanes({
                   className="absolute inset-0"
                   onClose={newTab.close}
                   onCreateDraft={onCreateDraft}
+                  onCreateInteractiveNote={onCreateInteractiveNote}
                 />
               )}
             </div>

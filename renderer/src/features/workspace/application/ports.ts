@@ -90,6 +90,11 @@ export interface GitHubImportPort {
 export interface FilesPort {
   load(folderPath: string, signal: AbortSignal): Promise<WorkspaceListing>;
   reveal(folderPath: string, entryPath: string, signal: AbortSignal): Promise<void>;
+  createInteractiveNote(
+    folderPath: string,
+    parentPath: string,
+    signal: AbortSignal,
+  ): Promise<{ path: string; entryPath: string }>;
   /** Creates one file or folder under `parentPath` and returns the settled
    *  path: the server may complete a file's extension. */
   createEntry(

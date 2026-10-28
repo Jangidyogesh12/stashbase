@@ -1,5 +1,10 @@
 import { lazy } from 'react';
+import { useStore } from 'zustand';
 
+import type { HtmlDataSession } from '@/features/documents/application/html-data-session';
+import type { DocumentAsset } from '@/features/documents/application/ports';
+import { useDocumentRefresh } from '@/features/documents/hooks/use-document-refresh';
+import { RefreshFailedBanner } from '@/features/documents/ui/banner';
 import { AssetSurface } from '@/features/documents/ui/source/asset';
 import type { DocumentViewerProps } from '@/features/documents/ui/source/viewer';
 
@@ -21,18 +26,68 @@ export default function HtmlViewer({
   return (
     <AssetSurface active={active} api={assetApi} name={name} runtime={runtime} status={status}>
       {({ asset }) => (
-        <HtmlDocument
-          active={active}
-          key={asset.version}
-          name={name}
-          navigation={navigation}
-          onNavigate={onNavigate}
-          onOpenExternal={onOpenExternal}
-          resource={asset}
-          source={runtime.scope.source}
-          tabId={runtime.scope.id}
-        />
+        <FormPreview active={active} asset={asset} data={runtime.htmlData}>
+          {(resource, revision) => (
+            <HtmlDocument
+              active={active}
+              key={`${resource.version}:${revision}`}
+              name={name}
+              navigation={navigation}
+              onNavigate={onNavigate}
+              onOpenExternal={onOpenExternal}
+              resource={resource}
+              data={runtime.htmlData}
+              source={runtime.scope.source}
+              tabId={runtime.scope.id}
+            />
+          )}
+        </FormPreview>
       )}
     </AssetSurface>
+  );
+}
+
+function FormPreview({
+  active,
+  asset,
+  data,
+  children,
+}: {
+  active: boolean;
+  asset: DocumentAsset;
+  data: HtmlDataSession | undefined;
+  children(resource: DocumentAsset, revision: number): React.ReactNode;
+}) {
+  return data ? (
+    <BoundPreview active={active} asset={asset} data={data}>
+      {children}
+    </BoundPreview>
+  ) : (
+    children(asset, 0)
+  );
+}
+
+function BoundPreview({
+  active,
+  asset,
+  data,
+  children,
+}: {
+  active: boolean;
+  asset: DocumentAsset;
+  data: HtmlDataSession;
+  children(resource: DocumentAsset, revision: number): React.ReactNode;
+}) {
+  const document = useStore(data.store, (state) => state.document);
+  const revision = useStore(data.store, (state) => state.revision);
+  const refreshFailed = useStore(data.store, (state) => state.refreshFailed);
+  useDocumentRefresh(active && document !== null, data.refresh);
+  // A new page loads the shared draft again, so HTML and data changes both
+  // replace the page at once.
+  return (
+    <>
+      {refreshFailed && <RefreshFailedBanner onRetry={() => void data.refresh()} />}
+      {children(asset, revision)}
+    </>
   );
 }

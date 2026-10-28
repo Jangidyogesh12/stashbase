@@ -72,6 +72,9 @@ export function createHttpProjectOperations(
       body: JSON.stringify({ name, ...(location != null ? { location } : {}) }),
     }),
     listDirectory: (path) => json(`${webBase}/api/project/directory?${pathQuery(path)}`, { headers: headers() }),
+    createInteractiveNote: ({ path, name }) => json(`${webBase}/api/project/interactive-note`, {
+      method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ path, name }),
+    }),
     read: (path, range) => json(
       `${webBase}/api/project/file?${pathQuery(path)}`
         + (range?.offset != null ? `&offset=${range.offset}` : '')

@@ -197,6 +197,28 @@ export function useFileOperations(
     [api, folderPath, openSource, refresh, run, runtime, stillOpen, update],
   );
 
+  const createInteractiveNote = useCallback(
+    async (parentPath: string): Promise<void> => {
+      if (running.current) return;
+      const captured = runtime.capture();
+      setNaming(null);
+      const created = await run((signal) =>
+        api.createInteractiveNote(folderPath, parentPath, signal),
+      );
+      if (!created || !stillOpen(captured)) return;
+      openSource(created.entryPath, { keep: true });
+      update(captured, (state) =>
+        selectTreePath(
+          expandTreeFolder(parentPath ? expandTreeFolder(state, parentPath) : state, created.path),
+          created.path,
+        ),
+      );
+      await refresh();
+      if (stillOpen(captured)) setRenamePath(created.path);
+    },
+    [api, folderPath, openSource, refresh, run, runtime, stillOpen, update],
+  );
+
   const beginRename = useCallback((entry: WorkspaceEntry) => {
     if (running.current) return;
     setFailure(null);
@@ -340,6 +362,7 @@ export function useFileOperations(
     consumeRenamePath,
     consumeSettledPath,
     createDraft,
+    createInteractiveNote,
     deleting,
     failure,
     moveEntry,

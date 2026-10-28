@@ -862,6 +862,52 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 
 ## J03: Documents
 
+**Interactive-note creation (2026-10-28):** New tab offers text and interactive
+notes. Workspace reuses Markdown creation for text and calls
+`server/interactive-note.ts` for an exclusively owned directory containing
+`index.html` and an `assets/` directory with initial JSON data. The generated title/body form uses the shared
+data bridge. The existing shell composition scenario exercises both entries;
+host checks cover concurrent names, existing-content preservation, traversal and
+symlink refusal, partial-failure cleanup, and operation receipts. Data-session
+checks cover hidden drafts, directory rename/rebind, and save/release. An isolated macOS Electron source pass created both note types through New tab,
+renamed the new note directory, entered and saved English/Chinese content using
+native input, confirmed no JSON tab
+opened, and restored the saved content after renderer reload. The New tab and note
+were visually inspected. A pre-release source pass also verified the current
+starter's automatic saving, restored the values after renderer reload, and
+retained them through a live HTML-change remount. Packaged Windows/Linux behavior
+remains unverified.
+
+**HTML form data (2026-10-28):** Source HTML receives `stashbase.data.load`,
+`update`, and `save` from `server/html-data.ts`. `application/html-data-session.ts`
+and `html-data-documents.ts` bind an explicitly named JSON under the page's
+`assets/` (or its same-stem sibling for no-argument calls) to a shared background
+document. Loading data does not open a JSON tab; explicit opens and conflict
+recovery reveal that same runtime. The frame bridge requires source identity and user activation for
+changes; ordinary project/version checks remain at the file owner. Activated HTML
+frames are retained across navigation; HTML changes remount bound forms too.
+Focused session and mounted-workspace tests cover autosaved updates, shared drafts,
+source preservation, first create, close/release refusal on conflict, stale editor
+updates, pending-save edits, source disposal, and cross-project refusal.
+Saved JSON edits and active-preview disk refreshes remount the HTML without an
+extra data-file label; the form's own writes keep its frame. Session and mounted
+tests cover reverse refresh, malformed JSON, reads racing pending input, and
+reopening a JSON editor with a retained query cache after a form refresh.
+Host tests exercise client injection and absent-version no-clobber writes. An isolated
+macOS Electron source run loaded the API before an early authored script,
+loaded a real JSON sibling, accepted native input, left disk unchanged until
+Save, preserved an untouched numeric lexeme, automatically reflected an external
+JSON edit without a data-file label, and recovered the saved value after renderer
+reload. The rendered form was inspected by eye. The later pre-release Electron
+pass above exercised autosaved updates, the starter's automatic save, and
+HTML-change remounts. Packaged and Windows/Linux form flows remain unverified.
+
+**Authored HTML fidelity (2026-10-28):** `server/html.ts` no longer replaces heading
+ids with `h-N`, which broke scripts and in-page links addressing their own heading
+ids; no outline or other caller consumed them. The scrollbar style and data client join
+existing lines. `server/html.test.ts` covers unchanged authored ids and matching
+line numbers; a real authored page in Electron remains unexercised.
+
 **Preview fonts and save-conflict reporting (2026-10-27):** the renderer-origin
 policy admits opaque-origin GET/HEAD only on scoped resource routes. Route tests
 load a font with `Origin: null`, refuse unregistered folders and API/write access,
@@ -3229,6 +3275,14 @@ pricing or a newly packaged desktop journey.
 
 ## J07: Converge
 
+**Interactive notes (2026-10-28):** `create_interactive_note` shares the blank
+starter with New tab, returning a new directory, HTML entry, and JSON data paths.
+Shared runtime instructions explain when to choose text or interactive notes and
+how to keep resources under the note's own `assets/`. Ordinary edit permissions
+apply; file changes remain directly saved. Controlled MCP creation and project-scope
+refusal are exercised in `server/interactive-note.test.ts`. Real-provider selection
+and customization quality remain unverified.
+
 **Shared Agent instructions (2026-10-27):**
 `server/agent-runtime-instructions.ts` supplies Default, Claude, Codex, and
 Antigravity with one role and the default to answer in Chat. File output
@@ -3346,6 +3400,11 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   built Electron smoke checks passed.
 
 ## J08: External MCP
+
+**Interactive notes (2026-10-28):** The shared MCP tool factory and stdio HTTP
+adapter expose `create_interactive_note` through Project Operations. The host test
+calls the actual HTTP MCP tool, checks its generated starter against manual
+creation, and verifies that an attributed session cannot create in another project.
 
 **Intent:** [J08](../design-docs/journeys/README.md#j08-connect-an-external-agent-through-mcp).
 

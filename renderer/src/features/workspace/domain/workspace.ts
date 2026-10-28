@@ -13,7 +13,7 @@ export interface WorkspaceScope {
  *  The tree's menu keeps both as explicit rows; the request is how the
  *  folder header and the titlebar reach the same flows. */
 export interface TreeCreateRequest {
-  kind: 'draft' | 'folder';
+  kind: 'draft' | 'folder' | 'interactive-note';
   /** Distinguishes one request from the next of the same kind, so asking
    *  twice starts the naming twice. */
   revision: number;

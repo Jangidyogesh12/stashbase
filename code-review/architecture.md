@@ -584,8 +584,9 @@ stable status without download, retry, or a new durable demand latch.
   existing text files use `edit_file` while new text files use `write_file`,
   including requested source code and configuration; a tool description alone
   cannot own a rule, because a runtime may defer it. Neither is a permission,
-  skill contents, or a project-file edit, and StashBase ships no workflow
-  guidance of its own: that belongs to the user's loaded project instructions.
+  skill contents, or a project-file edit. Product authoring guidance distinguishes
+  Markdown text notes from HTML interactive notes and directs blank HTML creation
+  through `create_interactive_note`; other workflows belong to loaded project instructions.
   `server/agent-persona.ts` owns the library: one Markdown file per persona in
   app data, seeded once from `assets/agent-personas/`, plus the record of each
   native session's persona. The Chat's persona id travels on its connection;
@@ -1404,11 +1405,47 @@ every project route refuses.
 
 Markdown renders schema nodes; DOCX is sanitized inside its worker with the shared
 policy. Local HTML's scripts run in an opaque sandbox without same-origin/preload,
-form, popup, or navigation authority. Frame messages validate source, shape, and
+form, popup, modal dialog, or navigation authority. `server/html.ts` serves authored
+markup unchanged, so scripts, styles, and in-page links keep their own ids; the
+injected frame chrome adds no lines ahead of authored code, keeping error line
+numbers those of the file. Frame messages validate source, shape, and
 user activation for external links (server-produced DOCX has its narrow exception).
 The host accepts the opaque `null` origin only for GET/HEAD of `/asset/`,
 `/asset-derived/`, and `/pdfjs-assets/`, so fonts/modules can load with CORS.
 Resource membership/path checks still apply; this grants no API or write access.
+`server/html-data.ts` injects a separate data client into source HTML before
+its authored scripts. The frame's source-checked messages carry only an operation
+and JSON content, plus an optional page-relative data path, never window
+credentials or the application preload.
+`ui/html/use-data-bridge.ts` requires user activation for update/save and bounds
+pending requests. `domain/html-data.ts` admits an explicit JSON path below the
+HTML's own `assets/`, rejecting traversal and URL paths; omission uses a same-stem
+JSON sibling. `application/html-data-session.ts` binds one source per live HTML
+owner in its project. Rebind retires that session before accepting new requests.
+Its background JSON document has no tab until explicitly opened or revealed for
+recovery, and uses ordinary source transactions, autosave, and release barriers. A form
+update compares the shared draft it last read, so a second editor cannot be
+silently overwritten. `absent` is the explicit expected-version token for a
+first create; host writes still recheck absence before publication. HTML asset
+changes remount the frame like any other preview; the new page's load returns the
+shared draft, which reconciliation never replaces while dirty or saving.
+The data session observes clean, valid JSON revisions from the shared editor and
+checks disk on the active preview's focus/two-second refresh cycle. These changes
+remount the form to rerun its existing load call; its own updates/saves do not.
+Refresh reads compare the captured editor and scope before reconciliation, so
+late results cannot roll back edits or saves. Dirty drafts and invalid JSON keep
+the current frame; source conflicts remain owned by the JSON document runtime.
+Accepted form reads also replace the source query cache, preventing a reopened
+JSON editor from replaying older cached bytes over refreshed data.
+`server/interactive-note.ts` owns blank interactive-note creation for Files and
+Agent/MCP. The Agent adapter resolves an existing absolute parent through Project
+Operations and retains session/project membership checks. `create_interactive_note`
+is an ordinary scoped creation grant, never a read-only tool. An exclusive directory claim chooses a free name, writes initial data
+under `assets/`, then publishes `index.html`. It never merges an existing directory;
+failure cleanup removes only unchanged owned output and empty owned directories.
+The HTTP adapter uses the ordinary window/project-scoped mutation receipts.
+New tab routes creation through Workspace, which opens the entry and names its
+containing directory without expanding `assets/`.
 Relative links resolve inside the source's folder. Executable HTML/remote resources
 remain a documented trust gap, not permission to expand the boundary.
 

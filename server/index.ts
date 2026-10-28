@@ -299,6 +299,7 @@ app.use([
   '/api/file-operations',
   '/api/file-preview',
   '/api/folders',
+  '/api/interactive-notes',
   '/api/search',
   '/api/rename-preview',
   '/api/reveal',

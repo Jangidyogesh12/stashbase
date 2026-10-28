@@ -237,7 +237,7 @@ test('Claude permission callback asks for mutations and unknown tools, and settl
   assert.equal(workbookRedirect.behavior, 'deny');
   if (workbookRedirect.behavior === 'deny') assert.match(workbookRedirect.message, /worksheet tables ready for this XLSX/);
   assert.equal((await workbookRead()).behavior, 'allow', 'the workbook redirect is only a one-time hint');
-  for (const name of ['mcp__stashbase__edit_file', 'mcp__stashbase__move_file', 'mcp__stashbase__write_file', 'mcp__stashbase__delete_file', 'Bash', 'new_tool', 'mcp__other__read_file']) {
+  for (const name of ['mcp__stashbase__edit_file', 'mcp__stashbase__move_file', 'mcp__stashbase__write_file', 'mcp__stashbase__create_interactive_note', 'mcp__stashbase__delete_file', 'Bash', 'new_tool', 'mcp__other__read_file']) {
     let settled = false;
     const input = { path: '/project/note.md' };
     const result = canUseTool(name, input, { signal: new AbortController().signal, toolUseID: name });

@@ -13,7 +13,7 @@ editing capabilities remain explicit for each surface.
 | Markdown | Read/edit; new drafts use Markdown | Source text | Read/write source |
 | Plain text (`.txt`) | Read/edit valid UTF-8 | Source text | Read/write valid UTF-8 |
 | JSON | Source-preserving editing | Source text | Read/write source |
-| HTML | Preview only | Extracted in memory | Read/write raw HTML |
+| HTML | Preview; authored forms edit an associated JSON file | Extracted in memory | Read/write raw HTML |
 | PDF | Source preview | Prepared Markdown | Read prepared text |
 | Image | Source preview | Prepared OCR text | Native attachments depend on runtime; MCP does not return image bytes |
 | DOCX | Sanitized preview with prepared fallback | Prepared HTML | Read prepared text |
@@ -90,6 +90,45 @@ larger pages sooner.
 - Files lists names and file metadata only; it never reads a file to show its
   row. A cloud-only file, such as one iCloud's Optimize Mac Storage has moved
   off the disk, downloads when it is opened, not when the tree loads.
+
+## HTML Forms
+
+Interactive notes are ordinary project subdirectories, each with an `index.html`
+entry and an `assets/` directory. Creating one supplies an editable title and body,
+initial JSON data, and working data loading and automatic saving. Each creation owns a separate
+folder; existing names are never merged or overwritten. The resource directory
+starts collapsed in Files. A template's filenames and data structure are defaults,
+not constraints on authored pages. An ordinary empty project remains empty.
+
+An authored HTML form can load and edit one JSON resource by its explicit relative
+path under its own `assets/`, using `stashbase.data.load('./assets/records.json')`,
+`update(value)`, and `save()`. Subdirectories and JSON filenames are freely chosen.
+The no-argument load interface still addresses a same-directory, same-stem JSON.
+Data remains user-owned project content, never browser storage or disposable
+extraction output.
+
+- Loading retains a background document without opening a JSON tab. An explicitly
+  opened source editor shares that same draft. A missing file loads as `null`;
+  the first explicit save can create it, but opening a form alone writes nothing.
+  Invalid JSON is reported without replacing the file. A loaded form cannot switch
+  to a different data path without reopening.
+- Update acknowledges the shared draft, which then saves automatically within about
+  half a second, creating a missing file. Save completes only after the file save
+  succeeds. Updates and page-requested saves require a user interaction.
+  The usual close/project-release save barrier also settles the draft.
+- Valid changes saved in the JSON editor automatically reload the form. While
+  visible, the form also checks for external JSON changes every two seconds and
+  on focus. Its own data updates and saves do not reload it. Dirty drafts and
+  invalid JSON retain the current form; stale edits are refused, and conflicting
+  saves open the JSON comparison without discarding either version.
+- Activated forms remain mounted across document and Chat navigation. An updated
+  HTML/script/style reloads the form at once, and the new page loads the same
+  shared draft. Input the page has not passed to Update is not kept.
+- The interface operates on the bound JSON in the current project only. Closing
+  releases data that has no other open owner. Moving or renaming the source retires
+  its old binding and reloads relative to the new location; moving the whole note
+  directory preserves its internal references. Renaming an HTML file does not
+  rename its resources. Save conflicts reveal the shared JSON editor for recovery.
 
 ## External Files
 

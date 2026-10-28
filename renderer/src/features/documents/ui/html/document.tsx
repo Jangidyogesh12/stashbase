@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 
+import type { HtmlDataSession } from '@/features/documents/application/html-data-session';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import type { DocumentAsset } from '@/features/documents/application/ports';
 import { resolveDocumentLink } from '@/features/documents/domain/link-target';
@@ -15,6 +16,7 @@ import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { createHtmlFrameFindController } from './find-controller';
+import { useHtmlDataBridge } from './use-data-bridge';
 
 interface FrameLinkMessage {
   href: string;
@@ -47,6 +49,7 @@ function resolvedViewerTheme(): 'dark' | 'light' {
 }
 
 export interface SandboxedHtmlFrameProps {
+  data?: HtmlDataSession | undefined;
   active: boolean;
   name: string;
   navigation: DocumentNavigationRuntime;
@@ -65,6 +68,7 @@ export interface SandboxedHtmlFrameProps {
  */
 export function SandboxedHtmlFrame({
   active,
+  data,
   name,
   navigation,
   onNavigate,
@@ -75,6 +79,7 @@ export function SandboxedHtmlFrame({
   url,
 }: SandboxedHtmlFrameProps) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  useHtmlDataBridge(frameRef, data, url, active);
   const loadedRef = useRef(false);
   const ownerRef = useRef(Symbol(tabId));
   const shape = useShape();
@@ -178,6 +183,7 @@ export function SandboxedHtmlFrame({
 
   const loaded = () => {
     loadedRef.current = true;
+    if (data) frameRef.current?.contentWindow?.postMessage({ type: 'stashbase-data-ready' }, '*');
     frameRef.current?.contentWindow?.postMessage(
       { theme: resolvedViewerTheme(), type: 'stashbase-theme' },
       '*',
@@ -218,6 +224,7 @@ export function SandboxedHtmlFrame({
 
 export function HtmlDocument({
   active,
+  data,
   name,
   navigation,
   onNavigate,
@@ -229,6 +236,7 @@ export function HtmlDocument({
   return (
     <SandboxedHtmlFrame
       active={active}
+      data={data}
       name={name}
       navigation={navigation}
       onNavigate={onNavigate}

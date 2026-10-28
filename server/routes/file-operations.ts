@@ -17,9 +17,9 @@ export function mountFileOperationReceipts(app: express.Express): void {
     return res.json(receipt.response);
   });
   app.use(async (req, res, next) => {
-    const mutation = /^\/api\/(?:files|folders)(?:\/.*)?$/u.test(req.path) &&
+    const mutation = /^\/api\/(?:files|folders|interactive-notes)(?:\/.*)?$/u.test(req.path) &&
       (req.method === 'PATCH' || req.method === 'DELETE' ||
-        (req.method === 'POST' && /^\/api\/(?:files|folders)$/u.test(req.path)));
+        (req.method === 'POST' && /^\/api\/(?:files|folders|interactive-notes)$/u.test(req.path)));
     if (!mutation || req.query.operationId === undefined) return next();
     if (!(await guardExplicitFolder(req, res))) return;
     const id = req.query.operationId;

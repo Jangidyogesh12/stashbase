@@ -8,6 +8,7 @@
  * `unavailable` one. Every map covers its whole ladder, so adding a kind fails
  * the build here rather than silently showing the wrong recovery.
  */
+import { HtmlDataError } from '@/features/documents/domain/html-data';
 import { JsonEditError } from '@/features/documents/domain/json-edit';
 import type { RevisionRefusal } from '@/features/documents/domain/revision';
 import {
@@ -152,6 +153,12 @@ export function documentFailure<Extra extends string = never>(
   messages: FailureMessages<Extra>,
 ): FailureView {
   return readFailure<Extra>(error, messages, { owner });
+}
+
+/** Domain refusals are authored for form readers; transport diagnostics are not. */
+export function htmlDataFailureMessage(error: unknown): string {
+  if (error instanceof HtmlDataError || error instanceof JsonEditError) return error.message;
+  return documentFailure(error, 'DocumentSourceError', DOCUMENT_SOURCE_MESSAGES).message;
 }
 
 /**
