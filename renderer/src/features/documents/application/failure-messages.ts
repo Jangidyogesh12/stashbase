@@ -160,13 +160,3 @@ export function htmlDataFailureMessage(error: unknown): string {
   if (error instanceof HtmlDataError || error instanceof JsonEditError) return error.message;
   return documentFailure(error, 'DocumentSourceError', DOCUMENT_SOURCE_MESSAGES).message;
 }
-
-/**
- * The sentence a refused JSON edit shows. The JSON domain authors these for the
- * reader — they name the key or path that could not be edited, which no fixed
- * line here could — so a refusal it raised keeps its own words. A rejection
- * from anywhere else is a bug and reads as the generic line.
- */
-export function jsonEditFailureMessage(error: unknown): string {
-  return error instanceof JsonEditError ? error.message : 'The JSON edit could not be applied.';
-}

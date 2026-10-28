@@ -1348,6 +1348,18 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   to prose and between two code blocks. Computed line and gutter backgrounds
   were the hover color only in the focused editor and transparent otherwise;
   refocusing restored the highlight. The light composition was inspected by eye.
+- **JSON views and Find focus (2026-10-28):** JSON shows one view at a time, a
+  read-only outline or the editable source, behind one Preview/Source control;
+  both stay mounted. Find leaves focus in its field in either view: the code
+  editor marks matches with its own decorations instead of focusing the match,
+  and the outline selects a row without focusing it. `editor.test.ts` proves
+  focus stays in a field while typing and stepping (it fails with the old
+  `view.focus()`), `document-json.test.tsx` covers the switch and the retained
+  editor, and `tree.test.tsx` the read-only outline. The New tab page isolates
+  the document layer beneath it, so z-indexed table rows no longer draw through.
+  A built-app Electron pass in an isolated profile typed into Find in both views,
+  pressed Enter twice in Source with the document unchanged, found no add, delete,
+  or inline editor in the outline, and hit-tested the New tab page at four points.
 - **Known issues — source/viewers:** Markdown relative images lack folder-scoped resolution/upload/lightbox; heading
   ids are assigned by order without identity cross-check. PDF placeholder/observer
   counts are unbounded.

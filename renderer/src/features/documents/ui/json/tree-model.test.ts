@@ -9,11 +9,7 @@ import {
 import {
   isJsonContainer,
   jsonNodeDisplayValue,
-  jsonNodeEditableValue,
   jsonNodeLabel,
-  jsonNodeSourceValue,
-  jsonTableValueSource,
-  lastVisibleDescendantIndex,
   visibleJsonNodes,
 } from './tree-model';
 
@@ -50,13 +46,6 @@ describe('JSON tree projection', () => {
     expect(deepItems[0]?.parent?.type).toBe('array');
   });
 
-  it('places a new child after the whole expanded subtree of its container', () => {
-    const visible = visibleJsonNodes(rootOf(NESTED), new Set(['$', '$.one', '$.one.deep']));
-    expect(lastVisibleDescendantIndex(visible, ['one'])).toBe(4);
-    expect(lastVisibleDescendantIndex(visible, [])).toBe(visible.length - 1);
-    expect(lastVisibleDescendantIndex(visible, ['missing'])).toBe(-1);
-  });
-
   it('labels rows by key, array index, or root', () => {
     const visible = visibleJsonNodes(rootOf(NESTED), new Set(['$', '$.one', '$.one.deep']));
     expect(visible.map(({ node }) => jsonNodeLabel(node))).toEqual([
@@ -69,7 +58,7 @@ describe('JSON tree projection', () => {
     ]);
   });
 
-  it('summarizes containers and shows scalars as their editable text', () => {
+  it('summarizes containers and shows a string as its text', () => {
     const root = rootOf(NESTED);
     expect(jsonNodeDisplayValue(root)).toBe('2 properties');
     expect(jsonNodeDisplayValue(root.children[0]?.children[0] as JsonSourceNode)).toBe('2 items');
@@ -77,23 +66,11 @@ describe('JSON tree projection', () => {
 
     const text = root.children[1] as JsonSourceNode;
     expect(isJsonContainer(text)).toBe(false);
-    expect(jsonNodeEditableValue(text)).toBe('text');
     expect(jsonNodeDisplayValue(text)).toBe('text');
-    expect(jsonNodeSourceValue(text, 'other')).toBe('"other"');
   });
 
   it('keeps a number cell literal and does not quote it', () => {
     const number = rootOf('{"count":42}').children[0] as JsonSourceNode;
-    expect(jsonNodeEditableValue(number)).toBe('42');
-    expect(jsonNodeSourceValue(number, '43')).toBe('43');
-  });
-
-  it('treats typed prose as a JSON string and refuses broken JSON syntax', () => {
-    expect(jsonTableValueSource('purbayan.me')).toBe('"purbayan.me"');
-    expect(jsonTableValueSource('  true ')).toBe('true');
-    expect(jsonTableValueSource('[1, 2]')).toBe('[1, 2]');
-    expect(() => jsonTableValueSource('{bad')).toThrow(/Invalid JSON value/u);
-    // The reader is in the grid, not the source pane, so the advice is dropped.
-    expect(() => jsonTableValueSource('{bad')).not.toThrow(/Source mode/u);
+    expect(jsonNodeDisplayValue(number)).toBe('42');
   });
 });

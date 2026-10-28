@@ -163,8 +163,10 @@ export function WorkspacePanes({
           documents ? (
             // The New tab's page lies over the document rather than replacing
             // it, so the editors underneath keep their state for its close.
+            // `isolate` keeps the document's own layers, such as a table row's
+            // z-index, beneath the page instead of drawing through it.
             <div className="relative h-full">
-              <div aria-hidden={newTab.open} className="h-full" inert={newTab.open}>
+              <div aria-hidden={newTab.open} className="isolate h-full" inert={newTab.open}>
                 <DocumentWorkspace
                   active={mode === 'documents' && !newTab.open}
                   assetApi={dependencies.documents.adapters.asset}

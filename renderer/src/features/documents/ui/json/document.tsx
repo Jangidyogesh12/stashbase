@@ -1,10 +1,14 @@
 /**
- * The JSON surface: a source-preserving outline beside the raw text, with one
- * Find controller following whichever pane the reader is in.
+ * The JSON surface: a read-only outline or the editable source, switched by
+ * one control like Markdown's Edit and Read. Both views stay mounted, so the
+ * source keeps its undo history and the outline its selection across a
+ * switch, and one Find controller follows whichever view is shown.
  */
+import { FileCode2, ListTree } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 
+import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type {
   DocumentFindController,
@@ -88,13 +92,9 @@ export function JsonDocument({
     return navigation.claimFind(runtime.scope.id, registrationOwnerRef.current, controller);
   }, [active, activePane, editorRef, navigation, runtime.scope.id]);
 
-  const activatePane = (pane: 'source' | 'tree') => {
+  const choosePane = (pane: 'source' | 'tree') => {
     if (pane === 'tree' && !analysis.available) return;
     if (pane !== activePane) runtime.setJsonSession({ viewMode: pane });
-  };
-  const applyTreeChange = (next: string) => {
-    editorRef.current?.applyContent(next);
-    onChange(next);
   };
 
   return (
@@ -105,44 +105,56 @@ export function JsonDocument({
       ref={rootRef}
       role="document"
     >
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <JsonTree
-          active={activePane === 'tree'}
-          editable={!readOnly}
-          onChange={applyTreeChange}
-          onActivate={() => activatePane('tree')}
-          onSessionChange={(patch) => runtime.setJsonSession(patch)}
-          session={session}
-          source={value}
-        />
-
-        <section
-          aria-label="JSON source"
-          className="flex min-h-0 min-w-0 flex-col border-l border-border bg-surface-2"
-          data-active={activePane === 'source' ? '' : undefined}
-          onFocusCapture={() => activatePane('source')}
-          onPointerDown={() => activatePane('source')}
+      {/* The 40px row puts the view control where Markdown's mode control
+          sits: centred 20px below the pane top, in the panel toggle's column. */}
+      <div className="flex h-10 shrink-0 items-center gap-3 pr-[5px] pl-3">
+        <div className="min-w-0 flex-1">
+          {/* Not a `FailureLine`: this is a standing badge for the state the
+              open document is in, not a refusal of something the reader just
+              did. It keeps the attention colour because the document really
+              does have a problem, and the polite role because it is restated
+              on every switch to a broken file rather than raised once. */}
+          {!analysis.available && (
+            <span
+              className="block truncate text-caption text-destructive"
+              role="status"
+              title={analysis.message}
+            >
+              {sourceIssueLabel(analysis)}
+            </span>
+          )}
+        </div>
+        <TabsSubtle
+          aria-label="JSON view"
+          iconOnly
+          onSelect={(index) => choosePane(index === 0 ? 'tree' : 'source')}
+          selectedIndex={activePane === 'tree' ? 0 : 1}
+          size="compact"
+          track
         >
-          <div className="flex h-9 shrink-0 items-center gap-2 px-3">
-            <span className="text-caption font-medium text-muted-foreground">Source</span>
-            {/* Not a `FailureLine`: this is a standing badge for the state the
-                open document is in, not a refusal of something the reader just
-                did. It keeps the attention colour because the document really
-                does have a problem, and the polite role because it is restated
-                on every switch to a broken file rather than raised once. */}
-            {!analysis.available && (
-              <span
-                className="min-w-0 truncate text-caption text-destructive"
-                role="status"
-                title={analysis.message}
-              >
-                {sourceIssueLabel(analysis)}
-              </span>
-            )}
-          </div>
-          <div className="min-h-0 flex-1" ref={hostRef} />
-        </section>
+          <TabsSubtleItem
+            disabled={!analysis.available}
+            icon={ListTree}
+            label="Preview"
+            title="Preview"
+          />
+          <TabsSubtleItem icon={FileCode2} label="Source" title="Source" />
+        </TabsSubtle>
       </div>
+
+      <JsonTree
+        hidden={activePane !== 'tree'}
+        onSessionChange={(patch) => runtime.setJsonSession(patch)}
+        session={session}
+        source={value}
+      />
+
+      <section
+        aria-label="JSON source"
+        className="min-h-0 min-w-0 flex-1"
+        hidden={activePane !== 'source'}
+        ref={hostRef}
+      />
     </div>
   );
 }

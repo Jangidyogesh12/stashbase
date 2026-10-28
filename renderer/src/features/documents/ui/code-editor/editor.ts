@@ -6,7 +6,7 @@ import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
 
 import type { DocumentFindController } from '@/features/documents/application/navigation-runtime';
 
-import { createCodeFindController } from './find-controller';
+import { codeFindHighlight, createCodeFindController } from './find-controller';
 import { codeSurfaceExtensions, codeSyntaxHighlighting } from './surface';
 
 export type CodeEditorLanguage = { kind: 'filename'; fileName: string } | { kind: 'plain' };
@@ -62,6 +62,7 @@ export function createCodeEditor(host: HTMLElement, options: CodeEditorOptions):
       syntax.of([]),
       readOnly.of(readOnlyExtensions(options.readOnly)),
       codeSurfaceExtensions,
+      codeFindHighlight,
       options.extensions ?? [],
       keymap.of([...(options.keyBindings ?? []), ...defaultKeymap, ...historyKeymap]),
       EditorView.contentAttributes.of({

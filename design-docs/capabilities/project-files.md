@@ -12,7 +12,7 @@ editing capabilities remain explicit for each surface.
 |---|---|---|---|
 | Markdown | Read/edit; new drafts use Markdown | Source text | Read/write source |
 | Plain text (`.txt`) | Read/edit valid UTF-8 | Source text | Read/write valid UTF-8 |
-| JSON | Source-preserving editing | Source text | Read/write source |
+| JSON | Read-only outline, or source text editing | Source text | Read/write source |
 | HTML | Preview; authored forms edit an associated JSON file | Extracted in memory | Read/write raw HTML |
 | PDF | Source preview | Prepared Markdown | Read prepared text |
 | Image | Source preview | Prepared OCR text | Native attachments depend on runtime; MCP does not return image bytes |
@@ -26,6 +26,11 @@ editing capabilities remain explicit for each surface.
 Playback depends on codecs. Previewability, content editing, file mutation, and
 retrieval are independent capabilities. The [glossary](../glossary.md#format-capability)
 defines those distinctions; [Project Context](project-context.md) owns preparation.
+
+JSON opens as a read-only outline of keys, values, and types. **Preview /
+Source** switches to the source text, which is where JSON is edited; the switch
+keeps the source's undo history and the outline's selection. JSON that is empty,
+invalid, or too complex for the outline opens in Source with the reason.
 
 PDF preview keeps zoomed page geometry and selectable text while bounding raster
 resolution. Pages outside the nearby viewport release their canvas storage;

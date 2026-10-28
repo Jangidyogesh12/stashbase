@@ -2,21 +2,10 @@
  * What the JSON grid shows, derived from the parsed outline.
  *
  * The projection is pure: which rows are visible for a set of expanded paths,
- * what a row's label, display value, and editable value are, and how a typed
- * cell becomes JSON source. Rendering and keyboard handling live beside it.
+ * and what a row's label and display value are. Rendering and keyboard
+ * handling live beside it.
  */
-import { JsonEditError } from '@/features/documents/domain/json-edit';
-import {
-  analyzeJsonSource,
-  formatJsonPath,
-  type JsonSourceNode,
-} from '@/features/documents/domain/json-source';
-
-/** An edit the grid has opened on one node. */
-export type JsonEditIntent =
-  | { kind: 'add'; node: JsonSourceNode }
-  | { kind: 'rename'; node: JsonSourceNode }
-  | { caretOffset?: number; kind: 'replace'; node: JsonSourceNode };
+import { formatJsonPath, type JsonSourceNode } from '@/features/documents/domain/json-source';
 
 export interface VisibleJsonNode {
   node: JsonSourceNode;
@@ -44,53 +33,12 @@ function containerSummary(node: JsonSourceNode): string {
   return `${count.toLocaleString()} ${count === 1 ? 'property' : 'properties'}`;
 }
 
+/** A container shows its size; a string its text; anything else its literal. */
 export function jsonNodeDisplayValue(node: JsonSourceNode): string {
   if (isJsonContainer(node)) return containerSummary(node);
-  return jsonNodeEditableValue(node);
-}
-
-/** A string is edited as its text, everything else as its literal source. */
-export function jsonNodeEditableValue(node: JsonSourceNode): string {
   if (node.type !== 'string') return node.raw;
   const value: unknown = JSON.parse(node.raw);
   return typeof value === 'string' ? value : node.raw;
-}
-
-export function jsonNodeSourceValue(node: JsonSourceNode, value: string): string {
-  return node.type === 'string' ? JSON.stringify(value) : value;
-}
-
-function looksLikeJsonSyntax(value: string): boolean {
-  if (value.startsWith('[') || value.startsWith('{') || value.startsWith('"')) return true;
-  if (/^(?:true|false|null)$/u.test(value)) return true;
-  return /^(?:-?(?:\d|\.)|NaN$|Infinity$|-Infinity$)/u.test(value);
-}
-
-/** Plain prose typed into a new cell becomes a JSON string; anything that
- *  reads as JSON syntax must actually parse, and says so when it does not. */
-export function jsonTableValueSource(value: string): string {
-  const trimmed = value.trim();
-  if (!looksLikeJsonSyntax(trimmed)) return JSON.stringify(value);
-
-  const analysis = analyzeJsonSource(trimmed);
-  if (!analysis.available) {
-    const detail = analysis.message.replace(/\s*Fix it in Source mode\.?$/u, '');
-    throw new JsonEditError('rejected', `Invalid JSON value: ${detail}`);
-  }
-  return trimmed;
-}
-
-/** The last row belonging to `parentPath`, so a new child is inserted after
- *  the whole expanded subtree rather than immediately under its container. */
-export function lastVisibleDescendantIndex(
-  visible: readonly VisibleJsonNode[],
-  parentPath: JsonSourceNode['path'],
-): number {
-  for (let index = visible.length - 1; index >= 0; index -= 1) {
-    const path = visible[index]?.node.path;
-    if (path && parentPath.every((part, pathIndex) => path[pathIndex] === part)) return index;
-  }
-  return -1;
 }
 
 export function visibleJsonNodes(

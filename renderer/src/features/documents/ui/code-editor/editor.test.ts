@@ -41,10 +41,23 @@ describe('code editor', () => {
 
     expect(view.state.facet(EditorState.readOnly)).toBe(true);
     expect(view.contentDOM.getAttribute('aria-readonly')).toBe('true');
+    // The Find bar keeps focus while the reader types and steps; a match the
+    // editor took focus for would receive the next keystroke as an edit.
+    const findInput = globalThis.document.createElement('input');
+    globalThis.document.body.append(findInput);
+    findInput.focus();
     expect(editor.find.setQuery('alpha', { caseSensitive: false, wholeWord: true })).toEqual({
       current: 1,
       total: 2,
     });
+    expect(editor.find.next()).toEqual({ current: 2, total: 2 });
+    expect(globalThis.document.activeElement).toBe(findInput);
+    expect(view.state.selection.main).toMatchObject({ from: 17, to: 22 });
+    const current = host.querySelector('.cm-find-match-current'); // dom-contract: CodeMirror marks
+    expect(current?.textContent).toBe('alpha');
+    expect(host.querySelectorAll('.cm-find-match')).toHaveLength(2); // dom-contract: CodeMirror marks
+    editor.find.close();
+    expect(host.querySelector('.cm-find-match')).toBeNull(); // dom-contract: CodeMirror marks
 
     editor.setReadOnly(false);
     expect(view.contentDOM.getAttribute('aria-readonly')).toBe('false');

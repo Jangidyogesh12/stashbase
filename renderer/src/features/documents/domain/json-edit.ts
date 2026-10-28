@@ -10,12 +10,7 @@ import { parseTree, type Node, type ParseError } from 'jsonc-parser';
 
 import { featureErrorClass, type FeatureError } from '@/shared/domain/feature-error';
 
-import {
-  analyzeJsonSource,
-  formatJsonPath,
-  type JsonPath,
-  type JsonSourceNode,
-} from './json-source';
+import { analyzeJsonSource, formatJsonPath, type JsonPath } from './json-source';
 
 /**
  * An edit this module refused, with the sentence the reader sees.
@@ -31,43 +26,6 @@ export const JsonEditError = featureErrorClass<'rejected'>('JsonEditError');
 const refuse: (message: string) => never = (message) => {
   throw new JsonEditError('rejected', message);
 };
-
-export function replaceJsonNode(
-  source: string,
-  node: JsonSourceNode,
-  replacement: string,
-  subtree = false,
-): string {
-  const analyzed = analyzeJsonSource(replacement);
-  if (!analyzed.available) {
-    refuse(`Replacement is not valid strict JSON: ${analyzed.message}`);
-  }
-  if (!subtree && (analyzed.root.type === 'array' || analyzed.root.type === 'object')) {
-    refuse('Use subtree editing to replace an object or array.');
-  }
-  return splice(source, node.valueOffset, node.valueLength, replacementWithoutBom(replacement));
-}
-
-export function renameJsonProperty(source: string, path: JsonPath, nextKey: string): string {
-  if (!path.length || typeof path.at(-1) !== 'string') {
-    refuse('Only object properties can be renamed.');
-  }
-  const located = locate(source, path);
-  const property = located.node.parent;
-  const object = property?.parent;
-  const keyNode = property?.children?.[0];
-  if (!property || property.type !== 'property' || !object || !keyNode) {
-    refuse('Property no longer exists.');
-  }
-  if (
-    (object.children ?? []).some(
-      (candidate) => candidate !== property && candidate.children?.[0]?.value === nextKey,
-    )
-  ) {
-    refuse(`The key ${JSON.stringify(nextKey)} already exists in this object.`);
-  }
-  return splice(source, keyNode.offset + located.bom, keyNode.length, JSON.stringify(nextKey));
-}
 
 export function deleteJsonPath(source: string, path: JsonPath): string {
   if (!path.length) refuse('The root value cannot be deleted.');
