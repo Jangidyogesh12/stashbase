@@ -93,7 +93,7 @@ test('HTTP creation returns a usable entry and a receipt prevents duplicate crea
   assert.equal(fromAgent.status, 200);
   const agentResult = await fromAgent.json() as { result: { content: Array<{ text: string }> } };
   const agentNote = JSON.parse(agentResult.result.content[0]!.text) as { entryPath: string };
-  assert.equal(agentNote.entryPath, path.join(root, 'Agent note/index.html'));
+  assert.equal(path.normalize(agentNote.entryPath), path.join(root, 'Agent note/index.html'));
   assert.equal(fs.readFileSync(agentNote.entryPath, 'utf8'), fs.readFileSync(path.join(root, created.entryPath), 'utf8'));
   registerAttributedAgentSession('interactive-note-other-project', {
     agentId: 'claude', windowId: 'note-test', boundFolder: () => path.join(root, 'Elsewhere'), turnInFlight: () => true,
