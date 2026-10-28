@@ -91,6 +91,7 @@ export const agentServerEventSchema = z.union([
       t: z.literal("models"),
       models: z.array(agentModelSchema).max(256),
       activeModel: boundedText(200).optional(),
+      effort: boundedText(64).optional(),
       fallback: boundedText(500).optional(),
     })
     .strict(),

@@ -3,6 +3,7 @@
  *  resumed, and what restoring or retiring a conversation settles. */
 import { describe, expect, it, vi } from 'vite-plus/test';
 
+import { modelChoice } from '@/features/agent/domain/model-choice';
 import { agentSessionPort } from '@/test/fakes/agent';
 
 import { createAgentSessionRuntime } from './session-runtime';
@@ -108,6 +109,65 @@ describe('AgentSessionRuntime', () => {
     expect(test.requests()).toHaveLength(2);
     expect(test.requests().at(-1)).toMatchObject({ effort: 'high', model: 'gpt-codex' });
     expect(runtime.store.getState().effort).toBe('high');
+  });
+
+  it('restores native thinking, preserves it on reconnect, and sends an explicit reset', () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/project/Research' },
+    });
+    const catalog = [
+      {
+        id: 'gpt-6-astra',
+        label: 'Astra',
+        defaultEffort: 'medium',
+        supportedEfforts: ['medium', 'high'],
+      },
+    ];
+    test.listeners[0]?.onEvent({
+      kind: 'models',
+      models: catalog,
+      activeModel: 'gpt-6-astra',
+      effort: 'high',
+      fallback: null,
+    });
+    test.listeners[0]?.onEvent({ kind: 'identified', id: 'native-astra' });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    expect(modelChoice(runtime.store.getState()).effort).toBe('high');
+    runtime.setPersona('journalist');
+    expect(test.requests().at(-1)).toMatchObject({ effort: 'high', resume: 'native-astra' });
+    test.listeners.at(-1)?.onEvent({ kind: 'ready' });
+    runtime.setEffort(null);
+    expect(test.requests().at(-1)).toMatchObject({ effort: 'medium', resume: 'native-astra' });
+    test.listeners.at(-1)?.onEvent({
+      kind: 'models',
+      models: catalog,
+      activeModel: 'gpt-6-astra',
+      effort: 'medium',
+      fallback: null,
+    });
+    expect(modelChoice(runtime.store.getState()).effort).toBe('medium');
+    test.listeners.at(-1)?.onEvent({ kind: 'ready' });
+    test.listeners.at(-1)?.onEvent({
+      kind: 'models',
+      models: [
+        ...catalog,
+        { id: 'other', label: 'Other', defaultEffort: 'low', supportedEfforts: ['low'] },
+      ],
+      activeModel: 'gpt-6-astra',
+      fallback: null,
+    });
+    runtime.setModel('other');
+    expect(test.requests().at(-1)).toMatchObject({
+      model: 'other',
+      effort: 'low',
+      resume: 'native-astra',
+    });
+    runtime.dispose();
   });
 
   it('runs a chosen persona by resuming its own conversation, and a draft starts with it', () => {

@@ -147,14 +147,16 @@ export function transitionAgentSession(
       return { ...state, persona: action.persona };
     case 'models': {
       const catalogIds = new Set(action.models.map((model) => model.id));
+      const unavailable = state.model !== null && !catalogIds.has(state.model);
+      const fallback = action.fallback || (state.agent !== 'codex' && unavailable);
       const next = {
         ...state,
         activeModel: action.activeModel ?? state.activeModel,
         models: action.models,
-        model:
-          action.fallback || (state.model && !catalogIds.has(state.model)) ? null : state.model,
+        model: fallback ? null : state.model,
       };
-      return { ...next, effort: supportedEffort(next, state.effort) };
+      const effort = state.effort ?? action.effort ?? null;
+      return { ...next, effort: state.agent === 'codex' ? effort : supportedEffort(next, effort) };
     }
     case 'skills': {
       const catalogIds = new Set(action.skills.map((skill) => skill.id));
@@ -376,8 +378,7 @@ export function transitionAgentSession(
   }
 }
 
-/** An edit a transcript helper declined to make leaves the state itself
- *  untouched, so a repeated event costs no subscriber a re-render. */
+/** Declined edits preserve state identity and avoid subscriber re-renders. */
 function sameTranscript(
   state: AgentSessionState,
   transcript: AgentTranscriptBlock[],
@@ -385,8 +386,7 @@ function sameTranscript(
   return transcript === state.transcript ? state : { ...state, transcript };
 }
 
-/** Retirement cancels whatever was running and says how many queued or waiting
- *  messages went with the folder, so the transcript explains its own ending. */
+/** Retirement explains which queued and waiting messages were cancelled. */
 function retiredTranscript(state: AgentSessionState) {
   const cancelled = settlePendingTools(state.transcript, 'cancelled');
   const count = state.queuedPrompts.length + state.steers.length;

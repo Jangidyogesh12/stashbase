@@ -126,7 +126,7 @@ export class CodexSession implements AttributedAgentSession {
   private selectedModel: string | undefined;
   /** A pick made while the catalog was still being read, applied by
    * `resolveModel` the way it applies the choice the URL carried. */
-  private heldModel: string | undefined;
+  private heldModel: string | null | undefined;
   private activeModel: string | undefined;
   private models: AgentModel[] = [];
   /** Native metadata gaps belong to this process generation. A later refusal
@@ -381,31 +381,14 @@ export class CodexSession implements AttributedAgentSession {
       // How Codex records this id shows how a follow-up can be confirmed.
       const turnMessageId = randomUUID();
       this.turnMessageId = turnMessageId;
-      const startTurn = (override: string | undefined) => this.request('turn/start', {
+      const result = await this.request('turn/start', {
         threadId,
         clientUserMessageId: turnMessageId,
         cwd: this.activeCwd(),
         ...codexEffortOption(this.effort),
-        ...(override ? { model: override } : {}),
+        ...(model ? { model } : {}),
         input: [{ type: 'text', text: skill ? `$${skill.name}${prompt ? ` ${prompt}` : ''}` : prompt, text_elements: [] }, ...(skill ? [{ type: 'skill', name: skill.name, path: skill.path }] : [])],
-      }) as Promise<JsonObject>;
-      let result: JsonObject;
-      try {
-        result = await startTurn(model);
-      } catch (err: unknown) {
-        if (!model || !isCodexModelSelectionError(err)) throw err;
-        // A runtime can reject a catalogued model because its entitlement or
-        // availability changed after discovery. Clear the override and retry
-        // this first turn with Default while the picker is still recoverable.
-        this.selectedModel = undefined;
-        this.send({
-          t: 'models',
-          models: this.models,
-          ...(this.activeModel ? { activeModel: this.activeModel } : {}),
-          fallback: 'That model could not be used; retrying with the runtime default.',
-        });
-        result = await startTurn(undefined);
-      }
+      }) as JsonObject;
       if (model && this.selectedModel === model) {
         this.activeModel = model;
         this.send({ t: 'models', models: this.models, activeModel: model });
@@ -493,25 +476,19 @@ export class CodexSession implements AttributedAgentSession {
     try {
       this.models = await this.loadModelCatalog();
     } catch (err: unknown) {
-      // Older app-servers can still run a normal default session even when
-      // they do not expose the optional catalog method.
-      this.modelResolved = true;
-      const asked = this.heldModel ?? this.model;
-      this.heldModel = undefined;
-      this.send({ t: 'models', models: [], ...(asked ? { fallback: 'This Codex runtime cannot verify that model; using the runtime default.' } : {}) });
+      // Discovery is not permission to replace an explicit choice. The turn
+      // request remains authoritative, including when the catalog is unavailable.
       log.debug(`could not discover Codex models: ${errorMessage(err)}`);
-      return undefined;
     }
-    // A resumed thread stays on its native model whatever a stale URL says;
-    // only a pick made in this session while the catalog was read counts.
-    const requested = this.heldModel ?? (this.resumeThreadId ? undefined : this.model);
+    // History clears new-chat preferences in the renderer. A model carried
+    // on a reconnect is the reader's current choice, including a pick that
+    // has not run yet. A held null explicitly clears the URL's selection.
+    const selected = this.heldModel !== undefined ? this.heldModel ?? undefined : this.model;
     this.heldModel = undefined;
-    const selected = requested && this.models.some((entry) => entry.id === requested) ? requested : undefined;
     this.send({
       t: 'models',
       models: this.models,
       ...(this.activeModel ? { activeModel: this.activeModel } : {}),
-      ...(requested && !selected ? { fallback: 'That model is no longer available; using the runtime default.' } : {}),
     });
     this.selectedModel = selected;
     this.modelResolved = true;
@@ -525,20 +502,10 @@ export class CodexSession implements AttributedAgentSession {
   private setModelForNextTurn(value: unknown): void {
     if (this.busy || (value !== undefined && typeof value !== 'string')) return;
     const requested = typeof value === 'string' && value ? value : undefined;
-    // The catalog is still being read: refusing the pick against an empty
-    // list would report it "no longer available" and drop it. Hold it for
-    // the read to validate.
+    // Keep a pick made during discovery ahead of the connection-time choice.
+    // The native turn validates availability; the catalog only fills the picker.
     if (!this.modelResolved) {
-      this.heldModel = requested;
-      return;
-    }
-    if (requested && !this.models.some((entry) => entry.id === requested)) {
-      this.send({
-        t: 'models',
-        models: this.models,
-        ...(this.activeModel ? { activeModel: this.activeModel } : {}),
-        fallback: 'That model is no longer available; keeping the current model.',
-      });
+      this.heldModel = requested ?? null;
       return;
     }
     this.selectedModel = requested;
@@ -612,6 +579,9 @@ export class CodexSession implements AttributedAgentSession {
     if (!id) throw new Error('Codex app-server did not return a thread id.');
     const shouldSendSessionId = this.threadId !== id;
     this.threadId = id;
+    // The model catalog's suggested default is not the effort this native
+    // thread runs with. Publish the resumed/configured value before ready.
+    this.effort ??= stringValue(result.reasoningEffort) || undefined;
     const activeModel = codexThreadModel(thread, result);
     if (activeModel) {
       this.activeModel = activeModel;
@@ -620,12 +590,8 @@ export class CodexSession implements AttributedAgentSession {
       if (!this.models.some((entry) => entry.id === activeModel)) {
         this.models = [...this.models, { id: activeModel, label: activeModel }];
       }
-      // A new thread is still on its native Default until the first selected
-      // turn succeeds. Do not let that temporary identity overwrite the
-      // pending selection in the renderer.
-      if (!isNewThread || !this.selectedModel) {
-        this.send({ t: 'models', models: this.models, activeModel });
-      }
+      // The renderer keeps explicit selections ahead of this native identity.
+      this.send({ t: 'models', models: this.models, activeModel, ...(this.effort ? { effort: this.effort } : {}) });
     }
     this.resumeThreadId = null;
     if (shouldSendSessionId) this.send({ t: 'session-id', id });
@@ -1131,12 +1097,6 @@ function codexThreadModel(thread: JsonObject | undefined, response?: JsonObject)
 
 function codexEffortOption(effort: string | undefined): { effort?: string } {
   return effort ? { effort } : {};
-}
-
-function isCodexModelSelectionError(err: unknown): boolean {
-  const message = errorMessage(err);
-  return /\bmodel\b/i.test(message)
-    && /(unavailable|not available|not found|unsupported|unauthori[sz]ed|not permitted|access denied|does not exist)/i.test(message);
 }
 
 function titleFromPrompt(prompt: string): string {

@@ -33,7 +33,9 @@ export function modelChoice(
   const byId = (id: string | null) =>
     id === null ? undefined : state.models.find((model) => model.id === id);
   const model =
-    byId(state.model) ?? byId(state.activeModel) ?? state.models.find((entry) => entry.isDefault);
+    (state.model ? (byId(state.model) ?? { id: state.model, label: state.model }) : undefined) ??
+    byId(state.activeModel) ??
+    state.models.find((entry) => entry.isDefault);
   const efforts = model?.supportedEfforts ?? [];
   const declared = model?.defaultEffort;
   return {

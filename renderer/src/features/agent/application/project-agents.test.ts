@@ -105,7 +105,7 @@ describe('project Agent preferences', () => {
     reopened
       .activeSession()
       .seedModels(models.map((model) => ({ ...model, supportedEfforts: ['medium'] })));
-    expect(reopened.activeSession().store.getState().effort).toBeNull();
+    expect(reopened.activeSession().store.getState().effort).toBe('high');
     expect(vi.mocked(preferences.save).mock.calls.length).toBe(writes);
     reopened.activeSession().seedModels(models);
     reopened.activeSession().setEffort('medium');

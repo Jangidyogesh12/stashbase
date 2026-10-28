@@ -329,7 +329,8 @@ export function createAgentSessionRuntime({
       const current = state();
       if (disposed || current.connection.kind !== 'draft') return;
       if (JSON.stringify(current.models) === JSON.stringify(models)) return;
-      transition({ activeModel: null, fallback: null, kind: 'models', models: [...models] });
+      // A provisional catalog populates the picker without erasing pending choices.
+      store.setState({ models: [...models] });
     },
     setDraft(draft) {
       if (!disposed) transition({ draft, kind: 'set-draft' });

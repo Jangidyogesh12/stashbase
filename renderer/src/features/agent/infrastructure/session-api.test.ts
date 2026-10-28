@@ -274,6 +274,7 @@ describe('Agent session API', () => {
         t: 'models',
         models: [{ id: 'native-model', label: 'Native model', supportedEfforts: ['high'] }],
         activeModel: 'native-model',
+        effort: 'high',
       }),
     });
     messageListeners[0]?.({
@@ -291,6 +292,7 @@ describe('Agent session API', () => {
       { id: 'native-1', kind: 'identified' },
       {
         activeModel: 'native-model',
+        effort: 'high',
         fallback: null,
         kind: 'models',
         models: [{ id: 'native-model', label: 'Native model', supportedEfforts: ['high'] }],

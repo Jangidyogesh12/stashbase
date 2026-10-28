@@ -529,9 +529,15 @@ stable status without download, retry, or a new durable demand latch.
   Model and thinking effort are stored separately per agent in that project. Composer choices
   update the window cache immediately and persist in order; new/blank chats seed
   from that cache, while history clears the new-chat model before resuming and
-  restores its native effort. Seed the model before validating its effort.
-  Catalog admission clears unavailable models and unsupported effort in the session
-  without overwriting the saved choices. Model and effort writes preserve the
+  restores its native effort. Cached catalogs only populate the picker; they do
+  not validate or clear pending choices. Codex reconnects honor the model carried
+  by the renderer; history clears project defaults before connecting. Its native
+  thread response publishes effective effort before ready, separately from catalog
+  defaults. Missing catalog entries and rejected turns never substitute another
+  Codex model. Other adapters may explicitly report catalog fallback without
+  overwriting preferences. An effort reset or a model change that changes effort
+  reconnects with the intended effort, so native resume cannot retain the old one.
+  Model and effort writes preserve the
   preferred agent, persona, and other runtimes' choices.
   Missing preference means Default; failed preference reads/writes remain visible.
   Access requested on Send retains a scope/session/draft snapshot and cancellation

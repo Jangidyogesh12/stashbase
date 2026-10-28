@@ -49,6 +49,12 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Codex selection verification (2026-10-28):** the built app and host were launched
+with `verify:onboarding --agent codex --built` using the persistent private profile.
+Its runtime listing reports Codex uninstalled; no provider sign-in or completed
+reply was available. Model/effort continuity is covered by the controlled J06
+checks below, not a passing real-provider restore/reconnect verification.
+
 **Account request recovery (2026-10-27):** credits and billing distinguish
 authentication lost during a request (401) from an unavailable service (502).
 Controlled route checks cover expired sessions, concurrent sign-out and network
@@ -1566,6 +1572,26 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
   evaluation does not establish ranking quality.
 
 ## J06: Agent
+
+**Codex model and effort continuity (2026-10-28):** cached picker catalogs no
+longer clear saved selections. `codex-session-runtime.ts` honors explicit model
+overrides on reconnect and preserves them when discovery omits a model or a turn
+rejects it; rejection no longer retries on Default. Thread start/resume publishes
+native reasoning effort through the typed models event, so history does not show
+the catalog's Medium in place of native High. Composer effort resets and model
+changes that reset effort reconnect with the intended value. Existing host tests
+first reproduced catalog substitution, missing restored effort and automatic
+retry; renderer preference/runtime/adapter tests cover cache omission, restored
+effort, reconnect and explicit reset. Real-provider and packaged reproduction on
+the reporting installation remain unverified; controlled tests do not establish
+provider availability or native persistence across every installed CLI version.
+Validation passed 72 host/protocol checks, 48 focused renderer checks, core tests,
+host/renderer types, builds, Electron built-output smoke, and documentation checks.
+The wider Agent run passed 502 tests and timed out on 15 UI cases during concurrent
+validation; rerunning those suites with one worker passed all 29 UI tests. A live
+Story browser pass selected another model and High. The first core command was
+blocked by a concurrent Documents test's nullable-value type error; after that
+file was corrected, renderer types and the core tests passed separately.
 
 **Intentional window retirement (2026-10-27):** all four runtime disposals mark
 intent before socket closure. Main retires the host window after successful saves

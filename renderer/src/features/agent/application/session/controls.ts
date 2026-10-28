@@ -84,7 +84,10 @@ export function createSessionControls({
       const current = state();
       if (disposed() || agentSessionIsBusy(current) || current.effort === effort) return;
       if (effort && !modelChoice(current).efforts.includes(effort)) return;
-      transition({ effort, kind: 'set-effort' });
+      // Keep the effective reset value in the session so a reconnect during
+      // startup also overrides the native thread's old effort. The project
+      // preference still clears when the reader chooses Default.
+      transition({ effort: modelChoice({ ...current, effort }).effort, kind: 'set-effort' });
       if (isStarted()) transport.open({ resume: current.nativeSessionId ?? undefined });
       onEffortChange?.(current.scope, current.agent, effort);
     },
@@ -118,15 +121,20 @@ export function createSessionControls({
       ) {
         return;
       }
-      const nextModel = current.models.find((entry) => entry.id === model);
-      const nextEffort =
-        current.effort && !nextModel?.supportedEfforts?.includes(current.effort)
-          ? null
-          : current.effort;
+      const nextModel = modelChoice({ ...current, model }).model;
+      const resetEffort = Boolean(
+        current.effort && !nextModel?.supportedEfforts?.includes(current.effort),
+      );
+      const nextEffort = resetEffort
+        ? modelChoice({ ...current, model, effort: null }).effort
+        : current.effort;
       transition({ model, kind: 'set-model' });
       if (nextEffort !== current.effort) transition({ effort: nextEffort, kind: 'set-effort' });
-      transport.applyModel(model);
+      if (nextEffort !== current.effort && isStarted()) {
+        transport.open({ resume: current.nativeSessionId ?? undefined });
+      } else transport.applyModel(model);
       onModelChange?.(current.scope, current.agent, model);
+      if (resetEffort) onEffortChange?.(current.scope, current.agent, null);
     },
     setQueue(queue: Parameters<AgentSessionRuntime['setQueue']>[0]) {
       if (disposed()) return;

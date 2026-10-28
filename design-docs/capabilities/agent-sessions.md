@@ -144,10 +144,15 @@ permissions, with current model and tool choices checked before use.
 - Model, effort, skills, and permission options follow the selected runtime.
   Remember explicitly chosen models and thinking effort per project and agent
   when switching agents and starting new chats, including after restart.
-  An unavailable model or unsupported effort uses the runtime's own default
-  without overwriting the saved choice. Other open chats keep their choices.
+  A remembered model list cannot erase a saved choice. Codex retains an explicit
+  model and thinking effort through reconnects and catalog changes; a refused
+  choice fails visibly instead of retrying the message on a different model.
+  Other runtimes may report an unavailable choice and use their native default
+  without overwriting the preference. Other open chats keep their choices.
   Restoring history keeps that conversation's native choices and never changes
-  the preferences; explicitly returning a choice to Default clears that preference.
+  the preferences, including the native thinking effort rather than the model
+  catalog's suggested default. Explicitly returning a choice to Default clears
+  that preference and applies the model's default effort to the next turn.
   Without an explicit model choice, a chat runs on the model the runtime's own
   settings name; StashBase never resets a runtime to a built-in default the user
   did not choose. A model named by an alias shows the release that alias

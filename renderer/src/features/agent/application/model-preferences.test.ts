@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
+import { modelChoice } from '@/features/agent/domain/model-choice';
 import { agentSessionPort } from '@/test/fakes/agent';
 
 import type { AgentPreferencesPort } from './ports';
@@ -112,7 +113,14 @@ describe('project model preferences', () => {
 
     const next = runtime.newChat();
     next.seedModels(models.filter((model) => model.id === 'standard'));
-    expect(next.store.getState()).toMatchObject({ model: null, effort: null });
+    expect(next.store.getState()).toMatchObject({ model: 'writer', effort: 'high' });
+    expect(modelChoice(next.store.getState())).toMatchObject({
+      model: { id: 'writer' },
+      effort: 'high',
+    });
+    next.start();
+    listeners.at(-1)?.onEvent({ kind: 'models', models: [], activeModel: null, fallback: null });
+    expect(next.store.getState()).toMatchObject({ model: 'writer', effort: 'high' });
     expect(preferences.save).not.toHaveBeenCalled();
     next.setDraft('Keep the fallback chat');
     const availableAgain = runtime.newChat();
@@ -191,6 +199,20 @@ describe('project model preferences', () => {
       expect(runtime.preferences.getState().failure).toContain('Could not save'),
     );
     expect(session.store.getState()).toMatchObject({ model: 'writer', draft: 'Keep this idea' });
+    runtime.dispose();
+  });
+
+  it('does not seed an incompatible old effort after deliberately changing models', async () => {
+    const { runtime } = workspace();
+    await runtime.chooseAgent('codex');
+    const session = runtime.activeSession();
+    session.seedModels(models);
+    session.setModel('writer');
+    session.setEffort('high');
+    session.setModel('standard');
+    session.setDraft('Keep this draft');
+    const next = runtime.newChat();
+    expect(next.store.getState()).toMatchObject({ model: 'standard', effort: null });
     runtime.dispose();
   });
 });

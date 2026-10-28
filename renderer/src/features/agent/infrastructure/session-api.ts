@@ -156,6 +156,7 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
     case 'models':
       return {
         activeModel: event.activeModel ?? null,
+        ...(event.effort === undefined ? {} : { effort: event.effort }),
         fallback: event.fallback ?? null,
         kind: 'models',
         models: event.models.map(toModel),

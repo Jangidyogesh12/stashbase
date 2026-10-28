@@ -176,6 +176,8 @@ type AgentSessionStateEvent =
       kind: 'models';
       models: AgentModel[];
       activeModel: string | null;
+      /** The native session's effort, when reported with its configuration. */
+      effort?: string;
       fallback: string | null;
     }
   | {

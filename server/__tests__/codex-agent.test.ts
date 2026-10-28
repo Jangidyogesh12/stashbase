@@ -67,6 +67,7 @@ function catalogProcess(
     skillsListError?: string;
     initializeError?: string;
     threadModel?: string;
+    threadEffort?: string;
     selectedTurnError?: string;
     interruptError?: string;
     turnIds?: string[];
@@ -88,7 +89,7 @@ function catalogProcess(
     const result = request.method === 'model/list' ? { data: catalog[page] ?? [], ...(page++ < catalog.length - 1 ? { nextCursor: `page-${page}` } : {}) }
       : request.method === 'skills/list' ? { data: [{ cwd: Array.isArray(request.params.cwds) ? request.params.cwds[0] : undefined, skills: options.skills ?? [] }] }
       : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, model: options.threadModel ?? 'runtime-default' }
-      : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model' }
+      : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model', reasoningEffort: options.threadEffort }
         : request.method === 'turn/start' ? { turn: { id: options.turnIds?.[turn++] ?? 'turn-1' } } : {};
     if (request.method === 'initialize' && options.initializeError) {
       proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.initializeError } })}\n`);
@@ -389,7 +390,7 @@ test('Codex changes the model for the next turn without replacing its thread', a
   session.dispose();
 });
 
-test('Codex recovers unavailable selections to Default and never forwards an override while resuming', async (t) => {
+test('Codex keeps explicit selections through catalog omissions and reconnection', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
   await runWithWindowId('stale-window', () => openProjectFolder(folder));
   await runWithWindowId('resume-window', () => openProjectFolder(folder));
@@ -401,15 +402,15 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
   stale.begin();
   await settle();
   const staleModels = staleWs.sent.map((item) => JSON.parse(item) as { t: string; fallback?: string }).find((event) => event.t === 'models');
-  assert.match(staleModels?.fallback ?? '', /no longer available/);
+  assert.equal(staleModels?.fallback, undefined);
   staleWs.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
   await settle();
-  assert.equal('model' in (staleNative.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
+  assert.equal(staleNative.requests.find((request) => request.method === 'turn/start')?.params.model, 'withdrawn-model');
   stale.dispose();
 
   const resumeWs = new FakeWebSocket();
   const resumeNative = catalogProcess();
-  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', undefined, 'thread-old', undefined, 'native-model', undefined, undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', 'high', 'thread-old', undefined, 'native-model', undefined, undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
   resumed.begin();
   await settle();
   const resumedModels = resumeWs.sent.map((item) => JSON.parse(item) as { t: string; activeModel?: string }).filter((event) => event.t === 'models').at(-1);
@@ -417,8 +418,28 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
   resumeWs.emit('message', JSON.stringify({ t: 'prompt', text: 'continue' }));
   await settle();
   assert.equal(resumeNative.requests.some((request) => request.method === 'thread/resume'), true);
-  assert.equal('model' in (resumeNative.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
+  assert.equal(resumeNative.requests.find((request) => request.method === 'turn/start')?.params.model, 'native-model');
+  assert.equal(resumeNative.requests.find((request) => request.method === 'turn/start')?.params.effort, 'high');
   resumed.dispose();
+});
+
+test('Codex publishes and retains the resumed native effort without a project override', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-resume-effort-'));
+  await runWithWindowId('resume-effort-window', () => openProjectFolder(folder));
+  t.after(() => { runWithWindowId('resume-effort-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { threadEffort: 'high' });
+  const session = new CodexSession(ws as unknown as WebSocket, 'resume-effort-window', undefined, 'thread-old', undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  t.after(() => session.dispose());
+  session.begin();
+  await settle();
+  const reported = ws.sent.map((item) => JSON.parse(item)).filter((event) => event.t === 'models').at(-1);
+  assert.equal(reported.effort, 'high');
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'continue' }));
+  await settle();
+  const turn = native.requests.find((request) => request.method === 'turn/start');
+  assert.equal(turn?.params.effort, 'high');
+  assert.equal('model' in (turn?.params ?? {}), false);
 });
 
 test('Codex reports the native Default model after starting a new thread', async (t) => {
@@ -536,7 +557,7 @@ test('Codex forwards a runtime-native effort identifier without remapping it', a
   session.dispose();
 });
 
-test('Codex retries a rejected selected model with Default and publishes recovery', async (t) => {
+test('Codex reports a rejected selected model without retrying on a different model', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
   await runWithWindowId('reject-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('reject-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
@@ -548,14 +569,16 @@ test('Codex retries a rejected selected model with Default and publishes recover
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
   await settle();
   const turns = native.requests.filter((request) => request.method === 'turn/start');
-  assert.equal(turns.length, 2);
+  assert.equal(turns.length, 1);
   assert.equal(turns[0]?.params.model, 'native-model');
-  assert.equal('model' in (turns[1]?.params ?? {}), false);
   const fallback = ws.sent
     .map((item) => JSON.parse(item) as { t: string; activeModel?: string; fallback?: string })
     .find((event) => event.fallback);
-  assert.match(fallback?.fallback ?? '', /retrying/);
-  assert.equal(fallback?.activeModel, 'runtime-default');
+  assert.equal(fallback, undefined);
+  assert.ok(ws.sent.map((item) => JSON.parse(item)).some((event) => event.t === 'error' && event.message === 'model unavailable'));
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'retry my choice' }));
+  await settle();
+  assert.equal(native.requests.filter((request) => request.method === 'turn/start')[1]?.params.model, 'native-model');
   session.dispose();
 });
 

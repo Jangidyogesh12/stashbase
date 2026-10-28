@@ -7,7 +7,6 @@ import type {
   ProjectAgentPreference,
 } from '@/features/agent/application/ports';
 import { DEFAULT_AGENT_ID } from '@/features/agent/domain/agent-catalog';
-import { supportedEffort } from '@/features/agent/domain/model-choice';
 import {
   agentScopeKey,
   agentSessionIsUnstarted,
@@ -27,13 +26,9 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
   const seedRuntimeChoices = (session: AgentSessionRuntime) => {
     const state = session.store.getState();
     const preference = choices.get(agentScopeKey(state.scope));
-    const preferredModel = preference?.models?.[state.agent] ?? null;
-    const model =
-      state.models.length && !state.models.some((entry) => entry.id === preferredModel)
-        ? null
-        : preferredModel;
+    const model = preference?.models?.[state.agent] ?? null;
     const effort = preference?.efforts?.[state.agent] ?? null;
-    session.store.setState({ model, effort: supportedEffort({ ...state, model }, effort) });
+    session.store.setState({ model, effort });
   };
   /** A new Chat starts with its project's persona; a started one keeps the
    *  persona it already runs under. */
