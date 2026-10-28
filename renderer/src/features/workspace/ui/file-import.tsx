@@ -84,11 +84,6 @@ export function FileImport({
         />
         <div aria-live="polite" className="text-caption text-muted-foreground">
           {state.pending && <p>Importing…</p>}
-          {state.imported > 0 && (
-            <p>
-              {state.imported} {state.imported === 1 ? 'file' : 'files'} imported.
-            </p>
-          )}
         </div>
       </div>
       {children({

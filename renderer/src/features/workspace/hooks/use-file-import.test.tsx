@@ -30,7 +30,6 @@ it('retries only refused files, into the folder they were headed for, and ignore
   await act(() => hook.result.current.importFiles(files, 'drafts'));
   expect(upload.mock.calls[0]?.[3]).toBe('drafts');
   expect(hook.result.current.refused).toEqual([files[1]]);
-  expect(hook.result.current.imported).toBe(1);
   let pending!: Promise<void>;
   act(() => {
     pending = hook.result.current.retryRefused();
@@ -40,9 +39,9 @@ it('retries only refused files, into the folder they were headed for, and ignore
   runtime.dispose();
   expect(upload.mock.calls[1]?.[2].aborted).toBe(true);
   await act(async () => {
-    complete({ paths: ['b.md'], refused: [] });
+    complete({ paths: [], refused: [0] });
     await pending;
   });
-  expect(hook.result.current.imported).toBe(0);
+  expect(hook.result.current.refused).toEqual([]);
   client.clear();
 });

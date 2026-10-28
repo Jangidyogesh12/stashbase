@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vite-plus/test';
 
@@ -56,7 +56,6 @@ it('offers import in the tree menu and shows progress only while importing', asy
     '',
   );
   await act(async () => finish({ paths: ['draft.md'], refused: [] }));
-  expect(await screen.findByText('1 file imported.')).not.toBeNull();
   expect(screen.queryByText('Importing…')).toBeNull();
   runtime.dispose();
   client.clear();
@@ -111,7 +110,7 @@ it('imports desktop files into the folder they are dropped on, and never a dropp
     runtime.signal,
     'docs',
   );
-  expect(await screen.findByText('1 file imported.')).not.toBeNull();
+  await waitFor(() => expect(screen.queryByText('Importing…')).toBeNull());
   runtime.dispose();
   client.clear();
 });
