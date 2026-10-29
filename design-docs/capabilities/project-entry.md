@@ -14,6 +14,10 @@ usable; agent setup and indexing are independent.
   reuse the initiating Welcome window; otherwise open another window.
 - Repeated or superseded requests cannot create duplicate copies or windows.
   Existing work remains available until a replacement entry succeeds.
+- When no kept document tabs are restored, open a readable `index.html` directly
+  in the project root as the initial preview. Nested files do not qualify. Existing
+  tabs and navigation begun during entry take priority; later listing refreshes
+  never reopen the preview after it is closed.
 - A [scheduled run](scheduled-tasks.md#quiet-by-design) is not an entry request and
   never takes focus. It uses the project's existing window; otherwise it opens one out
   of sight, never reusing Welcome, and shows it, still without focus, the next time the

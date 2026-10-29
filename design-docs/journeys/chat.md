@@ -49,7 +49,8 @@ Chat, Documents assistance, and runtimes.
 
 ## First Send
 
-With no explicit project choice, the draft uses Default even while signed out.
+The draft starts with the [remembered agent choice](../capabilities/agent-sessions.md#choice-and-readiness),
+inheriting the user's choice from other projects when this project has none.
 If the selected agent is unavailable, Send presents its access prompt before
 starting login, installation, or a session:
 

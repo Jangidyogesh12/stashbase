@@ -49,6 +49,12 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Codex approval verification (2026-10-29):** a fresh build launched with
+`verify:onboarding --agent codex --built` in the persistent private profile.
+Welcome and Settings > Agents loaded; Codex reports Not installed. No signed-in
+Computer Use turn or persisted app grant was exercised. J06 records the controlled
+RPC/renderer and isolated Electron Story evidence for the approval changes.
+
 **Codex selection verification (2026-10-28):** the built app and host were launched
 with `verify:onboarding --agent codex --built` using the persistent private profile.
 Its runtime listing reports Codex uninstalled; no provider sign-in or completed
@@ -733,6 +739,16 @@ and active Pro subscription, and no generic Electron page opened.
 ## J02: Folder
 
 **Intent:** [J02](../design-docs/journeys/README.md#j02-add-and-open-a-folder).
+
+**Root landing page (2026-10-29):** App composition's
+`use-document-workspace.ts` opens root `index.html` as the initial preview when
+no tabs are restored and no document navigation has started. Its composition
+tests cover delayed listings, restored work, nested-only and empty projects,
+unreadable files, and no reopening after closure or refresh; `app.test.tsx`
+exercises the tab and Files selection in the mounted shell. An isolated macOS
+Electron source pass visually confirmed the HTML preview, closure through a
+focus refresh, kept-tab restoration, and no default for a nested-only project.
+Packaged and Windows/Linux behavior remains unverified.
 
 **Implementation:** Renderer: `renderer/src/features/workspace/hooks/use-project-entry.ts`, `renderer/src/features/workspace/hooks/use-project-entry-receiver.ts`, `renderer/src/features/workspace/ui/sidebar.tsx`, `renderer/src/features/workspace/application/open-folder.ts`, `renderer/src/features/workspace/application/remove-folder.ts`.
 Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-file-mutations.ts`, `electron/window-restore.cjs`.
@@ -1630,6 +1646,34 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
   evaluation does not establish ranking quality.
 
 ## J06: Agent
+
+**Codex approval duration and mode changes (2026-10-29):** `codex-approval.ts`
+and `codex-session-runtime.ts` expose native session/persistent choices, return
+MCP persistence in `_meta.persist`, and apply a changed reviewer on subsequent
+turns without replacing the thread. The shared permission card carries the scope
+through the session command and socket adapters. Controlled Codex RPC tests cover
+session grants, offered/unavailable MCP durations, one-off approval, rejection,
+and Auto/Ask/Plan/Edit transitions while preserving resolved workspace policy.
+The existing workspace scenario exercises both duration buttons and the mode
+switch; socket adapter and transcript checks cover presentation and transport.
+An isolated Electron Story pass inspected normal and compact Computer Use cards,
+verified four non-overlapping buttons, and resolved Always allow in both layouts.
+These fixtures do not establish real Computer Use app-grant persistence or native
+automatic-review behavior with a signed-in account.
+
+**Agent choice across projects (2026-10-29):** `server/routes/agent-preferences.ts`
+persists the last selected Agent with the project choice. The renderer's
+`project-agents.ts` uses it only when the project has no choice; the workspace
+hook reads on entry. Existing preference tests cover restart inheritance,
+project overrides, explicit Default, write failure, and unrelated model/effort/persona
+updates; the hook covers another window choosing while Welcome is open.
+J01's controlled onboarding scenario also sends a completed first reply in a
+second empty project with the inherited Agent, without repeating setup or login.
+An isolated macOS Electron source pass selected Claude, inherited it in a second
+empty project, then selected Codex and inherited that in a third. Returning to the
+first project retained Claude; an explicit Default selection was inherited too.
+This verifies selection and persistence, not real-provider subscription access;
+packaged Windows/Linux behavior remains unverified.
 
 **Codex model and effort continuity (2026-10-28):** cached picker catalogs no
 longer clear saved selections. `codex-session-runtime.ts` honors explicit model

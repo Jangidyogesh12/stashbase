@@ -539,7 +539,13 @@ stable status without download, retry, or a new durable demand latch.
   reconnects with the intended effort, so native resume cannot retain the old one.
   Model and effort writes preserve the
   preferred agent, persona, and other runtimes' choices.
-  Missing preference means Default; failed preference reads/writes remain visible.
+  An explicit agent selection atomically saves both the project choice and the
+  user-wide `lastSelectedAgent`. The preferences response supplies the fallback
+  for unchosen projects: that selection, an existing remembered project choice,
+  or Default when neither exists. Model, effort and persona writes preserve it;
+  removing a project does not clear it. The renderer reads preferences on project
+  entry, so an already open Welcome window sees another window's later choice.
+  Failed preference reads/writes remain visible.
   Access requested on Send retains a scope/session/draft snapshot and cancellation
   owner. Only confirmed readiness may continue that same submission once; navigation,
   edits, cancellation, and disposal reject late completions. Setup HTTP 202 is an
@@ -716,6 +722,11 @@ stable status without download, retry, or a new durable demand latch.
   Tray images derive from the application mark through `scripts/icons/status.mjs`
   and ship inside `electron/notifications/icons`; macOS uses Retina templates.
 - Pending approvals require the exact request id; abort/disposal denies them.
+  Codex advertises supported approval scopes to the renderer. Session decisions
+  map to native command/file decisions or permission grants; MCP persistence
+  reads the request's `_meta.persist` and returns only an offered scope in response
+  metadata. Codex owns remembered grants; StashBase does not cache blanket tool
+  authorization. Native automatic-review denials remain visible and are not replayed.
   Read/orientation/reindex may use the low-risk path. Document writes remain
   permissioned and Review never grants a write in advance. Edit policy grants only its
   bounded writes; move/delete/commands/network/broader access require their own
@@ -737,6 +748,10 @@ stable status without download, retry, or a new durable demand latch.
   Markdown changes regardless of the writing tool. External MCP clients have no
   app-owned turn socket and do not receive Chat turn-review cards.
 - Codex modes use on-request approval with mode-specific sandbox/review policy;
+  each `turn/start` carries the selected reviewer, including after a mode change
+  on an existing thread. Reviewer-only changes preserve the native sandbox;
+  leaving Plan restores the resolved workspace sandbox when available. Mode
+  changes during an active turn are ignored.
   Claude maps native modes. Headless `agy` cannot ask the reader, so Antigravity
   runs with `--dangerously-skip-permissions` and every tool call passes the
   approval hook. `server/routes/antigravity-hook.ts` reviews a call only for the
@@ -1268,6 +1283,8 @@ registered host boundaries; renderer shared types are a different layer.
 - Tabs stay unique across asynchronous opens. First edit keeps a preview; only
   kept tabs persist. History advances after open succeeds. Hidden panes are inert;
   mode/visibility changes preserve drafts, transcripts, focus, and session identity.
+  App composition chooses the root `index.html` preview once the first folder
+  listing arrives, only if restoration and user navigation have left no document.
   App composition switches to Documents when a user opens a Chat file result or
   local file link, restoring the last Documents sidebar panel.
 - Refresh keeps usable content. Clean editors may adopt newer source; dirty ones

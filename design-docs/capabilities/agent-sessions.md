@@ -27,8 +27,12 @@ actual capabilities through this common experience.
 
 ## Choice and Readiness
 
-An unchosen project uses **Default**, even when signed out. Remember only explicit
-project choices; readiness and history restoration never rewrite them.
+A project keeps its explicitly selected agent. A project without its own choice
+inherits the user's latest explicit agent selection across projects, including
+after restart, so an existing native subscription remains the starting point.
+With no remembered selection, use **Default**, even when signed out. Explicitly
+choosing Default also makes it the starting point for new projects. Model, effort,
+and persona changes, readiness, and history restoration never rewrite this choice.
 [Account and Settings](account-settings.md) owns access prerequisites and credentials.
 The [Chat journey](../journeys/chat.md#first-send) owns the first-send interaction.
 
@@ -269,7 +273,11 @@ permissions, with current model and tool choices checked before use.
 - Resolving an approval keeps the composer anchored at the bottom of an active
   conversation. Transcript scrolling and focus restoration stay inside the
   conversation's scroll area, including when long previews collapse.
-- Approval applies to its pending action only. Stop cancels unanswered approvals,
+- Allow applies to its pending action only. Codex also offers Allow for this session
+  and Always allow when the native request supports those durations. The choice
+  remembers that permission with Codex; it does not approve unrelated actions.
+  Computer Use app access and Auto's review of a particular action remain separate,
+  and a denied review retains its explanation. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.
 - Default offers Auto, Ask, Edit, and Plan. Ask confirms changes and commands; Edit
@@ -285,6 +293,9 @@ permissions, with current model and tool choices checked before use.
   Reviews have no tools and share the current turn's usage allowance. Plan reads
   and explores without writes or commands. A mode change applies between turns,
   including when a conversation resumes.
+- Codex applies a changed mode on the next turn of the current conversation.
+  Switching from Auto to Ask routes subsequent approval requests to the reader;
+  it does not retry an action that was already denied.
 - A new chat starts each agent in Auto, or in Edit where Auto is not offered;
   Ask is only a choice, never the starting point while either exists. The mode belongs to its agent: switching agents in an
   unsent chat restores the mode that agent was last left in there, so one
