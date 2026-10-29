@@ -9,7 +9,7 @@ import type { AppDependencies } from '@/app/dependencies';
 import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
 import { typeInto } from '@/test/dom';
-import { agentDefinition, agentSessionPort } from '@/test/fakes/agent';
+import { agentDefinition, agentSessionPort, CODEX_AGENT } from '@/test/fakes/agent';
 import { appDependencies } from '@/test/fakes/app';
 import { SIGNED_IN_ACCOUNT, SIGNED_OUT_ACCOUNT } from '@/test/fakes/settings';
 import { projectRegistrySnapshot } from '@/test/fakes/workspace';
@@ -45,6 +45,26 @@ function onboarding(provider: Provider) {
     agents: providers.map((entry) =>
       agentDefinition({
         ...entry,
+        ...(entry.id === 'stashbase'
+          ? {}
+          : {
+              abilities: CODEX_AGENT.abilities,
+              models: [
+                {
+                  id: 'standard',
+                  label: 'Standard',
+                  isDefault: true,
+                  defaultEffort: 'medium',
+                  supportedEfforts: ['medium'],
+                },
+                {
+                  id: 'writer',
+                  label: 'Writer',
+                  defaultEffort: 'medium',
+                  supportedEfforts: ['medium', 'high'],
+                },
+              ],
+            }),
         ready: entry.id === provider.id && signedIn,
         needsSignIn:
           entry.id === provider.id && !signedIn && (installed || entry.id === 'stashbase'),
@@ -94,8 +114,32 @@ function onboarding(provider: Provider) {
   };
   dependencies.agent.preferences = {
     load: async () => preferences,
-    save: async (scope, agent) => {
-      preferences = { defaultAgent: agent, projects: [{ scope: scope.path, agent }] };
+    save: async (scope, agent, _signal, { model, effort, persona } = {}) => {
+      const previous = preferences.projects.find((entry) => entry.scope === scope.path);
+      const selectingAgent = model === undefined && effort === undefined && persona === undefined;
+      preferences = {
+        ...preferences,
+        defaultAgent: selectingAgent ? agent : preferences.defaultAgent,
+        defaultModels: {
+          ...preferences.defaultModels,
+          ...(model === undefined ? {} : { [agent]: model }),
+        },
+        defaultEfforts: {
+          ...preferences.defaultEfforts,
+          ...(effort === undefined ? {} : { [agent]: effort }),
+        },
+        projects: [
+          ...preferences.projects.filter((entry) => entry.scope !== scope.path),
+          {
+            ...previous,
+            scope: scope.path,
+            agent: selectingAgent ? agent : (previous?.agent ?? agent),
+            ...(model === undefined ? {} : { models: { ...previous?.models, [agent]: model } }),
+            ...(effort === undefined ? {} : { efforts: { ...previous?.efforts, [agent]: effort } }),
+            ...(persona === undefined ? {} : { persona }),
+          },
+        ],
+      };
     },
   };
   dependencies.settings.accountApi.load = vi.fn(async () =>
@@ -266,6 +310,17 @@ it.each(providers)(
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
 
     if (provider.id !== 'stashbase') {
+      await user.click(screen.getByRole('button', { name: 'New chat' }));
+      await user.click(
+        await screen.findByRole('button', { name: /^Model and thinking: Standard,/u }),
+      );
+      await user.click(await screen.findByRole('button', { name: 'Model: Standard' }));
+      await user.click(await screen.findByRole('menuitemradio', { name: 'Writer' }));
+      await user.click(
+        await screen.findByRole('button', { name: /^Model and thinking: Writer,/u }),
+      );
+      act(() => screen.getByRole('slider', { name: 'Thinking' }).focus());
+      await user.keyboard('{End}{Escape}');
       await recoverAuthentication(fixture, provider, user, request, signInRequests);
 
       fixture.requireUpdate();
@@ -306,13 +361,34 @@ it.each(providers)(
     expect(fixture.dependencies.settings.accountApi.startSignIn).toHaveBeenCalledTimes(signInCalls);
     expect(fixture.prompts.filter((text) => text === 'Continue my essay')).toHaveLength(1);
 
+    // Using another Agent between projects must not erase this Agent's model.
+    const other = provider.id === 'codex' ? 'Claude' : 'Codex';
+    if (provider.id !== 'stashbase') {
+      await user.click(screen.getByRole('button', { name: `Provider: ${provider.label}` }));
+      await user.click(
+        await screen.findByRole('menuitemradio', { name: new RegExp(`^${other}`, 'u') }),
+      );
+    }
     returningWindow.unmount();
     fixture.enterNewProject();
     fixture.mount();
-    await screen.findByRole('button', { name: `Provider: ${provider.label}` });
+    if (provider.id !== 'stashbase') {
+      await user.click(await screen.findByRole('button', { name: `Provider: ${other}` }));
+      await user.click(await screen.findByRole('menuitemradio', { name: provider.label }));
+      await screen.findByRole('button', { name: 'Model and thinking: Writer, High' });
+    } else {
+      await screen.findByRole('button', { name: 'Provider: Default' });
+    }
     typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Start my next essay');
     await user.click(screen.getByRole('button', { name: 'Send' }));
     await screen.findByText(`${provider.label} reply: Start my next essay`);
+    expect(fixture.dependencies.agent.session.connect).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agent: provider.id,
+        ...(provider.id === 'stashbase' ? {} : { model: 'writer', effort: 'high' }),
+      }),
+      expect.anything(),
+    );
     expect(fixture.dependencies.agent.catalog.prepareAgent).toHaveBeenCalledTimes(preparationCalls);
     expect(fixture.dependencies.settings.accountApi.startSignIn).toHaveBeenCalledTimes(signInCalls);
   },

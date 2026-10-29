@@ -106,6 +106,9 @@ of Default/Claude/Codex/Antigravity, declining access without losing the draft,
 signing in, and displaying one completed reply. Native rows also exercise a
 refused outdated-runtime turn, update, and one resend. Remounting the app reuses
 the fixture's project/preferences/account state and sends without another login.
+The native scenarios also select a model and thinking effort, switch agents,
+then reopen in a second project and switch back before sending with those choices
+(see [J06](#j06-agent), 2026-10-29).
 These four scenarios use controlled ports, not real HTTP, OAuth or provider
 processes. They join focused host setup/source-preservation tests and the pinned
 OpenCode fake-gateway smoke in `pnpm test:core`; `pnpm check` adds types.
@@ -1646,6 +1649,19 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
   evaluation does not establish ranking quality.
 
 ## J06: Agent
+
+**Model and effort across projects (2026-10-29):** `server/routes/agent-preferences.ts`
+atomically saves each agent's last explicit model and effort alongside the project
+choice. `project-agents.ts` inherits these defaults only for missing project
+choices, preserving explicit null resets and leaving personas project-scoped.
+The existing model-preference scenario first reproduced Codex → Claude → new
+project → Codex losing both choices. It now covers inheritance through the native
+connection request, loaded defaults, project overrides, and explicit resets.
+Host preference checks cover durable per-agent defaults, unrelated writes, and
+project removal. J01's controlled full-window scenario also chooses a native model
+and effort, uses another agent, reopens in a second project, switches back, and
+sends a completed reply with the remembered choices. These fixtures do not prove
+real-provider model availability or packaged behavior on the reporting installation.
 
 **Codex approval duration and mode changes (2026-10-29):** `codex-approval.ts`
 and `codex-session-runtime.ts` expose native session/persistent choices, return

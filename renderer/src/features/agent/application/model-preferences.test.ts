@@ -70,7 +70,16 @@ describe('project model preferences', () => {
     runtime.setWindowFolder('/other');
     await runtime.chooseAgent('codex');
     runtime.activeSession().seedModels(models);
-    expect(runtime.activeSession().store.getState()).toMatchObject({ model: null, effort: null });
+    expect(runtime.activeSession().store.getState()).toMatchObject({
+      model: 'writer',
+      effort: 'high',
+      persona: null,
+    });
+    runtime.activeSession().start();
+    expect(port.connect).toHaveBeenLastCalledWith(
+      expect.objectContaining({ agent: 'codex', model: 'writer', effort: 'high' }),
+      expect.anything(),
+    );
     runtime.dispose();
   });
 
@@ -78,12 +87,20 @@ describe('project model preferences', () => {
     const preferences: AgentPreferencesPort = {
       load: vi.fn<AgentPreferencesPort['load']>(async () => ({
         defaultAgent: 'stashbase',
+        defaultModels: { codex: 'standard', claude: 'writer' },
+        defaultEfforts: { codex: 'medium', claude: 'high' },
         projects: [
           {
             scope: scope.path,
             agent: 'codex',
             models: { codex: 'writer' },
             efforts: { codex: 'high' },
+          },
+          {
+            scope: '/native-default',
+            agent: 'codex',
+            models: { codex: null },
+            efforts: { codex: null },
           },
         ],
       })),
@@ -144,6 +161,23 @@ describe('project model preferences', () => {
     await reopened.runtime.loadPreferences();
     reopened.runtime.activeSession().seedModels(models);
     expect(reopened.runtime.activeSession().store.getState().model).toBe('writer');
+    reopened.runtime.setWindowFolder('/new-after-restart');
+    await reopened.runtime.chooseAgent('codex');
+    expect(reopened.runtime.activeSession().store.getState()).toMatchObject({
+      model: 'standard',
+      effort: 'medium',
+    });
+    await reopened.runtime.chooseAgent('claude');
+    expect(reopened.runtime.activeSession().store.getState()).toMatchObject({
+      model: 'writer',
+      effort: 'high',
+    });
+    reopened.runtime.setWindowFolder('/native-default');
+    expect(reopened.runtime.activeSession().store.getState()).toMatchObject({
+      agent: 'codex',
+      model: null,
+      effort: null,
+    });
     reopened.runtime.dispose();
   });
 

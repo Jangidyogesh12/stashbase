@@ -202,6 +202,8 @@ export interface ProjectAgentPreference {
 export interface AgentPreferencesPort {
   load(signal: AbortSignal): Promise<{
     defaultAgent: AgentId;
+    defaultModels?: ProjectAgentPreference['models'];
+    defaultEfforts?: ProjectAgentPreference['efforts'];
     projects: ProjectAgentPreference[];
   }>;
   save(

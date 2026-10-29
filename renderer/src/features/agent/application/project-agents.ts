@@ -21,6 +21,8 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
   const store = createStore(() => ({ loading: Boolean(port), failure: null as string | null }));
   const choices = new Map<string, ProjectAgentPreference>();
   let defaultAgent: AgentId = DEFAULT_AGENT_ID;
+  let defaultModels: ProjectAgentPreference['models'];
+  let defaultEfforts: ProjectAgentPreference['efforts'];
   const preferred = (scope: AgentScope) => choices.get(agentScopeKey(scope))?.agent ?? defaultAgent;
   let loading: Promise<boolean> | null = null;
   let saving = false;
@@ -28,8 +30,9 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
   const seedRuntimeChoices = (session: AgentSessionRuntime) => {
     const state = session.store.getState();
     const preference = choices.get(agentScopeKey(state.scope));
-    const model = preference?.models?.[state.agent] ?? null;
-    const effort = preference?.efforts?.[state.agent] ?? null;
+    // Null is an explicit reset to the native default, not an absent project choice.
+    const model = { ...defaultModels, ...preference?.models }[state.agent] ?? null;
+    const effort = { ...defaultEfforts, ...preference?.efforts }[state.agent] ?? null;
     session.store.setState({ model, effort });
   };
   /** A new Chat starts with its project's persona; a started one keeps the
@@ -65,13 +68,17 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
     store.setState({ loading: true, failure: null });
     loading = pendingSave
       .then(() => port.load(signal))
-      .then(({ defaultAgent: inherited, projects }) => {
-        signal.throwIfAborted();
-        defaultAgent = inherited;
-        choices.clear();
-        for (const entry of projects) choices.set(entry.scope, entry);
-        return true;
-      })
+      .then(
+        ({ defaultAgent: inherited, defaultModels: models, defaultEfforts: efforts, projects }) => {
+          signal.throwIfAborted();
+          defaultAgent = inherited;
+          defaultModels = models;
+          defaultEfforts = efforts;
+          choices.clear();
+          for (const entry of projects) choices.set(entry.scope, entry);
+          return true;
+        },
+      )
       .catch(() => {
         if (!signal.aborted)
           store.setState({ failure: 'Could not load your agent settings. Retry before sending.' });
@@ -102,6 +109,8 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
         ? {}
         : { efforts: { ...previous?.efforts, [agent]: change.effort } }),
     });
+    if (change.model !== undefined) defaultModels = { ...defaultModels, [agent]: change.model };
+    if (change.effort !== undefined) defaultEfforts = { ...defaultEfforts, [agent]: change.effort };
     void save(scope, agent, change);
   };
   return {

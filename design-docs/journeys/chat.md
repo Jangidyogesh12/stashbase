@@ -45,7 +45,9 @@ Chat, Documents assistance, and runtimes.
 5. Return through history or change modes without losing the conversation or unsent
    work. Rename is deliberate; deleting a chat does not delete project files.
    Switching agents and New Chat reuse the last explicitly selected model and
-   thinking effort for that project's agent when supported.
+   thinking effort for that project's agent when supported. Without a project
+   choice, they inherit that agent's last explicit choice across projects, even
+   after using a different agent in between.
 
 ## First Send
 

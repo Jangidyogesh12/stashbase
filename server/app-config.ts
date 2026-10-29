@@ -90,6 +90,9 @@ export function isEmbedderProvider(value: unknown): value is EmbedderProvider {
 export interface AppConfigFile {
   /** The last explicit Agent choice, inherited by projects without their own. */
   lastSelectedAgent?: 'stashbase' | 'codex' | 'claude' | 'antigravity';
+  /** Per-Agent defaults for projects without an explicit model or effort choice. */
+  lastSelectedModels?: Partial<Record<'stashbase' | 'codex' | 'claude' | 'antigravity', string | null>>;
+  lastSelectedEfforts?: Partial<Record<'stashbase' | 'codex' | 'claude' | 'antigravity', string | null>>;
   agentPreferences?: Array<{
     scope: string;
     agent: 'stashbase' | 'codex' | 'claude' | 'antigravity';

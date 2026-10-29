@@ -153,7 +153,9 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   revealing a lower control must not scroll away the dialog title or close action.
 
 - Settings declare their scope. Project agent preferences follow the project;
-  current account and embedding configuration are shared across windows.
+  missing model and effort choices inherit user-wide defaults separately for
+  each agent, while an explicit project reset to Default takes precedence.
+  Current account and embedding configuration are shared across windows.
 - A failed read is not an empty configuration. Failed writes preserve unrelated
   settings and report failure; disposable caches cannot overwrite unreadable state.
 - Later changes supersede pending validation or authentication. Stale completion

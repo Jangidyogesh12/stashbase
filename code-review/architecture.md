@@ -526,7 +526,14 @@ stable status without download, retry, or a new durable demand latch.
   deltas cannot cross session, message, or turn boundaries.
 - Project agent preferences are explicit choices in Node-owned app config, keyed
   by registered project scope. Readiness and history restore never write them.
-  Model and thinking effort are stored separately per agent in that project. Composer choices
+  Model and thinking effort are stored separately per agent in that project.
+  Explicit changes atomically update the project and user-wide `lastSelectedModels`
+  / `lastSelectedEfforts` maps. The preferences response supplies `defaultModels`
+  and `defaultEfforts`, using existing remembered project choices where an agent
+  has no user-wide value. Renderer seeding overlays project choices on those maps;
+  explicit null resets override inherited values. Switching agents, restoring
+  history, and persona changes do not replace another agent's defaults. Removing
+  a project retains the user-wide choices. Composer choices
   update the window cache immediately and persist in order; new/blank chats seed
   from that cache, while history clears the new-chat model before resuming and
   restores its native effort. Cached catalogs only populate the picker; they do

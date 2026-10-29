@@ -45,13 +45,16 @@ describe('project Agent preferences', () => {
   });
   it('persists effort per project and Agent without adopting history or catalog defaults', async () => {
     const entries = new Map<string, ProjectAgentPreference>();
+    let defaultEfforts: ProjectAgentPreference['efforts'];
     const preferences: AgentPreferencesPort = {
       load: vi.fn<AgentPreferencesPort['load']>(async () => ({
         defaultAgent: 'stashbase',
+        defaultEfforts,
         projects: [...entries.values()],
       })),
       save: vi.fn(async (project, agent, _signal, change = {}) => {
         const { effort } = change;
+        if (effort !== undefined) defaultEfforts = { ...defaultEfforts, [agent]: effort };
         const previous = entries.get(project.path);
         entries.set(project.path, {
           ...previous,
@@ -87,7 +90,7 @@ describe('project Agent preferences', () => {
     expect(first.activeSession().store.getState().effort).toBe('high');
     first.setWindowFolder('/other');
     await first.chooseAgent('codex');
-    expect(first.activeSession().store.getState().effort).toBeNull();
+    expect(first.activeSession().store.getState().effort).toBe('high');
     first.dispose();
 
     const reopened = workspace(preferences);

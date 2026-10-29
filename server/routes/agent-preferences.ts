@@ -7,9 +7,14 @@ import { sendError } from '../http.ts';
 
 function preferences(config: AppConfigFile) {
   const projects = config.agentPreferences ?? [];
+  // Existing project choices supply defaults until that Agent has a user-wide choice.
+  const defaultModels = Object.assign({}, ...projects.map(entry => entry.models), config.lastSelectedModels);
+  const defaultEfforts = Object.assign({}, ...projects.map(entry => entry.efforts), config.lastSelectedEfforts);
   return agentPreferencesSchema.parse({
     // With no user-wide choice yet, inherit an already remembered project choice.
     defaultAgent: config.lastSelectedAgent ?? projects.at(-1)?.agent ?? 'stashbase',
+    defaultModels,
+    defaultEfforts,
     projects,
   });
 }
@@ -48,6 +53,8 @@ export function mount(app: express.Express): void {
       };
       config.agentPreferences = [...existing.filter(entry => !filesystemPath.equal(entry.scope, scope)), updated];
       config.lastSelectedAgent = selectingAgent ? agent : snapshot.defaultAgent;
+      config.lastSelectedModels = { ...snapshot.defaultModels, ...(model === undefined ? {} : { [agent]: model }) };
+      config.lastSelectedEfforts = { ...snapshot.defaultEfforts, ...(effort === undefined ? {} : { [agent]: effort }) };
       writeAppConfigStrict(config);
       res.json(updated);
     } catch (error) { sendError(res, error); }

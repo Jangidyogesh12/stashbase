@@ -148,6 +148,10 @@ permissions, with current model and tool choices checked before use.
 - Model, effort, skills, and permission options follow the selected runtime.
   Remember explicitly chosen models and thinking effort per project and agent
   when switching agents and starting new chats, including after restart.
+  A project without its own model or effort choice inherits the user's last
+  explicit choice for that agent across projects. Using another agent does not
+  replace these defaults. An existing project's explicit choices, including a
+  reset to the native default, take precedence; personas remain project-scoped.
   A remembered model list cannot erase a saved choice. Codex retains an explicit
   model and thinking effort through reconnects and catalog changes; a refused
   choice fails visibly instead of retrying the message on a different model.
@@ -155,8 +159,9 @@ permissions, with current model and tool choices checked before use.
   without overwriting the preference. Other open chats keep their choices.
   Restoring history keeps that conversation's native choices and never changes
   the preferences, including the native thinking effort rather than the model
-  catalog's suggested default. Explicitly returning a choice to Default clears
-  that preference and applies the model's default effort to the next turn.
+  catalog's suggested default. Explicitly returning a choice to Default remembers
+  that reset for the project and as that agent's cross-project default, and applies
+  the model's default effort to the next turn.
   Without an explicit model choice, a chat runs on the model the runtime's own
   settings name; StashBase never resets a runtime to a built-in default the user
   did not choose. A model named by an alias shows the release that alias
