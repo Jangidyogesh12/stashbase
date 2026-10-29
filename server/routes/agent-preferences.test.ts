@@ -26,13 +26,17 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       await new Promise(resolve => server.once('listening', resolve));
       const url = 'http://127.0.0.1:' + server.address().port + '/api/agent-preferences';
       const save = (scope, agent, effort) => fetch(url, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({scope,agent,...(effort === undefined ? {} : {effort})}) });
-      assert.deepEqual(await (await fetch(url)).json(), []);
+      assert.deepEqual(await (await fetch(url)).json(), {defaultAgent:'stashbase',projects:[]});
+      config.writeAppConfigStrict({...config.readAppConfigStrict(), agentPreferences:[{scope:filesystemPath.absolute(project),agent:'codex'}]});
+      assert.equal((await (await fetch(url)).json()).defaultAgent, 'codex');
+      assert.equal(config.readAppConfigStrict().lastSelectedAgent, undefined);
       assert.equal((await save(project, 'codex')).status, 200);
       assert.equal((await save(nested, 'claude')).status, 200);
       assert.equal((await save('/unregistered', 'codex')).status, 404);
       assert.equal((await save(project, 'other')).status, 400);
-      assert.deepEqual(await (await fetch(url)).json(), [{scope:filesystemPath.absolute(project),agent:'codex'}, {scope:filesystemPath.absolute(nested),agent:'claude'}]);
+      assert.deepEqual(await (await fetch(url)).json(), {defaultAgent:'claude',projects:[{scope:filesystemPath.absolute(project),agent:'codex'}, {scope:filesystemPath.absolute(nested),agent:'claude'}]});
       assert.equal((await save(project, 'codex', 'high')).status, 200);
+      assert.equal((await (await fetch(url)).json()).defaultAgent, 'claude');
       assert.equal((await save(project, 'claude')).status, 200);
       assert.equal((await save(project, 'claude', 'medium')).status, 200);
       assert.equal((await save(project, 'codex', 'low')).status, 200);
@@ -43,23 +47,23 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       assert.equal((await save(project, 'codex', '')).status, 400);
       assert.equal((await save(project, 'codex', 2)).status, 400);
       assert.equal((await save('/unregistered', 'codex', 'high')).status, 404);
-      let saved = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      let saved = (await (await fetch(url)).json()).projects.find(entry => entry.scope === filesystemPath.absolute(project));
       assert.deepEqual(saved.efforts, {codex:null,claude:'medium'});
       // Every Agent's level survives the next read and write, Antigravity's included.
       assert.equal((await save(project, 'antigravity', 'high')).status, 200);
       assert.equal((await save(project, 'claude', 'medium')).status, 200);
-      saved = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      saved = (await (await fetch(url)).json()).projects.find(entry => entry.scope === filesystemPath.absolute(project));
       assert.deepEqual(saved.efforts, {codex:null,claude:'medium',antigravity:'high'});
       assert.equal(saved.agent, 'claude');
       // A persona chosen in an older Chat becomes the project's choice for new
       // Chats without changing its Agent; null starts them with none.
       const choose = (scope, agent, persona) => fetch(url, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({scope,agent,persona}) });
       assert.equal((await choose(project, 'codex', 'journalist')).status, 200);
-      let chosen = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      let chosen = (await (await fetch(url)).json()).projects.find(entry => entry.scope === filesystemPath.absolute(project));
       assert.equal(chosen.persona, 'journalist');
       assert.equal(chosen.agent, 'claude');
       assert.equal((await choose(project, 'claude', null)).status, 200);
-      chosen = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      chosen = (await (await fetch(url)).json()).projects.find(entry => entry.scope === filesystemPath.absolute(project));
       assert.equal(chosen.persona, null);
       assert.equal((await choose(project, 'claude', '../escape')).status, 400);
       const chooseModel = (scope, agent, model) => fetch(url, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({scope,agent,model}) });
@@ -68,7 +72,7 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       assert.equal((await chooseModel(project, 'antigravity', 'gemini')).status, 200);
       assert.equal((await save(project, 'codex', 'high')).status, 200);
       assert.equal((await choose(project, 'codex', 'journalist')).status, 200);
-      chosen = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      chosen = (await (await fetch(url)).json()).projects.find(entry => entry.scope === filesystemPath.absolute(project));
       assert.deepEqual(chosen.models, { codex: 'writer', claude: 'opus', antigravity: 'gemini' });
       assert.deepEqual(chosen.efforts, { codex: 'high', claude: 'medium', antigravity: 'high' });
       assert.equal(chosen.agent, 'claude');
@@ -80,9 +84,16 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       }
       assert.equal((await chooseModel('/unregistered', 'codex', 'writer')).status, 404);
       assert.equal(config.readAppConfigStrict().workspace.showHiddenFiles, true);
+      assert.equal((await (await fetch(url)).json()).defaultAgent, 'claude');
+      assert.equal((await save(project, 'stashbase')).status, 200);
+      assert.equal(config.readAppConfigStrict().lastSelectedAgent, 'stashbase');
+      // Editing a different project's model must not replace the explicit Default choice.
+      assert.equal((await chooseModel(nested, 'claude', 'opus')).status, 200);
+      assert.equal((await (await fetch(url)).json()).defaultAgent, 'stashbase');
       const { removeRecentAsync } = await import('./server/folder.ts');
       await removeRecentAsync(project);
-      assert.deepEqual(config.readAppConfigStrict().agentPreferences, [{scope:filesystemPath.absolute(nested),agent:'claude'}]);
+      assert.deepEqual(config.readAppConfigStrict().agentPreferences, [{scope:filesystemPath.absolute(nested),agent:'claude',models:{claude:'opus'}}]);
+      assert.equal((await (await fetch(url)).json()).defaultAgent, 'stashbase');
       assert.ok(fs.existsSync(nested));
       const file = path.join(os.homedir(), '.stashbase/config.json');
       fs.writeFileSync(file, '{broken');

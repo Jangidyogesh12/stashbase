@@ -4,7 +4,7 @@ import { idleAgentSessionPort } from '@/test/fakes/agent';
 import { agentCatalogPort, CODEX_AGENT } from '@/test/fakes/agent';
 
 import { connectAgent } from './connect-agent';
-import type { AgentPreferencesPort } from './ports';
+import type { AgentPreferencesPort, ProjectAgentPreference } from './ports';
 import { createAgentWorkspaceRuntime } from './workspace-runtime';
 
 const scope = { kind: 'folder', path: '/project' } as const;
@@ -21,7 +21,10 @@ function workspace(preferences: AgentPreferencesPort) {
 describe('project Agent preferences', () => {
   it('keeps the chosen effort and draft while surfacing a failed preference write', async () => {
     const preferences: AgentPreferencesPort = {
-      load: vi.fn(async () => [{ scope: scope.path, agent: 'codex' } as const]),
+      load: vi.fn<AgentPreferencesPort['load']>(async () => ({
+        defaultAgent: 'claude',
+        projects: [{ scope: scope.path, agent: 'codex' }],
+      })),
       save: vi.fn(async () => {
         throw new Error('Read-only');
       }),
@@ -41,9 +44,12 @@ describe('project Agent preferences', () => {
     runtime.dispose();
   });
   it('persists effort per project and Agent without adopting history or catalog defaults', async () => {
-    const entries = new Map<string, Awaited<ReturnType<AgentPreferencesPort['load']>>[number]>();
+    const entries = new Map<string, ProjectAgentPreference>();
     const preferences: AgentPreferencesPort = {
-      load: vi.fn(async () => [...entries.values()]),
+      load: vi.fn<AgentPreferencesPort['load']>(async () => ({
+        defaultAgent: 'stashbase',
+        projects: [...entries.values()],
+      })),
       save: vi.fn(async (project, agent, _signal, change = {}) => {
         const { effort } = change;
         const previous = entries.get(project.path);
@@ -146,12 +152,16 @@ describe('project Agent preferences', () => {
     );
     runtime.dispose();
   });
-  it('remembers an explicit choice across new chats and restarts, isolated from other projects', async () => {
-    const entries: Awaited<ReturnType<AgentPreferencesPort['load']>> = [];
+  it('inherits the latest choice in new projects and preserves existing project choices across restarts', async () => {
+    const entries: ProjectAgentPreference[] = [];
+    let defaultAgent: ProjectAgentPreference['agent'] = 'stashbase';
     const preferences: AgentPreferencesPort = {
-      load: vi.fn(async () => entries),
-      save: vi.fn(async (_scope, agent) => {
-        entries.push({ scope: scope.path, agent });
+      load: vi.fn<AgentPreferencesPort['load']>(async () => ({ defaultAgent, projects: entries })),
+      save: vi.fn(async (selectedScope, agent) => {
+        defaultAgent = agent;
+        const previous = entries.findIndex((entry) => entry.scope === selectedScope.path);
+        if (previous >= 0) entries.splice(previous, 1);
+        entries.push({ scope: selectedScope.path, agent });
       }),
     };
     const first = workspace(preferences);
@@ -161,11 +171,19 @@ describe('project Agent preferences', () => {
     expect(first.activeSession().store.getState().draft).toBe('Unsent work');
     expect(first.newChat().store.getState().agent).toBe('codex');
     first.setWindowFolder('/other');
-    expect(first.activeSession().store.getState().agent).toBe('stashbase');
+    expect(first.activeSession().store.getState().agent).toBe('codex');
+    await first.chooseAgent('claude');
+    first.setWindowFolder('/third');
+    expect(first.activeSession().store.getState().agent).toBe('claude');
     first.dispose();
     const reopened = workspace(preferences);
     await reopened.loadPreferences();
     expect(reopened.activeSession().store.getState().agent).toBe('codex');
+    reopened.setWindowFolder('/new-after-restart');
+    expect(reopened.activeSession().store.getState().agent).toBe('claude');
+    await reopened.chooseAgent('stashbase');
+    reopened.setWindowFolder('/explicit-default');
+    expect(reopened.activeSession().store.getState().agent).toBe('stashbase');
     reopened.dispose();
   });
   it('exposes preference failure without overwriting a saved choice or losing work', async () => {
@@ -173,7 +191,10 @@ describe('project Agent preferences', () => {
       load: vi
         .fn()
         .mockRejectedValueOnce(new Error('Offline'))
-        .mockResolvedValue([{ scope: scope.path, agent: 'claude' }]),
+        .mockResolvedValue({
+          defaultAgent: 'claude',
+          projects: [{ scope: scope.path, agent: 'claude' }],
+        }),
       save: vi.fn(async () => {
         throw new Error('Read-only');
       }),
@@ -194,9 +215,12 @@ describe('project Agent preferences', () => {
     runtime.dispose();
   });
   it("starts each new Chat with the project's last persona, and keeps a started Chat's own", async () => {
-    const entries = new Map<string, Awaited<ReturnType<AgentPreferencesPort['load']>>[number]>();
+    const entries = new Map<string, ProjectAgentPreference>();
     const preferences: AgentPreferencesPort = {
-      load: vi.fn(async () => [...entries.values()]),
+      load: vi.fn<AgentPreferencesPort['load']>(async () => ({
+        defaultAgent: 'stashbase',
+        projects: [...entries.values()],
+      })),
       save: vi.fn(async (project, agent, _signal, change = {}) => {
         const previous = entries.get(project.path);
         entries.set(project.path, {

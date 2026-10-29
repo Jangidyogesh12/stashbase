@@ -30,10 +30,10 @@ type Command = ReturnType<typeof agentSessionPort>['sent'][number];
 
 function onboarding(provider: Provider) {
   const dependencies = appDependencies();
-  const folder = '/projects/First essay';
+  let folder = '/projects/First essay';
   let snapshot = projectRegistrySnapshot({ activeFolder: null, projects: [] });
   let receive: Parameters<Lifecycle['onEnterFolder']>[0] | undefined;
-  let preferences: Preferences = [];
+  let preferences: Preferences = { defaultAgent: 'stashbase', projects: [] };
   let signedIn = false;
   let signingIn = false;
   let installed = false;
@@ -95,7 +95,7 @@ function onboarding(provider: Provider) {
   dependencies.agent.preferences = {
     load: async () => preferences,
     save: async (scope, agent) => {
-      preferences = [{ scope: scope.path, agent }];
+      preferences = { defaultAgent: agent, projects: [{ scope: scope.path, agent }] };
     },
   };
   dependencies.settings.accountApi.load = vi.fn(async () =>
@@ -156,6 +156,16 @@ function onboarding(provider: Provider) {
   return {
     dependencies,
     prompts,
+    enterNewProject: () => {
+      folder = '/projects/Next essay';
+      snapshot = projectRegistrySnapshot({
+        activeFolder: { path: folder, name: 'Next essay' },
+        projects: [
+          ...snapshot.projects,
+          { path: folder, favorite: false, openedAt: '2026-10-29T00:00:00.000Z' },
+        ],
+      });
+    },
     signIn: () => {
       signedIn = true;
     },
@@ -287,7 +297,7 @@ it.each(providers)(
     const signInCalls = vi.mocked(fixture.dependencies.settings.accountApi.startSignIn).mock.calls
       .length;
     firstWindow.unmount();
-    fixture.mount();
+    const returningWindow = fixture.mount();
     await screen.findByRole('button', { name: `Provider: ${provider.label}` });
     typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Continue my essay');
     await user.click(screen.getByRole('button', { name: 'Send' }));
@@ -295,6 +305,16 @@ it.each(providers)(
     expect(fixture.dependencies.agent.catalog.prepareAgent).toHaveBeenCalledTimes(preparationCalls);
     expect(fixture.dependencies.settings.accountApi.startSignIn).toHaveBeenCalledTimes(signInCalls);
     expect(fixture.prompts.filter((text) => text === 'Continue my essay')).toHaveLength(1);
+
+    returningWindow.unmount();
+    fixture.enterNewProject();
+    fixture.mount();
+    await screen.findByRole('button', { name: `Provider: ${provider.label}` });
+    typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Start my next essay');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await screen.findByText(`${provider.label} reply: Start my next essay`);
+    expect(fixture.dependencies.agent.catalog.prepareAgent).toHaveBeenCalledTimes(preparationCalls);
+    expect(fixture.dependencies.settings.accountApi.startSignIn).toHaveBeenCalledTimes(signInCalls);
   },
   20_000,
 );

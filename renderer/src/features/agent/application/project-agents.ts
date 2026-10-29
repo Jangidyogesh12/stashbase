@@ -20,6 +20,8 @@ import type { AgentSessionRuntime } from './session-runtime';
 export function createProjectAgents(port: AgentPreferencesPort | undefined, signal: AbortSignal) {
   const store = createStore(() => ({ loading: Boolean(port), failure: null as string | null }));
   const choices = new Map<string, ProjectAgentPreference>();
+  let defaultAgent: AgentId = DEFAULT_AGENT_ID;
+  const preferred = (scope: AgentScope) => choices.get(agentScopeKey(scope))?.agent ?? defaultAgent;
   let loading: Promise<boolean> | null = null;
   let saving = false;
   let pendingSave = Promise.resolve(true);
@@ -63,10 +65,11 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
     store.setState({ loading: true, failure: null });
     loading = pendingSave
       .then(() => port.load(signal))
-      .then((entries) => {
+      .then(({ defaultAgent: inherited, projects }) => {
         signal.throwIfAborted();
+        defaultAgent = inherited;
         choices.clear();
-        for (const entry of entries) choices.set(entry.scope, entry);
+        for (const entry of projects) choices.set(entry.scope, entry);
         return true;
       })
       .catch(() => {
@@ -113,12 +116,12 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
     apply(session: AgentSessionRuntime) {
       const state = session.store.getState();
       if (!agentSessionIsUnstarted(state)) return;
-      const agent = choices.get(agentScopeKey(state.scope))?.agent ?? DEFAULT_AGENT_ID;
+      const agent = preferred(state.scope);
       if (state.agent !== agent) session.changeAgent(agent);
       seedRuntimeChoices(session);
       seedPersona(session);
     },
-    get: (scope: AgentScope) => choices.get(agentScopeKey(scope))?.agent ?? DEFAULT_AGENT_ID,
+    get: preferred,
     rememberEffort(scope: AgentScope, agent: AgentId, effort: string | null) {
       remember(scope, agent, { effort });
     },
@@ -147,6 +150,7 @@ export function createProjectAgents(port: AgentPreferencesPort | undefined, sign
         if (!(await save(scope, agent))) return false;
         const key = agentScopeKey(scope);
         choices.set(key, { ...choices.get(key), scope: key, agent });
+        defaultAgent = agent;
         return true;
       } finally {
         saving = false;

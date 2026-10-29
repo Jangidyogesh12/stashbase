@@ -30,4 +30,7 @@ export const projectAgentPreferenceSchema = z.object({
   }).optional(),
   persona: agentPersonaIdSchema.nullable().optional(),
 });
-export const agentPreferencesSchema = z.array(projectAgentPreferenceSchema);
+export const agentPreferencesSchema = z.object({
+  defaultAgent: agentIdSchema,
+  projects: z.array(projectAgentPreferenceSchema),
+});

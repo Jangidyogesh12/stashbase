@@ -55,8 +55,10 @@ export function useAgentWorkspaceRuntime({
   );
 
   useEffect(() => {
-    void runtime.loadPreferences();
-  }, [runtime]);
+    // Read on entry so a Welcome window inherits choices made elsewhere while
+    // it was open, without reusing a preference request started on Welcome.
+    if (folderPath) void runtime.loadPreferences();
+  }, [folderPath, runtime]);
   useLayoutEffect(() => runtime.setWindowFolder(folderPath), [folderPath, runtime]);
   useEffect(
     () => subscribeFolderRemoved((path) => runtime.retireFolder(path)),

@@ -76,14 +76,17 @@ describe('project model preferences', () => {
 
   it('loads saved models, keeps native history independent, and does not save catalog fallbacks', async () => {
     const preferences: AgentPreferencesPort = {
-      load: vi.fn<AgentPreferencesPort['load']>(async () => [
-        {
-          scope: scope.path,
-          agent: 'codex',
-          models: { codex: 'writer' },
-          efforts: { codex: 'high' },
-        },
-      ]),
+      load: vi.fn<AgentPreferencesPort['load']>(async () => ({
+        defaultAgent: 'stashbase',
+        projects: [
+          {
+            scope: scope.path,
+            agent: 'codex',
+            models: { codex: 'writer' },
+            efforts: { codex: 'high' },
+          },
+        ],
+      })),
       save: vi.fn(async () => undefined),
     };
     const { runtime, port, listeners } = workspace(preferences);
@@ -146,9 +149,10 @@ describe('project model preferences', () => {
 
   it('saves explicit changes in order, clears the saved model, and ignores refused choices', async () => {
     const preferences: AgentPreferencesPort = {
-      load: vi.fn<AgentPreferencesPort['load']>(async () => [
-        { scope: scope.path, agent: 'codex' },
-      ]),
+      load: vi.fn<AgentPreferencesPort['load']>(async () => ({
+        defaultAgent: 'stashbase',
+        projects: [{ scope: scope.path, agent: 'codex' }],
+      })),
       save: vi.fn(async () => undefined),
     };
     const { runtime, listeners } = workspace(preferences);
@@ -184,7 +188,10 @@ describe('project model preferences', () => {
 
   it('retains the selected model and draft when saving fails', async () => {
     const preferences: AgentPreferencesPort = {
-      load: vi.fn(async () => []),
+      load: vi.fn<AgentPreferencesPort['load']>(async () => ({
+        defaultAgent: 'stashbase',
+        projects: [],
+      })),
       save: vi.fn(async () => {
         throw new Error('Read-only');
       }),

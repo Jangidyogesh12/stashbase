@@ -88,6 +88,8 @@ export function isEmbedderProvider(value: unknown): value is EmbedderProvider {
 }
 
 export interface AppConfigFile {
+  /** The last explicit Agent choice, inherited by projects without their own. */
+  lastSelectedAgent?: 'stashbase' | 'codex' | 'claude' | 'antigravity';
   agentPreferences?: Array<{
     scope: string;
     agent: 'stashbase' | 'codex' | 'claude' | 'antigravity';

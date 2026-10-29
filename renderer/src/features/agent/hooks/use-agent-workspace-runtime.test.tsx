@@ -1,6 +1,7 @@
-import { cleanup, renderHook } from '@testing-library/react';
+import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import type { AgentPreferencesPort } from '@/features/agent/application/ports';
 import { agentContextPort, idleAgentSessionPort } from '@/test/fakes/agent';
 
 import { useAgentWorkspaceRuntime } from './use-agent-workspace-runtime';
@@ -30,6 +31,34 @@ function mount(
 }
 
 describe('useAgentWorkspaceRuntime', () => {
+  it('refreshes the inherited Agent when an existing Welcome window enters a project', async () => {
+    let defaultAgent: 'stashbase' | 'claude' = 'stashbase';
+    const preferences: AgentPreferencesPort = {
+      load: vi.fn(async () => ({ defaultAgent, projects: [] })),
+      save: vi.fn(async () => undefined),
+    };
+    let nextId = 0;
+    const hook = renderHook(
+      ({ folder }: { folder: string | null }) =>
+        useAgentWorkspaceRuntime({
+          context: agentContextPort(),
+          createId: () => `chat-${++nextId}`,
+          folderPath: folder,
+          preferences,
+          session: idleAgentSessionPort(),
+          subscribeFolderRemoved: noSubscription,
+        }),
+      { initialProps: { folder: null as string | null } },
+    );
+    expect(preferences.load).not.toHaveBeenCalled();
+    defaultAgent = 'claude'; // Chosen in another window while Welcome is open.
+    hook.rerender({ folder: '/project/New' });
+    await waitFor(() =>
+      expect(hook.result.current.activeSession().store.getState().agent).toBe('claude'),
+    );
+    expect(preferences.save).not.toHaveBeenCalled();
+  });
+
   it('keeps one runtime for the window and republishes the folder it moves to', () => {
     const hook = mount('/project/Research');
     const runtime = hook.result.current;
