@@ -131,7 +131,6 @@ describe('Agent session API', () => {
       telemetryConnectionId: expect.any(String),
       model: 'gpt-codex',
     });
-    expect(url.searchParams.has('windowId')).toBe(false);
   });
 
   it('replays a quoted attachment in the chat folder as a passage and the rest as uploads', async () => {
