@@ -9,12 +9,18 @@ import {
   type DocumentUsageEvent,
   type DocumentTabsRuntime,
 } from '@/features/documents/public';
-import type { WorkspaceRuntime, WorkspaceSessionController } from '@/features/workspace/public';
+import {
+  fileIsRestricted,
+  type WorkspaceListing,
+  type WorkspaceRuntime,
+  type WorkspaceSessionController,
+} from '@/features/workspace/public';
 import { useScopedRuntime } from '@/shared/runtime/use-scoped-runtime';
 
 export function useDocumentWorkspace(
   workspace: WorkspaceRuntime | null,
   session: Pick<WorkspaceSessionController, 'runtime' | 'status'>,
+  listing: WorkspaceListing | undefined,
   sourceApi: DocumentAdapters['source'],
   createId: () => string,
   previewAdapters?: Pick<DocumentAdapters, 'asset' | 'genericPreview' | 'table'>,
@@ -66,6 +72,27 @@ export function useDocumentWorkspace(
       create,
       (tabs) => tabs.dispose(),
     ) ?? null;
+
+  const initialized = useRef<DocumentTabsRuntime | null>(null);
+  useEffect(() => {
+    if (!runtime || initialized.current === runtime) return;
+    const state = runtime.store.getState();
+    // Restored work and navigation begun while the listing loads take priority.
+    if (state.tabs.length > 0 || state.openRequest !== null) {
+      initialized.current = runtime;
+      return;
+    }
+    if (!listing) return;
+    // Decide once per project entry, including when no landing page exists.
+    initialized.current = runtime;
+    const index = listing.files.find((file) => file.path === 'index.html');
+    if (index && !fileIsRestricted(index)) {
+      void runtime.open(
+        { folderPath: runtime.scope.folderPath, path: index.path },
+        { preview: true },
+      );
+    }
+  }, [listing, runtime]);
 
   useEffect(() => {
     if (!workspace || !runtime) return;

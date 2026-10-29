@@ -91,9 +91,11 @@ function WorkspaceWindow() {
   );
   const project = useProject(workspaceDeps.adapters.project).data ?? null;
   const workspace = useWorkspace(workspaceDeps.adapters.project, session);
+  const listing = useFiles(workspace, workspaceDeps.adapters.files).data;
   const documents = useDocumentWorkspace(
     workspace,
     session,
+    listing,
     docs.adapters.source,
     docs.createId,
     docs.adapters,
@@ -110,7 +112,6 @@ function WorkspaceWindow() {
   const activeFolder = project?.activeFolder ?? null;
   const selectedPath = activeFolder?.path ?? null;
   const folderPath = workspace?.scope.folder.path ?? null;
-  const listing = useFiles(workspace, workspaceDeps.adapters.files).data;
   const status = useFolderStatus(dependencies.preparation.statusApi, folderPath).data ?? null;
   // Search by meaning exists only once the reader's own key is on. The
   // window reads that once, and every folder's readiness is projected through

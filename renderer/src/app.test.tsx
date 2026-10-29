@@ -198,13 +198,14 @@ describe('workspace shell', () => {
 
   it('opens an eligible file-tree source into the document workspace', async () => {
     await act(async () => root.unmount());
-    await mount(folderDependencies(['plan.md'], () => 'document-tab'));
+    await mount(folderDependencies(['plan.md', 'site/index.html'], () => 'document-tab'));
 
     const view = within(container);
     await waitFor(() => {
       expect(view.getByRole('treeitem', { name: 'plan.md' })).not.toBeNull();
       expect(document.body.dataset.bootSettled).toBe('1');
     });
+    expect(view.queryByLabelText('Document workspace')).toBeNull();
     await act(async () => view.getByRole('treeitem', { name: 'plan.md' }).click());
 
     const workspace = view.getByLabelText('Document workspace');
@@ -288,7 +289,7 @@ describe('workspace shell', () => {
   it('keeps the tree on the document in front of the reader', async () => {
     await act(async () => root.unmount());
     let nextId = 0;
-    await mount(folderDependencies(['plan.md', 'notes.md'], () => `tab-${++nextId}`));
+    await mount(folderDependencies(['index.html', 'plan.md', 'notes.md'], () => `tab-${++nextId}`));
 
     const view = within(container);
     await waitFor(() => expect(view.getByRole('treeitem', { name: 'plan.md' })).not.toBeNull());
@@ -298,6 +299,12 @@ describe('workspace shell', () => {
         .getAllByRole('treeitem')
         .filter((item) => item.getAttribute('aria-selected') === 'true')
         .map((item) => item.getAttribute('data-path'));
+
+    const landingTab = await view.findByRole('tab', { name: 'index.html, preview' });
+    expect(view.getByLabelText('Document workspace')).not.toBeNull();
+    expect(selectedRows()).toEqual(['index.html']);
+    await act(async () => landingTab.querySelector<HTMLElement>('[data-tab-trailing]')?.click());
+    expect(selectedRows()).toEqual([]);
 
     await act(async () => row('plan.md').click());
     // A double click on the preview asks for the tab to stay, so the next
