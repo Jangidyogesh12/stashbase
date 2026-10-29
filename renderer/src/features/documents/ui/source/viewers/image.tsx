@@ -9,14 +9,12 @@ const ImageDocument = lazy(async () => {
 });
 
 export default function ImageViewer({
-  active,
   assetApi,
   name,
-  runtime,
-  status,
+  ...surface
 }: DocumentViewerProps<'assetApi'>) {
   return (
-    <AssetSurface active={active} api={assetApi} name={name} runtime={runtime} status={status}>
+    <AssetSurface {...surface} api={assetApi} name={name}>
       {({ asset }) => <ImageDocument key={asset.version} name={name} resource={asset} />}
     </AssetSurface>
   );
