@@ -11,8 +11,6 @@ import type { DocumentNavigationRuntime } from '@/features/documents/application
 import type { DocumentAsset } from '@/features/documents/application/ports';
 import { resolveDocumentLink } from '@/features/documents/domain/link-target';
 import { LinkFailureNotice } from '@/features/documents/ui/link-failure-notice';
-import { useShape } from '@/lib/shape-context';
-import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { createHtmlFrameFindController } from './find-controller';
@@ -82,7 +80,6 @@ export function SandboxedHtmlFrame({
   useHtmlDataBridge(frameRef, data, url, active);
   const loadedRef = useRef(false);
   const ownerRef = useRef(Symbol(tabId));
-  const shape = useShape();
   const [linkFailed, setLinkFailed] = useState(false);
   const pendingAnchor = useStore(navigation.store, (state) =>
     state.pendingAnchor?.tabId === tabId ? state.pendingAnchor.id : null,
@@ -200,24 +197,17 @@ export function SandboxedHtmlFrame({
   };
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden bg-surface-2 p-2">
+    <div className="relative min-h-0 flex-1 overflow-hidden">
       <LinkFailureNotice failed={linkFailed} onDismiss={() => setLinkFailed(false)} />
-      <div
-        className={cn(
-          'size-full overflow-hidden border border-border bg-surface-3 shadow-surface-2',
-          shape.container,
-        )}
-      >
-        <iframe
-          className="block size-full border-0 bg-white"
-          onLoad={loaded}
-          ref={frameRef}
-          referrerPolicy="no-referrer"
-          sandbox="allow-scripts"
-          src={url}
-          title={`${name} HTML preview`}
-        />
-      </div>
+      <iframe
+        className="block size-full border-0 bg-white"
+        onLoad={loaded}
+        ref={frameRef}
+        referrerPolicy="no-referrer"
+        sandbox="allow-scripts"
+        src={url}
+        title={`${name} HTML preview`}
+      />
     </div>
   );
 }
