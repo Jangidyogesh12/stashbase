@@ -33,9 +33,12 @@ import {
 import {
   approvalTitle,
   codexAccessOptions,
+  codexTurnAccessOptions,
+  commandCanRemember,
   commandApprovalInput,
   fileChangeApprovalInput,
   mcpToolApprovalFromElicitation,
+  mcpApprovalScopes,
   notificationMessage,
   protocolNoticeFromParams,
   requestedPermissions,
@@ -93,6 +96,8 @@ export class CodexSession implements AttributedAgentSession {
   /** The library persona this Chat runs under, read when its thread starts. */
   persona: string | undefined;
   private threadId: string | null = null;
+  private threadAccessMode: AgentAccessMode | undefined;
+  private workspaceSandboxPolicy: JsonObject | undefined;
   private resumeThreadId: string | null = null;
   private activeTurnId: string | null = null;
   // An app-server can report a terminal notification in the same stdout
@@ -291,7 +296,7 @@ export class CodexSession implements AttributedAgentSession {
         this.setModelForNextTurn(msg.model);
         break;
       case 'set-mode':
-        this.accessMode = isAgentAccessMode(msg.mode) ? msg.mode : this.accessMode;
+        if (!this.busy && isAgentAccessMode(msg.mode)) this.accessMode = msg.mode;
         break;
     }
   }
@@ -381,14 +386,17 @@ export class CodexSession implements AttributedAgentSession {
       // How Codex records this id shows how a follow-up can be confirmed.
       const turnMessageId = randomUUID();
       this.turnMessageId = turnMessageId;
+      const accessMode = this.accessMode;
       const result = await this.request('turn/start', {
         threadId,
         clientUserMessageId: turnMessageId,
         cwd: this.activeCwd(),
+        ...codexTurnAccessOptions(accessMode, this.cwd, this.threadAccessMode, this.workspaceSandboxPolicy),
         ...codexEffortOption(this.effort),
         ...(model ? { model } : {}),
         input: [{ type: 'text', text: skill ? `$${skill.name}${prompt ? ` ${prompt}` : ''}` : prompt, text_elements: [] }, ...(skill ? [{ type: 'skill', name: skill.name, path: skill.path }] : [])],
       }) as JsonObject;
+      this.threadAccessMode = accessMode;
       if (model && this.selectedModel === model) {
         this.activeModel = model;
         this.send({ t: 'models', models: this.models, activeModel: model });
@@ -579,6 +587,9 @@ export class CodexSession implements AttributedAgentSession {
     if (!id) throw new Error('Codex app-server did not return a thread id.');
     const shouldSendSessionId = this.threadId !== id;
     this.threadId = id;
+    this.threadAccessMode = this.accessMode;
+    const sandbox = result.sandbox as JsonObject | undefined;
+    this.workspaceSandboxPolicy = sandbox?.type === 'workspaceWrite' ? sandbox : undefined;
     // The model catalog's suggested default is not the effort this native
     // thread runs with. Publish the resumed/configured value before ready.
     this.effort ??= stringValue(result.reasoningEffort) || undefined;
@@ -673,6 +684,7 @@ export class CodexSession implements AttributedAgentSession {
           name: 'Bash',
           title: approvalTitle(params.reason, params.command, 'Allow Codex to run this command?'),
           input: commandApprovalInput(params),
+          approvalScopes: commandCanRemember(params) ? ['session'] : [],
         });
         break;
       }
@@ -696,6 +708,7 @@ export class CodexSession implements AttributedAgentSession {
           name: 'File change',
           title: approvalTitle(params.reason, params.grantRoot, 'Allow Codex to change files?'),
           input: fileChangeApprovalInput(params),
+          approvalScopes: ['session'],
         });
         break;
       }
@@ -708,6 +721,7 @@ export class CodexSession implements AttributedAgentSession {
           id: approvalId,
           toolUseId: itemId,
           name: 'Permissions',
+          approvalScopes: ['session'],
           title: approvalTitle(params.reason, params.cwd, 'Allow Codex to use requested permissions?'),
           input: {
             cwd: stringValue(params.cwd),
@@ -733,6 +747,7 @@ export class CodexSession implements AttributedAgentSession {
             name: approval.name,
             title: approval.title,
             input: approval.input,
+            approvalScopes: approval.approvalScopes,
           });
           break;
         }
@@ -770,9 +785,9 @@ export class CodexSession implements AttributedAgentSession {
     if (!pending) return;
     this.pendingApprovals.delete(id);
     const allow = msg.allow === true;
-    const always = msg.always === true;
+    const always = msg.scope === 'session' || msg.always === true;
     if (pending.method === 'item/commandExecution/requestApproval') {
-      this.respond(pending.requestId, { decision: allow ? (always ? 'acceptForSession' : 'accept') : 'decline' });
+      this.respond(pending.requestId, { decision: allow ? (always && commandCanRemember(pending.params ?? {}) ? 'acceptForSession' : 'accept') : 'decline' });
       return;
     }
     if (pending.method === 'item/fileChange/requestApproval') {
@@ -787,11 +802,14 @@ export class CodexSession implements AttributedAgentSession {
       return;
     }
     if (pending.method === 'mcpServer/elicitation/request') {
+      const scope = msg.scope ?? (msg.always === true ? 'session' : undefined);
+      const supported = scope === undefined || mcpApprovalScopes(pending.params ?? {}).some(value => value === scope);
       this.respond(pending.requestId, {
-        action: allow ? 'accept' : 'decline',
-        content: allow ? {} : null,
-        _meta: null,
+        action: allow && supported ? 'accept' : 'decline',
+        content: null,
+        _meta: allow && supported && scope ? { persist: scope } : null,
       });
+      if (allow && !supported) this.send({ t: 'notice', message: 'Codex does not support that approval duration for this request. The action was not allowed.' });
       return;
     }
     this.rejectRequest(pending.requestId, 'Unsupported approval request.');

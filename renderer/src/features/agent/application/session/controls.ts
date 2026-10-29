@@ -66,6 +66,7 @@ export function createSessionControls({
       const sent = transport.send({
         allow,
         always: decision?.always ?? null,
+        ...(decision?.scope ? { scope: decision.scope } : {}),
         answers,
         id: permissionId,
         kind: 'reply-permission',

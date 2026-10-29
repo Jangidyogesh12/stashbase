@@ -7,6 +7,7 @@ import type { AgentAccessMode } from '@/features/agent/domain/access';
 import type { AgentContextItem } from '@/features/agent/domain/context';
 import type { AgentModel, AgentSkill } from '@/features/agent/domain/runtime-catalog';
 import type {
+  AgentApprovalScope,
   AgentTranscriptBlock,
   AgentTurnChangedFile,
   AgentTurnFailureReason,
@@ -221,6 +222,7 @@ type AgentSessionStateEvent =
       name: string;
       title: string | null;
       input: Record<string, unknown>;
+      approvalScopes?: readonly AgentApprovalScope[] | undefined;
     };
 
 /** Events the application layer has to interpret before any state moves: a

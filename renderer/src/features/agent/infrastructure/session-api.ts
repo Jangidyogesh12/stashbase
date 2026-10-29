@@ -128,6 +128,7 @@ function clientEvent(command: AgentSessionCommand): AgentClientEvent {
         id: command.id,
         allow: command.allow,
         ...(command.always === null ? {} : { always: command.always }),
+        ...(command.scope ? { scope: command.scope } : {}),
         ...(command.answers === null ? {} : { answers: command.answers }),
       };
     case 'select-model':
@@ -183,6 +184,7 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
         id: event.id,
         input: event.input,
         kind: 'permission-requested',
+        ...(event.approvalScopes ? { approvalScopes: event.approvalScopes } : {}),
         name: event.name,
         title: event.title,
         toolUseId: event.toolUseId,

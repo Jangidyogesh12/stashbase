@@ -5,6 +5,7 @@ export interface CodexMcpToolApproval {
   name: string;
   title: string;
   input: JsonObject;
+  approvalScopes: Array<'session' | 'always'>;
 }
 export function approvalTitle(reason: unknown, detail: unknown, fallback: string): string {
   const normalizedReason = stringValue(reason);
@@ -64,6 +65,7 @@ export function mcpToolApprovalFromElicitation(
     toolUseId,
     name,
     title: prompt || `Allow Codex to use ${name}?`,
+    approvalScopes: mcpApprovalScopes(params),
     input: {
       server,
       tool,
@@ -71,6 +73,30 @@ export function mcpToolApprovalFromElicitation(
       prompt,
       requestedSchema: params.requestedSchema ?? params.requested_schema ?? null,
     },
+  };
+}
+
+/** Codex advertises supported persistence modes in the request's `_meta.persist`.
+ * The accepted scope goes back in response metadata, not in form content. */
+export function mcpApprovalScopes(params: JsonObject): Array<'session' | 'always'> {
+  const persist = objectValue(params._meta).persist;
+  const offered = Array.isArray(persist) ? persist : [persist];
+  return (['session', 'always'] as const).filter(scope => offered.includes(scope));
+}
+
+export function commandCanRemember(params: JsonObject): boolean {
+  return !Array.isArray(params.availableDecisions) || params.availableDecisions.includes('acceptForSession');
+}
+
+export function codexTurnAccessOptions(mode: string | undefined, cwd: string, previousMode: string | undefined, workspacePolicy?: JsonObject): JsonObject {
+  const { approvalPolicy, approvalsReviewer, sandbox } = codexAccessOptions(mode);
+  return {
+    approvalPolicy,
+    approvalsReviewer,
+    // Reviewer-only changes preserve the runtime's resolved sandbox and grants.
+    ...(sandbox === codexAccessOptions(previousMode).sandbox ? {} : { sandboxPolicy: sandbox === 'read-only'
+      ? { type: 'readOnly' }
+      : workspacePolicy ?? { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: false } }),
   };
 }
 

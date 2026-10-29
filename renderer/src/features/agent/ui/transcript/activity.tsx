@@ -30,6 +30,7 @@ import {
 } from '@/features/agent/domain/file-change';
 import { agentQuestionAnswers, agentQuestions } from '@/features/agent/domain/question';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
+import type { AgentPermissionDecision } from '@/features/agent/domain/session-command';
 import { agentToolKind } from '@/features/agent/domain/tool-kind';
 import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
@@ -289,12 +290,21 @@ export function AgentPermissionCard({
   onReply,
 }: {
   tool: AgentToolBlock;
-  onReply(toolUseId: string, permissionId: string, allow: boolean): boolean;
+  onReply(
+    toolUseId: string,
+    permissionId: string,
+    allow: boolean,
+    decision?: AgentPermissionDecision,
+  ): boolean;
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const permissionId = tool.permissionId;
-  const reply = (allow: boolean) => {
-    if (!permissionId || !onReply(tool.id, permissionId, allow)) return;
+  const reply = (allow: boolean, decision?: AgentPermissionDecision) => {
+    if (!permissionId) return;
+    const accepted = decision
+      ? onReply(tool.id, permissionId, allow, decision)
+      : onReply(tool.id, permissionId, allow);
+    if (!accepted) return;
     requestAnimationFrame(() => headingRef.current?.focus());
   };
   return (
@@ -304,11 +314,26 @@ export function AgentPermissionCard({
       icon={CircleAlert}
     >
       <AgentToolPayload indent={false} tool={tool} />
+      {permissionId && tool.approvalScopes?.includes('always') && (
+        <p className="text-sm text-muted-foreground">
+          Applies to this permission. Individual actions can still require approval.
+        </p>
+      )}
       {permissionId ? (
-        <div className="mt-1 flex justify-end gap-2">
+        <div className="mt-1 flex flex-wrap justify-end gap-2">
           <Button leadingIcon={Ban} onClick={() => reply(false)} size="compact" variant="tertiary">
             Reject
           </Button>
+          {tool.approvalScopes?.map((scope) => (
+            <Button
+              key={scope}
+              onClick={() => reply(true, { scope })}
+              size="compact"
+              variant="secondary"
+            >
+              {scope === 'session' ? 'Allow for this session' : 'Always allow'}
+            </Button>
+          ))}
           <Button leadingIcon={Check} onClick={() => reply(true)} size="compact">
             Allow
           </Button>

@@ -232,18 +232,41 @@ describe('Agent workspace', () => {
         input: { command: 'pnpm test:agent' },
         kind: 'permission-requested',
         name: 'Bash',
+        approvalScopes: ['session'],
         title: null,
         toolUseId: 'tool-1',
       });
     });
     expect(screen.getByRole('heading', { name: 'Run this command?' })).not.toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Allow for this session' }));
     expect(sent.at(-1)).toEqual({
       allow: true,
       always: null,
+      scope: 'session',
       answers: null,
       id: 'permission-1',
       kind: 'reply-permission',
+    });
+
+    act(() =>
+      listeners[0]?.onEvent({
+        kind: 'permission-requested',
+        id: 'permission-2',
+        toolUseId: 'tool-2',
+        name: 'Computer Use',
+        title: 'Allow Computer Use to use "Google Chrome"?',
+        input: { app: 'com.google.Chrome' },
+        approvalScopes: ['session', 'always'],
+      }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Always allow' }));
+    expect(sent.at(-1)).toEqual({
+      kind: 'reply-permission',
+      id: 'permission-2',
+      allow: true,
+      always: null,
+      answers: null,
+      scope: 'always',
     });
 
     expect(

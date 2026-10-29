@@ -68,6 +68,7 @@ function catalogProcess(
     initializeError?: string;
     threadModel?: string;
     threadEffort?: string;
+    threadSandbox?: Record<string, unknown>;
     selectedTurnError?: string;
     interruptError?: string;
     turnIds?: string[];
@@ -76,19 +77,21 @@ function catalogProcess(
     catalogGate?: Promise<void>;
     skillsGate?: Promise<void>;
   } = {},
-): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
+): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }>; responses: Array<{ id: number; result: unknown }> } {
   const proc = new FakeCodexProcess();
   const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
+  const responses: Array<{ id: number; result: unknown }> = [];
   let page = 0;
   let rejected = false;
   let turn = 0;
   proc.stdin.on('data', (chunk: Buffer) => {
     const request = JSON.parse(String(chunk)) as { id: number; method: string; params: Record<string, unknown> };
+    if (!request.method) { responses.push(JSON.parse(String(chunk))); return; }
     requests.push({ method: request.method, params: request.params });
     const catalog = options.pages ?? [models];
     const result = request.method === 'model/list' ? { data: catalog[page] ?? [], ...(page++ < catalog.length - 1 ? { nextCursor: `page-${page}` } : {}) }
       : request.method === 'skills/list' ? { data: [{ cwd: Array.isArray(request.params.cwds) ? request.params.cwds[0] : undefined, skills: options.skills ?? [] }] }
-      : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, model: options.threadModel ?? 'runtime-default' }
+      : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, model: options.threadModel ?? 'runtime-default', sandbox: options.threadSandbox }
       : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model', reasoningEffort: options.threadEffort }
         : request.method === 'turn/start' ? { turn: { id: options.turnIds?.[turn++] ?? 'turn-1' } } : {};
     if (request.method === 'initialize' && options.initializeError) {
@@ -108,7 +111,7 @@ function catalogProcess(
       proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
     }
   });
-  return { proc, requests };
+  return { proc, requests, responses };
 }
 
 async function settle(): Promise<void> {
@@ -805,6 +808,101 @@ test('Codex Auto uses the app-server auto-reviewer wire value', () => {
     approvalsReviewer: 'auto_review',
     sandbox: 'workspace-write',
   });
+});
+
+test('Codex applies permission mode changes to later turns on the same thread', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-mode-'));
+  await runWithWindowId('mode-window', () => openProjectFolder(folder));
+  const workspacePolicy = { type: 'workspaceWrite', writableRoots: [folder], networkAccess: true, excludeSlashTmp: true };
+  const native = catalogProcess([], { turnIds: ['auto-turn', 'ask-turn', 'plan-turn', 'edit-turn'], threadSandbox: workspacePolicy });
+  const ws = new FakeWebSocket();
+  const session = new CodexSession(ws as unknown as WebSocket, 'mode-window', undefined, undefined, 'auto', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  t.after(() => {
+    session.dispose();
+    runWithWindowId('mode-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  session.begin();
+  await settle();
+  for (const [mode, turnId, reviewer, sandbox] of [
+    ['auto', 'auto-turn', 'auto_review', 'workspaceWrite'],
+    ['default', 'ask-turn', 'user', 'workspaceWrite'],
+    ['plan', 'plan-turn', 'user', 'readOnly'],
+    ['acceptEdits', 'edit-turn', 'user', 'workspaceWrite'],
+  ]) {
+    ws.emit('message', JSON.stringify({ t: 'set-mode', mode }));
+    ws.emit('message', JSON.stringify({ t: 'prompt', text: 'Continue the task' }));
+    await settle();
+    const turn = native.requests.filter(request => request.method === 'turn/start').at(-1)!;
+    assert.equal(turn.params.threadId, 'thread-1');
+    assert.equal(turn.params.approvalsReviewer, reviewer);
+    assert.equal(turn.params.approvalPolicy, 'on-request');
+    if (mode === 'auto' || mode === 'default') assert.equal(turn.params.sandboxPolicy, undefined);
+    else if (sandbox === 'workspaceWrite') assert.deepEqual(turn.params.sandboxPolicy, workspacePolicy);
+    else assert.deepEqual(turn.params.sandboxPolicy, { type: 'readOnly' });
+    emitCodexTurnCompleted(native.proc, turnId!, 'completed');
+    await settle();
+  }
+  assert.equal(native.requests.filter(request => request.method === 'thread/start').length, 1);
+});
+
+test('Codex carries native session grants and MCP approval choices through the permission reply', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-approval-'));
+  await runWithWindowId('approval-window', () => openProjectFolder(folder));
+  const native = catalogProcess();
+  const ws = new FakeWebSocket();
+  const session = new CodexSession(ws as unknown as WebSocket, 'approval-window', undefined, undefined, 'default', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  t.after(() => {
+    session.dispose();
+    runWithWindowId('approval-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'Inspect the project' }));
+  await settle();
+  let sequence = 100;
+  const ask = async (method: string, params: Record<string, unknown>, reply: Record<string, unknown>) => {
+    const id = ++sequence;
+    native.proc.stdout.write(`${JSON.stringify({ id, method, params: { threadId: 'thread-1', turnId: 'turn-1', itemId: `item-${id}`, ...params } })}\n`);
+    await settle();
+    const permission = ws.sent.map(value => JSON.parse(value)).filter(event => event.t === 'permission').at(-1);
+    assert.equal(permission.id, `codex-${id}`);
+    ws.emit('message', JSON.stringify({ t: 'permission-reply', id: permission.id, ...reply }));
+    await settle();
+    return { permission, result: native.responses.find(response => response.id === id)?.result };
+  };
+  for (const method of ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval']) {
+    const { permission, result } = await ask(method, {}, { allow: true, scope: 'session' });
+    assert.deepEqual(permission.approvalScopes, ['session']);
+    assert.deepEqual(result, { decision: 'acceptForSession' });
+  }
+  const limited = await ask('item/commandExecution/requestApproval', { availableDecisions: ['accept', 'decline'] }, { allow: true, always: true });
+  assert.deepEqual(limited.permission.approvalScopes, []);
+  assert.deepEqual(limited.result, { decision: 'accept' });
+  const requested = { network: { enabled: true } };
+  assert.deepEqual((await ask('item/permissions/requestApproval', { permissions: requested }, { allow: true, always: true })).result, { permissions: requested, scope: 'session' });
+
+  // Codex's native approval form is empty; supported durations live in metadata.
+  const params = {
+    message: 'Allow Computer Use to use "Google Chrome"?',
+    _meta: { codex_approval_kind: 'mcp_tool_call', persist: ['session', 'always'], tool_name: 'computer_use', tool_params: { app: 'com.google.Chrome' } },
+    requestedSchema: { type: 'object', properties: {} },
+  };
+  for (const scope of ['session', 'always']) {
+    const accepted = await ask('mcpServer/elicitation/request', params, { allow: true, scope });
+    assert.deepEqual(accepted.permission.approvalScopes, ['session', 'always']);
+    assert.deepEqual(accepted.result, { action: 'accept', content: null, _meta: { persist: scope } });
+  }
+  assert.deepEqual((await ask('mcpServer/elicitation/request', params, { allow: true })).result, { action: 'accept', content: null, _meta: null });
+  assert.deepEqual((await ask('mcpServer/elicitation/request', params, { allow: false, scope: 'always' })).result, { action: 'decline', content: null, _meta: null });
+  const sessionOnly = { ...params, _meta: { ...params._meta, persist: 'session' } };
+  const unavailable = await ask('mcpServer/elicitation/request', sessionOnly, { allow: true, scope: 'always' });
+  assert.deepEqual(unavailable.permission.approvalScopes, ['session']);
+  assert.deepEqual(unavailable.result, { action: 'decline', content: null, _meta: null });
+  const onceOnly = await ask('mcpServer/elicitation/request', { ...params, _meta: { ...params._meta, persist: undefined } }, { allow: true });
+  assert.deepEqual(onceOnly.permission.approvalScopes, []);
+  assert.deepEqual(onceOnly.result, { action: 'accept', content: null, _meta: null });
 });
 
 test('Codex Edit auto-accepts only physical file-change grants inside the open folder', () => {

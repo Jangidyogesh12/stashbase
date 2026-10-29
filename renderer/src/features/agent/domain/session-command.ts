@@ -3,12 +3,13 @@
  *  choice spelled `null` rather than left off — and `infrastructure/session-api`
  *  is the only place that turns one into a frame on the socket. */
 import type { AgentAccessMode } from '@/features/agent/domain/access';
+import type { AgentApprovalScope } from '@/features/agent/domain/session-transcript';
 
-/** What a reader adds to a decision beyond allow or deny: `always` remembers
- *  an approval, `answers` carry a clarifying question's replies keyed by
- *  question text. */
+/** A native approval duration, a runtime's boolean remember option, or
+ *  clarifying replies keyed by question text. */
 export interface AgentPermissionDecision {
   always?: boolean;
+  scope?: AgentApprovalScope;
   answers?: Record<string, string>;
 }
 
@@ -33,6 +34,7 @@ export type AgentSessionCommand =
       id: string;
       allow: boolean;
       always: boolean | null;
+      scope?: AgentApprovalScope;
       answers: Record<string, string> | null;
     }
   /** Picks a catalog model, or returns to the runtime's own choice. */

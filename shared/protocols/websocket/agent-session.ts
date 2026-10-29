@@ -57,6 +57,7 @@ export const agentClientEventSchema = z.discriminatedUnion("t", [
       id: boundedText(512),
       allow: z.boolean(),
       always: z.boolean().optional(),
+      scope: z.enum(["session", "always"]).optional(),
       // Replies to an Agent's clarifying questions, keyed by question text.
       answers: z.record(boundedText(4_000), boundedText(16_384)).optional(),
     })
@@ -145,6 +146,7 @@ export const agentServerEventSchema = z.union([
       name: boundedText(512),
       title: boundedText(2_000).nullable(),
       input: recordSchema,
+      approvalScopes: z.array(z.enum(["session", "always"])).max(2).optional(),
     })
     .strict(),
   z

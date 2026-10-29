@@ -57,6 +57,8 @@ export interface AgentTurnChangedFile {
   readonly deletions: number;
 }
 
+export type AgentApprovalScope = 'session' | 'always';
+
 export type AgentTranscriptBlock =
   | {
       kind: 'user';
@@ -97,6 +99,7 @@ export type AgentTranscriptBlock =
       permissionId?: string | undefined;
       permissionRequested?: boolean | undefined;
       permissionTitle?: string | null | undefined;
+      approvalScopes?: readonly AgentApprovalScope[] | undefined;
       result?: string | undefined;
     };
 
@@ -271,6 +274,7 @@ export function requestToolPermission(
     name: string;
     title: string | null;
     input: Record<string, unknown>;
+    approvalScopes?: readonly AgentApprovalScope[] | undefined;
   },
 ): AgentTranscriptBlock[] {
   const index = transcript.findIndex(
@@ -284,6 +288,7 @@ export function requestToolPermission(
     permissionId: request.id,
     permissionRequested: true,
     permissionTitle: request.title,
+    approvalScopes: request.approvalScopes,
     status: 'awaiting',
   };
   if (index < 0) return [...transcript, permissionBlock];

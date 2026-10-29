@@ -43,6 +43,7 @@ const permission: AgentToolBlock = {
   permissionId: 'permission-1',
   permissionRequested: true,
   permissionTitle: null,
+  approvalScopes: ['session'],
   status: 'awaiting',
 };
 
@@ -242,9 +243,25 @@ function QuestionHarness() {
   );
 }
 
-function AgentActivityHarness({ compact = false }: { compact?: boolean }) {
+function AgentActivityHarness({
+  compact = false,
+  computerUse = false,
+}: {
+  compact?: boolean;
+  computerUse?: boolean;
+}) {
   const [mode, setMode] = useState<AgentAccessMode>('auto');
-  const [decision, setDecision] = useState<AgentToolBlock>(permission);
+  const [decision, setDecision] = useState<AgentToolBlock>(
+    computerUse
+      ? {
+          ...permission,
+          name: 'Computer Use',
+          permissionTitle: 'Allow Computer Use to use "Google Chrome"?',
+          input: { app: 'com.google.Chrome' },
+          approvalScopes: ['session', 'always'],
+        }
+      : permission,
+  );
   return (
     <div className={compact ? 'w-[20rem] space-y-4' : 'w-[34rem] space-y-5'}>
       <AgentActivityGroup steps={tools} />
@@ -331,5 +348,14 @@ export const StillWorking: Story = {
 
 export const Compact: Story = {
   args: { compact: true },
+  parameters: { fluidCanvas: { width: '22rem', minHeight: '30rem' } },
+};
+
+export const ComputerUseApproval: Story = {
+  args: { computerUse: true },
+};
+
+export const CompactComputerUseApproval: Story = {
+  args: { computerUse: true, compact: true },
   parameters: { fluidCanvas: { width: '22rem', minHeight: '30rem' } },
 };

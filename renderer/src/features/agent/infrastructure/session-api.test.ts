@@ -385,12 +385,14 @@ describe('Agent session API', () => {
         name: 'Bash',
         title: null,
         input: { command: 'pwd' },
+        approvalScopes: ['session'],
       }),
     });
     expect(
       connection.send?.({
         allow: true,
         always: null,
+        scope: 'session',
         answers: null,
         id: 'permission-1',
         kind: 'reply-permission',
@@ -423,6 +425,7 @@ describe('Agent session API', () => {
         id: 'permission-1',
         input: { command: 'pwd' },
         kind: 'permission-requested',
+        approvalScopes: ['session'],
         name: 'Bash',
         title: null,
         toolUseId: 'tool-1',
@@ -438,7 +441,7 @@ describe('Agent session API', () => {
       },
     ]);
     expect(sent).toEqual([
-      JSON.stringify({ t: 'permission-reply', id: 'permission-1', allow: true }),
+      JSON.stringify({ t: 'permission-reply', id: 'permission-1', allow: true, scope: 'session' }),
       JSON.stringify({
         t: 'permission-reply',
         id: 'permission-2',

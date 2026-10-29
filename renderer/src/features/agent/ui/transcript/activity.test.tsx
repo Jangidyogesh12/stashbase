@@ -89,6 +89,7 @@ describe('Agent activity', () => {
         }}
       />,
     );
+    expect(screen.queryByRole('button', { name: 'Allow for this session' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Reject' }));
     expect(onReply).toHaveBeenCalledWith('tool-1', 'permission-1', false);
     rerender(
