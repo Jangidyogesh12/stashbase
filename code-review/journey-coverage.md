@@ -1541,9 +1541,14 @@ repair without restart, persistence after reopen, and explicit reprocessing.
 An unrepaired process crash cannot durably preserve a failed write.
 
 **Contextual component recovery (2026-09-16):** `workspace-panes.tsx` composes
-`local-component-recovery.tsx` beside a pending PDF/image, using the existing shared
-installation port. Its test verifies no implicit retry, explicit retry, and
-removal after installation. The installation owner and source cancellation are unchanged.
+`local-component-recovery.tsx` beside a pending PDF, using the existing shared
+installation port. Image previews no longer request the preparation slot
+(2026-10-30); OCR still supplies search text, and failed component demand retains
+its next-launch retry. Existing readiness/status-line tests retain PDF/DOCX behavior,
+and document viewer tests retain versioned image loading. An isolated macOS
+Electron source pass opened a PNG and visually confirmed the image without an
+OCR status or recovery row. The installation owner and source cancellation are
+unchanged; packaged verification is separate.
 
 **Intent:** [J04](../design-docs/journeys/README.md#j04-prepare-a-hard-to-read-file).
 

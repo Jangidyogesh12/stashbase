@@ -66,8 +66,8 @@ describe('source readiness', () => {
       ),
     ).toBe('Reading page 4…');
     expect(
-      readinessStatusLine({ kind: 'pending', progress: { phase: 'extracting' } }, 'image'),
-    ).toBe('Reading image text…');
+      readinessStatusLine({ kind: 'pending', progress: { phase: 'extracting' } }, 'docx'),
+    ).toBe('Preparing searchable text…');
     expect(
       readinessStatusLine(
         { kind: 'pending', progress: { lane: 'light', phase: 'queued', tasksAhead: 3 } },
@@ -75,8 +75,8 @@ describe('source readiness', () => {
       ),
     ).toBe('Waiting for other file preparation to finish…');
     expect(readinessStatusLine({ kind: 'current' }, 'pdf')).toBeNull();
-    expect(readinessStatusLine({ attempts: 1, detail: '', kind: 'failed' }, 'image')).toContain(
-      'still opens normally',
+    expect(readinessStatusLine({ attempts: 1, detail: '', kind: 'failed' }, 'docx')).toContain(
+      'The document is visible',
     );
   });
 

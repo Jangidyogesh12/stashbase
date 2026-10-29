@@ -135,7 +135,7 @@ const image = viewerEntry({
   find: false,
   icon: constantIcon(FileImage),
   outline: false,
-  services: ['assetApi', 'renderPreparation'],
+  services: ['assetApi'],
   status: assetStatus,
 });
 

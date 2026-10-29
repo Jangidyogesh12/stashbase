@@ -12,20 +12,11 @@ export default function ImageViewer({
   active,
   assetApi,
   name,
-  renderPreparation,
   runtime,
   status,
-}: DocumentViewerProps<'assetApi' | 'renderPreparation'>) {
+}: DocumentViewerProps<'assetApi'>) {
   return (
-    <AssetSurface
-      active={active}
-      api={assetApi}
-      name={name}
-      preparationSlot="image"
-      renderPreparation={renderPreparation}
-      runtime={runtime}
-      status={status}
-    >
+    <AssetSurface active={active} api={assetApi} name={name} runtime={runtime} status={status}>
       {({ asset }) => <ImageDocument key={asset.version} name={name} resource={asset} />}
     </AssetSurface>
   );

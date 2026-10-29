@@ -21,6 +21,8 @@ an empty project and a conversation without references are valid.
   defines which sources participate.
 - Preview, preparation, and semantic-index readiness are separate. Background work
   prioritizes interaction without blocking unrelated documents or conversation.
+  Image OCR only adds search text, so the image viewer says nothing about its
+  progress or result; PDF and DOCX viewers show their preparation state.
 - Local PDF/OCR components download on first demand and work offline thereafter.
   Updating the app reuses an installed component when that component is unchanged.
   Failed setup offers retry beside a waiting document, or one retry on next launch.

@@ -33,18 +33,18 @@ describe('preparation status line', () => {
   it('raises failures as alerts with reprocess, the busy label, and the action error', () => {
     const { rerender } = render(
       <PreparationStatusLine
-        format="image"
+        format="docx"
         onReprocess={vi.fn()}
         readiness={{ attempts: 2, detail: 'ocr crashed', kind: 'failed' }}
       />,
     );
-    expect(screen.getByRole('alert').textContent).toContain('still opens normally');
+    expect(screen.getByRole('alert').textContent).toContain('The document is visible');
     expect(screen.getByRole('button', { name: 'Reprocess' }).hasAttribute('disabled')).toBe(false);
 
     rerender(
       <PreparationStatusLine
         error="Reprocess could not start. Try again."
-        format="image"
+        format="docx"
         onReprocess={vi.fn()}
         pending="reprocess"
         readiness={{ attempts: 2, detail: 'ocr crashed', kind: 'failed' }}

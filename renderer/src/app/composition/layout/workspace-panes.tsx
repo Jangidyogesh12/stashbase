@@ -191,7 +191,7 @@ export function WorkspacePanes({
                   renderPreparation={(source, format) =>
                     isExternalSource(source) ? null : (
                       <>
-                        {(format === 'pdf' || format === 'image') &&
+                        {format === 'pdf' &&
                           status?.folderPath === source.folderPath &&
                           status.pendingConversions.includes(source.path) && (
                             <LocalComponentRecovery

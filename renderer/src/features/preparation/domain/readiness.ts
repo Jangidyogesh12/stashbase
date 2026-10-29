@@ -23,7 +23,7 @@ export type SourceReadiness =
 
 export type SourceReadinessKind = SourceReadiness['kind'];
 
-export type PreparedFormat = 'pdf' | 'image' | 'docx';
+export type PreparedFormat = 'pdf' | 'docx';
 
 /** The explicit controls a source's state can offer. The server stays the
  *  authority: offering an action is not a promise that it will succeed. */
@@ -138,7 +138,6 @@ function progressCopy(progress: PreparationProgress | null, format: PreparedForm
       if (format === 'pdf' && progress.currentPage !== undefined) {
         return `Reading page ${progress.currentPage}…`;
       }
-      if (format === 'image') return 'Reading image text…';
       return 'Preparing searchable text…';
   }
 }
@@ -159,8 +158,6 @@ export function readinessStatusLine(
       switch (format) {
         case 'pdf':
           return 'This PDF is not searchable. Reprocess it to try again.';
-        case 'image':
-          return 'Searchable text is unavailable. The image still opens normally.';
         case 'docx':
           return 'The document is visible, but its searchable text is unavailable.';
         default:

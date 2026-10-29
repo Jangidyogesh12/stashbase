@@ -21,8 +21,10 @@ import type { DocumentViewerFormat } from '@/features/documents/domain/document-
 import type { DocumentSelection } from '@/features/documents/domain/selection';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-/** Formats that can show a preparation status row above their content. */
-export type PreparationSlotFormat = Extract<DocumentViewerFormat, 'docx' | 'image' | 'pdf'>;
+/** Formats that can show a preparation status row above their content. Image
+ *  OCR only makes a picture searchable; its preview never waits on it, so the
+ *  image viewer has no row. */
+export type PreparationSlotFormat = Extract<DocumentViewerFormat, 'docx' | 'pdf'>;
 
 /** Formats whose preparation is promoted the moment a tab opens them. */
 export type PreparedOnOpenFormat = Extract<DocumentViewerFormat, 'docx'>;

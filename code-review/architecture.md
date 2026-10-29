@@ -301,7 +301,9 @@ start downloads. PDF cost probes discover already installed components through
 that owner and return unknown cost while unavailable; packaged probes never fall
 back to development scripts. Waiting conversions yield their lane. A process makes one
 automatic demand attempt; failure has no timer retry. A durable demand latch
-permits one next-launch attempt; Retry beside a waiting PDF/image starts one shared attempt.
+permits one next-launch attempt; Retry beside a waiting PDF starts one shared
+attempt. Image viewers do not render preparation or component recovery;
+OCR affects search text only. PDF and DOCX retain their preparation status rows.
 Cancellation removes source demand and clears the durable latch when its last
 source waiter leaves. Explicit/startup downloads have component ownership and
 survive source cancellation. Shutdown retains unfinished demand.
