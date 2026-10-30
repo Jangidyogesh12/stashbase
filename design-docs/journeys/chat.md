@@ -36,8 +36,9 @@ Chat, Documents assistance, and runtimes.
    an approval preserves that position too; keyboard focus can follow the
    decided tool into its activity group without scrolling to the group header.
 4. Continue, send a follow-up into the running turn or queue it for after,
-   stop, or reuse a message for another turn. An agent that can take a
-   follow-up mid-turn gets it there by default; it shows as not yet read until
+   stop, or reuse a message for another turn. Copy a prompt, a settled reply,
+   or only a block the reply sets apart, such as a drafted post. An agent that
+   can take a follow-up mid-turn gets it there by default; it shows as not yet read until
    the agent reads it, then stays where the agent read it. Open a
    file result or a local file link to switch to Documents and show that file,
    retaining the conversation and unsent input. A link that cites a passage

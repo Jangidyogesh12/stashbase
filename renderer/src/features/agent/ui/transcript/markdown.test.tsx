@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -82,6 +82,20 @@ Keep ${'`\\(x\\)`'} as code.`}
     expect(container.querySelectorAll('math')).toHaveLength(4); // dom-contract: KaTeX's accessible MathML output
     expect(screen.getByText(String.raw`\(x\)`).tagName).toBe('CODE');
     expect(container.textContent).not.toContain('$$');
+  });
+
+  it('copies a fenced draft without the reply around it', async () => {
+    const post = 'Shipping today.\n\nTwo lines, kept as written.';
+    // user-event installs its own clipboard stub over navigator, so the copy
+    // is read back from there rather than from a spy it would have replaced.
+    const user = userEvent.setup();
+    render(
+      <AgentMarkdown markdown={`Here is the post:\n\n\`\`\`\n${post}\n\`\`\`\n\nWant edits?`} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Copy block' }));
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(post));
+    expect(await screen.findByRole('button', { name: 'Copied' })).not.toBeNull();
   });
 
   it('keeps prices as written instead of reading them as math', () => {

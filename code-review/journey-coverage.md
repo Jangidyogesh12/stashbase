@@ -3486,6 +3486,13 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   and `agent-convergence.test.tsx` (a cited link selects Documents and Find lands
   on the phrase) cover it. Not proven: that a real runtime cites as instructed,
   and a phrase spanning a line break in the rendered text is not found.
+- **Block copy (2026-10-30):** `renderer/src/features/agent/ui/transcript/markdown.tsx`
+  gives each fenced block in a reply its own Copy, revealed on hover or focus,
+  which copies the block's text without the fence's closing line break. Blocks
+  wrap, and the Copy floats beside the first line so text never runs under it.
+  `markdown.test.tsx` covers the copied text. A Storybook pass in Electron's
+  Chromium showed a wrapped drafted post in both themes, unchanged in layout
+  between idle and hover. Not proven: a packaged build.
 - **AI Eval:** requested writing quality belongs to J10. Existing deterministic
   orchestration evidence is not document-specific diff evidence.
 - **Release Check:** real-runtime requested draft/revision followed by editor save.

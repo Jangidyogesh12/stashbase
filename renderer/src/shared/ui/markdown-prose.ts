@@ -17,7 +17,7 @@ export const MARKDOWN_PROSE_CLASS = [
   '[&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-working/40 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground',
   '[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.88em]',
   // shape-literal: a descendant variant cannot carry a class variable.
-  '[&_pre]:my-4 [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border [&_pre]:bg-surface-1 [&_pre]:p-3',
+  '[&_pre]:my-4 [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:break-words [&_pre]:whitespace-pre-wrap [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border [&_pre]:bg-surface-1 [&_pre]:p-3',
   '[&_pre_code]:bg-transparent [&_pre_code]:p-0',
   '[&_hr]:my-5 [&_hr]:border-border',
   '[&_table]:my-4 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:border-collapse',
