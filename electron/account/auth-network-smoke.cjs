@@ -7,7 +7,6 @@ const os = require('node:os');
 const path = require('node:path');
 const { app, session } = require('electron');
 const { createAuthNetworkBridge } = require('../../dist/electron/account/auth-network.cjs');
-const destination = require('../../server/telemetry-destination.json');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-auth-network-'));
 app.setPath('userData', path.join(root, 'profile'));
@@ -54,7 +53,7 @@ app.whenReady().then(async () => {
   });
   assert.equal(usage.status, 502);
   assert.equal((await usage.json()).errorCode, 'ERR_TUNNEL_CONNECTION_FAILED');
-  const ingestion = `${new URL(destination.host).hostname}:443`;
+  const ingestion = `${new URL(bridge.usageUrl).hostname}:443`;
   assert.ok(tunnels.includes(ingestion),
     `Chromium must send usage through the PAC-selected proxy; observed ${JSON.stringify(tunnels)}`);
   await authSession.closeAllConnections();

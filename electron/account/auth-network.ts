@@ -112,7 +112,7 @@ export async function createAuthNetworkBridge(options: { fetch: typeof fetch; us
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing authentication relay address');
   return {
-    port: address.port, token,
+    port: address.port, token, usageUrl,
     cancelPending() { for (const controller of pending) controller.abort(); },
     close() {
       for (const controller of pending) controller.abort();
