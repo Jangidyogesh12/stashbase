@@ -148,7 +148,7 @@ test('file outcomes retain the initiating identity and request while an account 
     available: true, distribution: 'source', projectToken: 'test', host: 'https://example.test', version: 'test', os: 'linux',
     read: () => structuredClone(config), write: (next) => { config = structuredClone(next); },
     fetch: async (_url, init) => {
-      events.push(JSON.parse(String(init?.body)));
+      events.push(...JSON.parse(String(init?.body)).batch);
       return new Response(null, { status: 200 });
     },
   });

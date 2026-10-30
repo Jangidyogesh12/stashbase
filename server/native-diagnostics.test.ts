@@ -26,7 +26,7 @@ test('native failures survive host restart with original time/version/distributi
     const sent: any[] = [];
     now += 60_000;
     const service = createTelemetry({ available: true, distribution: 'packaged', version: '2.15.11', os: 'darwin', projectToken: 'fixture', host: 'https://example.invalid',
-      read, write, now: () => now, native, fetch: async (_url, init) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } });
+      read, write, now: () => now, native, fetch: async (_url, init) => { sent.push(...JSON.parse(String(init?.body)).batch); return new Response(null, { status: 200 }); } });
     t.mock.timers.tick(5000);
     await service.flush();
     assert.equal(sent.length, 1);
@@ -69,7 +69,7 @@ test('native update warnings aggregate hourly across checks, preserve occurrence
   const sent: any[] = [];
   const native = createNativeDiagnostics({ directory, available: true, distribution: 'packaged', version: '2.16.3', now: () => now, read });
   const options = { available: true, distribution: 'source' as const, version: '2.16.4', os: process.platform, projectToken: 'fixture', host: 'https://example.invalid',
-    read, write, now: () => now, native, fetch: async (_url: unknown, init?: RequestInit) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } };
+    read, write, now: () => now, native, fetch: async (_url: unknown, init?: RequestInit) => { sent.push(...JSON.parse(String(init?.body)).batch); return new Response(null, { status: 200 }); } };
   const service = createTelemetry(options);
   const failure = new Error('net::ERR_INTERNET_DISCONNECTED');
   const record = () => native.record(failure, 'app-update', { stage: 'checking' }, 'warning');
@@ -124,7 +124,7 @@ test('offline native warnings retain account boundaries and opt-out erases count
   now += 15 * 60_000; record(); now -= 15 * 60_000; record(); now += 15 * 60_000;
   const sent: any[] = [];
   const service = createTelemetry({ available: true, distribution: 'source', version: 'test', os: 'win32', projectToken: 'fixture', host: 'https://example.invalid',
-    read, write, now: () => now, native, fetch: async (_url, init) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } });
+    read, write, now: () => now, native, fetch: async (_url, init) => { sent.push(...JSON.parse(String(init?.body)).batch); return new Response(null, { status: 200 }); } });
   try {
     t.mock.timers.tick(5000); await service.flush();
     assert.equal(sent.length, 1);
@@ -156,7 +156,7 @@ test('socket loss joins native lifecycle observations without classifying normal
   const native = createNativeDiagnostics({ directory, available: true, distribution: 'source', version: 'test', read });
   const service = createTelemetry({ available: true, distribution: 'source', version: 'test', os: process.platform,
     projectToken: 'fixture', host: 'https://example.invalid', read, write: value => { config = structuredClone(value); }, native,
-    fetch: async (_url, init) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 200 }); } });
+    fetch: async (_url, init) => { sent.push(...JSON.parse(String(init?.body)).batch); return new Response(null, { status: 200 }); } });
   const windowId = randomUUID(), hostId = randomUUID(), connectionId = randomUUID();
   const previous = process.env.STASHBASE_SERVER_INSTANCE_ID;
   process.env.STASHBASE_SERVER_INSTANCE_ID = hostId;

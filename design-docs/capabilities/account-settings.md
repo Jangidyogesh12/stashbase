@@ -316,7 +316,9 @@ reader to current credits rather than claiming all credits are spent.
   Diagnostic explanations, paths, stack traces, nested causes and bounded process
   output are retained to support debugging. Known credential patterns are filtered;
   documents, chats, arbitrary provider payloads and whole logs are not collected.
-  Bounded offline delivery preserves occurrence time and identity. A submitted
+  Bounded offline delivery preserves occurrence time and identity, follows the
+  operating system's proxy settings like sign-in, and keeps undelivered events
+  long enough to survive several weeks between uses. A submitted
   agent turn can retain content-free progress and its result across restarts.
   Once an agent accepts a task, reporting its execution does not depend on the
   interface's submission report arriving first. Short reporting retries never

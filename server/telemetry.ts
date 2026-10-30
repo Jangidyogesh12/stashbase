@@ -14,6 +14,8 @@ import { accountUsageId, usageState, usageIdentity, usagePayload, QUEUE_LIMIT,
   turnCapacity, TURN_LIMIT, noteDelivery, type PendingTurn, type QueuedUsage, type UsageIdentity, type TelemetryState } from './telemetry-state.ts';
 import { finishTelemetryTurn, recordTelemetryToolResult, type TurnObservation } from './telemetry-turns.ts';
 import destination from './telemetry-destination.json' with { type: 'json' };
+import { hostedUsageFetch } from './hosted-auth-transport.ts';
+import { usageBatchUrl } from '../shared/hosted-auth-network.ts';
 import packageInfo from '../package.json' with { type: 'json' };
 export type { TelemetryState } from './telemetry-state.ts';
 
@@ -24,6 +26,22 @@ type DiagnosticEvent = Extract<TelemetryEvent, { event: 'application_error' | 'a
  * counted and reported once when the window closes, so a persistent failure
  * keeps one event per window while its frequency stays measurable. */
 const OCCURRENCE_WINDOWS = { application_error: 60_000, application_warning: 10 * 60_000 } as const;
+/** One request carries a bounded batch. Proxied cold TLS connections can take
+ * seconds, so the deadline is generous; the relay applies its own bound too. */
+const BATCH_EVENTS = 50;
+const BATCH_BYTES = 1024 * 1024;
+const DELIVERY_TIMEOUT = 12_000;
+/** Per-minute admission budgets. Core activity is already bounded by
+ * per-minute suppression, once-per-launch admission or the pending-turn limit.
+ * Diagnostics and progress observations can repeat without user action, so
+ * they cannot consume the budget of user operation results such as saves. */
+const RATE_LIMIT = 120;
+const OBSERVATIONS = new Set<TelemetryEvent['event']>(['application_error', 'application_warning', 'agent_turn_stage',
+  'agent_runtime_start_result', 'agent_runtime_stop_result', 'agent_connection_closed', 'agent_setup_stage', 'native_lifecycle']);
+const rateBudget = (event: TelemetryEvent): 'observation' | 'outcome' | null =>
+  event.event === 'app_opened' || event.event === 'app_active' || event.event === 'document_engaged'
+    || (event.event === 'agent_turn_started' && Boolean(event.turn_id)) ? null
+    : OBSERVATIONS.has(event.event) ? 'observation' : 'outcome';
 
 export function createTelemetry(options: {
   available: boolean;
@@ -44,11 +62,14 @@ export function createTelemetry(options: {
   let stopped = false;
   let collectionStopped = false;
   let rateWindow = 0;
-  let count = 0;
+  let counts = { observation: 0, outcome: 0 };
   let sending: Promise<void> | null = null;
   let pending: AbortController | null = null;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let retryDelay = 1000;
+  // After a refused batch, its members are retried singly so one invalid
+  // envelope cannot discard the valid events delivered with it.
+  let isolate = 0;
   let generation = 0;
   let storageFailures = 0;
   let refusedDelivery: Partial<Record<Parameters<typeof noteDelivery>[1], number>> = {};
@@ -101,6 +122,7 @@ export function createTelemetry(options: {
   const cancel = () => {
     generation++;
     retireRenderer();
+    isolate = 0;
     pending?.abort();
     pending = null;
     clearTimeout(retry);
@@ -119,28 +141,32 @@ export function createTelemetry(options: {
     ...(value.fallback_error ? { fallback_error: errorDiagnostic(value.fallback_error) } : {}),
     ...(value.taskkill_stderr ? { taskkill_stderr: diagnosticText(value.taskkill_stderr) } : {}),
   });
-  const send = async (queued: QueuedUsage, controller: AbortController) => {
-    const timeout = setTimeout(() => controller.abort(), 2000);
+  const outbound = (queued: QueuedUsage) => {
+    const payload = usagePayload(queued);
+    // Re-redact disk diagnostics too, even if a queue file was modified.
+    if ('diagnostic' in payload.properties && payload.properties.diagnostic) {
+      payload.properties.diagnostic = errorDiagnostic(payload.properties.diagnostic);
+    }
+    if ('context' in payload.properties && payload.properties.context) payload.properties.context = sanitizeContext(payload.properties.context);
+    if ('termination' in payload.properties && payload.properties.termination) payload.properties.termination = sanitizeTermination(payload.properties.termination);
+    if ('operation' in payload.properties) payload.properties.operation = diagnosticOperation(payload.properties.operation);
+    return JSON.stringify(payload);
+  };
+  const send = async (batch: string[], controller: AbortController): Promise<'delivered' | 'rejected' | 'transport_failed'> => {
+    const timeout = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT);
     timeout.unref();
     try {
-      const payload = usagePayload(queued);
-      // Re-redact disk diagnostics too, even if a queue file was modified.
-      if ('diagnostic' in payload.properties && payload.properties.diagnostic) {
-        payload.properties.diagnostic = errorDiagnostic(payload.properties.diagnostic);
-      }
-      if ('context' in payload.properties && payload.properties.context) payload.properties.context = sanitizeContext(payload.properties.context);
-      if ('termination' in payload.properties && payload.properties.termination) payload.properties.termination = sanitizeTermination(payload.properties.termination);
-      if ('operation' in payload.properties) payload.properties.operation = diagnosticOperation(payload.properties.operation);
-      const response = await sendFetch(`${options.host.replace(/\/$/, '')}/i/v0/e/`, {
+      const response = await sendFetch(`${options.host.replace(/\/$/, '')}/batch/`, {
         method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: options.projectToken, ...payload }),
+        body: `{"api_key":${JSON.stringify(options.projectToken)},"historical_migration":false,"batch":[${batch.join(',')}]}`,
       });
       await response.body?.cancel();
       // Retrying a refused payload cannot repair it. Network failures, timeouts,
       // rate limits and service failures retain the same UUID and timestamp.
-      return response.ok ? 'delivered' : (response.status >= 400 && response.status < 500
-        && response.status !== 408 && response.status !== 429) ? 'rejected' : 'transport_failed';
+      if (response.ok) return 'delivered';
+      return response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429
+        ? 'rejected' : 'transport_failed';
     } finally { clearTimeout(timeout); }
   };
   const schedule = () => {
@@ -155,35 +181,47 @@ export function createTelemetry(options: {
       const config = options.read();
       const state = usageState(config, now());
       if (!state.enabled) return;
-      const queued = state.queue?.[0];
       // Persist expiry/filtering even when there is nothing left to deliver.
-      if (!queued) {
+      if (!state.queue?.length) {
         if (config.telemetry?.queue?.length || storageFailures || Object.keys(refusedDelivery).length) save(config, state);
         return;
       }
+      const uuids = new Set<string>();
+      const batch: string[] = [];
+      let bytes = 0;
+      for (const queued of state.queue) {
+        const body = outbound(queued);
+        if (batch.length && (batch.length >= (isolate ? 1 : BATCH_EVENTS) || bytes + body.length > BATCH_BYTES)) break;
+        batch.push(body);
+        uuids.add(queued.uuid);
+        bytes += body.length + 1;
+      }
       const controller = new AbortController();
       pending = controller;
-      let result: 'delivered' | 'rejected' | 'transport_failed' = 'transport_failed';
-      try { result = await send(queued, controller); } catch { /* bounded retry below */ }
+      let result: Awaited<ReturnType<typeof send>> = 'transport_failed';
+      try { result = await send(batch, controller); } catch { /* bounded retry below */ }
       if (capturedGeneration !== generation || !allowed()) return;
       pending = null;
+      // Nothing is dropped yet: resend the batch singly to find the refused events.
+      if (result === 'rejected' && batch.length > 1) { isolate = batch.length; continue; }
       // Re-read after await: never overwrite captures, settings or account
       // changes made while this request was in flight.
       try {
         const latest = options.read();
         const current = usageState(latest, now());
         if (!current.enabled) return;
-        noteDelivery(current, result, now());
-        if (result !== 'transport_failed') current.queue = current.queue?.filter((item) => item.uuid !== queued.uuid);
+        noteDelivery(current, result, now(), batch.length);
+        if (result !== 'transport_failed') current.queue = current.queue?.filter((item) => !uuids.has(item.uuid));
         save(latest, current);
       } catch {
         // Collection was confirmed above; an acknowledgement that cannot be
-        // checkpointed must keep the event's UUID for safe delivery retry.
+        // checkpointed must keep the events' UUIDs for safe delivery retry.
         storageFailures++;
         schedule();
         return;
       }
       if (result === 'transport_failed') { schedule(); return; }
+      if (isolate) isolate--;
       retryDelay = 1000;
     }
   };
@@ -325,8 +363,9 @@ export function createTelemetry(options: {
       }
       if (event.event === 'app_opened' && opened) return refuse('duplicate', 'duplicate');
       const minute = Math.floor(now() / 60000);
-      if (minute !== rateWindow) { rateWindow = minute; count = 0; }
-      if (count >= 120) return refuse('retry', 'rate_limited');
+      if (minute !== rateWindow) { rateWindow = minute; counts = { observation: 0, outcome: 0 }; }
+      const budget = rateBudget(event);
+      if (budget && counts[budget] >= RATE_LIMIT) return refuse('retry', 'rate_limited');
       const active = event.event === 'app_active' || event.event === 'document_engaged' || event.event === 'agent_turn_started';
       const currentIdentity = !captured || (captured.anonymousId === identity.anonymousId && captured.userId === identity.userId);
       if (active && currentIdentity) {
@@ -364,7 +403,7 @@ export function createTelemetry(options: {
         }
       }
       if (event.event === 'app_opened') opened = true;
-      count++;
+      if (budget) counts[budget]++;
       kick();
       return 'accepted';
     } catch {
@@ -572,8 +611,7 @@ export function createTelemetry(options: {
   };
 }
 
-const available = telemetryAvailable()
-  && destination.projectToken.startsWith('phc_') && destination.host.startsWith('https://');
+const available = telemetryAvailable() && usageBatchUrl(destination) !== undefined;
 const distribution = process.env.STASHBASE_PACKAGED === '1' ? 'packaged' : 'source';
 export const telemetry = createTelemetry({
   available, distribution,
@@ -581,4 +619,6 @@ export const telemetry = createTelemetry({
   projectToken: destination.projectToken, host: destination.host,
   version: packageInfo.version, os: process.platform,
   read: readAppConfigStrict, write: writeAppConfigStrict,
+  // Follow the system proxy like account traffic; Node fetch would bypass it.
+  fetch: hostedUsageFetch,
 });

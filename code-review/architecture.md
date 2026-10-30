@@ -959,9 +959,12 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   an in-memory Chromium session in system-proxy mode; Node retains PKCE, session
   persistence and flow retirement. The process-private relay binds IPv4 loopback
   on an ephemeral port, requires a per-launch capability, rejects browser Origins,
-  and admits only the fixed Better Auth operations listed in
+    and admits only the fixed Better Auth operations listed in
   `shared/hosted-auth-network.ts` on `api.stashbase.ai`: desktop exchange,
   session/token reads, logout, email-code login, and explicit account linking.
+  Its separate usage route forwards analytics batches only to the ingestion URL
+  derived from `server/telemetry-destination.json`; it refuses that route when the
+  destination is unset and never accepts a caller-supplied host.
   Email attempts carry host-owned flow IDs. Cancel, a new login, or sign-out
   retires older continuations; late issued sessions are revoked before they can
   replace the current account. Browser-link permissions contain no session token
@@ -1136,9 +1139,16 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
 - Queue envelopes preserve UUID, occurrence time, installation, anonymous/account
   identity and source version through retry/restart. Identity links share durable
   admission with their events. Full queues refuse later work; expiry and permanent
-  ingestion refusal remain observable-data limitations. One serial drain re-reads
-  current preferences/queue after every await and removes only acknowledged UUIDs.
-  Bounded retry never waits in the user's writing operation or shutdown.
+  ingestion refusal remain observable-data limitations. One serial drain sends
+  bounded batches, re-reads current preferences/queue after every await and
+  removes only acknowledged UUIDs. A refused multi-event batch is retried singly
+  before anything is dropped. Desktop delivery uses the proxy-aware native relay
+  (`hostedUsageFetch`) and never falls back to direct Node fetch; envelopes stay
+  queued for 30 days because weeks between uses are normal.
+  Bounded retry never waits in the user's writing operation or shutdown. Diagnostics/progress
+  observations and operation results have separate per-minute admission budgets;
+  core activity facts that already have their own bound are exempt, so diagnostic
+  or stage bursts cannot suppress saves, project entry or core use.
 - Renderer intake acknowledges persisted admission separately from duplicates,
   disabled/stale collection and temporary refusal. Short, bounded in-memory
   retries retain event UUID/time; the existing Node queue is the only durable

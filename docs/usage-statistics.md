@@ -259,23 +259,36 @@ not measured by desktop events.
 
 The host atomically saves bounded, validated event envelopes in the owner-only
 application configuration before sending. The queue holds at most 500 events for
-seven days. Network failures, timeouts, rate limiting and service failures retry
-with bounded backoff; permanent request refusals are dropped. UUIDs, event times,
+30 days, so events left unsent when the app closes are delivered at the next
+launch even after a gap of several weeks. Desktop delivery follows the operating
+system's proxy settings, including automatic proxy configuration, through the same
+private network relay as account sign-in; it never falls back to a direct
+connection. Standalone source servers without Electron connect directly.
+Events leave in batches of up to 50 events or 1 MB, with a 12-second request
+deadline. Network failures, timeouts, rate limiting and service failures retry
+with bounded backoff. A refused batch is retried one event at a time, so only
+the refused events are dropped. UUIDs, event times,
 identities, app versions and distributions stay fixed during retry and across process restarts.
-PostHog receives the stable event UUID for deduplication. Admission is limited to
-120 ordinary events per minute. Up to 100 admitted pending turns each reserve
+PostHog receives the stable event UUID for deduplication. Admission has two
+per-minute budgets of 120 events: one for diagnostics and progress observations
+(errors, warnings, turn stages, runtime start/stop, connection closes, setup
+stages and native lifecycle), and one for operation results such as saves,
+project entry, sign-in and billing. A burst of failures therefore cannot hide a
+save made in the same minute. `app_opened`, `app_active`, `document_engaged` and
+turn starts with a turn ID are bounded by their own suppression or the
+pending-turn limit instead. Up to 100 admitted pending turns each reserve
 one of the 500 queue slots for their terminal record. Terminals consume that
 reservation without ordinary rate limiting; queueing the terminal and removing
 the pending record are one atomic write. Full queues refuse new starts and other
 events rather than evicting identity links or reserved terminals. Pending records
-and up to 500 recent-completion IDs expire after seven days. Local storage failure,
+and up to 500 recent-completion IDs expire after 30 days. Local storage failure,
 expiry and permanent ingestion refusal still limit delivery. Independently
 arriving host observations other than acceptance can wait briefly for an admitted
 start. This bounded race buffer cannot infer a missing submission; actual host
 acceptance supplies its own start as described above.
 
 Collection never waits on network delivery to complete a writing operation or
-shutdown. The host re-reads current configuration after each outbound request so
+shutdown; an in-flight request is abandoned at shutdown and its events remain queued. The host re-reads current configuration after each outbound request so
 an acknowledgement cannot overwrite newer preferences or newly queued work.
 Renderer usage delivery keeps at most 100 outstanding reports in memory and makes
 at most three attempts, retaining the event UUID and occurrence time. Local intake
@@ -307,7 +320,7 @@ with no heartbeat or second delivery queue.
 | Host `attempted`, `accepted`, `duplicate`, `invalid` | Capture admission attempts, accepted events, suppressed duplicates and invalid capture input |
 | Host `queue_full`, `rate_limited`, `turn_limit`, `missing_start`, `stale` | Refusals caused by capacity, rate, pending-turn count, missing start or stale renderer/identity context |
 | Host `storage_failed` | Storage failures observed after collection is known to be enabled; unreadable storage can also prevent recording this count |
-| Host `delivered`, `transport_failed`, `rejected` | Acknowledged envelopes, retryable outbound failures and permanent ingestion refusals |
+| Host `delivered`, `transport_failed`, `rejected` | Acknowledged envelopes, retryable outbound failures and permanent ingestion refusals, counted per envelope in each batch; a refused batch counts only after its events are retried singly |
 | Host `expired`, `invalid_queued` | Expired or invalid/excess queued envelopes removed during validation |
 | Renderer `generated`, `coalesced`, `invalid`, `overflow` | Recorder calls, activity reports suppressed within the minute, invalid input and reports refused by the outstanding-request limit |
 | Renderer `requests`, `accepted`, `duplicate`, `refused`, `exhausted` | Local send attempts, acknowledged admissions/duplicates, permanent local refusals and reports that exhausted three send attempts |

@@ -10,6 +10,16 @@ export const AUTH_PATHS = new Set([
   '/account/google/link', '/account/google/unlink', '/account/link/status',
 ]);
 
+/** Usage delivery shares the relay so analytics follow the system proxy too.
+ * The relay owns the fixed ingestion destination; callers supply only a batch. */
+export const USAGE_RELAY_PATH = '/usage';
+export const USAGE_REQUEST_LIMIT = 4 * 1024 * 1024;
+
+export function usageBatchUrl(destination: { projectToken: string; host: string }): string | undefined {
+  return destination.projectToken.startsWith('phc_') && destination.host.startsWith('https://')
+    ? `${destination.host.replace(/\/$/, '')}/batch/` : undefined;
+}
+
 export function authMethod(path: string): 'GET' | 'POST' {
   return path === '/get-session' || path === '/token' ? 'GET' : 'POST';
 }

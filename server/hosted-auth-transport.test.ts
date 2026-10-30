@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAuthNetworkBridge } from '../electron/account/auth-network.ts';
-import { createHostedAuthRequest } from './hosted-auth-transport.ts';
-import { AUTH_REQUEST_LIMIT, AUTH_RESPONSE_LIMIT, AUTH_BASE_URL } from '../shared/hosted-auth-network.ts';
+import { createHostedAuthRequest, createHostedUsageFetch } from './hosted-auth-transport.ts';
+import { AUTH_REQUEST_LIMIT, AUTH_RESPONSE_LIMIT, AUTH_BASE_URL, USAGE_RELAY_PATH, USAGE_REQUEST_LIMIT } from '../shared/hosted-auth-network.ts';
 
 test('desktop auth uses only the native transport for exchange, refresh, profile and logout', async t => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -80,6 +80,38 @@ test('native transport retains provider rejection but sends only safe network er
   });
   mode = 'large';
   await assert.rejects(invoke, /AUTH_RESPONSE_TOO_LARGE/);
+});
+
+test('usage batches follow the proxy-aware relay only to the fixed ingestion destination', async t => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const bridge = await createAuthNetworkBridge({ usageUrl: 'https://ingest.test/batch/', fetch: async (url, init) => {
+    calls.push({ url: String(url), init });
+    return Response.json({ status: 'Ok' });
+  } });
+  t.after(() => bridge.close());
+  const usage = createHostedUsageFetch({ port: String(bridge.port), token: bridge.token, required: true });
+  const body = JSON.stringify({ api_key: 'phc_test', batch: [{ event: 'app_opened' }] });
+  const response = await usage('https://attacker.example/collect', { method: 'POST', body, signal: AbortSignal.timeout(2000) });
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://ingest.test/batch/');
+  assert.equal(calls[0].init?.body, body);
+  assert.equal(calls[0].init?.redirect, 'error');
+  assert.equal(calls[0].init?.credentials, 'omit');
+  const url = `http://127.0.0.1:${bridge.port}${USAGE_RELAY_PATH}`;
+  const headers = { 'x-stashbase-auth-network-token': bridge.token };
+  assert.equal((await fetch(url, { method: 'POST', headers, body: '{"path":"/token"}' })).status, 400);
+  assert.equal((await fetch(url, { method: 'POST', headers, body: 'x'.repeat(USAGE_REQUEST_LIMIT + 1) })).status, 413);
+  assert.equal((await fetch(url, { method: 'POST', body })).status, 403);
+  assert.equal(calls.length, 1);
+
+  const unconfigured = await createAuthNetworkBridge({ usageUrl: undefined, fetch: async () => { calls.push({ url: 'unexpected' }); return Response.json({}); } });
+  t.after(() => unconfigured.close());
+  const refused = await fetch(`http://127.0.0.1:${unconfigured.port}${USAGE_RELAY_PATH}`, {
+    method: 'POST', headers: { 'x-stashbase-auth-network-token': unconfigured.token }, body });
+  assert.equal(refused.status, 404);
+  await assert.rejects(createHostedUsageFetch({ required: true })('https://ingest.test/batch/', { method: 'POST', body }), (error: { code?: string }) => error.code === 'AUTH_BRIDGE_UNAVAILABLE');
+  assert.equal(calls.length, 1);
 });
 
 test('caller cancellation and desktop shutdown abort upstream requests without retry', async t => {

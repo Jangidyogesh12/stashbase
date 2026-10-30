@@ -68,21 +68,26 @@ test('source and packaged launches collect while tests and explicit suppression 
       process.env.STASHBASE_TELEMETRY_DISABLED = process.env.EXPECT_TELEMETRY_DISABLED;
       const packaged = process.env.STASHBASE_PACKAGED === '1';
       const available = process.env.EXPECT_TELEMETRY_AVAILABLE === '1';
-      Object.assign(process.env, createServerChildEnvironment({
-        baseEnv: process.env, packaged,
-        packagedEnv: { STASHBASE_PACKAGED: packaged ? '1' : '0' },
-        shutdownToken: 'test-shutdown', oauthReturnToken: 'test-oauth', instanceId: 'test',
-      }));
       const sent = [];
       const distributions = [];
       // Replace the outbound transport before importing the production owner.
-      // Even the positive control must never contact the production destination.
-      globalThis.fetch = async (_url, init) => {
-        const payload = JSON.parse(init.body);
-        sent.push(payload.event);
-        distributions.push(payload.properties.app_distribution);
-        return new Response(null, { status: 200 });
-      };
+      // Even the positive control must never contact the production destination,
+      // and desktop delivery must use the proxy-aware native relay, not Node fetch.
+      globalThis.fetch = async () => { throw new Error('direct usage delivery bypassed the native relay'); };
+      const { createAuthNetworkBridge } = await import('./electron/account/auth-network.ts');
+      const bridge = await createAuthNetworkBridge({ usageUrl: 'https://ingest.test/batch/', fetch: async (url, init) => {
+        assert.equal(String(url), 'https://ingest.test/batch/');
+        for (const payload of JSON.parse(init.body).batch) {
+          sent.push(payload.event);
+          distributions.push(payload.properties.app_distribution);
+        }
+        return new Response('{}', { status: 200 });
+      } });
+      Object.assign(process.env, createServerChildEnvironment({
+        baseEnv: process.env, packaged,
+        packagedEnv: { STASHBASE_PACKAGED: packaged ? '1' : '0' },
+        shutdownToken: 'test-shutdown', oauthReturnToken: 'test-oauth', instanceId: 'test', authNetwork: bridge,
+      }));
       const { telemetry } = await import('./server/telemetry.ts');
       const { readAppConfigStrict, writeAppConfigStrict } = await import('./server/app-config.ts');
       const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -116,7 +121,7 @@ test('source and packaged launches collect while tests and explicit suppression 
       assert.deepEqual(readAppConfigStrict().telemetry, { enabled: false });
       telemetry.update({ enabled: true });
       telemetry.capture({ event: 'project_entry_result', outcome: 'success' });
-      await tick();
+      await telemetry.flush();
       assert.deepEqual(sent, available ? [
         'app_opened', 'agent_turn_started', 'document_write_result', 'application_error', 'application_warning',
         'project_entry_result',
@@ -132,6 +137,7 @@ test('source and packaged launches collect while tests and explicit suppression 
       const native = createNativeDiagnostics({ available: telemetryAvailable(), distribution: packaged ? 'packaged' : 'source', version: 'test', directory });
       native.record(new Error('test native failure'), 'startup');
       assert.equal(fs.existsSync(directory), available);
+      bridge.close();
     `], {
       cwd: fileURLToPath(new URL('..', import.meta.url)),
       env: { ...environment, ...marker, STASHBASE_PACKAGED: packaged, STASHBASE_TELEMETRY_DISABLED: disabled, EXPECT_TELEMETRY_AVAILABLE: available ? '1' : '0', EXPECT_TELEMETRY_DISABLED: disabled },
@@ -153,7 +159,7 @@ function fixture(available = true) {
     write(next: AppConfigFile) { if (writeFails) throw new Error('private config path'); config = structuredClone(next); },
     now: () => now,
     fetch: (async (_url, init) => {
-      sent.push({ body: JSON.parse(String(init?.body)), signal: init?.signal as AbortSignal });
+      for (const body of JSON.parse(String(init?.body)).batch) sent.push({ body, signal: init?.signal as AbortSignal });
       return new Response(null, { status: 200 });
     }) as typeof fetch,
   };
@@ -567,6 +573,63 @@ test('offline queue survives a distribution change and keeps occurrence identity
   f.service.close();
 });
 
+test('queued events leave in batches and a refused batch cannot discard its valid members', async () => {
+  const f = fixture();
+  const requests: string[][] = [];
+  const service = createTelemetry({ ...f.options, fetch: async (_url, init) => {
+    const batch = JSON.parse(String(init?.body)).batch as Array<{ event: string }>;
+    requests.push(batch.map(({ event }) => event));
+    // The provider refuses any request that contains the invalid envelope.
+    return new Response(null, { status: batch.some(({ event }) => event === 'document_write_result') ? 400 : 200 });
+  } });
+  service.capture({ event: 'app_opened' });
+  service.capture({ event: 'document_write_result', outcome: 'success', changed: true });
+  service.capture({ event: 'project_entry_result', outcome: 'success' });
+  await service.flush();
+  assert.deepEqual(requests, [
+    ['app_opened', 'document_write_result', 'project_entry_result'],
+    ['app_opened'], ['document_write_result'], ['project_entry_result'],
+  ]);
+  assert.equal(f.config().telemetry!.queue!.length, 0);
+  service.capture({ event: 'app_active', mode: 'chat' });
+  service.capture({ event: 'project_entry_result', outcome: 'failed' });
+  await service.flush();
+  assert.deepEqual(requests.at(-1), ['app_active', 'project_entry_result']);
+  service.close(); f.service.close();
+});
+
+test('undelivered events survive a three-week absence and leave on the next launch', async () => {
+  const f = fixture();
+  const offline = createTelemetry({ ...f.options, fetch: async () => { throw new Error('offline'); } });
+  offline.capture({ event: 'document_engaged', activity: 'edit', format: 'md' });
+  offline.close('app_shutdown');
+  for (let day = 0; day < 21; day++) f.nextDay();
+  f.service.capture({ event: 'app_opened' });
+  await f.service.flush();
+  assert.deepEqual(f.sent.map(({ body }) => body.event), ['document_engaged', 'app_opened']);
+  f.service.close();
+});
+
+test('diagnostic bursts cannot crowd out core activity, turn starts or operation results', async () => {
+  const f = fixture();
+  for (let index = 0; index < 130; index++) {
+    f.service.captureWarning(new Error('refused request'), { source: 'server', operation: 'http', request_id: crypto.randomUUID() });
+  }
+  const turn_id = crypto.randomUUID();
+  f.service.capture({ event: 'agent_turn_started', runtime: 'stashbase', turn_id });
+  f.service.capture({ event: 'document_engaged', activity: 'edit', format: 'md' });
+  f.service.capture({ event: 'app_active', mode: 'chat' });
+  f.service.capture({ event: 'document_write_result', outcome: 'success', changed: true });
+  f.service.capture({ event: 'agent_turn_finished', runtime: 'stashbase', turn_id, outcome: 'success' });
+  for (let index = 0; index < 130; index++) f.service.capture({ event: 'project_entry_result', outcome: 'failed', request_id: crypto.randomUUID() });
+  await f.service.flush();
+  const events = f.sent.map(({ body }) => body.event);
+  assert.equal(events.filter(event => event === 'application_warning').length, 120);
+  assert.equal(events.filter(event => event === 'project_entry_result').length, 119);
+  for (const event of ['agent_turn_started', 'document_engaged', 'app_active', 'document_write_result', 'agent_turn_finished']) assert.ok(events.includes(event), event);
+  f.service.close();
+});
+
 test('rate limiting retains failed deliveries while permanent refusals do not block the queue', async () => {
   const f = fixture();
   let status = 429;
@@ -668,7 +731,7 @@ test('queued events expire, queue capacity is bounded, and malformed disk payloa
   const valid = f.config().telemetry!.queue![0];
   f.config().telemetry!.queue!.push({ ...valid, event: { event: 'app_opened', secret: 'private-content' } } as any);
   offline.close();
-  for (let day = 0; day < 8; day++) f.nextDay();
+  for (let day = 0; day < 31; day++) f.nextDay();
   await f.service.flush();
   assert.equal(f.sent.length, 0);
   assert.equal(f.config().telemetry!.queue!.length, 0);

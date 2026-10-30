@@ -2,13 +2,16 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import {
   AUTH_PATHS, AUTH_REQUEST_LIMIT, AUTH_RESPONSE_LIMIT, AUTH_TIMEOUT_MS,
-  AUTH_BASE_URL, authMethod, authNetworkError,
+  AUTH_BASE_URL, USAGE_RELAY_PATH, USAGE_REQUEST_LIMIT, authMethod, authNetworkError, usageBatchUrl,
 } from '../../shared/hosted-auth-network.ts';
+import destination from '../../server/telemetry-destination.json' with { type: 'json' };
 
 /** A bounded, process-private relay to Chromium's system-proxy-aware session.
+ * It carries hosted Auth operations and usage batches to their fixed destinations.
  * No renderer IPC, arbitrary destination, redirects, cookies or session storage. */
-export async function createAuthNetworkBridge(options: { fetch: typeof fetch }) {
+export async function createAuthNetworkBridge(options: { fetch: typeof fetch; usageUrl?: string | undefined }) {
   const token = crypto.randomBytes(32).toString('hex');
+  const usageUrl = 'usageUrl' in options ? options.usageUrl : usageBatchUrl(destination);
   const pending = new Set<AbortController>();
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
@@ -18,7 +21,10 @@ export async function createAuthNetworkBridge(options: { fetch: typeof fetch }) 
       response.writeHead(403).end();
       return;
     }
-    if (request.method !== 'POST' || request.url !== '/') { response.writeHead(404).end(); return; }
+    const usage = request.url === USAGE_RELAY_PATH;
+    if (request.method !== 'POST' || (request.url !== '/' && !usage) || (usage && !usageUrl)) {
+      response.writeHead(404).end(); return;
+    }
     if (pending.size >= 8) { response.writeHead(503).end(); return; }
     const controller = new AbortController();
     pending.add(controller);
@@ -29,31 +35,41 @@ export async function createAuthNetworkBridge(options: { fetch: typeof fetch }) 
     // Also bound incomplete request bodies, before an upstream fetch exists.
     controller.signal.addEventListener('abort', abort, { once: true });
     try {
+      const limit = usage ? USAGE_REQUEST_LIMIT : AUTH_REQUEST_LIMIT;
       const chunks: Buffer[] = [];
       let size = 0;
       for await (const chunk of request) {
         size += chunk.length;
-        if (size > AUTH_REQUEST_LIMIT) { response.writeHead(413).end(); return; }
+        if (size > limit) { response.writeHead(413).end(); return; }
         chunks.push(Buffer.from(chunk));
       }
+      const raw = Buffer.concat(chunks).toString('utf8');
       let input;
-      try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+      try { input = JSON.parse(raw); }
       catch { response.writeHead(400).end(); return; }
-      if (!input || !AUTH_PATHS.has(input.path)
-        || (input.body !== undefined && typeof input.body !== 'string')
-        || (input.accessToken !== undefined && (typeof input.accessToken !== 'string' || input.accessToken.length > 16_384))) {
-        response.writeHead(400).end(); return;
+      let target: { url: string; init: RequestInit };
+      if (usage) {
+        if (!input || typeof input !== 'object' || !Array.isArray(input.batch)) { response.writeHead(400).end(); return; }
+        target = { url: usageUrl!, init: { method: 'POST', headers: { 'content-type': 'application/json' }, body: raw } };
+      } else {
+        if (!input || !AUTH_PATHS.has(input.path)
+          || (input.body !== undefined && typeof input.body !== 'string')
+          || (input.accessToken !== undefined && (typeof input.accessToken !== 'string' || input.accessToken.length > 16_384))) {
+          response.writeHead(400).end(); return;
+        }
+        target = { url: `${AUTH_BASE_URL}${input.path}`, init: {
+          method: authMethod(input.path),
+          headers: {
+            'content-type': 'application/json',
+            'cache-control': 'no-store',
+            ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
+          },
+          ...(authMethod(input.path) === 'POST' ? { body: input.body } : {}),
+        } };
       }
       controller.signal.removeEventListener('abort', abort);
-      const upstream = await options.fetch(`${AUTH_BASE_URL}${input.path}`, {
-        method: authMethod(input.path),
-        headers: {
-          'content-type': 'application/json',
-          'cache-control': 'no-store',
-          ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
-        },
-        ...(authMethod(input.path) === 'POST' ? { body: input.body } : {}),
-        credentials: 'omit', redirect: 'error', signal: controller.signal,
+      const upstream = await options.fetch(target.url, {
+        ...target.init, credentials: 'omit', redirect: 'error', signal: controller.signal,
       });
       const reader = upstream.body?.getReader();
       const parts: Uint8Array[] = [];

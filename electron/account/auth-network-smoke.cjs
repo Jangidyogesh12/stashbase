@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { app, session } = require('electron');
 const { createAuthNetworkBridge } = require('../../dist/electron/account/auth-network.cjs');
+const destination = require('../../server/telemetry-destination.json');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-auth-network-'));
 app.setPath('userData', path.join(root, 'profile'));
@@ -45,13 +46,24 @@ app.whenReady().then(async () => {
   // the configured proxy. Relay destination restrictions have their own tests.
   assert.ok(tunnels.includes('api.stashbase.ai:443'),
     `Chromium must send Auth through the PAC-selected proxy; observed ${JSON.stringify(tunnels)}`);
+  // Usage batches take the same proxy-aware route to the configured ingestion
+  // host. The proxy refuses the tunnel, so the fixture never reaches it.
+  const usage = await fetch(`http://127.0.0.1:${bridge.port}/usage`, {
+    method: 'POST', headers: { 'x-stashbase-auth-network-token': bridge.token },
+    body: JSON.stringify({ api_key: 'phc_fixture', historical_migration: false, batch: [] }),
+  });
+  assert.equal(usage.status, 502);
+  assert.equal((await usage.json()).errorCode, 'ERR_TUNNEL_CONNECTION_FAILED');
+  const ingestion = `${new URL(destination.host).hostname}:443`;
+  assert.ok(tunnels.includes(ingestion),
+    `Chromium must send usage through the PAC-selected proxy; observed ${JSON.stringify(tunnels)}`);
   await authSession.closeAllConnections();
   await new Promise(resolve => proxy.close(resolve));
   await authSession.setProxy({ mode: 'fixed_servers', proxyRules: `http=127.0.0.1:${proxyPort};https=127.0.0.1:${proxyPort}` });
   const unavailable = await send();
   assert.equal(unavailable.status, 502);
   assert.equal((await unavailable.json()).errorCode, 'ERR_PROXY_CONNECTION_FAILED');
-  console.log('Auth native smoke passed: PAC CONNECT routing, proxy changes, concrete Chromium failures.');
+  console.log('Auth native smoke passed: PAC CONNECT routing for Auth and usage, proxy changes, concrete Chromium failures.');
 }).then(() => finish(0), error => { console.error(error); finish(1); });
 
 function finish(code) {

@@ -5,7 +5,9 @@ import type { AppConfigFile } from './app-config.ts';
 import { countDelivery, hostDeliverySchema, rendererDeliverySchema, type HostDelivery } from '../shared/protocols/telemetry-delivery.ts';
 
 export const QUEUE_LIMIT = 500;
-export const QUEUE_TTL = 7 * 86400_000;
+/** Gaps of one to three weeks between uses are normal; undelivered events
+ * wait for a later launch instead of expiring before the person returns. */
+export const QUEUE_TTL = 30 * 86400_000;
 export const usageDistributionSchema = z.enum(['source', 'packaged']);
 const id = z.string().uuid();
 const userId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);

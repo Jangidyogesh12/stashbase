@@ -429,9 +429,12 @@ transport and do not establish production delivery.
 
 `server/telemetry.test.ts` covers anonymous-to-account links, restart continuity,
 logout/direct account switching, delayed outcomes, offline queue replay, stable
-UUID/time/version, retryable/permanent refusals, capacity/expiry, corrupt config,
+UUID/time/version, retryable/permanent refusals, batching with single-event
+isolation of a refused batch, delivery after a three-week absence, core activity
+and operation results admitted through diagnostic bursts, capacity/expiry, corrupt config,
 opt-out cancellation, active days without restart, session expiry and subscription
-poll suppression. Its subprocess replaces outbound transport before importing the
+poll suppression. Its subprocess routes delivery through a local native relay with a replaced
+upstream (direct Node fetch fails the test) before importing the
 production owner and exercises source, Vite-development and packaged collection,
 distribution attribution, opt-out, and Electron's test-suppression environment.
 Node, Vitest, Jest and `NODE_ENV=test` markers suppress both distributions,
@@ -445,6 +448,12 @@ listener disposal, bounded edit reporting and refusal of host-only facts.
 Document lifecycle tests distinguish editing from reconciliation/no-change callbacks;
 agent usage tests cover correlation and terminal coalescing. All collection tests
 use isolated configuration and fake/local transport, never production PostHog.
+`server/hosted-auth-transport.test.ts` limits the relay's usage route to its fixed
+destination, and `electron/account/auth-network-smoke.cjs` proves in real Chromium
+that usage batches follow the PAC-selected proxy (the proxy refuses the tunnel).
+On 2026-10-30 these suites, `pnpm check`, Electron boundary tests and the built
+Electron smoke passed. Production PostHog receipt through a real user proxy
+remains unverified.
 
 On 2026-10-22, the telemetry/native-diagnostic/account suites (69 tests), host and
 renderer types, documentation checks, service/renderer builds, Electron boundary
