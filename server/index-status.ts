@@ -117,9 +117,17 @@ function preparationFailuresForFolder(folderRoot: string): PreparationFailure[] 
   for (const { path: sourcePath, entry } of listPreparationProblems()) {
     const rel = filesystemPath.relative(root, sourcePath);
     if (rel == null) continue;
-    if (!fs.existsSync(sourcePath)) {
-      clearRecord(sourcePath);
-      continue;
+    try {
+      fs.statSync(sourcePath);
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      // Permission loss is not deletion. Polling must preserve the same
+      // durable failure/cancellation that reconciliation protects while a
+      // subtree cannot be observed.
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        clearRecord(sourcePath);
+        continue;
+      }
     }
     out.push({
       path: rel,

@@ -81,6 +81,14 @@ correctness does not establish search-by-meaning relevance. Representative
 quality evaluation is deferred; [J05](../../code-review/journey-coverage.md#j05-search)
 records the evidence gap.
 
+An unreadable child directory must not stop other readable files from updating.
+Skip that subtree, retain its existing index and prepared state, and identify the
+directory in the project's Search warning with a retry action, including when
+only keyword search is configured. Missing inventory is not proof of deletion.
+After access returns, the next sync updates or removes retained entries normally
+and clears the warning after a successful run. An unreadable project root or
+unexpected scan failure still stops reconciliation without cleaning unseen files.
+
 ## Related Journeys
 
 [J04](../journeys/README.md#j04-prepare-a-hard-to-read-file),

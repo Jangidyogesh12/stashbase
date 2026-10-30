@@ -214,7 +214,7 @@ function ensureSwitchWatchdog(): void {
 function syncFailureMessage(result: SyncResult): string {
   const sample = result.failed.slice(0, 3).map((f) => `${f.name}: ${f.error}`).join('; ');
   const suffix = result.failed.length > 3 ? `; plus ${result.failed.length - 3} more` : '';
-  return `${result.failed.length} file(s) could not be indexed${sample ? ` (${sample}${suffix})` : ''}`;
+  return `${result.failed.length} file(s) or folder(s) could not be indexed${sample ? ` (${sample}${suffix})` : ''}`;
 }
 
 function syncTouchedVisibleTree(result: SyncResult): boolean {

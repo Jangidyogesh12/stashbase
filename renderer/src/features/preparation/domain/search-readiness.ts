@@ -24,6 +24,8 @@ type SemanticSearchReadiness =
 export interface FolderSearchReadiness {
   /** How many visible sources are in each preparation state. */
   readonly counts: FolderPreparationSummary;
+  /** Reconciliation failures affect keyword search even without an embedding key. */
+  readonly indexWarning: string | null;
   /** Visible sources already searchable. */
   readonly readyCount: number;
   readonly semantic: SemanticSearchReadiness;
@@ -47,9 +49,10 @@ export function folderSearchReadiness(
   status: FolderIndexStatus | null | undefined,
 ): FolderSearchReadiness {
   const counts = folderPreparationSummary(status);
-  if (!status) return { counts, readyCount: 0, semantic: { state: 'unknown' } };
+  if (!status) return { counts, indexWarning: null, readyCount: 0, semantic: { state: 'unknown' } };
   return {
     counts,
+    indexWarning: status.indexWarning?.sentence ?? null,
     readyCount: Math.max(0, status.total - counts.pending),
     semantic: semanticSearchReadiness(status),
   };

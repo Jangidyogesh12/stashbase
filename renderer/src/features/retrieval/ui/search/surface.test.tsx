@@ -67,6 +67,7 @@ function renderSurface(backends: readonly [SearchBackend, ...SearchBackend[]]) {
           decisionApi={indexDecisionApi()}
           focusRevision={0}
           folderPath="/project/research"
+          indexWarning={null}
           onNavigate={onNavigate}
           preparation={noPreparation}
           readiness={{ state: 'ready' }}

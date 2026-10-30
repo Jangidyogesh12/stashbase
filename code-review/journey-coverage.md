@@ -1643,8 +1643,28 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 - **Release Check:** semantic-quality evaluation and baseline collection are
   deferred, with no required provider reports or quality threshold gate.
   Deterministic retrieval checks and packaged integration checks still apply.
-- **Background fixes (2026-09-16):** an unreadable-subtree regression verifies
-  incomplete enumeration cannot remove existing projections. Real sync
+- **Unreadable subdirectories (2026-10-30):** `conversion.ts` reports child
+  `EACCES`/`EPERM` paths to `sync.ts`, which protects both indexed documents and
+  derived preparation state while reconciling readable peers. Root denial and
+  unexpected scan errors still abort before cleanup. `semantic-index-inputs.test.ts`
+  covers retained nested rows, prepared artifacts and cancellation state,
+  similarly named sibling cleanup, and recovery when access returns.
+  `semantic-indexing-state.test.ts` covers folder-scoped warning persistence and
+  clearing after success. `index-status.test.ts` verifies status polling retains
+  failed/cancelled preparation through permission or I/O errors and clears only
+  confirmed missing sources. Preparation and Search expose that warning, including
+  its directory path, without requiring an embedding key; the renderer test
+  retains usable keyword results and Retry/Dismiss. An isolated macOS source
+  pass used real filesystem `EACCES` and Python/MFS: readable siblings updated,
+  retained child rows and prepared state survived daemon restart, and restoring
+  access allowed normal update/removal. Root denial preserved the index. This
+  exercises the sync/MFS seam with synthetic prepared text, not extraction or
+  the packaged application. An isolated Electron render of the production Search
+  component at sidebar width visibly retained the wrapped directory warning,
+  Retry/Dismiss controls and usable keyword result without a meaning-search key.
+  The reporter's macOS
+  permissions/ACL/TCC cause and packaged-device behavior remain unverified.
+- **Background fixes (2026-09-16):** Real sync
   orchestration tests inject daemon retirement during upsert and deletion,
   verifying rebind, retry, and a successful result without false file failures.
   The redundant `folderReady` set is removed; successful daemon status establishes

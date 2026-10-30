@@ -562,14 +562,24 @@ export async function discoverNewSources(
   await walkSources(folderAbs, '', spec.matches, (_rel, abs) => discoverSource(abs, spec, queueConversion));
 }
 
+export interface UnreadableSourceDirectory {
+  path: string;
+  code: 'EACCES' | 'EPERM';
+}
+
 /** Collect candidate files through the same yielding traversal and exclusion
- * policy used by direct format discovery. */
+ * policy used by direct format discovery. A caller may opt into partial scans
+ * only by handling unreadable child directories and preserving their state. */
 export async function collectSourceCandidates(
   folderAbs: string,
   matches: (name: string) => boolean,
+  onUnreadableDirectory?: (directory: UnreadableSourceDirectory) => void,
 ): Promise<string[]> {
   const candidates: string[] = [];
-  await walkSources(folderAbs, '', matches, (_rel, abs) => candidates.push(abs));
+  await walkSources(folderAbs, '', matches, (_rel, abs) => candidates.push(abs), {
+    entriesSinceYield: 0,
+    onUnreadableDirectory,
+  });
   return candidates;
 }
 
@@ -624,6 +634,7 @@ export function getInFlightConversions(folderRoot?: string): string[] {
 
 interface DiscoveryWalkState {
   entriesSinceYield: number;
+  onUnreadableDirectory?: (directory: UnreadableSourceDirectory) => void;
 }
 
 async function walkSources(
@@ -634,8 +645,16 @@ async function walkSources(
   state: DiscoveryWalkState = { entriesSinceYield: 0 },
 ): Promise<void> {
   let entries: fs.Dirent[];
-  // An incomplete inventory cannot authorize deletion of unseen projections.
-  entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    // Root and unexpected failures remain fatal. A partial child inventory
+    // is safe only when the caller explicitly protects the unobserved subtree.
+    if (!prefix || !state.onUnreadableDirectory || (code !== 'EACCES' && code !== 'EPERM')) throw err;
+    state.onUnreadableDirectory({ path: dir, code });
+    return;
+  }
   for (const e of entries) {
     state.entriesSinceYield += 1;
     if (state.entriesSinceYield >= FILESYSTEM_SCAN_YIELD_EVERY) {

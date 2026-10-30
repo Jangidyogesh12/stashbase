@@ -75,6 +75,7 @@ const result: ExactSearchResult = {
 afterEach(cleanup);
 
 interface RenderOptions {
+  indexWarning?: string;
   onConfigureSearch?: () => void;
   decisions?: IndexDecisionPort;
   onNavigate?: ProjectSearchProps['onNavigate'];
@@ -98,6 +99,7 @@ function renderSearch(api: ExactSearchPort, options: RenderOptions = {}) {
         decisionApi={decisions}
         exactApi={api}
         focusRevision={focusRevision}
+        indexWarning={options.indexWarning ?? null}
         onNavigate={onNavigate}
         onConfigureSearch={options.onConfigureSearch}
         preparation={options.preparation ?? noPreparation}
@@ -321,6 +323,35 @@ describe('Library Search', () => {
 
     expect(screen.getByText('Search may be incomplete: daemon restarted')).not.toBeNull();
     const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() =>
+      expect(rendered.decisions.dismissWarning).toHaveBeenCalledWith(
+        '/project/research',
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
+  it('names a skipped folder while keyword search remains usable without an embedding key', async () => {
+    const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
+    const warning = 'Library: Directory could not be read (EACCES). Existing index retained.';
+    const rendered = renderSearch(exactApi, {
+      indexWarning: warning,
+      readiness: { state: 'not-set-up' },
+    });
+    const user = userEvent.setup();
+
+    expect(screen.getByRole('alert').textContent).toContain(warning);
+    expect(screen.queryByRole('tab', { name: 'By meaning' })).toBeNull();
+    await user.type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answer');
+    await waitFor(() => expect(screen.getByText('answer.md')).not.toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() =>
+      expect(rendered.decisions.resync).toHaveBeenCalledWith(
+        '/project/research',
+        expect.any(AbortSignal),
+      ),
+    );
     await user.click(screen.getByRole('button', { name: 'Dismiss' }));
     await waitFor(() =>
       expect(rendered.decisions.dismissWarning).toHaveBeenCalledWith(

@@ -256,9 +256,16 @@ source URL and installed package version.
   registered folder before traversal and mutation-triggered scheduling. The
   MFS adapter repeats that check against its longest bound folder; ancestors
   outside the project must not affect eligibility.
-  An incomplete directory scan fails reconciliation before unseen projections can
-  be removed. Queuing invalidates stale final output; source removal retires all
-  owned artifacts.
+  A child directory denied with `EACCES` or `EPERM` is recorded as a partial-scan
+  failure. Reconciliation preserves index rows, derived artifacts and preparation
+  state beneath that directory while processing readable peers, including their
+  confirmed removals. Root scan failures and unexpected traversal errors still
+  fail reconciliation before cleanup. The next readable scan reconciles the
+  retained subtree normally. Status polling clears durable preparation problems
+  only after `ENOENT`/`ENOTDIR` confirms absence; permission and I/O errors retain
+  failed and cancelled records. Folder-scoped index warnings name skipped paths and
+  reach Search even without an embedding key. Queuing invalidates stale final
+  output; confirmed source removal retires all owned artifacts.
 - The longest registered folder owns a source namespace. Nested binding replay
   retires ancestor projections in order with admission. Daemon readiness waits
   for current config/bindings; reset/removal races retry the authoritative operation

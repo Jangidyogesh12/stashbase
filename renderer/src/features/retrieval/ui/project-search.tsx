@@ -1,31 +1,13 @@
 import { useMemo } from 'react';
 
-import type {
-  ExactSearchPort,
-  IndexDecisionPort,
-  SemanticSearchPort,
-} from '@/features/retrieval/application/ports';
-import type { SearchNavigationIntent } from '@/features/retrieval/domain/exact-search';
-import type {
-  PreparationCounts,
-  SemanticReadiness,
-} from '@/features/retrieval/domain/semantic-readiness';
+import type { ExactSearchPort, SemanticSearchPort } from '@/features/retrieval/application/ports';
 
 import { offeredBackends, searchBackends } from './search/backends';
-import { SearchSurface } from './search/surface';
+import { SearchSurface, type SearchSurfaceProps } from './search/surface';
 
-export interface ProjectSearchProps {
-  active: boolean;
+export interface ProjectSearchProps extends Omit<SearchSurfaceProps, 'backends' | 'folderPath'> {
   activeFolderPath: string;
-  decisionApi: IndexDecisionPort;
   exactApi: ExactSearchPort;
-  focusRevision: number;
-  onConfigureSearch?: (() => void) | undefined;
-  onNavigate(intent: SearchNavigationIntent): Promise<boolean>;
-  preparation: PreparationCounts;
-  readiness: SemanticReadiness;
-  /** Visible sources already searchable, for the preparation line. */
-  readyCount: number;
   semanticApi: SemanticSearchPort;
 }
 

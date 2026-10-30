@@ -6,7 +6,7 @@ import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 export type IndexDecisionAction = 'dismiss-warning' | 'retry-index';
 
-/** Runs one search-by-meaning decision at a time for the folder; the status poll
+/** Runs one index decision at a time for the folder; the status poll
  *  owned elsewhere reports the outcome, so nothing here is optimistic. The
  *  decision lane aborts its own previous call and every call on unmount. */
 export function useIndexDecisions(api: IndexDecisionPort, folderPath: string) {

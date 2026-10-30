@@ -73,4 +73,17 @@ describe('useFolderReadiness', () => {
     const on = renderHook(() => useFolderReadiness(folderListing, status, true));
     expect(on.result.current.search.semantic).toEqual({ state: 'ready' });
   });
+
+  it('keeps an unreadable-folder warning when search by meaning is not configured', () => {
+    const warning = 'Library: Directory could not be read (EACCES). Existing index retained.';
+    const status = folderIndexStatus({
+      indexWarning: { at: 'now', sentence: warning },
+      semantic: { state: 'not-set-up' },
+    });
+    const { result } = renderHook(() => useFolderReadiness(folderListing, status, false));
+
+    expect(result.current.search.semantic).toEqual({ state: 'not-set-up' });
+    expect(result.current.search.indexWarning).toBe(warning);
+    expect(result.current.search.counts.needsAttention).toBe(true);
+  });
 });

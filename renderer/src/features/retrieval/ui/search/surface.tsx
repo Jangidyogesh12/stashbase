@@ -48,6 +48,7 @@ export interface SearchSurfaceProps {
   decisionApi: IndexDecisionPort;
   focusRevision: number;
   folderPath: string;
+  indexWarning: string | null;
   onConfigureSearch?: (() => void) | undefined;
   onNavigate(intent: SearchNavigationIntent): Promise<boolean>;
   preparation: PreparationCounts;
@@ -62,6 +63,7 @@ export function SearchSurface({
   decisionApi,
   focusRevision,
   folderPath,
+  indexWarning,
   onNavigate,
   onConfigureSearch,
   preparation,
@@ -93,7 +95,7 @@ export function SearchSurface({
   const rows = lane === null ? null : (run.data ?? null);
   const count = rows?.count ?? 0;
   const searching = lane !== null && (run.isSettling || run.isFetching);
-  const notice = semanticIndexNotice(readiness);
+  const notice = semanticIndexNotice(readiness, indexWarning);
   const preparationLine = preparationReadinessLine(preparation, readyCount);
 
   useEffect(() => setActiveIndex(0), [backendId, folderPath, query, run.data]);

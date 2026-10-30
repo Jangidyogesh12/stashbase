@@ -11,6 +11,9 @@ export interface SyncResult {
   added: string[];
   modified: string[];
   removed: string[];
+  /** Folder-relative file failures and unreadable child directories. Skipped
+   * directories retain their previous index and derived state; readable peers
+   * can still appear in the successful mutation lists. */
   failed: { name: string; error: string }[];
   /** True when the caller deliberately abandoned the sync because the
    *  target folder/window is no longer current. Any arrays are partial work

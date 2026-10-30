@@ -2,10 +2,9 @@
  * Search-by-meaning readiness for the search surface.
  *
  * The states arrive already reduced: the shell hands search one variant per
- * observable state, each carrying exactly the facts its notice needs.
- * `canSemanticSearch` and `semanticIndexNotice` derive the two answers a
- * surface asks for, so no caller reads a loose flag beside the state it came
- * from, and nothing here reaches for the daemon's own status shape.
+ * observable state. Semantic state controls availability; folder reconciliation
+ * warnings independently inform both search modes. Nothing here reaches for
+ * the daemon's own status shape.
  */
 
 export type SemanticReadinessAction = 'dismiss-warning' | 'retry-index';
@@ -44,19 +43,16 @@ export interface SemanticIndexNotice {
   readonly tone: 'attention' | 'neutral';
 }
 
-/** What the reader should be told about search by meaning, or null when the state
- *  has nothing to say. */
-export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndexNotice | null {
+/** Folder reconciliation warnings apply to both modes, independently of
+ *  search-by-meaning setup. Otherwise report semantic readiness. */
+export function semanticIndexNotice(
+  readiness: SemanticReadiness,
+  indexWarning: string | null = null,
+): SemanticIndexNotice | null {
+  if (indexWarning !== null) return indexWarningNotice(indexWarning);
   switch (readiness.state) {
     case 'failed':
-      return {
-        actions: ['retry-index', 'dismiss-warning'],
-        detail: `Search may be incomplete: ${readiness.warning}`,
-        persistent: true,
-        prominent: false,
-        title: 'Search needs attention',
-        tone: 'attention',
-      };
+      return indexWarningNotice(readiness.warning);
     case 'indexing':
       return {
         actions: [],
@@ -76,6 +72,17 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
     case 'unknown':
       return null;
   }
+}
+
+function indexWarningNotice(warning: string): SemanticIndexNotice {
+  return {
+    actions: ['retry-index', 'dismiss-warning'],
+    detail: `Search may be incomplete: ${warning}`,
+    persistent: true,
+    prominent: false,
+    title: 'Search needs attention',
+    tone: 'attention',
+  };
 }
 
 export interface PreparationCounts {

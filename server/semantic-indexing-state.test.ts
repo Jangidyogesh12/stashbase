@@ -8,6 +8,7 @@ import {
   cancelFolderSyncsAndWait,
   deleteFolderRuntimeState,
   enqueueFolderSyncOperation,
+  getIndexWarning,
   runFolderSyncOperation,
 } from './state.ts';
 import type { Indexer } from './indexer.ts';
@@ -106,6 +107,26 @@ test('a Folder reconcile rebinds once when runtime reset drops the binding', asy
   assert.deepEqual(result.failed, []);
   assert.equal(bindCalls, 2);
   assert.equal(syncCalls, 2);
+});
+
+test('a partial Folder reconcile retains its directory warning until a successful retry', async (t) => {
+  const folder = path.join(os.tmpdir(), 'stashbase-unreadable-directory-warning');
+  t.after(() => deleteFolderRuntimeState(folder));
+  const failed = [{ name: 'Library', error: 'Directory could not be read (EACCES). Existing index retained.' }];
+  const deps = {
+    indexer: {} as Indexer,
+    bind: async () => undefined,
+    sync: async () => ({ added: ['readable.md'], modified: [], removed: [], failed }),
+  };
+
+  const result = await runFolderSyncOperation(folder, { reason: 'manual sync' }, deps);
+  assert.deepEqual(result.added, ['readable.md']);
+  assert.match(getIndexWarning(folder)?.message ?? '', /file\(s\) or folder\(s\).*Library:.*EACCES.*Existing index retained/);
+  assert.equal(getIndexWarning(`${folder}-other`), null);
+
+  failed.length = 0;
+  await runFolderSyncOperation(folder, { reason: 'retry' }, deps);
+  assert.equal(getIndexWarning(folder), null);
 });
 
 test('Folder removal interrupts an unresponsive reconcile before waiting', async () => {

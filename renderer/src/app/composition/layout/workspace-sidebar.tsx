@@ -251,6 +251,7 @@ export function WorkspaceSidebar({
                   decisionApi={dependencies.retrieval.decisionApi}
                   exactApi={dependencies.retrieval.exactSearchApi}
                   focusRevision={sidebar.focusRevision}
+                  indexWarning={folder.search.indexWarning}
                   onNavigate={sources.navigateToMatch}
                   preparation={folder.search.counts}
                   readiness={folder.search.semantic}

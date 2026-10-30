@@ -6,7 +6,8 @@
  * document status, chunking, embedding, and publication. Every direct text
  * projection is offered idempotently; MFS returns `unchanged` without
  * embedding it again. Documents absent from the current source set are
- * removed by DocumentId.
+ * removed by DocumentId, except beneath unreadable directories whose previous
+ * state must be retained until a complete scan can establish absence.
  *
  * Sources are offered in bounded batches that yield the shared event loop,
  * and per-file reads are asynchronous, so one large Folder cannot stall the
@@ -18,7 +19,7 @@ import {
   discoverConvertibleSources,
   indexFreshConvertibleSource,
 } from './conversion-dispatch.ts';
-import { cancelConversion, collectSourceCandidates } from './conversion.ts';
+import { cancelConversion, collectSourceCandidates, type UnreadableSourceDirectory } from './conversion.ts';
 import type { Indexer, IndexUpsertResult } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
 import {
@@ -85,17 +86,23 @@ function toFolderRelFailures(
 
 /** Product-owned admission walk. MFS receives only the resulting complete
  * projections, so it never traverses the user's Folder in this integration. */
-async function collectCurrentSources(root: string): Promise<string[]> {
+async function collectCurrentSources(root: string): Promise<{
+  sources: string[];
+  unreadableDirectories: UnreadableSourceDirectory[];
+}> {
+  const unreadableDirectories: UnreadableSourceDirectory[] = [];
   const candidates = await collectSourceCandidates(
     root,
     (name) => detectFormat(name) !== null || isConvertibleSource(name),
+    (directory) => unreadableDirectories.push(directory),
   );
-  return candidates
+  const sources = candidates
     .filter((sourcePath) => {
       const rel = folderRelOf(root, sourcePath);
       return rel != null && isRetrievalEligiblePath(rel);
     })
     .sort((left, right) => left.localeCompare(right));
+  return { sources, unreadableDirectories };
 }
 
 function cleanupRemovedSource(sourcePath: string): void {
@@ -107,8 +114,9 @@ function cleanupRemovedSource(sourcePath: string): void {
   }
 }
 
-function cleanupMissingConvertedSources(root: string): void {
+function cleanupMissingConvertedSources(root: string, isUnobserved: (sourcePath: string) => boolean): void {
   for (const sourcePath of knownDerivedSourcesUnderFolder(root)) {
+    if (isUnobserved(sourcePath)) continue;
     const folderRel = folderRelOf(root, sourcePath);
     if (folderRel != null && isRetrievalEligiblePath(folderRel) && fs.existsSync(sourcePath)) continue;
     cleanupRemovedSource(sourcePath);
@@ -123,13 +131,14 @@ async function removeAbsentDocuments(
   indexer: Indexer,
   currentSources: ReadonlySet<string>,
   indexedDocuments: readonly string[],
+  isUnobserved: (sourcePath: string) => boolean,
   removed: string[],
   failed: Array<{ name: string; error: string }>,
   opts: SyncOptions,
 ): Promise<boolean> {
   let removedSinceYield = 0;
   for (const sourcePath of indexedDocuments) {
-    if (currentSources.has(filesystemPath.identity(sourcePath))) continue;
+    if (currentSources.has(filesystemPath.identity(sourcePath)) || isUnobserved(sourcePath)) continue;
     if (removedSinceYield >= RECONCILE_BATCH_SIZE) {
       removedSinceYield = 0;
       await yieldToEventLoop();
@@ -206,17 +215,24 @@ export async function syncIndex(
 ): Promise<SyncResult> {
   if (shouldStop(opts)) return emptyResult(true);
 
-  const sources = await collectCurrentSources(root);
+  const { sources, unreadableDirectories } = await collectCurrentSources(root);
+  const isUnobserved = (sourcePath: string) => unreadableDirectories.some(
+    (directory) => filesystemPath.contains(directory.path, sourcePath),
+  );
   const current = sourceIdentities(sources);
   const indexedDocuments = await indexer.listDocuments(root);
   const existing = sourceIdentities(indexedDocuments);
-  const failed: Array<{ name: string; error: string }> = [];
+  const failed: Array<{ name: string; error: string }> = unreadableDirectories.map((directory) => ({
+    name: directory.path,
+    error: `Directory could not be read (${directory.code}); skipped this folder and kept its existing index.`,
+  }));
+  for (const failure of failed) log.warn(`${failure.name}: ${failure.error}`);
   const added: string[] = [];
   const modified: string[] = [];
   const removed: string[] = [];
 
-  cleanupMissingConvertedSources(root);
-  if (!await removeAbsentDocuments(indexer, current, indexedDocuments, removed, failed, opts)) {
+  cleanupMissingConvertedSources(root, isUnobserved);
+  if (!await removeAbsentDocuments(indexer, current, indexedDocuments, isUnobserved, removed, failed, opts)) {
     return {
       ...emptyResult(true),
       removed: toFolderRelList(root, removed),

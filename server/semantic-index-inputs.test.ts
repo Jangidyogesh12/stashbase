@@ -8,6 +8,9 @@ import { syncIndex } from './sync.ts';
 import type { Indexer } from './indexer.ts';
 import { MfsIndexer, prepareForIndex } from './indexer.mfs.ts';
 import { getDaemon } from './mfs-daemon.ts';
+import { collectSourceCandidates } from './conversion.ts';
+import { clearRecord, markCancelled, readAll } from './conversion-status.ts';
+import { deleteDerivedForSource, derivedNoteFor, knownDerivedSourcesUnderFolder, registerDerivedSource } from './derived-store.ts';
 import {
   hasNoExtractableText,
   indexableFileSizeError,
@@ -165,26 +168,104 @@ test('reconcile excludes media while preserving source files and admitting text'
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test('an unreadable subtree cannot authorize removal of existing projections', async (t) => {
+for (const code of ['EACCES', 'EPERM']) test(`${code} skips only unreadable subtrees, retains their state, and recovers on the next scan`, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-incomplete-scan-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const child = path.join(root, 'notes');
-  fs.mkdirSync(child);
-  const source = path.join(child, 'note.md');
+  fs.mkdirSync(path.join(child, 'nested'), { recursive: true });
+  const source = path.join(child, 'nested', 'note.md');
+  const missing = path.join(child, 'missing.md');
+  const prepared = path.join(child, 'paper.pdf');
+  const unindexedPrepared = path.join(child, 'unindexed.pdf');
+  const outsidePrepared = path.join(root, 'removed.pdf');
+  const peer = path.join(root, 'visible.md');
+  const added = path.join(root, 'new.md');
+  const peerMissing = path.join(root, 'notes-old', 'missing.md');
   fs.writeFileSync(source, 'still present');
+  fs.writeFileSync(peer, 'updated readable text');
+  fs.writeFileSync(added, 'new readable text');
+  for (const pdf of [prepared, unindexedPrepared, outsidePrepared]) {
+    registerDerivedSource(pdf);
+    fs.writeFileSync(derivedNoteFor(pdf), 'previous prepared text');
+    markCancelled(pdf);
+    t.after(() => { clearRecord(pdf); deleteDerivedForSource(pdf); });
+  }
+  let denied = true;
   const readdir = fs.promises.readdir.bind(fs.promises);
   t.mock.method(fs.promises, 'readdir', async (candidate: string, ...args: unknown[]) => {
-    if (candidate === child) throw Object.assign(new Error('temporary access denied'), { code: 'EACCES' });
+    if (denied && candidate === child) throw Object.assign(new Error('temporary access denied'), { code });
     return (readdir as Function)(candidate, ...args);
   });
-  const mutations: string[] = [];
-  await assert.rejects(syncIndex({
-    listDocuments: async () => [source],
-    deleteFile: async (name: string) => { mutations.push(name); },
-    upsertFile: async (name: string) => { mutations.push(name); return { outcome: 'added' }; },
-  } as unknown as Indexer, root), { code: 'EACCES' });
-  assert.deepEqual(mutations, []);
+  // Discovery without an explicit partial-inventory handler remains strict.
+  await assert.rejects(collectSourceCandidates(root, () => true), { code });
+  const documents = new Set([source, missing, prepared, peer, peerMissing, outsidePrepared]);
+  const offered = new Map<string, string>();
+  const indexer = {
+    listDocuments: async () => [...documents],
+    deleteFile: async (name: string) => { documents.delete(name); },
+    upsertFile: async (name: string, content: string) => {
+      offered.set(name, content);
+      const outcome = documents.has(name) ? 'updated' : 'added';
+      documents.add(name);
+      return { outcome };
+    },
+  } as unknown as Indexer;
+  const partial = await syncIndex(indexer, root);
+  assert.deepEqual(partial.added, ['new.md']);
+  assert.deepEqual(partial.modified, ['visible.md']);
+  assert.deepEqual(partial.removed, ['notes-old/missing.md', 'removed.pdf']);
+  assert.deepEqual([...offered], [[added, 'new readable text'], [peer, 'updated readable text']]);
+  assert.deepEqual([...documents].sort(), [source, missing, prepared, peer, added].sort());
+  assert.equal(partial.failed.length, 1);
+  assert.equal(partial.failed[0].name, 'notes');
+  assert.match(partial.failed[0].error, new RegExp(code));
+  assert.match(partial.failed[0].error, /skipped.*kept its existing index/);
+  for (const pdf of [prepared, unindexedPrepared]) {
+    assert.equal(fs.readFileSync(derivedNoteFor(pdf), 'utf8'), 'previous prepared text');
+    assert.equal(readAll()[filesystemPath.absolute(pdf)]?.status, 'cancelled');
+    assert.ok(knownDerivedSourcesUnderFolder(root).includes(filesystemPath.absolute(pdf)));
+  }
+  assert.equal(fs.existsSync(derivedNoteFor(outsidePrepared)), false);
+  assert.equal(readAll()[filesystemPath.absolute(outsidePrepared)], undefined);
+
+  denied = false;
+  fs.writeFileSync(source, 'now readable and changed');
+  const recovered = await syncIndex(indexer, root);
+  assert.deepEqual(recovered.failed, []);
+  assert.deepEqual(recovered.removed, ['notes/missing.md', 'notes/paper.pdf']);
+  assert.equal(offered.get(source), 'now readable and changed');
+  for (const pdf of [prepared, unindexedPrepared]) {
+    assert.equal(fs.existsSync(derivedNoteFor(pdf)), false);
+    assert.equal(readAll()[filesystemPath.absolute(pdf)], undefined);
+  }
 });
+
+for (const [location, code] of [['root', 'EACCES'], ['root', 'EPERM'], ['child', 'EIO'], ['child', 'ENOENT']]) {
+  test(`${location} scan failure ${code} still stops before index or derived cleanup`, async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-fatal-scan-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const child = path.join(root, 'notes');
+    fs.mkdirSync(child);
+    fs.writeFileSync(path.join(root, 'visible.md'), 'readable');
+    const prepared = path.join(root, 'missing.pdf');
+    registerDerivedSource(prepared);
+    fs.writeFileSync(derivedNoteFor(prepared), 'keep on failed scan');
+    t.after(() => deleteDerivedForSource(prepared));
+    const readdir = fs.promises.readdir.bind(fs.promises);
+    t.mock.method(fs.promises, 'readdir', async (candidate: string, ...args: unknown[]) => {
+      if (candidate === (location === 'root' ? root : child)) throw Object.assign(new Error('scan failed'), { code });
+      return (readdir as Function)(candidate, ...args);
+    });
+    const mutations: string[] = [];
+    await assert.rejects(syncIndex({
+      listDocuments: async () => [prepared],
+      deleteFile: async (name: string) => { mutations.push(name); },
+      upsertFile: async (name: string) => { mutations.push(name); return { outcome: 'added' }; },
+    } as unknown as Indexer, root), { code });
+    assert.deepEqual(mutations, []);
+    assert.equal(fs.readFileSync(derivedNoteFor(prepared), 'utf8'), 'keep on failed scan');
+  });
+}
 
 test('removing many stale projections yields to the event loop between batches', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-batched-reconcile-'));
