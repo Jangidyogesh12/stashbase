@@ -11,6 +11,7 @@ export function createHttpProjectOperations(
 ): ProjectOperations {
   const headers = (extra?: Record<string, string>): Record<string, string> => ({
     ...(extra ?? {}),
+    'x-stashbase-project-client': 'mcp',
     ...(windowId != null ? { 'x-stashbase-window-id': windowId } : {}),
     // Per-session attribution for host-side policy and tools (search by
     // meaning and create_project). Comes from the spawning session's

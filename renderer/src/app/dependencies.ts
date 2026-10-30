@@ -96,6 +96,7 @@ export interface AppDependencies {
    *  null on a first launch. */
   initialAppearance: AppearanceSurface | null;
   recordUsage: ReturnType<typeof createUsageRecorder>;
+  onInputActivity?: WindowLifecycleBridge['onInputActivity'];
   agent: {
     /** Which runtimes a conversation can open on. Settings reads the same
      *  endpoint through its own port for its own question. */
@@ -169,6 +170,7 @@ export function createDependencies(): AppDependencies {
     reportError,
     initialAppearance: bridge.runtime.appearance ?? null,
     recordUsage: createUsageRecorder(http),
+    onInputActivity: bridge.windowLifecycle.onInputActivity,
     agent: {
       catalog: createAgentCatalogAdapter(http),
       preferences: createAgentPreferencesAdapter(http),

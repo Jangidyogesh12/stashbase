@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { rendererDeliverySchema } from '../telemetry-delivery';
+export { countDelivery, type RendererDelivery } from '../telemetry-delivery';
 
 const runtime = z.enum(['stashbase', 'claude', 'codex', 'antigravity']);
 export const agentStopReasonSchema = z.enum(['session_closed', 'window_closed', 'scope_removed', 'app_shutdown',
@@ -19,6 +21,25 @@ export const processTerminationSchema = z.object({
 export const agentTurnStageSchema = z.enum(['preparing', 'host_accepted', 'runtime_dispatched', 'model_request_started', 'response_started', 'waiting_permission', 'tool_running']);
 export const agentTurnReasonSchema = z.enum(['completed', 'runtime_error', 'user_cancelled', 'context_invalid', 'connection_lost', 'session_closed', 'scope_removed', 'app_shutdown', 'host_shutdown', 'app_update', 'host_restarted']);
 export type AgentTurnStage = z.infer<typeof agentTurnStageSchema>;
+export const AGENT_TOOL_RESULT_LIMIT = 1000;
+export const agentToolCategorySchema = z.enum(['read', 'write', 'shell', 'search', 'agent', 'other']);
+export const agentToolResultSchema = z.object({
+  call_id: z.string().min(1).max(512), category: agentToolCategorySchema,
+  outcome: z.enum(['success', 'failed']),
+}).strict();
+export type AgentToolResult = z.infer<typeof agentToolResultSchema>;
+const toolCounts = z.object({
+  success: z.number().int().min(0).max(AGENT_TOOL_RESULT_LIMIT),
+  failed: z.number().int().min(0).max(AGENT_TOOL_RESULT_LIMIT),
+}).strict();
+/** Runtime tool outcomes, not file changes or proof that the user's goal was met.
+ * Counts stop at the bounded call-ID limit instead of recounting forgotten IDs. */
+export const agentToolSummarySchema = toolCounts.extend({
+  by_category: z.object({ read: toolCounts.optional(), write: toolCounts.optional(),
+    shell: toolCounts.optional(), search: toolCounts.optional(), agent: toolCounts.optional(), other: toolCounts.optional() }).strict(),
+  limited: z.boolean(),
+}).strict();
+export type AgentToolSummary = z.infer<typeof agentToolSummarySchema>;
 const outcome = z.enum(['success', 'failed', 'cancelled', 'blocked']);
 export { errorDiagnostic } from '../diagnostics';
 export type { ErrorDiagnostic } from '../diagnostics';
@@ -36,7 +57,7 @@ export const diagnosticContextSchema = z.object({
   model: z.string().max(200).optional(), runtime_version: z.string().max(100).optional(),
   turn_id: z.string().uuid().optional(),
   call_id: z.string().uuid().optional(), call_attempt: z.number().int().positive().optional(),
-  tool_call_id: z.string().max(512).optional(), tool_category: z.enum(['read', 'write', 'shell', 'search', 'agent', 'other']).optional(),
+  tool_call_id: z.string().max(512).optional(), tool_category: agentToolCategorySchema.optional(),
   tool_failure_kind: z.enum(['not_found', 'permission_denied', 'invalid_arguments', 'timeout', 'unknown']).optional(),
   close_code: z.number().int().min(0).max(65535).optional(), was_clean: z.boolean().optional(),
   close_initiator: z.enum(['client', 'server', 'unknown']).optional(),
@@ -106,6 +127,7 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
     last_stage: agentTurnStageSchema.optional(), sequence: z.number().int().nonnegative().optional(),
     started_at: z.string().datetime().optional(), last_observed_at: z.string().datetime().optional(),
     finished_at: z.string().datetime().optional(), recovered_at: z.string().datetime().optional(),
+    tool_summary: agentToolSummarySchema.optional(),
     context: diagnosticContextSchema.optional(),
   }).strict(),
   z.object({ event: z.literal('agent_turn_stage'), runtime, turn_id: z.string().uuid(),
@@ -113,6 +135,12 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
     context: diagnosticContextSchema.optional(),
   }).strict(),
   z.object({ event: z.literal('document_write_result'), ...correlation, outcome: z.enum(['success', 'failed', 'conflict']), changed: z.boolean().optional() }).strict(),
+  z.object({ event: z.literal('project_file_operation'), ...correlation,
+    turn_id: z.string().uuid().optional(),
+    operation: z.enum(['read', 'write', 'edit']), origin: z.enum(['agent', 'mcp', 'http']),
+    runtime: runtime.optional(), outcome: z.enum(['success', 'failed', 'conflict']),
+    changed: z.boolean().optional(),
+  }).strict(),
   z.object({ event: z.literal('agent_setup_result'), runtime,
     stage: z.enum(['prepare', 'login', 'update', 'connect']), outcome,
     ...correlation,
@@ -149,13 +177,16 @@ export type TelemetryEvent = z.infer<typeof telemetryEventSchema>;
  * cannot manufacture identity links or account/conversion outcomes. */
 export const rendererTelemetryEventSchema = telemetryEventSchema.refine((value) =>
   ['app_opened', 'app_active', 'document_engaged', 'agent_turn_started', 'agent_turn_finished'].includes(value.event)
+  && !('tool_summary' in value && value.tool_summary !== undefined)
   && (!('source' in value) || value.source === undefined || value.source === 'renderer'));
 export const rendererTelemetryRequestSchema = z.object({
   id: z.string().uuid(), timestamp: z.string().datetime(), event: rendererTelemetryEventSchema,
+  delivery: rendererDeliverySchema.optional(),
 }).strict();
 export type RendererTelemetryRequest = z.infer<typeof rendererTelemetryRequestSchema>;
 export const telemetryReceiptSchema = z.object({
   status: z.enum(['accepted', 'duplicate', 'disabled', 'retry', 'discarded']),
+  reset_delivery: z.boolean().optional(),
 }).strict();
 export type TelemetryReceiptStatus = z.infer<typeof telemetryReceiptSchema>['status'];
 export const telemetryPreferencesSchema = z.object({

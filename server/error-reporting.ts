@@ -5,7 +5,7 @@ import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { errorDiagnostic } from './error-diagnostics.ts';
 import { telemetry } from './telemetry.ts';
 import { setLogErrorReporter } from './log.ts';
-import type { ErrorContext, AgentTurnStage } from '../shared/protocols/http/telemetry.ts';
+import { AGENT_TOOL_RESULT_LIMIT, type ErrorContext, type AgentTurnStage, type AgentToolResult } from '../shared/protocols/http/telemetry.ts';
 import { agentClientEventSchema, type AgentServerEvent } from '../shared/protocols/websocket/agent-session.ts';
 
 /** One fixed feature name, never a dynamic route, query, body, or file path. */
@@ -69,7 +69,7 @@ export const unhandledHttpError: ErrorRequestHandler = (error: unknown, _req, re
 /** Installation has its own terminal event. Runtime events carry only their
  * error sentence; tool inputs, outputs, prompts, and replies never enter here. */
 const validTurnId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-const agentStates = new WeakMap<object, { runtime?: NonNullable<ErrorContext['runtime']>; interrupted: boolean; closing: boolean; finished?: boolean; lastError?: string; stage?: AgentTurnStage; tools?: Map<string, 'read' | 'write' | 'shell' | 'search' | 'agent' | 'other'> }>();
+const agentStates = new WeakMap<object, { runtime?: NonNullable<ErrorContext['runtime']>; interrupted: boolean; closing: boolean; finished?: boolean; lastError?: string; stage?: AgentTurnStage; tools?: Map<string, AgentToolResult['category']>; completedTools?: Set<string> }>();
 const agentCaptures = new WeakMap<object, ReturnType<typeof telemetry.scoped>>();
 const agentProcessSnapshots = new WeakMap<object, () => NonNullable<ErrorContext['context']>>();
 const agentDiagnostics = new WeakMap<object, Omit<ErrorContext, 'source' | 'operation' | 'runtime'>>();
@@ -171,23 +171,28 @@ function toolFailureKind(content: string): NonNullable<NonNullable<ErrorContext[
   return 'unknown';
 }
 
+/** Native adapters expose both MCP names and display names. Classify only the
+ * name; arguments, file paths and outputs never inform exported workload. */
+function toolCategory(raw: string): AgentToolResult['category'] {
+  const name = raw.replace(/^mcp__.+?__|^stashbase_/i, '').replace(/^.*:/, '');
+  return /^(read|read_file|view_file|view_file_outline)$/i.test(name) ? 'read'
+    : /^(write|edit|patch|apply_patch|multiedit|multi_edit|write_file|edit_file|file change|write_to_file|replace_file_content|multi_replace_file_content)$/i.test(name) ? 'write'
+    : /^(bash|shell|run_command|command_status)$/i.test(name) ? 'shell'
+    : /^(grep|glob|list|search|search_project|semantic_search|keyword_search|web[ _]?search|web[ _]?fetch|grep_search|find_by_name|list_dir|search_web|read_url_content)$/i.test(name) ? 'search'
+    : /^(task|agent|spawn_agent)$/i.test(name) ? 'agent' : 'other';
+}
+
 export function reportAgentRuntimeError(runtime: NonNullable<ErrorContext['runtime']>, event: AgentServerEvent, connection?: object, cause?: unknown): void {
   if (connection && !agentDiagnostics.has(connection)) beginAgentDiagnosticTurn(connection, undefined);
   const context = connection ? agentDiagnostics.get(connection) ?? {} : {};
   const state = connection ? agentStates.get(connection) : undefined;
   if (connection) {
-    if (event.t === 'tool') {
+    if (event.t === 'tool' && !state?.completedTools?.has(event.id)) {
       agentDiagnosticStage(connection, 'tool_running');
-      const name = event.name.replace(/^mcp__[^_]+__|^stashbase_/i, '');
-      const category = /^(read|read_file)$/i.test(name) ? 'read'
-        : /^(write|edit|apply_patch|write_file|edit_file)$/i.test(name) ? 'write'
-        : /^(bash|shell)$/i.test(name) ? 'shell'
-        : /^(grep|glob|search|search_project|semantic_search|keyword_search|websearch|webfetch)$/i.test(name) ? 'search'
-        : /^(task|agent)$/i.test(name) ? 'agent' : 'other';
       if (state) {
         state.tools ??= new Map();
-        if (state.tools.size >= 100) state.tools.delete(state.tools.keys().next().value!);
-        state.tools.set(event.id, category);
+        if (!state.tools.has(event.id) && state.tools.size >= AGENT_TOOL_RESULT_LIMIT) state.tools.delete(state.tools.keys().next().value!);
+        state.tools.set(event.id, toolCategory(event.name));
       }
     }
     if (event.t === 'permission') agentDiagnosticStage(connection, 'waiting_permission');
@@ -198,6 +203,17 @@ export function reportAgentRuntimeError(runtime: NonNullable<ErrorContext['runti
     if (scoped) scoped({ event: 'application_error', ...details, diagnostic: errorDiagnostic(error) });
     else telemetry.captureError(error, details);
   };
+  const duplicateToolResult = event.t === 'tool-result' && state?.completedTools?.has(event.id);
+  if (event.t === 'tool-result' && !duplicateToolResult) {
+    telemetry.observeTurn(context.turn_id, { tool_result: {
+      call_id: event.id, category: state?.tools?.get(event.id) ?? 'other', outcome: event.isError ? 'failed' : 'success',
+    } });
+    if (state && event.id && event.id.length <= 512) {
+      state.completedTools ??= new Set();
+      if (state.completedTools.size >= AGENT_TOOL_RESULT_LIMIT) state.completedTools.delete(state.completedTools.values().next().value!);
+      state.completedTools.add(event.id);
+    }
+  }
   if ((event.t === 'error' || event.t === 'exit') && 'message' in event && event.message) {
     // A runtime error can be immediately followed by an exit carrying that
     // same explanation for the UI. The first report owns its original cause.
@@ -206,7 +222,7 @@ export function reportAgentRuntimeError(runtime: NonNullable<ErrorContext['runti
         ...(event.t === 'error' && event.failure ? { code: event.failure.kind } : {}),
       }, { ...context, source: 'agent', operation: event.t === 'exit' ? 'connection' : 'runtime', runtime });
     }
-  } else if (event.t === 'tool-result' && event.isError) {
+  } else if (event.t === 'tool-result' && event.isError && !duplicateToolResult) {
     // Tool output can contain source text. Export only fixed categories, never the matched text.
     capture({ message: 'Agent tool call failed', code: 'AGENT_TOOL_FAILED' }, { ...context,
       context: { ...context.context, tool_call_id: event.id, tool_category: state?.tools?.get(event.id) ?? 'other',

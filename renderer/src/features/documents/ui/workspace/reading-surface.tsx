@@ -3,6 +3,9 @@ import { useStore } from 'zustand';
 
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentHistoryRuntime } from '@/features/documents/application/history-runtime';
+import type { SubscribeDocumentInput } from '@/features/documents/application/ports';
+
+import { listenForFrameInput } from './frame-input';
 
 // Sandboxed HTML owns its own viewport; it deliberately exposes no DOM to us.
 const scrollerSelector = '.cm-scroller, .milkdown, [data-document-scroller]';
@@ -15,11 +18,13 @@ export function DocumentReadingSurface({
   active,
   children,
   onRead,
+  onInputActivity,
 }: {
   runtime: DocumentRuntime;
   history: DocumentHistoryRuntime;
   active: boolean;
   onRead?: (() => void) | undefined;
+  onInputActivity?: SubscribeDocumentInput | undefined;
   children: ReactNode;
 }) {
   const request = useStore(runtime.store, (state) => state.readingRequest);
@@ -58,6 +63,8 @@ export function DocumentReadingSurface({
       )
         onRead?.();
     };
+    const releaseInput =
+      onInputActivity && onRead ? listenForFrameInput(host, onInputActivity, onRead) : undefined;
     const observer = new MutationObserver(restore);
     const resize = new ResizeObserver(restore);
     observer.observe(host, { childList: true, subtree: true });
@@ -68,6 +75,7 @@ export function DocumentReadingSurface({
     host.addEventListener('keydown', interact);
     restore();
     return () => {
+      releaseInput?.();
       observer.disconnect();
       resize.disconnect();
       host.removeEventListener('scroll', remember, true);
@@ -75,7 +83,7 @@ export function DocumentReadingSurface({
       host.removeEventListener('pointerdown', interact);
       host.removeEventListener('keydown', interact);
     };
-  }, [active, history, onRead, request, runtime]);
+  }, [active, history, onInputActivity, onRead, request, runtime]);
   return (
     <div className="flex min-h-0 flex-1 flex-col" ref={root}>
       {children}

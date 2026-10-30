@@ -130,6 +130,39 @@ it('stops after a definitive receipt or refusal and bounds attempts without a va
   }
 });
 
+it('checkpoints generated, coalesced and exhausted reports without counting retries as new activity', async () => {
+  vi.useFakeTimers();
+  const client = httpClient(null, 503);
+  const request = vi.spyOn(client, 'request');
+  const record = createUsageRecorder(client);
+  record({ event: 'document_engaged', activity: 'edit', format: 'md' });
+  record({ event: 'document_engaged', activity: 'edit', format: 'md' });
+  const first = structuredClone(request.mock.calls[0]?.[0].body);
+  await vi.runAllTimersAsync();
+  expect(request.mock.calls.map(([value]) => value.body)).toEqual([first, first, first]);
+  request.mockResolvedValue({ status: 200, body: { status: 'accepted' } });
+  record({ event: 'agent_turn_started', runtime: 'codex' });
+  expect(request.mock.calls.at(-1)?.[0].body).toMatchObject({
+    delivery: { counters: { generated: 3, coalesced: 1, exhausted: 1, requests: 4 } },
+  });
+  await vi.runAllTimersAsync();
+});
+
+it('starts a fresh checkpoint when host admission retires the previous collection period', async () => {
+  const client = httpClient({ status: 'accepted', reset_delivery: true });
+  const request = vi.spyOn(client, 'request');
+  const record = createUsageRecorder(client);
+  record({ event: 'document_engaged', activity: 'read', format: 'html' });
+  await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+  request.mockResolvedValue({ status: 200, body: { status: 'accepted' } });
+  record({ event: 'document_engaged', activity: 'read', format: 'html' });
+  const snapshots = request.mock.calls.map(
+    ([value]) => (value.body as { delivery: { series_id: string; counters: unknown } }).delivery,
+  );
+  expect(snapshots[1]?.series_id).not.toBe(snapshots[0]?.series_id);
+  expect(snapshots[1]?.counters).toEqual({ generated: 1, requests: 1 });
+});
+
 it('holds only its own terminal behind start retries and bounds concurrent reports', async () => {
   vi.useFakeTimers();
   const client = httpClient({ status: 'accepted' });

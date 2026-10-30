@@ -175,7 +175,7 @@ test('default-on manual collection has only allowed fields and no source or acco
   f.service.capture({ event: 'project_entry_result', outcome: 'success', path: '/private' } as any);
   await tick();
   assert.equal(f.sent.length, 1);
-  assert.equal(f.sent[0].body.properties.schema_version, 7);
+  assert.equal(f.sent[0].body.properties.schema_version, 8);
   assert.equal(f.sent[0].body.properties.$process_person_profile, false);
   assert.equal(f.sent[0].body.properties.$geoip_disable, true);
   assert.equal(f.sent[0].body.properties.$ip, null);
@@ -580,7 +580,79 @@ test('rate limiting retains failed deliveries while permanent refusals do not bl
   status = 400;
   await service.flush();
   assert.equal(f.config().telemetry!.queue!.length, 0);
+  assert.deepEqual(service.delivery()?.counters, { attempted: 1, accepted: 1, transport_failed: 2, rejected: 1 });
+  service.capture({ event: 'document_write_result', outcome: 'success', changed: true });
+  const checkpoint = structuredClone(f.config().telemetry!.queue![0].delivery);
+  assert.equal(checkpoint?.counters.rejected, 1);
+  service.close();
+  const restarted = createTelemetry(f.options);
+  await restarted.flush();
+  assert.deepEqual(f.sent[0].body.properties.delivery, checkpoint);
+  assert.equal(restarted.delivery()?.counters.delivered, 1);
+  restarted.close();
   service.close(); f.service.close();
+});
+
+test('delivery checkpoints distinguish failed storage and admission loss without carrying counters across opt-out', async () => {
+  const f = fixture();
+  f.writeFails();
+  f.service.capture({ event: 'app_opened' });
+  assert.equal(f.service.delivery()?.counters.storage_failed, 1);
+  f.writeFails(false);
+  f.service.capture({ event: 'app_opened' });
+  await f.service.flush();
+  assert.equal(f.sent[0].body.properties.delivery.counters.storage_failed, 1);
+  assert.equal(f.sent[0].body.properties.delivery.counters.attempted, 2);
+  assert.equal(f.sent[0].body.properties.delivery.counters.accepted, 1);
+  const first = f.service.delivery()!.series_id;
+  f.service.update({ enabled: false });
+  assert.equal(f.service.delivery(), null);
+  f.service.capture({ event: 'app_active', mode: 'documents' });
+  f.service.update({ enabled: true });
+  f.service.capture({ event: 'app_active', mode: 'documents' });
+  await f.service.flush();
+  assert.notEqual(f.service.delivery()!.series_id, first);
+  assert.equal(f.service.delivery()!.counters.storage_failed, undefined);
+  f.service.close();
+});
+
+test('renderer checkpoints cannot backfill a prior account or disabled collection period', async () => {
+  const f = fixture();
+  f.advance(1);
+  const delivery = { series_id: crypto.randomUUID(), started_at: new Date(f.options.now()).toISOString(), counters: { generated: 10 } };
+  f.service.update({ enabled: false });
+  f.advance(1);
+  f.service.update({ enabled: true });
+  f.advance(1);
+  const request = { id: crypto.randomUUID(), timestamp: new Date(f.options.now()).toISOString(), event: { event: 'app_opened' as const }, delivery };
+  assert.equal(f.service.captureRenderer(request), 'accepted');
+  assert.equal(f.service.rendererDeliveryCurrent(request), false);
+  await f.service.flush();
+  assert.equal(f.sent[0].body.properties.renderer_delivery, undefined);
+  f.advance(1);
+  const current = { ...request, id: crypto.randomUUID(), timestamp: new Date(f.options.now()).toISOString(),
+    event: { event: 'document_engaged' as const, activity: 'read' as const, format: 'html' as const },
+    delivery: { ...delivery, started_at: new Date(f.options.now()).toISOString(), counters: { generated: 1 } } };
+  assert.equal(f.service.captureRenderer(current), 'accepted');
+  await f.service.flush();
+  assert.deepEqual(f.sent.at(-1)!.body.properties.renderer_delivery, current.delivery);
+  f.service.close();
+});
+
+test('a failed delivery checkpoint retains the acknowledged UUID and records storage loss on recovery', async () => {
+  const f = fixture();
+  f.service.capture({ event: 'app_opened' });
+  f.writeFails();
+  await f.service.flush();
+  assert.equal(f.config().telemetry!.queue!.length, 1);
+  assert.equal(f.service.delivery()?.counters.storage_failed, 1);
+  f.writeFails(false);
+  await f.service.flush();
+  assert.equal(f.sent.length, 2);
+  assert.deepEqual(f.sent[1].body, f.sent[0].body);
+  assert.equal(f.service.delivery()?.counters.storage_failed, 1);
+  assert.equal(f.config().telemetry!.queue!.length, 0);
+  f.service.close();
 });
 
 test('queued events expire, queue capacity is bounded, and malformed disk payloads never leave', async () => {
@@ -592,6 +664,7 @@ test('queued events expire, queue capacity is bounded, and malformed disk payloa
   }
   await offline.flush();
   assert.ok(f.config().telemetry!.queue!.length <= 500);
+  assert.ok((offline.delivery()?.counters.queue_full ?? 0) > 0);
   const valid = f.config().telemetry!.queue![0];
   f.config().telemetry!.queue!.push({ ...valid, event: { event: 'app_opened', secret: 'private-content' } } as any);
   offline.close();
@@ -599,6 +672,8 @@ test('queued events expire, queue capacity is bounded, and malformed disk payloa
   await f.service.flush();
   assert.equal(f.sent.length, 0);
   assert.equal(f.config().telemetry!.queue!.length, 0);
+  assert.ok((f.service.delivery()?.counters.expired ?? 0) > 0);
+  assert.equal(f.service.delivery()?.counters.invalid_queued, 1);
   f.service.close();
 });
 
@@ -981,7 +1056,7 @@ test('window retirement cancels each runtime turn while an unexpected socket los
   }
 });
 
-test('tool failure can recover and interrupt acknowledgement remains cancellation', async (t) => {
+test('tool results count distinct per-turn workload without changing recovered and cancelled outcomes', async (t) => {
   const { EventEmitter } = await import('node:events');
   const { telemetry } = await import('./telemetry.ts');
   const { attachAgentDiagnostics, beginAgentDiagnosticTurn, reportAgentRuntimeError } = await import('./error-reporting.ts');
@@ -999,16 +1074,63 @@ test('tool failure can recover and interrupt acknowledgement remains cancellatio
   const first = start();
   reportAgentRuntimeError('claude', { t: 'tool', id: 'tool-1', name: 'mcp__stashbase__search_project', input: { private: 'PRIVATE INPUT' } }, connection);
   reportAgentRuntimeError('claude', { t: 'tool-result', id: 'tool-1', content: 'PRIVATE OUTPUT', isError: true }, connection);
+  reportAgentRuntimeError('claude', { t: 'tool', id: 'tool-1', name: 'mcp__stashbase__search_project', input: {} }, connection);
+  reportAgentRuntimeError('claude', { t: 'tool-result', id: 'tool-1', content: 'PRIVATE DUPLICATE', isError: true }, connection);
+  for (const [index, name] of ['stashbase:read_file', 'File change', 'MultiEdit', 'Web search', 'Bash', 'Task'].entries()) {
+    const id = `successful-${index}`;
+    reportAgentRuntimeError('claude', { t: 'tool', id, name, input: { private: 'PRIVATE INPUT' } }, connection);
+    reportAgentRuntimeError('claude', { t: 'tool-result', id, content: 'PRIVATE OUTPUT', isError: false }, connection);
+    reportAgentRuntimeError('claude', { t: 'tool-result', id, content: 'PRIVATE DUPLICATE', isError: false }, connection);
+  }
   reportAgentRuntimeError('claude', { t: 'turn-end', isError: false }, connection);
   const second = start();
+  reportAgentRuntimeError('claude', { t: 'tool', id: 'tool-1', name: 'read', input: {} }, connection);
+  reportAgentRuntimeError('claude', { t: 'tool-result', id: 'tool-1', content: 'PRIVATE OUTPUT', isError: false }, connection);
   connection.emit('message', Buffer.from('{"t":"interrupt"}'));
   reportAgentRuntimeError('claude', { t: 'turn-end', isError: false }, connection);
   await f.service.flush();
   const outcomes = f.sent.filter(({ body }) => body.event === 'agent_turn_finished');
   assert.deepEqual(outcomes.map(({ body }) => [body.properties.turn_id, body.properties.outcome]), [[first, 'success'], [second, 'cancelled']]);
+  assert.deepEqual(outcomes[0].body.properties.tool_summary, {
+    success: 6, failed: 1, limited: false, by_category: {
+      search: { success: 1, failed: 1 }, read: { success: 1, failed: 0 }, write: { success: 2, failed: 0 },
+      shell: { success: 1, failed: 0 }, agent: { success: 1, failed: 0 },
+    },
+  });
+  assert.deepEqual(outcomes[1].body.properties.tool_summary, {
+    success: 1, failed: 0, limited: false, by_category: { read: { success: 1, failed: 0 } },
+  });
+  assert.equal(f.sent.filter(({ body }) => body.properties.operation === 'tool').length, 1);
   assert.equal(f.sent.find(({ body }) => body.properties.operation === 'tool')!.body.properties.context.tool_category, 'search');
   assert.doesNotMatch(JSON.stringify(f.sent), /PRIVATE/);
   f.service.close();
+});
+
+test('bounded tool counts survive crash recovery without filling the queue or trusting renderer totals', async () => {
+  const { AGENT_TOOL_RESULT_LIMIT, rendererTelemetryEventSchema } = await import('../shared/protocols/http/telemetry.ts');
+  const f = fixture();
+  const turn_id = crypto.randomUUID();
+  f.service.observeTurn(turn_id, { stage: 'host_accepted', runtime: 'codex' });
+  const before = f.config().telemetry!.queue!.length;
+  for (let index = 0; index <= AGENT_TOOL_RESULT_LIMIT; index++) {
+    f.service.observeTurn(turn_id, { tool_result: { call_id: `tool-${index}`, category: 'read', outcome: 'success' } });
+  }
+  f.service.observeTurn(turn_id, { tool_result: { call_id: 'tool-0', category: 'write', outcome: 'failed' } });
+  assert.equal(f.config().telemetry!.queue!.length, before, 'successful tool results consume no queue slots');
+  const pending = f.config().telemetry!.turns![0];
+  assert.equal(pending.toolCallIds!.length, AGENT_TOOL_RESULT_LIMIT);
+  assert.deepEqual(pending.toolSummary, { success: AGENT_TOOL_RESULT_LIMIT, failed: 0,
+    by_category: { read: { success: AGENT_TOOL_RESULT_LIMIT, failed: 0 } }, limited: true });
+  assert.equal(rendererTelemetryEventSchema.safeParse({ event: 'agent_turn_finished', runtime: 'codex',
+    turn_id, outcome: 'success', tool_summary: pending.toolSummary }).success, false);
+  f.service.close();
+  const restarted = createTelemetry(f.options);
+  await restarted.flush();
+  const terminal = f.sent.find(({ body }) => body.event === 'agent_turn_finished')!.body;
+  assert.equal(terminal.properties.outcome, 'interrupted');
+  assert.deepEqual(terminal.properties.tool_summary, pending.toolSummary);
+  assert.doesNotMatch(JSON.stringify(f.sent), /tool-\d/);
+  restarted.close();
 });
 
 test('tool failure diagnostics retain only a bounded failure category, never tool output', async (t) => {

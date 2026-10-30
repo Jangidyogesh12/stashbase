@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
-const { app, BrowserWindow, net, protocol, session } = require('electron');
+const { app, BrowserWindow, ipcMain, net, protocol, session } = require('electron');
 const { WebSocketServer } = require('ws');
 const { APP_ORIGIN, installAppProtocol, registerAppScheme } = require('../app-protocol.cjs');
 const { applicationWindowWebPreferences, secureApplicationWindow } = require('../window-security.cjs');
@@ -52,6 +52,11 @@ requestApp.use((request, response) => {
         } catch (error) { parent.postMessage({ fixture: 'font', error: String(error) }, '*'); }
       })();
     </script></body>`);
+    return;
+  }
+  if (request.path === '/asset/__folder/fixture/activity.html') {
+    response.setHeader('content-type', 'text/html');
+    response.end('<!doctype html><input autofocus><p style="height:2000px">Interactive document</p>');
     return;
   }
   if (request.url === '/') {
@@ -107,7 +112,17 @@ app.whenReady().then(async () => {
   const serverOrigin = `http://127.0.0.1:${server.address().port}`;
   origins.add(serverOrigin);
   installAppProtocol({ protocol, net, rendererRoot: root, serverOrigin });
-  const window = new BrowserWindow({ show: false, webPreferences: applicationWindowWebPreferences({}) });
+  const window = new BrowserWindow({ show: false, width: 900, height: 600,
+    webPreferences: applicationWindowWebPreferences({
+      preloadPath: path.resolve(__dirname, '../../dist/electron/renderer/preload.cjs'),
+      additionalArguments: [`--stashbase-server-origin=${serverOrigin}`],
+    }),
+  });
+  const { registerWindowLifecycle } = require('../../dist/electron/window/lifecycle.cjs');
+  registerWindowLifecycle({
+    BrowserWindow, ipcMain, expectedOrigins: new Set([APP_ORIGIN]),
+    hasCapability: () => true, isLiveWindow: candidate => candidate === window,
+  }).attach(window);
   const unregistered = new BrowserWindow({ show: false, webPreferences: applicationWindowWebPreferences({}) });
   installRequestAuthorization({
     rendererOrigins: new Set([APP_ORIGIN]), serverOrigin, session: session.defaultSession,
@@ -163,6 +178,7 @@ app.whenReady().then(async () => {
   assert.deepEqual(cacheRecovery, { statuses: [200, 200], values: [{ value: 'live-settings' }, { value: 'live-settings' }], errors: [] });
   assert.equal(cacheProbeRequests, 3);
   console.log('real Electron API reads recover a bare 304 and bypass stale HTTP cache');
+  await checkFrameInput(window, serverOrigin);
   const viteWindow = new BrowserWindow({ show: false, webPreferences: applicationWindowWebPreferences({}) });
   installRequestAuthorization({
     rendererOrigins: new Set([serverOrigin]), serverOrigin, session: session.defaultSession,
@@ -190,3 +206,76 @@ app.whenReady().then(async () => {
   await new Promise((resolve) => server.close(resolve));
   app.exit(process.exitCode || 0);
 });
+
+async function checkFrameInput(window, serverOrigin) {
+  window.show();
+  app.focus({ steal: true });
+  window.focus();
+  await window.webContents.executeJavaScript(
+    fs.readFileSync(path.join(root, 'frame-input.js'), 'utf8') + `;
+    (async () => {
+      document.body.textContent = '';
+      const host = document.createElement('div');
+      host.id = 'reader';
+      const frame = document.createElement('iframe');
+      frame.sandbox = 'allow-scripts';
+      frame.style.cssText = 'position:fixed;left:0;top:0;width:400px;height:250px;border:0';
+      frame.src = ${JSON.stringify(serverOrigin + '/asset/__folder/fixture/activity.html')};
+      const loaded = new Promise(resolve => frame.onload = resolve);
+      host.append(frame);
+      document.body.append(host);
+      await loaded;
+      window.activityReads = 0;
+      window.nativeKinds = [];
+      window.stashbase.windowLifecycle.onInputActivity(kind => window.nativeKinds.push(kind));
+      window.releaseFrameInput = FixtureFrameInput.listenForFrameInput(
+        host, window.stashbase.windowLifecycle.onInputActivity, () => window.activityReads++);
+    })()`);
+  const frame = window.webContents.mainFrame.frames.find(candidate => candidate.url.endsWith('/activity.html'));
+  assert.ok(frame, 'opaque document frame is live');
+  await frame.executeJavaScript(`
+    document.querySelector('input').focus();
+    for (const type of ['keydown', 'pointerdown', 'wheel']) document.dispatchEvent(new Event(type));
+    parent.postMessage({ type: 'stashbase-input-activity', isTrusted: true }, '*');
+  `);
+  const snapshot = () => window.webContents.executeJavaScript('({ reads: window.activityReads, kinds: window.nativeKinds.slice() })');
+  assert.deepEqual(await snapshot(), { reads: 0, kinds: [] }, 'scripts cannot manufacture native activity');
+  await window.webContents.executeJavaScript('document.body.tabIndex = -1; document.body.focus()');
+  const waitForRead = async (before) => {
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      const value = await snapshot();
+      if (value.reads > before) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return snapshot();
+      }
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.fail(`native iframe input was not observed: ${JSON.stringify(await snapshot())}; ${JSON.stringify(await window.webContents.executeJavaScript('({focused: document.hasFocus(), visibility: document.visibilityState, active: document.activeElement?.tagName, hover: document.querySelector("iframe")?.matches(":hover")})'))}`);
+  };
+  window.webContents.sendInputEvent({ type: 'mouseMove', x: 60, y: 20 });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  window.webContents.sendInputEvent({ type: 'mouseDown', x: 60, y: 20, button: 'left', clickCount: 1 });
+  window.webContents.sendInputEvent({ type: 'mouseUp', x: 60, y: 20, button: 'left', clickCount: 1 });
+  let state = await waitForRead(0);
+  assert.ok(state.kinds.includes('pointer'));
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  state = await waitForRead(state.reads);
+  assert.ok(state.kinds.includes('keyboard'));
+  window.webContents.sendInputEvent({ type: 'mouseWheel', x: 60, y: 120, deltaY: -30, deltaX: 0 });
+  state = await waitForRead(state.reads);
+  // A wheel over another pane must not count as reading the still-focused frame.
+  window.webContents.sendInputEvent({ type: 'mouseMove', x: 650, y: 120 });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  window.webContents.sendInputEvent({ type: 'mouseWheel', x: 650, y: 120, deltaY: -30, deltaX: 0 });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal((await snapshot()).reads, state.reads);
+  await window.webContents.executeJavaScript('window.releaseFrameInput()');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal((await snapshot()).reads, state.reads, 'covered/disposed readers receive no activity');
+  window.hide();
+  console.log('real Electron opaque HTML input counts pointer, keyboard and wheel without trusting scripts');
+}

@@ -114,6 +114,11 @@ export interface DocumentWindowLifecyclePort {
   onPrepareContextRelease(handler: () => boolean | Promise<boolean>): () => void;
 }
 
+/** Trusted native input presence; sandboxed documents cannot emit this signal. */
+export type SubscribeDocumentInput = (
+  handler: (kind: 'keyboard' | 'pointer') => void,
+) => () => void;
+
 /** What one Markdown file held before an Agent turn, kept by the host so the
  *  reader can review the turn inside the document. `afterVersion` is the
  *  version the turn left on disk; a file that moved on since then is no longer

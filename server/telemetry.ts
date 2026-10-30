@@ -11,8 +11,8 @@ import { diagnosticAlreadyReported, diagnosticOperation, errorDiagnostic } from 
 import { diagnosticText } from '../shared/protocols/diagnostics.ts';
 import { diagnosticScope, type DiagnosticScope } from './diagnostic-context.ts';
 import { accountUsageId, usageState, usageIdentity, usagePayload, QUEUE_LIMIT,
-  turnCapacity, TURN_LIMIT, type PendingTurn, type QueuedUsage, type UsageIdentity, type TelemetryState } from './telemetry-state.ts';
-import { finishTelemetryTurn, type TurnObservation } from './telemetry-turns.ts';
+  turnCapacity, TURN_LIMIT, noteDelivery, type PendingTurn, type QueuedUsage, type UsageIdentity, type TelemetryState } from './telemetry-state.ts';
+import { finishTelemetryTurn, recordTelemetryToolResult, type TurnObservation } from './telemetry-turns.ts';
 import destination from './telemetry-destination.json' with { type: 'json' };
 import packageInfo from '../package.json' with { type: 'json' };
 export type { TelemetryState } from './telemetry-state.ts';
@@ -50,12 +50,17 @@ export function createTelemetry(options: {
   let retry: ReturnType<typeof setTimeout> | undefined;
   let retryDelay = 1000;
   let generation = 0;
+  let storageFailures = 0;
+  let refusedDelivery: Partial<Record<Parameters<typeof noteDelivery>[1], number>> = {};
   // Receipts only cover short renderer retries. The existing disk queue remains
   // the sole durable owner; a new host refuses retries from its predecessor.
   let rendererSince = now() - 1;
   let rendererAccount: string | undefined;
   try { rendererAccount = accountUsageId(options.read()); } catch { /* Admission retries unreadable storage. */ }
   const rendererReceipts = new Map<string, number>();
+  const rendererDeliveryCurrent = (request: RendererTelemetryRequest) => !request.delivery
+    || (Date.parse(request.delivery.started_at) > rendererSince
+      && Date.parse(request.delivery.started_at) <= Date.parse(request.timestamp));
   const retireRenderer = () => { rendererSince = now(); rendererReceipts.clear(); };
   const synchronizeRenderer = (config: AppConfigFile) => {
     const account = accountUsageId(config);
@@ -68,8 +73,26 @@ export function createTelemetry(options: {
   const allowed = () => options.available && !stopped && !collectionStopped;
   const preferences = () => ({ enabled: usageState(options.read(), now()).enabled, available: options.available });
   const save = (config: AppConfigFile, state: TelemetryState) => {
+    if (state.enabled) {
+      noteDelivery(state, 'storage_failed', now(), storageFailures);
+      for (const [key, amount] of Object.entries(refusedDelivery))
+        noteDelivery(state, key as Parameters<typeof noteDelivery>[1], now(), amount);
+    }
     config.telemetry = state;
     options.write(config);
+    storageFailures = 0;
+    refusedDelivery = {};
+  };
+  const refuseDelivery = (reason: Parameters<typeof noteDelivery>[1]) => {
+    refusedDelivery.attempted = (refusedDelivery.attempted ?? 0) + 1;
+    refusedDelivery[reason] = (refusedDelivery[reason] ?? 0) + 1;
+  };
+  const deliveryCheckpoint = (state: TelemetryState) => {
+    const checkpoint = { ...state, delivery: structuredClone(state.delivery) };
+    noteDelivery(checkpoint, 'storage_failed', now(), storageFailures);
+    for (const [key, amount] of Object.entries(refusedDelivery))
+      noteDelivery(checkpoint, key as Parameters<typeof noteDelivery>[1], now(), amount);
+    return checkpoint.delivery;
   };
   const entry = (identity: UsageIdentity, event: QueuedUsage['event'], sessionId?: string): QueuedUsage => ({
     ...identity, uuid: randomUUID(), timestamp: new Date(now()).toISOString(),
@@ -86,6 +109,8 @@ export function createTelemetry(options: {
     clearInterval(occurrenceTimer);
     occurrenceTimer = undefined;
     earlyTurns.clear();
+    storageFailures = 0;
+    refusedDelivery = {};
   };
   const sanitizeContext = (context: Record<string, unknown>) => Object.fromEntries(Object.entries(context).map(([key, value]) => [key, typeof value === 'string' ? diagnosticText(value, 500) : Array.isArray(value) ? value.map(item => typeof item === 'string' ? diagnosticText(item, 100) : item) : value]));
   const sanitizeTermination = (value: NonNullable<Extract<TelemetryEvent, { event: 'agent_runtime_stop_result' }>['termination']>) => ({
@@ -114,8 +139,8 @@ export function createTelemetry(options: {
       await response.body?.cancel();
       // Retrying a refused payload cannot repair it. Network failures, timeouts,
       // rate limits and service failures retain the same UUID and timestamp.
-      return response.ok || (response.status >= 400 && response.status < 500
-        && response.status !== 408 && response.status !== 429);
+      return response.ok ? 'delivered' : (response.status >= 400 && response.status < 500
+        && response.status !== 408 && response.status !== 429) ? 'rejected' : 'transport_failed';
     } finally { clearTimeout(timeout); }
   };
   const schedule = () => {
@@ -133,23 +158,32 @@ export function createTelemetry(options: {
       const queued = state.queue?.[0];
       // Persist expiry/filtering even when there is nothing left to deliver.
       if (!queued) {
-        if (config.telemetry?.queue?.length) save(config, state);
+        if (config.telemetry?.queue?.length || storageFailures || Object.keys(refusedDelivery).length) save(config, state);
         return;
       }
       const controller = new AbortController();
       pending = controller;
-      let delivered = false;
-      try { delivered = await send(queued, controller); } catch { /* bounded retry below */ }
+      let result: 'delivered' | 'rejected' | 'transport_failed' = 'transport_failed';
+      try { result = await send(queued, controller); } catch { /* bounded retry below */ }
       if (capturedGeneration !== generation || !allowed()) return;
       pending = null;
-      if (!delivered) { schedule(); return; }
       // Re-read after await: never overwrite captures, settings or account
       // changes made while this request was in flight.
-      const latest = options.read();
-      const current = usageState(latest, now());
-      if (!current.enabled) return;
-      current.queue = current.queue?.filter((item) => item.uuid !== queued.uuid);
-      save(latest, current);
+      try {
+        const latest = options.read();
+        const current = usageState(latest, now());
+        if (!current.enabled) return;
+        noteDelivery(current, result, now());
+        if (result !== 'transport_failed') current.queue = current.queue?.filter((item) => item.uuid !== queued.uuid);
+        save(latest, current);
+      } catch {
+        // Collection was confirmed above; an acknowledgement that cannot be
+        // checkpointed must keep the event's UUID for safe delivery retry.
+        storageFailures++;
+        schedule();
+        return;
+      }
+      if (result === 'transport_failed') { schedule(); return; }
       retryDelay = 1000;
     }
   };
@@ -199,39 +233,55 @@ export function createTelemetry(options: {
     if (!occurrences.size) { clearInterval(occurrenceTimer); occurrenceTimer = undefined; }
   };
   const withScope = (input: TelemetryEvent, scope: DiagnosticScope = diagnosticScope.getStore() ?? {}): TelemetryEvent => {
-    if (!['application_error', 'application_warning', 'account_login_result', 'billing_checkout_result', 'billing_portal_result', 'project_entry_result', 'document_write_result', 'agent_setup_result', 'agent_setup_stage', 'agent_runtime_start_result'].includes(input.event)) return input;
+    if (!['application_error', 'application_warning', 'account_login_result', 'billing_checkout_result', 'billing_portal_result', 'project_entry_result', 'document_write_result', 'project_file_operation', 'agent_setup_result', 'agent_setup_stage', 'agent_runtime_start_result'].includes(input.event)) return input;
     return { ...scope, ...input, ...('context' in input || scope.context ? { context: { ...scope.context, ...('context' in input ? input.context : {}) } } : {}) } as TelemetryEvent;
   };
   const capture = (input: TelemetryEvent, captured?: UsageIdentity, capturedGeneration = generation, rollup = false,
     native?: NativeDiagnostic, receipt?: RendererTelemetryRequest): TelemetryReceiptStatus => {
     if (!allowed() || capturedGeneration !== generation) return 'disabled';
+    let collecting = false;
     try {
-      const scoped = withScope(input);
-      const parsed = telemetryEventSchema.safeParse('context' in scoped ? { ...scoped, context: boundedDiagnosticContext(scoped.context) } : scoped);
-      if (!parsed.success) return 'discarded';
       const config = options.read();
       const state = usageState(config, now());
       if (!state.enabled) return 'disabled';
+      collecting = true;
+      noteDelivery(state, 'attempted', now());
+      const refuse = (status: TelemetryReceiptStatus, reason: Parameters<typeof noteDelivery>[1]) => {
+        // A refusal burst must not rewrite the full durable queue per attempt.
+        // The serial drain or next accepted capture checkpoints these counters.
+        refuseDelivery(reason);
+        kick();
+        return status;
+      };
+      const scoped = withScope(input);
+      const parsed = telemetryEventSchema.safeParse('context' in scoped ? { ...scoped, context: boundedDiagnosticContext(scoped.context) } : scoped);
+      if (!parsed.success) return refuse('discarded', 'invalid');
       const eventTurnId = 'turn_id' in parsed.data ? parsed.data.turn_id : undefined;
       const turn = eventTurnId ? state.turns?.find((item) => item.turnId === eventTurnId) : undefined;
       if (parsed.data.event === 'agent_turn_finished' && eventTurnId) {
-        if (!turn) return state.finishedTurns?.[eventTurnId] !== undefined ? 'duplicate' : 'retry';
+        if (!turn) return state.finishedTurns?.[eventTurnId] !== undefined ? refuse('duplicate', 'duplicate') : refuse('retry', 'missing_start');
+        noteDelivery(state, 'accepted', now());
         finishTelemetryTurn(state, turn, { ...parsed.data, source: parsed.data.source ?? 'renderer' }, receipt ? Date.parse(receipt.timestamp) : now());
+        const terminal = state.queue?.at(-1);
+        if (terminal) {
+          terminal.delivery = deliveryCheckpoint(state);
+          if (receipt?.delivery) terminal.rendererDelivery = receipt.delivery;
+        }
         save(config, state);
         kick();
         return 'accepted';
       }
       if (parsed.data.event === 'agent_turn_started' && eventTurnId) {
-        if (turn || state.finishedTurns?.[eventTurnId] !== undefined) return 'duplicate';
-        if ((state.turns?.length ?? 0) >= TURN_LIMIT) return 'retry';
+        if (turn || state.finishedTurns?.[eventTurnId] !== undefined) return refuse('duplicate', 'duplicate');
+        if ((state.turns?.length ?? 0) >= TURN_LIMIT) return refuse('retry', 'turn_limit');
       }
       if (turn) captured = turnIdentity(turn);
       // Reserve an identity link, the new event, and every admitted terminal.
       const reservation = parsed.data.event === 'agent_turn_started' && eventTurnId ? 3 : 2;
-      if (turnCapacity(state) > QUEUE_LIMIT - reservation) { kick(); return 'retry'; }
+      if (turnCapacity(state) > QUEUE_LIMIT - reservation) return refuse('retry', 'queue_full');
       const identity = synchronize(config, state);
-      if (captured && captured.installationId !== identity.installationId) return 'discarded';
-      if (native && state.queue?.some((item) => item.uuid === native.uuid)) return 'duplicate';
+      if (captured && captured.installationId !== identity.installationId) return refuse('discarded', 'stale');
+      if (native && state.queue?.some((item) => item.uuid === native.uuid)) return refuse('duplicate', 'duplicate');
       const event = parsed.data;
       if ('diagnostic' in event && event.diagnostic) event.diagnostic = errorDiagnostic(event.diagnostic);
       if ('context' in event && event.context) event.context = sanitizeContext(event.context);
@@ -252,7 +302,7 @@ export function createTelemetry(options: {
             // version and identity, even if delivered by a later host build.
             if (!bucket.repeated) bucket.native = native;
             bucket.repeated += repetitions;
-            return 'duplicate';
+            return refuse('duplicate', 'duplicate');
           }
           event.occurrences = (bucket?.repeated ?? 0) + repetitions;
           occurrences.delete(key);
@@ -273,10 +323,10 @@ export function createTelemetry(options: {
           }
         }
       }
-      if (event.event === 'app_opened' && opened) return 'duplicate';
+      if (event.event === 'app_opened' && opened) return refuse('duplicate', 'duplicate');
       const minute = Math.floor(now() / 60000);
       if (minute !== rateWindow) { rateWindow = minute; count = 0; }
-      if (count >= 120) return 'retry';
+      if (count >= 120) return refuse('retry', 'rate_limited');
       const active = event.event === 'app_active' || event.event === 'document_engaged' || event.event === 'agent_turn_started';
       const currentIdentity = !captured || (captured.anonymousId === identity.anonymousId && captured.userId === identity.userId);
       if (active && currentIdentity) {
@@ -287,15 +337,17 @@ export function createTelemetry(options: {
       }
       const marker = event.event === 'app_active' ? `app_active:${event.mode}`
         : event.event === 'document_engaged' ? `document_engaged:${event.activity}:${event.format}` : null;
-      if (marker && state.markers?.[marker] !== undefined && Math.floor(state.markers[marker] / 60_000) === minute) return 'duplicate';
+      if (marker && state.markers?.[marker] !== undefined && Math.floor(state.markers[marker] / 60_000) === minute) return refuse('duplicate', 'duplicate');
       if (marker) state.markers = { ...state.markers, [marker]: now() };
       if (event.event === 'subscription_observed') {
         const status = `${event.plan}:${event.paid}:${event.cancel_at_period_end}`;
-        if (!currentIdentity || state.subscription === status) return 'duplicate';
+        if (!currentIdentity || state.subscription === status) return refuse('duplicate', 'duplicate');
         state.subscription = status;
       }
+      noteDelivery(state, 'accepted', now());
       const queued = entry(captured ?? identity, event, turn?.sessionId ?? (currentIdentity ? state.sessionId : undefined));
-      if (receipt) Object.assign(queued, { uuid: receipt.id, timestamp: receipt.timestamp });
+      queued.delivery = deliveryCheckpoint(state);
+      if (receipt) Object.assign(queued, { uuid: receipt.id, timestamp: receipt.timestamp, ...(receipt.delivery ? { rendererDelivery: receipt.delivery } : {}) });
       if (native) Object.assign(queued, { uuid: native.uuid, timestamp: native.timestamp, version: native.version, distribution: native.distribution, os: native.os });
       if (!state.queue?.some((item) => item.uuid === queued.uuid)) (state.queue ??= []).push(queued);
       if (event.event === 'agent_turn_started' && event.turn_id) {
@@ -315,7 +367,15 @@ export function createTelemetry(options: {
       count++;
       kick();
       return 'accepted';
-    } catch { return 'retry'; /* Unavailable persistence never affects work. */ }
+    } catch {
+      if (collecting) {
+        storageFailures++;
+        // The attempted/accepted counters in the failed atomic write never
+        // reached disk. Retain only the attempt, not a fictitious admission.
+        refusedDelivery.attempted = (refusedDelivery.attempted ?? 0) + 1;
+      }
+      return 'retry'; /* Unavailable persistence never affects work. */
+    }
   };
   const observeTurn = (turnId: string | undefined, observation: TurnObservation) => {
     if (!turnId || !allowed()) return;
@@ -339,6 +399,14 @@ export function createTelemetry(options: {
         earlyTurns.set(turnId, early);
         return;
       }
+      if ('tool_result' in observation) {
+        if (recordTelemetryToolResult(turn, observation.tool_result)) {
+          turn.observedAt = new Date(now()).toISOString();
+          turn.sequence++;
+          save(config, state);
+        }
+        return;
+      }
       if ('outcome' in observation) {
         capture({ event: 'agent_turn_finished', runtime: turn.runtime, turn_id: turnId,
           ...observation, source: observation.source ?? 'host' });
@@ -351,6 +419,7 @@ export function createTelemetry(options: {
       const context = parsed.data.context;
       // Stream deltas never write disk. A new model call may repeat the stage.
       if (turn.stage === observation.stage && !context?.call_id) return;
+      if (observation.stage === 'host_accepted') turn.toolSummary ??= { success: 0, failed: 0, by_category: {}, limited: false };
       turn.stage = observation.stage;
       turn.observedAt = new Date(now()).toISOString();
       turn.sequence++;
@@ -384,6 +453,15 @@ export function createTelemetry(options: {
   retireTurns('host_restarted');
   return {
     preferences,
+    rendererDeliveryCurrent,
+    delivery() {
+      if (!allowed()) return null;
+      try {
+        const state = usageState(options.read(), now());
+        if (!state.enabled) return null;
+        return deliveryCheckpoint(state) ?? null;
+      } catch { return null; }
+    },
     observeTurn,
     capture(input: TelemetryEvent) { capture(input); },
     captureRenderer(request: RendererTelemetryRequest): TelemetryReceiptStatus {
@@ -394,12 +472,18 @@ export function createTelemetry(options: {
         const state = usageState(config, now());
         if (!state.enabled) return 'disabled';
         const occurred = Date.parse(request.timestamp);
-        if (!Number.isFinite(occurred) || occurred <= rendererSince || occurred < now() - 60_000 || occurred > now() + 1000) return 'discarded';
+        const refuse = (status: TelemetryReceiptStatus, reason: Parameters<typeof noteDelivery>[1]) => {
+          refuseDelivery(reason);
+          kick();
+          return status;
+        };
+        if (!Number.isFinite(occurred) || occurred <= rendererSince || occurred < now() - 60_000 || occurred > now() + 1000) return refuse('discarded', 'stale');
         for (const [id, at] of rendererReceipts) if (at < now() - 60_000) rendererReceipts.delete(id);
-        if (rendererReceipts.has(request.id) || state.queue?.some(item => item.uuid === request.id)) return 'duplicate';
-        if (rendererReceipts.size >= QUEUE_LIMIT) return 'retry';
+        if (rendererReceipts.has(request.id) || state.queue?.some(item => item.uuid === request.id)) return refuse('duplicate', 'duplicate');
+        if (rendererReceipts.size >= QUEUE_LIMIT) return refuse('retry', 'queue_full');
         const event = request.event.event === 'agent_turn_started' ? { ...request.event, source: 'renderer' as const } : request.event;
-        const status = capture(event, undefined, generation, false, undefined, request);
+        const receipt = rendererDeliveryCurrent(request) ? request : { ...request, delivery: undefined };
+        const status = capture(event, undefined, generation, false, undefined, receipt);
         if (status === 'accepted' || status === 'duplicate') rendererReceipts.set(request.id, now());
         return status;
       } catch { return 'retry'; }
@@ -413,7 +497,21 @@ export function createTelemetry(options: {
         if (!allowed()) return (_event: TelemetryEvent) => {};
         const config = options.read();
         const state = usageState(config, now());
-        if (!state.enabled || turnCapacity(state) >= QUEUE_LIMIT - 1) return (_event: TelemetryEvent) => {};
+        if (!state.enabled) return (_event: TelemetryEvent) => {};
+        if (turnCapacity(state) >= QUEUE_LIMIT - 1) {
+          // Without room for an identity link, never combine a new account with
+          // the previous account's anonymous ID. Count the refused observation.
+          return (_event: TelemetryEvent) => {
+            if (!allowed() || capturedGeneration !== generation) return;
+            try {
+              const latest = options.read();
+              const current = usageState(latest, now());
+              if (!current.enabled) return;
+              refuseDelivery('queue_full');
+              kick();
+            } catch { storageFailures++; }
+          };
+        }
         const identity = synchronize(config, state);
         save(config, state);
         kick();
@@ -461,6 +559,13 @@ export function createTelemetry(options: {
       if (reason) retireTurns(reason);
       drainNative();
       try { releaseOccurrences(true); } catch { /* Shutdown never depends on analytics. */ }
+      if (allowed() && (storageFailures || Object.keys(refusedDelivery).length)) {
+        try {
+          const config = options.read();
+          const state = usageState(config, now());
+          if (state.enabled) save(config, state);
+        } catch { /* A failed checkpoint remains an explicit completeness limit. */ }
+      }
       clearInterval(nativeTimer);
       stopped = true; cancel();
     },

@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { callTool } from './__tests__/mcp-call.ts';
+import type { TelemetryEvent } from '../shared/protocols/http/telemetry.ts';
 
 const isolatedEnvNames = [
   'HOME',
@@ -65,6 +66,9 @@ test('MCP project mutations work outside an active folder and enforce versions',
   clearCurrentFolder = folder.clearCurrentFolder;
   closeStateDb = stateDb.closeStateDb;
   closeIndexer = () => state.indexer.close();
+  const { telemetry } = await import('./telemetry.ts');
+  const fileEvents: TelemetryEvent[] = [];
+  t.mock.method(telemetry, 'scoped', () => (event: TelemetryEvent) => { fileEvents.push(event); });
 
   const root = path.join(testHome, 'Library Folder');
   const source = path.join(root, 'Drafts', 'Note.md');
@@ -97,6 +101,34 @@ test('MCP project mutations work outside an active folder and enforce versions',
   assert.equal('content' in created, false);
   assert.equal(fs.readFileSync(source, 'utf8'), 'version one');
   assert.equal(folder.getCurrentFolder(), null);
+
+  const unchanged = await callTool(base, token, 'write_file', { path: source, content: 'version one' });
+  assert.equal(unchanged.changed, false);
+  await callTool(base, token, 'read_file', { path: source });
+  assert.deepEqual(fileEvents, [
+    { event: 'project_file_operation', operation: 'write', origin: 'mcp', outcome: 'success', changed: true },
+    { event: 'project_file_operation', operation: 'write', origin: 'mcp', outcome: 'success', changed: false },
+    { event: 'project_file_operation', operation: 'read', origin: 'mcp', outcome: 'success' },
+  ]);
+
+  // The stdio adapter crosses HTTP, while an in-app session remains attributed
+  // to its validated runtime rather than the transport hint or another chat.
+  const { createHttpProjectOperations } = await import('../mcp/project-operations-http.ts');
+  const { registerAttributedAgentSession, unregisterAttributedAgentSession } = await import('./agent-session-registry.ts');
+  registerAttributedAgentSession('file-telemetry-session', {
+    agentId: 'codex', windowId: 'file-telemetry-window', boundFolder: () => root, turnInFlight: () => true,
+  });
+  t.after(() => unregisterAttributedAgentSession('file-telemetry-session'));
+  await createHttpProjectOperations(base).read(source);
+  await createHttpProjectOperations(base, 'file-telemetry-window', 'file-telemetry-session').read(source);
+  const ordinaryHttpRead = await fetch(`${base}/api/project/file?path=${encodeURIComponent(source)}`);
+  assert.equal(ordinaryHttpRead.status, 200);
+  await ordinaryHttpRead.body?.cancel();
+  assert.deepEqual(fileEvents.slice(-3), [
+    { event: 'project_file_operation', operation: 'read', origin: 'mcp', outcome: 'success' },
+    { event: 'project_file_operation', operation: 'read', origin: 'agent', runtime: 'codex', outcome: 'success' },
+    { event: 'project_file_operation', operation: 'read', origin: 'http', outcome: 'success' },
+  ]);
 
   const corruptedFormula = `[
 P_0=\frac{EPS_{\text{FY28}}\times PE}{1+r}
@@ -153,6 +185,10 @@ $$`;
   await assert.rejects(callTool(base, token, 'edit_file', {
     path: emptyPath, old_text: 'First', new_text: 'Stale', baseVersion: empty.version,
   }), /CONFLICT|changed|version/i);
+  assert.deepEqual(fileEvents.slice(-2), [
+    { event: 'project_file_operation', operation: 'edit', origin: 'mcp', outcome: 'failed' },
+    { event: 'project_file_operation', operation: 'edit', origin: 'mcp', outcome: 'conflict' },
+  ]);
   assert.equal(fs.readFileSync(emptyPath, 'utf8'), 'First paragraph.\n');
 
   const literalReplacement = "$& $$ $` $' $1";
@@ -206,6 +242,14 @@ $$`;
   });
   assert.equal(edited.replacements, 1);
   assert.equal(fs.readFileSync(source, 'utf8'), 'version three');
+  assert.deepEqual(fileEvents.at(-1), {
+    event: 'project_file_operation', operation: 'edit', origin: 'mcp', outcome: 'success', changed: true,
+  });
+  const beforeUnchangedEdit = fileEvents.length;
+  await callTool(base, token, 'edit_file', { path: source, old_text: 'version three', new_text: 'version three' });
+  assert.deepEqual(fileEvents.slice(beforeUnchangedEdit), [{
+    event: 'project_file_operation', operation: 'edit', origin: 'mcp', outcome: 'success', changed: false,
+  }], 'one edit result, with no extra count for its internal read or write');
 
   const moved = await callTool(base, token, 'move_file', {
     path: source,

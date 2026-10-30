@@ -1145,9 +1145,32 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   delivery owner. Host receipts suppress replay after delivery; account/privacy
   transitions and host replacement retire earlier renderer requests. Renderer
   event envelopes cannot choose identity or claim host observations.
+- Delivery health uses bounded cumulative checkpoints with a series UUID and
+  start time. The host persists capture/admission, refusal, storage, transport,
+  expiry and queue-validation counters; each admitted envelope pins its snapshot
+  through retry/restart. Renderer recorder counters are in-memory and pin their
+  snapshot at first send. Disabled/discarded and explicit reset receipts retire
+  that renderer period; the host excludes checkpoints spanning a retired period.
+  Existing event metadata carries checkpoints;
+  no heartbeat or additional durable queue is introduced. The local delivery
+  endpoint exposes the latest readable host snapshot. Counter deltas are compared
+  within a series, never summed across event snapshots or interpreted as activity.
+  Capture attempts and delivered identity/recovery envelopes have different
+  populations; there is no loss conservation equation. Final-close intervals,
+  unreadable storage and absent later reports remain incomplete evidence.
 - Foreground input and document/agent engagement establish activity, not timers,
   background work or streamed output. All windows share category suppression and
-  sessions. Save/project/billing work captures initiating identity before await;
+  sessions. Electron's main-process input observer supplies content-free input
+  presence across opaque HTML frames; visible/focused window checks and the active
+  reading surface gate app/read engagement. Authored DOM events and postMessage
+  cannot manufacture this bridge signal; keys, text and coordinates do not cross it.
+  Shared project read/write/edit results belong to `project-operations`, with
+  identity captured before await and origin supplied by the accepted transport or
+  a live attributed Agent session. Source transactions supply changed/unchanged;
+  internal edit reads do not add another operation. Native filesystem/shell work
+  that bypasses this owner remains outside the file counts. Neither file operations
+  nor tool workload establish foreground activity.
+  Save/project/billing work captures initiating identity before await;
   turn correlation persists identity/session, original version and observation times.
   Each admitted pending turn reserves a terminal queue slot; terminal insertion
   and pending removal are one atomic config write and bypass ordinary event rate
@@ -1158,6 +1181,14 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   Restart recovery reports an interrupted unknown result, never inferred success
   or a fabricated end time/duration. Unknown terminal IDs cannot manufacture starts;
   opt-out clears pending turns and bounded recent-completion IDs.
+  Host acceptance also initializes a zero tool summary. The pending-turn owner
+  persists distinct tool-result counts and call-ID deduplication, and owns the
+  summary copied to the terminal, including recovery. It counts success/failure
+  by fixed category for at most 1,000 unique results; later or invalid-ID results
+  mark the summary limited. Successful tools add no individual queue event.
+  Renderer terminals cannot supply or replace this summary. Tool success is not
+  a file-change fact or proof of the user's goal, and turn IDs do not correlate
+  the same task across later turns.
 - Settings General discloses account linking and controls both usage and errors.
   Opt-out stops this process even if saving fails, cancels transport, and on a
   successful save removes the queue and all local analytics state. There is no
@@ -1182,8 +1213,9 @@ allowance snapshot to the gateway so their explanation reflects held capacity.
   their submitting turn ID; unrelated HTTP calls never inherit one globally.
   Native adapters report host acceptance, dispatch, permissions, tool boundaries
   and terminal facts independently of renderer delivery. The owned model broker
-  reports request/response boundaries and failures directly. Only stage transitions
-  persist, never each streamed token; last stage is evidence, not inferred cause.
+  reports request/response boundaries and failures directly. Stage transitions
+  and tool-result summaries persist, never each streamed token; last stage is
+  evidence, not inferred cause.
   Tool failures contain bounded call IDs/categories and a fixed failure kind,
   never inputs or results. The host recognizes only bounded error prefixes for
   missing files, permissions, invalid arguments and timeouts; unmatched output

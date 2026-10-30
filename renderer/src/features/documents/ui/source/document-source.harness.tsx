@@ -53,6 +53,8 @@ type SourceOptions = Partial<
     | 'assetApi'
     | 'genericPreviewApi'
     | 'onAskAgent'
+    | 'onInputActivity'
+    | 'recordUsage'
     | 'tableApi'
     | 'onNavigate'
     | 'onOpenExternal'
@@ -89,6 +91,8 @@ export function renderSource(
       genericPreviewApi={options.genericPreviewApi ?? genericPreviewApi({ load: vi.fn(pending()) })}
       tableApi={options.tableApi ?? tableApi()}
       onAskAgent={options.onAskAgent}
+      onInputActivity={options.onInputActivity}
+      recordUsage={options.recordUsage}
       onNavigate={options.onNavigate}
       onOpenExternal={options.onOpenExternal}
       onOpenPrepared={options.onOpenPrepared}

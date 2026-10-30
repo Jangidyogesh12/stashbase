@@ -379,7 +379,7 @@ app
       workspaceSession: { ok: true, session: null },
       workspaceSessionFrozen: true,
       windowLifecycleFrozen: true,
-      windowLifecycleKeys: ['onPrepareContextRelease', 'setAppearance'],
+      windowLifecycleKeys: ['onInputActivity', 'onPrepareContextRelease', 'setAppearance'],
       updatesFrozen: true,
       updatesKeys: [
         'check',

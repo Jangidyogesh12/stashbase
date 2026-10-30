@@ -401,6 +401,23 @@ Document runtime changes and active reading-surface interaction report content-f
 engagement; agent usage correlates start/terminal results with a random turn ID.
 Settings General discloses account linking and the shared usage/error opt-out.
 
+Schema 8 adds bounded cumulative delivery checkpoints in
+`shared/protocols/telemetry-delivery.ts`. Renderer envelopes keep one immutable
+checkpoint through retries; host admission attaches its own persisted checkpoint.
+`GET /api/telemetry/delivery` exposes the newer local counters. Invalid input,
+queue/rate refusal, failed storage, expiry, transport retries and permanent
+ingestion refusal remain distinct. Checkpoints are not activity events and must
+not be summed. Receipt-directed reset and host filtering prevent renderer
+counters spanning an account/privacy transition or host replacement from being
+backfilled. Missing final checkpoints remain unknown, especially after abrupt
+renderer closure or unavailable storage; production PostHog receipt and Li's
+reported mismatch still require actual-device evidence.
+The focused host delivery/native-diagnostic/operation checks, renderer delivery
+checks, protocol checks, documentation checks and builds passed. Core host checks
+and the controlled bundled runtime passed. All 1,899 renderer tests and coverage
+passed with native-CI concurrency and timeout settings after two tests timed out
+under default concurrency. Fresh built-output Electron smoke also passed.
+
 Renderer intake returns explicit admission receipts. Bounded renderer retries keep
 one event ID/time, while Node owns short receipt deduplication and rejects requests
 from before an account/privacy transition or host replacement. The telemetry route
@@ -880,6 +897,18 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
   Cross-platform native-picker and signed-installer validation remain release checks.
 
 ## J03: Documents
+
+**HTML engagement:** native `electron/window/lifecycle.ts` input-presence events
+cross the narrow window preload/adapter without keys, positions or document
+content. The active reading surface credits only its focused iframe, with pointer
+hover checked for pointer/wheel input. Application composition counts foreground
+app activity through the same native subscription. Authored scripts and frame
+messages cannot manufacture this input signal; sandbox permissions are unchanged.
+The macOS built Electron smoke exercised first-click focus, keyboard, wheel,
+adjacent-pane exclusion, synthetic input refusal and disposal against the real
+opaque frame. Mounted HTML activity and existing form-data tests passed in a
+focused rerun. Windows/Linux input behavior and production event receipt remain
+unverified.
 
 **Interactive-note creation (2026-10-28):** New tab offers text and interactive
 notes. Workspace reuses Markdown creation for text and calls
@@ -2214,6 +2243,15 @@ intake, marked with host origin/time. The shared adapter test covers all four ru
 identities, late renderer starts, host results and an intervening account switch;
 recovery coverage also starts from host acceptance. Unknown results still cannot
 manufacture starts, and telemetry failure never controls task execution.
+Schema 8 terminal records include `tool_summary`: successful/failed observed
+tool results by category, with persistent call-ID deduplication and a bounded
+1,000-result limit. Host acceptance establishes a zero summary; missing summaries
+in earlier or renderer-only observations are not zero work. Recovery retains the
+same counts, and saturation marks them as a lower bound. Existing tool failures
+still identify individual calls; successful calls add no separate queue events.
+Focused telemetry scenarios cover duplicate results, a failed call followed by
+a successful call, cancellation, bounded counts, restart recovery and refusal of
+renderer-supplied summaries. These do not establish cross-turn task recovery.
 `error-reporting.ts` observes native lifecycle facts; the hosted model diagnostic
 owner emits request failures independently of native forwarding. Renderer context
 reads carry explicit turn IDs and socket errors share connection IDs, including
@@ -3504,6 +3542,18 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   built Electron smoke checks passed.
 
 ## J08: External MCP
+
+**File-operation measurement:** `project-operations/index.ts` records one
+`project_file_operation` per public read/write/edit, retaining initiating identity
+and supplied request/turn correlation. The transaction's `changed` result
+distinguishes changed and unchanged writes; an edit's internal read/write does
+not double count. Validated live sessions supply Agent/runtime attribution;
+external MCP and ordinary HTTP have separate origins. The mutation integration
+suite exercises actual MCP and HTTP read/write/edit/conflict/no-change outcomes;
+the Project Operations suite covers delayed results through an account switch
+and opt-out. Native CLI/shell filesystem access outside this owner, move/delete,
+and interactive-note creation are outside this event's coverage. MCP requests
+without a supplied turn ID remain uncorrelated rather than guessed.
 
 **Interactive notes (2026-10-28):** The shared MCP tool factory and stdio HTTP
 adapter expose `create_interactive_note` through Project Operations. The host test

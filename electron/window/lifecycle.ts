@@ -3,6 +3,7 @@ import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import {
   WINDOW_CONTEXT_RELEASE_READY_CHANNEL,
   WINDOW_FULLSCREEN_CHANNEL,
+  WINDOW_INPUT_ACTIVITY_CHANNEL,
   WINDOW_LIFECYCLE_CAPABILITY,
   WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL,
   type WindowContextReleaseReason,
@@ -84,6 +85,15 @@ export function registerWindowLifecycle(
   return {
     attach(window: LifecycleWindow) {
       const webContentsId = window.webContents.id;
+      // Chromium reports real input even inside an opaque HTML frame. Authored
+      // scripts cannot manufacture this through DOM dispatch or postMessage.
+      window.webContents.on('input-event', (_event, input) => {
+        if (window.isDestroyed() || window.webContents.isDestroyed()
+          || !dependencies.isLiveWindow(window) || !window.isVisible() || !window.isFocused()) return;
+        const kind = input.type === 'keyDown' || input.type === 'rawKeyDown' ? 'keyboard'
+          : input.type === 'mouseDown' || input.type === 'mouseWheel' ? 'pointer' : null;
+        if (kind) window.webContents.send(WINDOW_INPUT_ACTIVITY_CHANNEL, kind);
+      });
       // Native fullscreen hides the platform's own chrome, and the shell lays
       // itself out around that chrome, so the state is pushed on every change
       // and once more when a document has loaded and can hear it.

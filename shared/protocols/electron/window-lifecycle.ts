@@ -7,6 +7,11 @@ export const WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL = 'window:prepare-context-re
 export const WINDOW_CONTEXT_RELEASE_READY_CHANNEL = 'window:context-release-ready';
 export const WINDOW_FULLSCREEN_CHANNEL = 'window:fullscreen';
 export const WINDOW_APPEARANCE_CHANNEL = 'window:appearance';
+export const WINDOW_INPUT_ACTIVITY_CHANNEL = 'window:input-activity';
+
+/** Native input presence only; no keys, targets, text, coordinates or modifiers. */
+export const windowInputActivitySchema = z.enum(['keyboard', 'pointer']);
+export type WindowInputActivity = z.infer<typeof windowInputActivitySchema>;
 
 const windowContextReleaseReasonSchema = z.enum([
   'window-close',

@@ -1,19 +1,37 @@
 import type { HttpClient } from '@/platform/http/client';
 import {
+  countDelivery,
   rendererTelemetryEventSchema,
   telemetryReceiptSchema,
+  type RendererDelivery,
   type TelemetryEvent,
 } from '@/protocols/http/telemetry';
+
+const newDelivery = (): RendererDelivery => ({
+  series_id: crypto.randomUUID(),
+  started_at: new Date().toISOString(),
+  counters: {},
+});
 
 /** Sends only the schema's bounded facts to the local collection owner. Errors never
  * reach the writing flow; the server owns opt-out and outbound transport. */
 export function createUsageRecorder(client: HttpClient) {
+  let delivery = newDelivery();
   const recent = new Map<string, number>();
   const starts = new Map<string, Promise<void>>();
   let pending = 0;
   return (event: TelemetryEvent): void => {
+    const period = delivery;
+    countDelivery(period, 'generated');
     const parsed = rendererTelemetryEventSchema.safeParse(event);
-    if (!parsed.success || pending >= 100) return;
+    if (!parsed.success) {
+      countDelivery(period, 'invalid');
+      return;
+    }
+    if (pending >= 100) {
+      countDelivery(period, 'overflow');
+      return;
+    }
     const key =
       event.event === 'document_engaged'
         ? `${event.event}:${event.activity}:${event.format}`
@@ -22,13 +40,17 @@ export function createUsageRecorder(client: HttpClient) {
           : null;
     if (key) {
       const minute = Math.floor(Date.now() / 60_000);
-      if (recent.get(key) === minute) return;
+      if (recent.get(key) === minute) {
+        countDelivery(period, 'coalesced');
+        return;
+      }
       recent.set(key, minute);
     }
     const body = {
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       event: parsed.data,
+      delivery: structuredClone(period),
     };
     pending++;
     const send = async () => {
@@ -36,6 +58,9 @@ export function createUsageRecorder(client: HttpClient) {
         for (let attempt = 0; attempt < 3; attempt++) {
           if (attempt) await new Promise<void>((resolve) => setTimeout(resolve, 500 * attempt));
           try {
+            countDelivery(period, 'requests');
+            // Keep the first request immutable through retries and lost receipts.
+            if (attempt === 0) body.delivery = structuredClone(period);
             const response = await client.request({
               path: '/api/telemetry/events',
               method: 'POST',
@@ -43,19 +68,34 @@ export function createUsageRecorder(client: HttpClient) {
               signal: AbortSignal.timeout(2000),
             });
             const receipt = telemetryReceiptSchema.safeParse(response.body);
-            if (response.status === 200 && receipt.success && receipt.data.status !== 'retry')
+            if (receipt.success && receipt.data.reset_delivery && delivery === period) {
+              delivery = newDelivery();
+              recent.clear();
+            }
+            if (response.status === 200 && receipt.success && receipt.data.status !== 'retry') {
+              if (receipt.data.status === 'accepted' || receipt.data.status === 'duplicate')
+                countDelivery(period, receipt.data.status);
+              else if (delivery === period) {
+                // Do not replay disabled/prior-account counters into a later period.
+                delivery = newDelivery();
+                recent.clear();
+              }
               return;
+            }
             if (
               response.status >= 400 &&
               response.status < 500 &&
               response.status !== 408 &&
               response.status !== 429
-            )
+            ) {
+              countDelivery(period, 'refused');
               return;
+            }
           } catch {
             /* Short retries never delay or resend the user's actual work. */
           }
         }
+        countDelivery(period, 'exhausted');
       } finally {
         pending--;
       }

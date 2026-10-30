@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { telemetryEventSchema, agentTurnStageSchema, diagnosticContextSchema } from '../shared/protocols/http/telemetry.ts';
+import { telemetryEventSchema, agentTurnStageSchema, diagnosticContextSchema, agentToolSummarySchema, AGENT_TOOL_RESULT_LIMIT } from '../shared/protocols/http/telemetry.ts';
 import type { AppConfigFile } from './app-config.ts';
+import { countDelivery, hostDeliverySchema, rendererDeliverySchema, type HostDelivery } from '../shared/protocols/telemetry-delivery.ts';
 
 export const QUEUE_LIMIT = 500;
 export const QUEUE_TTL = 7 * 86400_000;
@@ -23,6 +24,8 @@ const queuedSchema = identitySchema.extend({
   distribution: usageDistributionSchema,
   os: z.string().max(20),
   sessionId: id.optional(),
+  delivery: hostDeliverySchema.optional(),
+  rendererDelivery: rendererDeliverySchema.optional(),
   event: z.union([telemetryEventSchema, z.object({ event: z.literal('$identify') }).strict()]),
 }).strict();
 export type QueuedUsage = z.infer<typeof queuedSchema>;
@@ -34,6 +37,8 @@ const turnSchema = identitySchema.extend({
   startedAt: timestamp, observedAt: timestamp, stage: agentTurnStageSchema,
   sequence: z.number().int().nonnegative(),
   context: diagnosticContextSchema.optional(),
+  toolSummary: agentToolSummarySchema.optional(),
+  toolCallIds: z.array(z.string().min(1).max(512)).max(AGENT_TOOL_RESULT_LIMIT).optional(),
 }).strict();
 export type PendingTurn = z.infer<typeof turnSchema>;
 export const TURN_LIMIT = 100;
@@ -54,6 +59,13 @@ export interface TelemetryState {
   /** Every admitted turn reserves one slot in the same bounded delivery queue. */
   turns?: PendingTurn[];
   finishedTurns?: Record<string, number>;
+  delivery?: HostDelivery;
+}
+
+export function noteDelivery(state: TelemetryState, key: keyof HostDelivery['counters'], now: number, amount = 1): void {
+  if (!amount) return;
+  state.delivery ??= { series_id: randomUUID(), started_at: new Date(now).toISOString(), counters: {} };
+  countDelivery(state.delivery, key, amount);
 }
 
 /** Validate the disk queue just like incoming events. Only current, bounded
@@ -63,8 +75,22 @@ export function usageState(config: AppConfigFile, now: number): TelemetryState {
   if (raw === undefined) return { enabled: true };
   if (raw?.enabled !== true) return { enabled: false };
   const identity = identitySchema.safeParse(raw);
+  const delivery = hostDeliverySchema.safeParse(raw.delivery);
+  const queue: QueuedUsage[] = [];
+  let expired = 0;
+  let invalid = 0;
+  for (const item of Array.isArray(raw.queue) ? raw.queue : []) {
+    const parsed = queuedSchema.safeParse(item);
+    if (!parsed.success || Date.parse(parsed.data.timestamp) > now + 60_000 || queue.length >= QUEUE_LIMIT) invalid++;
+    else if (Date.parse(parsed.data.timestamp) <= now - QUEUE_TTL) expired++;
+    else queue.push(parsed.data);
+  }
+  const health: TelemetryState = { enabled: true, ...(delivery.success ? { delivery: delivery.data } : {}) };
+  noteDelivery(health, 'expired', now, expired);
+  noteDelivery(health, 'invalid_queued', now, invalid);
   return {
     enabled: true,
+    ...(health.delivery ? { delivery: health.delivery } : {}),
     ...(identity.success ? identity.data : {}),
     ...(id.safeParse(raw.sessionId).success ? { sessionId: raw.sessionId } : {}),
     ...(Number.isFinite(raw.lastActiveAt) ? { lastActiveAt: raw.lastActiveAt } : {}),
@@ -80,11 +106,7 @@ export function usageState(config: AppConfigFile, now: number): TelemetryState {
     }),
     finishedTurns: Object.fromEntries(Object.entries(raw.finishedTurns ?? {}).filter(([key, time]) =>
       id.safeParse(key).success && Number.isFinite(time) && time > now - QUEUE_TTL).slice(-QUEUE_LIMIT)),
-    queue: (Array.isArray(raw.queue) ? raw.queue.slice(0, QUEUE_LIMIT) : []).flatMap((entry) => {
-      const parsed = queuedSchema.safeParse(entry);
-      return parsed.success && Date.parse(parsed.data.timestamp) > now - QUEUE_TTL
-        && Date.parse(parsed.data.timestamp) <= now + 60_000 ? [parsed.data] : [];
-    }),
+    queue,
   };
 }
 
@@ -116,7 +138,9 @@ export function usagePayload(entry: QueuedUsage) {
       installation_first_seen_at: entry.firstSeenAt,
       ...(entry.sessionId ? { $session_id: entry.sessionId } : {}),
       ...(event === '$identify' ? { $anon_distinct_id: entry.anonymousId } : {}),
-      app_version: entry.version, app_distribution: entry.distribution, os: entry.os, schema_version: 7,
+      ...(entry.delivery ? { delivery: entry.delivery } : {}),
+      ...(entry.rendererDelivery ? { renderer_delivery: entry.rendererDelivery } : {}),
+      app_version: entry.version, app_distribution: entry.distribution, os: entry.os, schema_version: 8,
       $process_person_profile: Boolean(entry.userId), $geoip_disable: true, $ip: null,
     },
   };

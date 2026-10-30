@@ -172,6 +172,7 @@ function WorkspaceWindow() {
   useDesktopUsage(
     dependencies.recordUsage,
     activeFolder ? (chrome.navigator.mode === 'documents' ? 'documents' : 'chat') : 'welcome',
+    dependencies.onInputActivity,
   );
 
   const agent = useAgentEnvironment(

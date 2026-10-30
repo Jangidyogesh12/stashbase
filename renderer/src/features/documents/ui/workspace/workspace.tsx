@@ -10,6 +10,7 @@ import type {
   DocumentSourcePort,
   DocxPreviewPort,
   GenericFilePreviewPort,
+  SubscribeDocumentInput,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { sourceName } from '@/features/documents/domain/document';
@@ -42,6 +43,7 @@ export interface DocumentWorkspaceProps {
   /** False while Chat mode or the New tab page covers the retained documents. */
   active?: boolean;
   recordUsage?: ((event: DocumentUsageEvent) => void) | undefined;
+  onInputActivity?: SubscribeDocumentInput | undefined;
   assetApi: DocumentAssetPort;
   docxPreviewApi: DocxPreviewPort;
   genericPreviewApi: GenericFilePreviewPort;
@@ -82,6 +84,7 @@ export function DocumentWorkspace({
   renderReadingControl,
   revealLabel,
   recordUsage,
+  onInputActivity,
   runtime,
   sourceApi,
   tableApi,
@@ -140,6 +143,7 @@ export function DocumentWorkspace({
         role="region"
       >
         <DocumentReadingSurface
+          onInputActivity={onInputActivity}
           runtime={document}
           history={runtime.history}
           active={active && !hidden}

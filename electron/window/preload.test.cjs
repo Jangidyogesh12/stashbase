@@ -55,7 +55,22 @@ test('window preload flushes registered barriers and refuses release after unsub
     { ready: false, reason: 'window-close', requestId: 'close-2' },
   ]);
 
-  assert.deepEqual(Object.keys(preload), ['onPrepareContextRelease', 'setAppearance']);
+  assert.deepEqual(Object.keys(preload), ['onInputActivity', 'onPrepareContextRelease', 'setAppearance']);
+});
+
+test('native input subscription admits presence only and stops on disposal', () => {
+  const ipc = ipcFixture();
+  const preload = createWindowLifecyclePreload(ipc);
+  const kinds = [];
+  const release = preload.onInputActivity(kind => kinds.push(kind));
+  ipc.emit('window:input-activity', { type: 'keyDown', key: 'private text' });
+  ipc.emit('window:input-activity', 'focus');
+  ipc.emit('window:input-activity', 'keyboard');
+  ipc.emit('window:input-activity', 'pointer');
+  release();
+  ipc.emit('window:input-activity', 'keyboard');
+  assert.deepEqual(kinds, ['keyboard', 'pointer']);
+  assert.deepEqual(ipc.invocations, []);
 });
 
 test('window preload carries an update install release across the boundary', async () => {

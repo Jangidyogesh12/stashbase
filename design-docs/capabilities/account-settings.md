@@ -324,7 +324,14 @@ reader to current credits rather than claiming all credits are spent.
   If a prior host left no result, recovery reports an interrupted turn with an
   unknown outcome; it does not infer success, failure, or an exact end time.
   Lost connections and recoverable tool errors remain distinct from confirmed
-  task failures. Opt-out stops
+  task failures. Content-free Agent/MCP file-operation outcomes and per-turn tool
+  success/failure counts describe observed work separately from human foreground
+  engagement. Actual HTML interaction counts as foreground reading; merely
+  loading a page or running its scripts does not. Neither a successful tool nor
+  a completed turn establishes that the user's goal was achieved.
+  Delivery checkpoints distinguish observed refusals and losses from low use.
+  They remain partial evidence: a closed renderer, unreadable storage or missing
+  later checkpoint can leave delivery unknown. Opt-out stops
   pending delivery and erases queued work; re-enabling never backfills disabled
   activity. A signed-in account can be associated again after re-enabling.
   [Usage statistics](../../docs/usage-statistics.md) owns the event definitions,

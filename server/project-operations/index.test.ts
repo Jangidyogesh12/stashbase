@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ProjectOperationError, createProjectOperations } from './index.ts';
+import { createTelemetry } from '../telemetry.ts';
+import { diagnosticScope } from '../diagnostic-context.ts';
+import type { AppConfigFile } from '../app-config.ts';
 
 const normalizeFolder = async (folder: unknown, pathPrefix: unknown) => {
   if (typeof folder !== 'string' || !folder) {
@@ -136,6 +139,52 @@ test('Project Operations validates mutation fields before an adapter can write',
     operations.write({ path: '/project/note.md', content: undefined }),
     (error: unknown) => error instanceof ProjectOperationError && error.status === 400,
   );
+});
+
+test('file outcomes retain the initiating identity and request while an account changes during I/O', async (t) => {
+  let config: AppConfigFile = {};
+  const events: Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> = [];
+  const service = createTelemetry({
+    available: true, distribution: 'source', projectToken: 'test', host: 'https://example.test', version: 'test', os: 'linux',
+    read: () => structuredClone(config), write: (next) => { config = structuredClone(next); },
+    fetch: async (_url, init) => {
+      events.push(JSON.parse(String(init?.body)));
+      return new Response(null, { status: 200 });
+    },
+  });
+  t.after(() => service.close());
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => { finish = resolve; });
+  const operations = createProjectOperations({
+    scopedTelemetry: () => service.scoped(),
+    fileOperationOrigin: () => ({ origin: 'agent', runtime: 'codex' }),
+    write: async () => { await pending; return { path: '/private/project/draft.md', changed: true }; },
+  });
+  const scope = { request_id: '11111111-1111-4111-8111-111111111111', turn_id: '22222222-2222-4222-8222-222222222222' };
+  const writing = diagnosticScope.run(scope, () => operations.write({ path: '/private/project/draft.md', content: 'private draft' }));
+  const initiatingAnonymousId = config.telemetry?.anonymousId;
+  assert.ok(initiatingAnonymousId);
+  config.account = { session: {
+    userId: 'later-account', email: 'later@example.test', accessToken: 'private-access', sessionToken: 'private-session', expiresAt: 9999999999,
+  } };
+  service.identityChanged();
+  finish();
+  await writing;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const outcomes = events.filter((event) => event.event === 'project_file_operation');
+  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes[0].distinct_id, initiatingAnonymousId);
+  assert.equal(outcomes[0].properties.request_id, scope.request_id);
+  assert.equal(outcomes[0].properties.turn_id, scope.turn_id);
+  assert.equal(outcomes[0].properties.changed, true);
+  assert.equal(outcomes[0].properties.origin, 'agent');
+  assert.equal(outcomes[0].properties.runtime, 'codex');
+  assert.doesNotMatch(JSON.stringify(outcomes), /private|draft\.md|later-account|later@example/);
+  assert.equal(events.some((event) => event.event === 'app_active' || event.event === 'document_engaged'), false);
+  service.update({ enabled: false });
+  await operations.write({ path: '/private/project/draft.md', content: 'still saved' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(events.filter((event) => event.event === 'project_file_operation').length, 1);
 });
 
 for (const mode of ['hybrid', 'grep'] as const) {

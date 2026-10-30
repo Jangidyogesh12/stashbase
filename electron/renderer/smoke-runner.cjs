@@ -31,6 +31,10 @@ async function run() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-electron-smoke-'));
     try {
       if (script === 'request-authorization-smoke.cjs') {
+        require('esbuild').buildSync({
+          entryPoints: [path.resolve(__dirname, '../../renderer/src/features/documents/ui/workspace/frame-input.ts')],
+          outfile: path.join(root, 'frame-input.js'), bundle: true, platform: 'browser', format: 'iife', globalName: 'FixtureFrameInput',
+        });
         // Exercise the production host policy inside the real Chromium fixture.
         require('esbuild').buildSync({
           entryPoints: [path.resolve(__dirname, '../../server/middleware/renderer-origin.ts')],

@@ -66,7 +66,7 @@ async function handleMcpPost(
   }
   const server = createProjectMcpServer({
     webBase: options.webBase,
-    operations: options.operations ?? createProjectOperations(),
+    operations: options.operations ?? createProjectOperations({ fileOperationOrigin: () => ({ origin: 'mcp' }) }),
   });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,

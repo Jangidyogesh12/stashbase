@@ -19,6 +19,8 @@ function harness({ load = true, timeoutMs = 1_000, beforeClose } = {}) {
   const frame = { url: 'app://renderer/' };
   let closeCalls = 0;
   let fullscreen = false;
+  let focused = true;
+  let visible = true;
   let blocked = 0;
   const webContents = {
     id: 41,
@@ -34,6 +36,8 @@ function harness({ load = true, timeoutMs = 1_000, beforeClose } = {}) {
     },
     isDestroyed: () => false,
     isFullScreen: () => fullscreen,
+    isFocused: () => focused,
+    isVisible: () => visible,
     on: (event, handler) => windowHandlers.set(event, handler),
     webContents,
   };
@@ -70,8 +74,29 @@ function harness({ load = true, timeoutMs = 1_000, beforeClose } = {}) {
       windowHandlers.get(value ? 'enter-full-screen' : 'leave-full-screen')();
     },
     window,
+    input: (input) => webContentsHandlers.get('input-event')({}, input),
+    setForeground: (nextFocused, nextVisible = true) => { focused = nextFocused; visible = nextVisible; },
   };
 }
+
+test('native activity reports only foreground input presence without raw fields', () => {
+  const setup = harness();
+  setup.input({ type: 'mouseMove', x: 123, y: 456 });
+  setup.input({ type: 'keyUp', key: 'private text' });
+  assert.deepEqual(setup.sent, []);
+  setup.input({ type: 'keyDown', key: 'private text', modifiers: ['meta'] });
+  setup.input({ type: 'mouseDown', x: 123, y: 456 });
+  setup.input({ type: 'mouseWheel', x: 123, deltaY: 100 });
+  setup.setForeground(false);
+  setup.input({ type: 'keyDown' });
+  setup.setForeground(true, false);
+  setup.input({ type: 'mouseDown' });
+  assert.deepEqual(setup.sent, [
+    ['window:input-activity', 'keyboard'],
+    ['window:input-activity', 'pointer'],
+    ['window:input-activity', 'pointer'],
+  ]);
+});
 
 test('native fullscreen is mirrored to the renderer on load and on every change', () => {
   const setup = harness({ load: false });

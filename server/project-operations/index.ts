@@ -39,6 +39,9 @@ import { ProjectOperationError } from './errors.ts';
 import type { SearchTypeCategory } from '../../shared/search-types.ts';
 import type { ProjectKeywordFile } from '../../shared/search-results.ts';
 import { EMBEDDER_KEY_REQUIRED_CODE } from '../../shared/protocols/http/semantic-search.ts';
+import { telemetry } from '../telemetry.ts';
+import { projectFileOperationOrigin } from '../project-request-scope.ts';
+import type { TelemetryEvent } from '../../shared/protocols/http/telemetry.ts';
 
 export type { ProjectKeywordFile } from '../../shared/search-results.ts';
 
@@ -96,6 +99,8 @@ export interface ProjectOperationsDependencies {
   move: typeof moveProjectFile;
   delete: typeof deleteProjectFile;
   hasEmbeddingKey: () => boolean;
+  scopedTelemetry: typeof telemetry.scoped;
+  fileOperationOrigin: typeof projectFileOperationOrigin;
 }
 
 const productionDependencies: ProjectOperationsDependencies = {
@@ -113,6 +118,8 @@ const productionDependencies: ProjectOperationsDependencies = {
   move: moveProjectFile,
   delete: deleteProjectFile,
   hasEmbeddingKey: isEmbeddingConfigured,
+  scopedTelemetry: () => telemetry.scoped(),
+  fileOperationOrigin: projectFileOperationOrigin,
 };
 
 /** Build the deep project module. Tests may replace only the dependencies they exercise. */
@@ -120,6 +127,22 @@ export function createProjectOperations(
   overrides: Partial<ProjectOperationsDependencies> = {},
 ): ProjectOperations {
   const deps = { ...productionDependencies, ...overrides };
+  type FileOperation = Extract<TelemetryEvent, { event: 'project_file_operation' }>;
+  const fileOperation = async <T>(operation: FileOperation['operation'], work: () => Promise<T>, changed?: (result: T) => boolean): Promise<T> => {
+    // Capture the initiating identity and caller before file I/O can yield.
+    const record = deps.scopedTelemetry();
+    const origin = deps.fileOperationOrigin();
+    try {
+      const result = await asProjectOperation(work);
+      record({ event: 'project_file_operation', operation, ...origin, outcome: 'success',
+        ...(changed ? { changed: changed(result) } : {}) });
+      return result;
+    } catch (error) {
+      record({ event: 'project_file_operation', operation, ...origin,
+        outcome: error instanceof ProjectOperationError && error.code === 'FILE_CHANGED' ? 'conflict' : 'failed' });
+      throw error;
+    }
+  };
   return {
     info: async () => deps.getProjectInfo(),
 
@@ -211,17 +234,17 @@ export function createProjectOperations(
     createProject: (input) => asProjectOperation(() => deps.createProject(input)),
 
     listDirectory: (path) => asProjectOperation(() => deps.listDirectory(path)),
-    read: (path, range) => asProjectOperation(() => deps.read(path, range)),
+    read: (path, range) => fileOperation('read', () => deps.read(path, range)),
     createInteractiveNote: (input) => asProjectOperation(() => deps.createInteractiveNote(input)),
-    write: ({ path, content, baseVersion }) => asProjectOperation(() => {
+    write: ({ path, content, baseVersion }) => fileOperation('write', () => {
       if (typeof content !== 'string') throw routeError('content (string) required', 400);
       return deps.write(path, content, { baseVersion });
-    }),
-    edit: ({ path, oldText, newText, replaceAll, baseVersion }) => asProjectOperation(() => {
+    }, (result) => result.changed),
+    edit: ({ path, oldText, newText, replaceAll, baseVersion }) => fileOperation('edit', () => {
       if (typeof oldText !== 'string') throw routeError('old_text (string) required', 400);
       if (typeof newText !== 'string') throw routeError('new_text (string) required', 400);
       return deps.edit(path, oldText, newText, { replaceAll, baseVersion });
-    }),
+    }, (result) => result.changed),
     move: ({ path, newPath, cascade }) => asProjectOperation(() => deps.move(path, newPath, { cascade })),
     delete: (path) => asProjectOperation(() => deps.delete(path)),
   };

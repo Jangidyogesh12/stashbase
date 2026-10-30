@@ -41,7 +41,8 @@ export function mount(app: express.Express, operations: ProjectOperations = crea
 
   app.use('/api/project', (req, res, next) => {
     try {
-      withAgentProjectScope(req.header(AGENT_SESSION_ID_HEADER), next);
+      withAgentProjectScope(req.header(AGENT_SESSION_ID_HEADER), next,
+        req.header('x-stashbase-project-client') === 'mcp' ? 'mcp' : 'http');
     } catch (error) {
       sendError(res, error);
     }

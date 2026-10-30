@@ -7,6 +7,9 @@ export function mount(app: express.Express, service = telemetry): void {
   app.get('/api/telemetry', (_req, res) => {
     try { res.json(service.preferences()); } catch (error) { sendError(res, error); }
   });
+  app.get('/api/telemetry/delivery', (_req, res) => {
+    res.json({ delivery: service.delivery() });
+  });
   app.put('/api/telemetry', (req, res) => {
     const parsed = telemetryPreferencesRequestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'invalid telemetry preferences' });
@@ -16,6 +19,8 @@ export function mount(app: express.Express, service = telemetry): void {
     const parsed = rendererTelemetryRequestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'invalid telemetry event' });
     const status = service.captureRenderer(parsed.data);
-    res.status(status === 'retry' ? 503 : 200).json({ status });
+    res.status(status === 'retry' ? 503 : 200).json({ status,
+      ...(!service.rendererDeliveryCurrent(parsed.data) ? { reset_delivery: true } : {}),
+    });
   });
 }

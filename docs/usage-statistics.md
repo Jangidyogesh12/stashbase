@@ -27,7 +27,7 @@ installation identity.
 
 ## Events and interpretation
 
-Schema version 7 carries an event UUID, occurrence time, app version, distribution, OS,
+Schema version 8 carries an event UUID, occurrence time, app version, distribution, OS,
 installation ID, anonymous ID, installation first-observed time, and, when signed
 in, the account ID. Active work also establishes a session ID shared across
 windows; 30 minutes without reported activity starts another session. The first
@@ -49,11 +49,12 @@ in provider history; absence is not evidence of source use.
 | `project_entry_result` | Host project-open operation settles | `outcome` |
 | `agent_turn_started` | Submission preparation, or first host acceptance when the submission report is missing | `runtime`, random `turn_id`, `source`: renderer / host |
 | `agent_turn_stage` | Host observes a significant execution boundary | `runtime`, `turn_id`, `stage`, per-turn `sequence`, bounded correlation context |
-| `agent_turn_finished` | Submission completes, fails, is blocked, cancelled or interrupted | `runtime`, `turn_id`, `outcome`, `source`, optional `reason`, last stage, sequence and observation times; duration only for an observed end |
+| `agent_turn_finished` | Submission completes, fails, is blocked, cancelled or interrupted | `runtime`, `turn_id`, `outcome`, `source`, optional `reason`, last stage, sequence and observation times; duration only for an observed end; host-observed `tool_summary` when available |
 | `agent_runtime_start_result` | One Default/OpenCode startup attempt settles, including history and prewarm | `purpose`, `outcome`, `stage`, `attempt_id`, optional `retry_of`, `elapsed_ms`/`first_output_ms`, phase `timings`, runtime version and optional diagnostic |
 | `agent_runtime_stop_result` | Managed OpenCode/Codex/Antigravity retirement succeeds, times out, or closes after timeout | `purpose`, initiating `reason`, stop `attempt_id`, original process-start ID, elapsed/deadline, exit/pipe observations and bounded termination evidence |
 | `agent_connection_closed` | Host observes socket closure, including idle and intentional closes | `runtime`, shared `context.connection_id`, close code/initiator/reason and available process evidence |
 | `document_write_result` | Versioned editor save settles | `outcome`; success includes `changed` |
+| `project_file_operation` | Shared project file read, write or edit settles | `operation`, `origin`: agent / mcp / http, `outcome`, optional runtime and turn/request correlation; successful writes/edits include `changed` |
 | `account_login_started` | A browser sign-in flow starts | None |
 | `account_login_result` | Sign-in completes or fails | `outcome` |
 | `account_signed_out` | Local account is signed out | None |
@@ -76,6 +77,22 @@ Editing events contain no text or keystrokes. Unchanged saves report
 proof of writing quality or user satisfaction. Agent file writes are not inferred
 from generated replies. Project entry excludes picker cancellations and acquisitions
 that never reach the open operation.
+
+In Electron, genuine keyboard, pointer and wheel input inside focused embedded HTML also
+contributes to foreground activity and the active document's read engagement.
+The main-process input bridge forwards only the input kind; it does not forward
+keys, text, coordinates or document messages. Scripted DOM events, automatic
+page changes and background frames do not establish engagement. Browser-only
+development lacks this Electron bridge.
+
+`project_file_operation` measures the shared project operation boundary. A live
+attributed Agent session supplies `origin: agent` and its runtime; otherwise the
+accepted transport supplies `mcp` or `http`. Successful writes/edits use the
+actual source transaction's `changed` result. An edit's internal read is not
+counted again. Paths, content and content hashes are absent. Native runtime
+filesystem operations and shell commands that bypass this boundary remain
+outside these file-operation counts. These operations describe workload and
+observed source changes; they do not establish human foreground activity.
 
 Runtime values are stashbase, claude, codex and antigravity. Outcomes are success, failed,
 cancelled or blocked; saves use conflict. Agent turns additionally use interrupted when execution continuity was lost without a confirmed result. Durations are under 10 seconds,
@@ -187,6 +204,18 @@ Stage events remain rate/capacity limited, but the pending turn's last stage is
 saved even when a stage event cannot be queued. Streamed tokens do not write
 telemetry state. The last stage establishes observation, not causation.
 
+From schema 8, host acceptance initializes a zero `tool_summary`. Each distinct
+native tool result updates persisted `success`/`failed` counts and `by_category`
+counts for read, write, shell, search, agent or other. The terminal carries that
+summary, including on crash recovery; successful tools do not each create a queue
+event. Call IDs are retained locally for per-turn deduplication, while tool error
+diagnostics retain their existing call-ID correlation. The first 1,000 distinct
+results are counted; later or invalid-ID observations set `limited: true`, making
+the counts a lower bound. Missing summaries are unobserved coverage, not zero
+work. Results reflect what the runtime reports, and successful tools do not prove
+file changes or that the user achieved their goal. Renderer terminal reports
+cannot supply or replace this host summary.
+
 At the next healthy host launch, a retained unfinished turn becomes
 `interrupted` with `reason: host_restarted` and `source: recovery`. Its actual
 result and end time remain unknown: `recovered_at` is the observation time,
@@ -201,10 +230,13 @@ requests never inherit a foreground chat's ID. A WebSocket 1006 is a lost close
 handshake, not a diagnosis of network or process failure. Model failures are
 reported at the broker even when the native adapter cannot relay them. Tool
 failure facts exclude arguments/results and can coexist with a successful turn.
-For task failure rates, use `agent_turn_finished.outcome`; join tool failures by
-`turn_id` to inspect recovery. Count tool failures separately by category. A
-failed meaning-search tool followed by a successful terminal is tool degradation,
-not task failure. Missing terminal evidence is unknown, not inferred success.
+For turn outcome rates, use `agent_turn_finished.outcome`; join tool failures by
+`turn_id` to inspect the same turn's subsequent result. Count tool failures
+separately by category. A failed meaning-search tool followed by a successful
+terminal records tool degradation during a normally ended turn. A turn ID does
+not identify a task across retries in later turns, and a successful terminal does
+not prove that an earlier difficulty was resolved. Missing terminal evidence is
+unknown, not inferred success.
 For 1006 investigations, join host connection records to native lifecycle records
 by `context.window_id` and `context.host_instance_id`. These are ephemeral UUIDs,
 not project paths. Main records renderer load/exit, actual window closure and host
@@ -262,6 +294,40 @@ stop admission at 25 pending records to leave room for failures.
 Queue expiry, saturation, unavailable local storage, ingestion rejection and
 uninstall can still lose events. HTTP acceptance alone does not establish that a
 provider's identity merge or dashboard query has completed.
+
+Schema 8 adds cumulative delivery checkpoints to event properties. Optional host
+`delivery` and renderer `renderer_delivery` each carry `series_id`, `started_at`
+and bounded `counters`. The host snapshot is saved at admission and remains
+unchanged through retries; the renderer snapshot is fixed at its first send.
+Later events can expose newer counts. These are metadata on existing events,
+with no heartbeat or second delivery queue.
+
+| Checkpoint counters | Interpretation |
+|---|---|
+| Host `attempted`, `accepted`, `duplicate`, `invalid` | Capture admission attempts, accepted events, suppressed duplicates and invalid capture input |
+| Host `queue_full`, `rate_limited`, `turn_limit`, `missing_start`, `stale` | Refusals caused by capacity, rate, pending-turn count, missing start or stale renderer/identity context |
+| Host `storage_failed` | Storage failures observed after collection is known to be enabled; unreadable storage can also prevent recording this count |
+| Host `delivered`, `transport_failed`, `rejected` | Acknowledged envelopes, retryable outbound failures and permanent ingestion refusals |
+| Host `expired`, `invalid_queued` | Expired or invalid/excess queued envelopes removed during validation |
+| Renderer `generated`, `coalesced`, `invalid`, `overflow` | Recorder calls, activity reports suppressed within the minute, invalid input and reports refused by the outstanding-request limit |
+| Renderer `requests`, `accepted`, `duplicate`, `refused`, `exhausted` | Local send attempts, acknowledged admissions/duplicates, permanent local refusals and reports that exhausted three send attempts |
+
+Compare the latest checkpoint or counter deltas within each series; never sum
+the snapshots attached to events. `attempted` counts capture admissions,
+including retries, while `delivered` also includes identity and recovery
+envelopes. These counters do not form a single generated-minus-delivered loss
+equation. The local `GET /api/telemetry/delivery` returns the latest readable host
+checkpoint, or null when unavailable or collection is off. It can be newer than
+the last uploaded snapshot.
+
+Renderer counters live only in memory for their collection period. Disabled,
+discarded or explicit host-reset receipts retire that period. The host omits
+checkpoints spanning its account/privacy boundary or an earlier host lifetime;
+renderer restart creates a new series. A final window close with no later
+event, storage failure, opt-out or uninstall can leave the last interval unknown.
+These checkpoints help explain missing reports but cannot prove complete receipt.
+Treat them as installation/renderer delivery health, never as a person's usage
+or active time.
 
 Turning collection off cancels pending requests and removes the queue, all local
 analytics identities, native diagnostic files and suppression markers. There is no final opt-out network
@@ -350,6 +416,15 @@ without next-month return was not observed in that window, which is not
 confirmed churn. Historical schema-2 installation counts are not directly
 comparable with schema-3 person or foreground return.
 
+For sustained-use reviews, show each resolved person's last 7 and 28 days of
+distinct use days, foreground/document interaction, Agent workload and observed
+changed writes separately. Add affected turn outcomes, latest occurrence and
+delivery coverage. Keep internal users with an explicit label, and compare app
+versions and schema coverage before ranking. High turn counts can include retries;
+low counts with incomplete delivery are insufficient evidence of low use. File
+operations and tool results supplement the existing core-use definition without
+turning automated work into human active time.
+
 ### Backend activity supplement
 
 The agreed operator reporting extension counts all hosted AI request attempts,
@@ -382,7 +457,7 @@ inactivity or churn.
 
 ## Turn diagnosis views
 
-For schema 5, join starts, stages, terminal results and diagnostics by `turn_id`,
+For schema 5 and later, join starts, stages, terminal results and diagnostics by `turn_id`,
 using `connection_id` for pre-prompt connection failures and request IDs for
 specific HTTP/model calls. Inspect sequence and occurrence/observation times,
 not ingestion order. Keep the original app version and installation in breakdowns.

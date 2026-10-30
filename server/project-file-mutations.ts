@@ -35,13 +35,13 @@ export async function writeProjectFile(
   rawPath: unknown,
   content: string,
   opts: { baseVersion?: string } = {},
-): Promise<{ path: string; version?: string; indexWarning?: string }> {
+): Promise<{ path: string; version?: string; indexWarning?: string; changed: boolean }> {
   const target = await normalizeProjectFilePath(rawPath);
   validateProjectWritableFolderRel(target.folderRel);
   validateProjectTextMutation(content);
   return runWithFolderRoot(target.folderRoot, async () => {
     const result = await saveTextFileContent(target.folderRel, content, opts);
-    return { path: target.abs, version: result.version, indexWarning: result.indexWarning };
+    return { path: target.abs, version: result.version, indexWarning: result.indexWarning, changed: result.changed };
   });
 }
 
@@ -50,7 +50,7 @@ export async function editProjectFile(
   oldText: string,
   newText: string,
   opts: { replaceAll?: boolean; baseVersion?: string } = {},
-): Promise<{ path: string; replacements: number; version?: string; indexWarning?: string }> {
+): Promise<{ path: string; replacements: number; version?: string; indexWarning?: string; changed: boolean }> {
   const current = await readProjectFile(rawPath);
   if (current.derived) {
     throw routeError('edit_file cannot edit derived PDF, DOCX or XLSX text; create or edit a UTF-8 text source file instead', 415, 'UNSUPPORTED_FORMAT');

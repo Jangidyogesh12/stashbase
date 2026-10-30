@@ -173,6 +173,7 @@ export function WorkspacePanes({
                   docxPreviewApi={dependencies.documents.adapters.docxPreview}
                   genericPreviewApi={dependencies.documents.adapters.genericPreview}
                   recordUsage={dependencies.recordUsage}
+                  onInputActivity={dependencies.onInputActivity}
                   onAskAgent={onAskAgent}
                   referencedPassages={referencedPassages}
                   onNavigate={sources.navigate}

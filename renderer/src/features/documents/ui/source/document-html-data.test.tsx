@@ -9,6 +9,66 @@ import { registerSourceCleanup, renderSource } from './document-source.harness';
 registerSourceCleanup();
 afterEach(() => vi.unstubAllGlobals());
 
+it('counts native input in the active HTML reader and retires its subscription when covered', async () => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  const recordUsage = vi.fn();
+  const listeners = new Set<(kind: 'keyboard' | 'pointer') => void>();
+  const { runtime } = renderSource(
+    sourceApi(),
+    { folderPath: '/project/notes', path: 'form.html' },
+    {
+      assetApi: assetApi({
+        load: vi.fn(async () => ({
+          kind: 'source' as const,
+          url: 'data:text/html,form',
+          version: 'one',
+        })),
+      }),
+      onInputActivity: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      recordUsage,
+    },
+  );
+  const frame = await screen.findByTitle<HTMLIFrameElement>('form.html HTML preview');
+  frame.focus();
+  const hover = vi.spyOn(frame, 'matches').mockReturnValue(false);
+  const emit = async (kind: 'keyboard' | 'pointer') => {
+    vi.useFakeTimers();
+    act(() => {
+      for (const listener of listeners) listener(kind);
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    vi.useRealTimers();
+  };
+  fireEvent.focus(frame);
+  fireEvent.keyDown(frame);
+  await emit('pointer');
+  expect(recordUsage).not.toHaveBeenCalled();
+  await emit('keyboard');
+  expect(recordUsage).toHaveBeenLastCalledWith({
+    event: 'document_engaged',
+    activity: 'read',
+    format: 'html',
+  });
+  hover.mockReturnValue(true);
+  await emit('pointer');
+  expect(recordUsage).toHaveBeenCalledTimes(2);
+  vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+  await emit('keyboard');
+  expect(recordUsage).toHaveBeenCalledTimes(2);
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  await act(async () => {
+    await runtime.open({ folderPath: '/project/notes', path: 'other.html' });
+  });
+  await screen.findByTitle('other.html HTML preview');
+  frame.focus();
+  await emit('keyboard');
+  expect(recordUsage).toHaveBeenCalledTimes(2);
+});
+
 it('binds only its own frame, requires input activation, autosaves data, keeps the form through navigation, and reloads it for HTML and data changes', async () => {
   const activation = { isActive: false };
   const descriptor = Object.getOwnPropertyDescriptor(navigator, 'userActivation');
