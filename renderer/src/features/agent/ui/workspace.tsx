@@ -54,6 +54,7 @@ function ChatWorkspace({
   catalog,
   catalogPort,
   header = true,
+  mathMode = false,
   persona: personaApi,
   scheduledTasks,
   tools: toolsApi,
@@ -123,6 +124,13 @@ function ChatWorkspace({
   const modelRefresh = useAgentModelRefresh(active, catalog.refresh);
   const activeTurn = agentTurnIsActive(state.connection);
   const busy = agentSessionIsBusy(active.store.getState());
+  const appliedMathMode = useRef(mathMode);
+  useEffect(() => {
+    if (appliedMathMode.current === mathMode) return;
+    if (busy) return;
+    appliedMathMode.current = mathMode;
+    if (active.store.getState().nativeSessionId) active.reconnect();
+  }, [active, busy, mathMode]);
   const armedSkill = agentSkills(state.skillCatalog).find((skill) => skill.id === state.skill);
   const empty = state.transcript.length === 0;
   const persona = useAgentPersona(
@@ -214,6 +222,7 @@ function ChatWorkspace({
               blocks={state.transcript}
               focusBlockId={focusBlockId}
               key={activeId}
+              mathMode={mathMode}
               modelRefresh={modelRefresh}
               onEditPrompt={composerShown ? editPrompt : undefined}
               onOpenExternal={onOpenExternal}

@@ -55,6 +55,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   block,
   closing,
   editable,
+  mathMode,
   modelRefresh,
   now,
   onEditPrompt,
@@ -76,6 +77,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   /** This prompt is the latest and its turn has settled, so it can be taken
    *  back into the composer. */
   editable: boolean;
+  mathMode: boolean;
   modelRefresh?: AgentModelRefreshView | undefined;
   now: number;
   onEditPrompt?: ((blockId: string) => void) | undefined;
@@ -113,6 +115,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
       >
         <span className="sr-only">Agent: </span>
         <AgentMarkdown
+          mathMode={mathMode}
           markdown={block.text}
           onOpenExternal={onOpenExternal}
           onOpenSource={onOpenSource}
@@ -168,6 +171,7 @@ export const AgentTranscript = memo(function AgentTranscript({
   activeTurn,
   blocks,
   focusBlockId,
+  mathMode = false,
   modelRefresh,
   onEditPrompt,
   onOpenExternal,
@@ -188,6 +192,8 @@ export const AgentTranscript = memo(function AgentTranscript({
    *  yet. They wait, dimmed, below the turn and join it where it reads them. */
   pending?: readonly PendingFollowUp[] | undefined;
   focusBlockId?: string | undefined;
+  /** The active project's single-dollar parsing preference. */
+  mathMode?: boolean | undefined;
   /** Reads the hosted models again, offered on a turn refused because the
    *  chosen model's configuration changed. Absent where no hosted list exists. */
   modelRefresh?: AgentModelRefreshView | undefined;
@@ -288,6 +294,7 @@ export const AgentTranscript = memo(function AgentTranscript({
                 block={group}
                 closing={closing.has(group.id)}
                 editable={group.id === editableId}
+                mathMode={mathMode}
                 modelRefresh={modelRefresh}
                 now={now}
                 onEditPrompt={onEditPrompt}

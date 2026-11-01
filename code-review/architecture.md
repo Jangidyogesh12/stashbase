@@ -609,6 +609,9 @@ stable status without download, retry, or a new durable demand latch.
   skill contents, or a project-file edit. Product authoring guidance distinguishes
   Markdown text notes from HTML interactive notes and directs blank HTML creation
   through `create_interactive_note`; other workflows belong to loaded project instructions.
+  The same composition reads the bound project's local `math_mode` and directs
+  every built-in runtime to use `\(...\)` with Math off or `$...$` with Math on,
+  without putting that preference in a project file.
   `server/agent-persona.ts` owns the library: one Markdown file per persona in
   app data, seeded once from `assets/agent-personas/`, plus the record of each
   native session's persona. The Chat's persona id travels on its connection;
@@ -619,6 +622,9 @@ stable status without download, retry, or a new durable demand latch.
   persona applies from the next turn. Gallery personas are Gallery index data;
   the composition layer adds them through the agent's library, since the
   features do not import each other. Brainstorming needs no sources/wiki/index.
+  A Math-mode change safely reconnects an idle existing Chat to the same native
+  conversation so its next turn receives the new formatting instruction; an
+  active turn is allowed to finish unchanged.
 - Default receives explicit transient attachment references in the prompt
   protocol. `server/routes/attach.ts` binds uploads to an explicit registered
   project and records their digest; `server/agent-attachments.ts` validates
@@ -1394,10 +1400,19 @@ registered host boundaries; renderer shared types are a different layer.
   synchronizer; anchor updates must not reparse prose or interrupt IME composition.
   The sole double-cast exemption is its Find controller's structural DOM corpus and guarded
   CSS Highlight probe; other exceptions need their code-owned rationale.
-- Markdown's `math.ts` owns the double-dollar math rule and code-block preview.
-  Single-dollar prices remain prose; math serialization retains double-dollar
-  blocks and explicit `math` / `latex` fences. The transcript's `markdown.tsx`
-  rewrites `\[ \]` and `\( \)` outside code to double-dollar math before parsing.
+- Markdown's `math.ts` owns the document math rule and code-block preview.
+  `$$`, explicit `math` / `latex` fences, and `\[ \]` / `\( \)` outside code
+  always parse as math. Its project-scoped `singleDollarTextMath` option and
+  the transcript's matching `markdown.tsx` option enable `$...$` only when
+  Math is on; code stays literal and source is never rewritten by a toggle.
+  KaTeX output carries its formula source for transcript selection-copy, while
+  the reply action copies the original Markdown text.
+- `projectSettings[].math_mode` in the local application config is keyed by the
+  resolved registered-folder identity. It defaults off, follows neither source
+  files nor frontmatter, and is forgotten when the project is removed. The
+  reading control owns its local optimistic write; app composition fans its
+  cached value into Documents and Chat without changing source or transcript
+  storage.
 - Inline review runs Milkdown's diff plugin, registered directly by
   `revision-adapter.ts`. `@milkdown/plugin-diff` is patched under `patches/` so a
   per-change Reject also resolves a pure deletion, which holds no span in the

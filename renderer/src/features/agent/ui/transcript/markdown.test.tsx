@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -105,6 +105,34 @@ Keep ${'`\\(x\\)`'} as code.`}
 
     expect(container.querySelectorAll('math')).toHaveLength(0); // dom-contract: KaTeX renders no MathML for plain prose
     expect(container.textContent).toContain('$4 per month billed annually or $5');
+  });
+
+  it('uses single dollars as inline math only when the project enables math mode', () => {
+    const { container } = render(
+      <AgentMarkdown mathMode markdown={String.raw`Square $x^2$ costs \$10.`} />,
+    );
+
+    expect(container.querySelectorAll('math')).toHaveLength(1);
+    expect(container.textContent).toContain('$10.');
+  });
+
+  it('copies a selected rendered formula as its Markdown source', () => {
+    const { container } = render(<AgentMarkdown mathMode markdown="$x^2$" />);
+    const formula = container.querySelector<HTMLElement>('.katex');
+    if (!formula) throw new Error('Expected KaTeX output.');
+    const range = document.createRange();
+    range.selectNode(formula);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    const setData = vi.fn();
+    const preventDefault = vi.fn();
+
+    const root = container.firstElementChild;
+    if (!(root instanceof HTMLElement)) throw new Error('Expected Markdown container.');
+    fireEvent.copy(root, { clipboardData: { setData }, preventDefault });
+
+    expect(setData).toHaveBeenCalledWith('text/plain', '$x^2$');
   });
 
   it('opens only project-resolved file references and keeps refused paths inert', async () => {

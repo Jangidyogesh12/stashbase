@@ -1,5 +1,5 @@
 /** Render Agent Markdown with source citations, math, and independently copyable blocks. */
-import { memo, type ComponentProps } from 'react';
+import { memo, type ClipboardEvent, type ComponentProps } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -55,6 +55,59 @@ interface SyntaxNode {
   type: string;
   value?: string;
   children?: SyntaxNode[];
+}
+
+interface HtmlNode {
+  type?: string;
+  tagName?: string;
+  properties?: Record<string, unknown>;
+  value?: string;
+  children?: HtmlNode[];
+}
+
+function textValue(node: HtmlNode): string {
+  return node.value ?? node.children?.map(textValue).join('') ?? '';
+}
+
+function katexSource(node: HtmlNode): string | null {
+  if (node.tagName === 'annotation' && node.properties?.encoding === 'application/x-tex') {
+    return textValue(node);
+  }
+  for (const child of node.children ?? []) {
+    const source = katexSource(child);
+    if (source !== null) return source;
+  }
+  return null;
+}
+
+/** Keep KaTeX's visual DOM separate from the source that a reader copies. */
+function preserveKatexSource() {
+  return (tree: HtmlNode) => {
+    const visit = (node: HtmlNode): void => {
+      const classes = node.properties?.className;
+      const classList = Array.isArray(classes) ? classes : typeof classes === 'string' ? [classes] : [];
+      if (node.tagName === 'span' && classList.includes('katex')) {
+        const source = katexSource(node);
+        if (source !== null) node.properties = { ...node.properties, dataMathSource: source };
+      }
+      node.children?.forEach(visit);
+    };
+    visit(tree);
+  };
+}
+
+function copyRenderedMathSource(event: ClipboardEvent<HTMLDivElement>): void {
+  const selection = event.currentTarget.ownerDocument.getSelection();
+  if (!selection || selection.rangeCount === 0) return;
+  const fragment = selection.getRangeAt(0).cloneContents();
+  const formulas = fragment.querySelectorAll<HTMLElement>('[data-math-source]');
+  if (formulas.length === 0) return;
+  for (const formula of formulas) {
+    const source = formula.dataset.mathSource;
+    if (source !== undefined) formula.replaceWith(event.currentTarget.ownerDocument.createTextNode(`$${source}$`));
+  }
+  event.clipboardData.setData('text/plain', fragment.textContent ?? '');
+  event.preventDefault();
 }
 
 function textOf(node: SyntaxNode | undefined): string {
@@ -161,22 +214,23 @@ function markdownComponents({
 }
 
 export const AgentMarkdown = memo(function AgentMarkdown({
+  mathMode = false,
   markdown,
   onOpenExternal,
   onOpenSource,
   sourceFor,
 }: MarkdownLinks & {
+  mathMode?: boolean | undefined;
   markdown: string;
 }) {
   return (
-    <div className={MARKDOWN_PROSE_CLASS}>
+    <div className={MARKDOWN_PROSE_CLASS} onCopy={copyRenderedMathSource}>
       <ReactMarkdown
         components={markdownComponents({ onOpenExternal, onOpenSource, sourceFor })}
-        // Single-dollar text math would swallow ordinary prices ("$4 ... $5");
-        // math still opens with two dollars or a ```math fence.
-        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: mathMode }]]}
         rehypePlugins={[
           [rehypeKatex, { trust: false, strict: 'ignore', maxExpand: 1000, maxSize: 20 }],
+          preserveKatexSource,
         ]}
       >
         {withDollarMath(markdown)}

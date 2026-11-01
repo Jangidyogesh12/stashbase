@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { failureMessage } from '@/features/settings/application/failure-messages';
-import { appearancePort } from '@/test/fakes/settings';
+import { appearancePort, projectMathPort } from '@/test/fakes/settings';
 import { withQueryClient } from '@/test/query';
 
 import { ReadingTextMenu } from './reading-text-menu';
@@ -26,7 +26,9 @@ const preset = async (group: string, name: string) =>
 describe('ReadingTextMenu', () => {
   it('saves only the reading font and applies it at once', async () => {
     const port = appearancePort();
-    withQueryClient(<ReadingTextMenu appearanceApi={port} />);
+    withQueryClient(
+      <ReadingTextMenu appearanceApi={port} mathApi={projectMathPort()} projectPath="/project" />,
+    );
 
     const user = await open();
     await user.click(await preset('Font', 'Sans'));
@@ -43,7 +45,9 @@ describe('ReadingTextMenu', () => {
 
   it('saves the reading size from the same menu', async () => {
     const port = appearancePort();
-    withQueryClient(<ReadingTextMenu appearanceApi={port} />);
+    withQueryClient(
+      <ReadingTextMenu appearanceApi={port} mathApi={projectMathPort()} projectPath="/project" />,
+    );
 
     const user = await open();
     await user.click(await preset('Size', 'Large'));
@@ -63,7 +67,9 @@ describe('ReadingTextMenu', () => {
         throw new Error('EPIPE');
       }),
     });
-    withQueryClient(<ReadingTextMenu appearanceApi={port} />);
+    withQueryClient(
+      <ReadingTextMenu appearanceApi={port} mathApi={projectMathPort()} projectPath="/project" />,
+    );
 
     const user = await open();
     await user.click(await preset('Font', 'Sans'));
@@ -74,5 +80,27 @@ describe('ReadingTextMenu', () => {
     );
     expect(screen.getByRole('button', { name: 'Reading text: Serif' })).toBeTruthy();
     expect(document.documentElement.dataset.readingFont).toBe('serif');
+  });
+
+  it('places the project Math switch beside the reading control and persists only this project setting', async () => {
+    const mathApi = projectMathPort();
+    withQueryClient(
+      <ReadingTextMenu
+        appearanceApi={appearancePort()}
+        mathApi={mathApi}
+        projectPath="/project-a"
+      />,
+    );
+
+    const user = userEvent.setup();
+    const control = await screen.findByRole('switch', { name: 'Math' });
+    expect(control.getAttribute('aria-checked')).toBe('false');
+    await user.click(control);
+
+    await waitFor(() =>
+      expect(mathApi.update).toHaveBeenCalledWith('/project-a', true, expect.any(AbortSignal)),
+    );
+    expect(control.getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('dialog', { name: 'Reading text' })).toBeNull();
   });
 });
